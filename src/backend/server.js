@@ -1565,14 +1565,48 @@ app.get('/api/duty-register/history', async (req, res) => {
 });
 
 // Serve compiled frontend in production (Single-Server Cloud Architecture)
-const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
-if (fs.existsSync(frontendDistPath)) {
+const possibleDistPaths = [
+  path.join(__dirname, '..', 'frontend', 'dist'),
+  path.join(process.cwd(), 'src', 'frontend', 'dist'),
+  path.join(process.cwd(), 'dist'),
+  path.join(__dirname, 'dist')
+];
+
+let frontendDistPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html')));
+
+if (frontendDistPath) {
+  console.log(`[Production] Serving frontend from: ${frontendDistPath}`);
   app.use(express.static(frontendDistPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
+    if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+} else {
+  console.warn('[Production] Frontend dist directory not found yet.');
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Railway Duty Roster Manager</title>
+        <meta http-equiv="refresh" content="5">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0D0D0F; color: #F2F0EB; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+          .card { background: #1A1A1D; border: 1px solid #D4A15C; border-radius: 16px; padding: 32px; max-width: 480px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.7); }
+          h2 { color: #D4A15C; margin-top: 0; }
+          .btn { background: #D4A15C; color: #0D0D0F; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>🚆 Railway Duty Roster Manager</h2>
+          <p>The backend server is online! Frontend assets are initializing. This page will refresh automatically in 5 seconds...</p>
+          <a class="btn" href="javascript:location.reload()">Refresh Page</a>
+        </div>
+      </body>
+      </html>
+    `);
   });
 }
 

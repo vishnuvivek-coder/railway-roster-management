@@ -1,0 +1,18 @@
+{
+  "short_name": "Duty Roster",
+  "name": "Railway Duty Link Rotation Roster",
+  "description": "Cyclic link rotation scheduling, train roster management, and ground-truth duty reconciliation for railway crew.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0D0D0F",
+  "theme_color": "#D4A15C",
+  "display": "standalone",
+  "orientation": "any"
+}
