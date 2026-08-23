@@ -1611,6 +1611,6 @@ if (frontendDistPath) {
 }
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Roster backend server is running on port ${PORT}`);
 });
