@@ -873,6 +873,230 @@ p, span, label, input, select, button, td, th {
 }
 
 /* ==========================================================================
+   ADAPTIVE DEVICE SYSTEM: IOS (IPHONE/IPAD) & ANDROID & DESKTOP
+   ========================================================================== */
+
+/* Universal Mobile & iOS WebKit Fixes */
+html, body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fix iOS Safari 16px input zoom issue */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ----------------------------------------------------
+   🍎 iOS ADAPTIVE LAYOUT & CUPERTINO FROSTED GLASS
+   ---------------------------------------------------- */
+.device-ios {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background-color: #0D0D0F;
+}
+
+.device-ios .app-container {
+  flex-direction: column !important;
+  min-height: 100dvh !important;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 75px) !important;
+}
+
+.device-ios .sidebar {
+  display: none !important;
+}
+
+.device-ios .main-content {
+  margin-left: 0 !important;
+  padding: 12px 14px calc(env(safe-area-inset-bottom) + 85px) 14px !important;
+  width: 100% !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* iOS Top Header Bar */
+.ios-header-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(13, 13, 15, 0.82);
+  -webkit-backdrop-filter: blur(25px);
+  backdrop-filter: blur(25px);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.12);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -12px -14px 16px -14px;
+}
+
+.ios-title {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-body);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* iOS Frosted Bottom Tab Bar Dock */
+.ios-bottom-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(18, 18, 22, 0.88);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 8px calc(max(10px, env(safe-area-inset-bottom))) 8px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.6);
+}
+
+.ios-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: #8E8E93;
+  font-size: 0.65rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 10px;
+  transition: all 0.15s ease;
+  flex: 1;
+}
+
+.ios-tab-item.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.ios-tab-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* iOS Segmented Control Pill Switcher */
+.ios-segmented-control {
+  display: flex;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+  margin-bottom: 16px;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ios-segment-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: #A1A1A6;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ios-segment-btn.active {
+  background: #2C2C2E;
+  color: #FFFFFF;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+  font-weight: 700;
+}
+
+/* iOS Grouped Cards */
+.device-ios .card {
+  border-radius: 20px !important;
+  background: #1C1C1E !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+}
+
+/* ----------------------------------------------------
+   🤖 ANDROID ADAPTIVE LAYOUT (MATERIAL 3 DARK)
+   ---------------------------------------------------- */
+.device-android .app-container {
+  flex-direction: column !important;
+  min-height: 100dvh !important;
+  padding-bottom: 75px !important;
+}
+
+.device-android .sidebar {
+  display: none !important;
+}
+
+.device-android .main-content {
+  margin-left: 0 !important;
+  padding: 14px 14px 85px 14px !important;
+  width: 100% !important;
+}
+
+.android-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #141416;
+  border-top: 1px solid var(--border-glass);
+  padding: 6px 4px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
+}
+
+.android-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 16px;
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.android-tab-item.active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.android-tab-indicator {
+  padding: 3px 14px;
+  border-radius: 16px;
+  background: rgba(212, 161, 92, 0.18);
+  font-size: 1.15rem;
+}
+
+/* ==========================================================================
    MOBILE SIMULATION & TOUCH-FRIENDLY RESPONSIVE STYLES
    ========================================================================== */
 
@@ -913,66 +1137,6 @@ p, span, label, input, select, button, td, th {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-}
-
-@media (max-width: 768px) {
-  .app-container {
-    flex-direction: column;
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .sidebar {
-    width: 100% !important;
-    height: auto !important;
-    position: static !important;
-    border-right: none !important;
-    border-bottom: 1px solid var(--border-glass) !important;
-    padding: 14px 16px !important;
-  }
-
-  .nav-links {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    gap: 8px !important;
-    padding-bottom: 6px !important;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .nav-item {
-    white-space: nowrap !important;
-    padding: 8px 14px !important;
-    font-size: 0.85rem !important;
-    border-radius: 20px !important;
-    margin-bottom: 0 !important;
-  }
-
-  .main-content {
-    margin-left: 0 !important;
-    padding: 16px !important;
-    width: 100% !important;
-  }
-
-  .header-container {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-  }
-
-  .filters-panel {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-  }
-
-  .filter-group {
-    width: 100% !important;
-  }
-
-  .select-input, .form-input {
-    width: 100% !important;
-  }
 }
 
 /* ==========================================================================

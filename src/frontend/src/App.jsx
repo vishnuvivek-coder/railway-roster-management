@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AuthScreen from './AuthScreen';
 import DemoBar from './DemoBar';
+import { useDevice } from './useDevice';
 
 const API_BASE = '/api';
 
@@ -97,6 +98,7 @@ export default function App() {
 
   // Derived Admin Role status
   const isAdmin = currentUser?.role === 'Admin';
+  const { device, isIOS, isAndroid, isMobile, isDesktop, deviceMode, setDeviceMode, detectedPlatform } = useDevice();
   const [isMobileSimulated, setIsMobileSimulated] = useState(false);
 
   // User Verification & Role Administration State
@@ -1249,6 +1251,10 @@ export default function App() {
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
         <DemoBar 
           currentUser={currentUser}
+          device={device}
+          deviceMode={deviceMode}
+          setDeviceMode={setDeviceMode}
+          detectedPlatform={detectedPlatform}
           onSwitchPersona={handleSwitchPersona}
           onRunScenario={handleRunScenario}
           isMobileSimulated={isMobileSimulated}
@@ -4163,6 +4169,10 @@ export default function App() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
       <DemoBar 
         currentUser={currentUser}
+        device={device}
+        deviceMode={deviceMode}
+        setDeviceMode={setDeviceMode}
+        detectedPlatform={detectedPlatform}
         onSwitchPersona={handleSwitchPersona}
         onRunScenario={handleRunScenario}
         isMobileSimulated={isMobileSimulated}

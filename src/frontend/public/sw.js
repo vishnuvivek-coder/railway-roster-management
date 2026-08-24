@@ -1,5 +1,5 @@
-// Service Worker for Railway Roster PWA Prototype
-const CACHE_NAME = 'railway-roster-cache-v1';
+// Service Worker for Railway Roster PWA (iOS Safari & Android compatible)
+const CACHE_NAME = 'railway-roster-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -11,6 +11,8 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
+    }).catch((err) => {
+      console.warn('SW cache install warning:', err);
     })
   );
   self.skipWaiting();
@@ -28,12 +30,27 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/api/')) {
+  // CRITICAL FOR IOS SAFARI: Never call respondWith on non-GET or API requests
+  if (event.request.method !== 'GET' || event.request.url.includes('/api')) {
     return;
   }
+
+  // Only handle http/https requests
+  if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).catch((err) => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        throw err;
+      });
     })
   );
 });
