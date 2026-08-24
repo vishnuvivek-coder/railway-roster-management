@@ -100,6 +100,7 @@ export default function App() {
   const isAdmin = currentUser?.role === 'Admin';
   const { device, isIOS, isAndroid, isMobile, isDesktop, deviceMode, setDeviceMode, detectedPlatform } = useDevice();
   const [isMobileSimulated, setIsMobileSimulated] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // User Verification & Role Administration State
   const [registeredUsers, setRegisteredUsers] = useState([]);

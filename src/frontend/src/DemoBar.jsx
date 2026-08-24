@@ -62,25 +62,25 @@ export default function DemoBar({
         onClick={() => setIsCollapsed(false)}
         style={{
           position: 'fixed',
-          top: '12px',
-          right: '24px',
+          bottom: '75px',
+          right: '14px',
           zIndex: 9999,
           background: 'linear-gradient(135deg, #1A1A1D 0%, #25252B 100%)',
           border: '1px solid var(--primary)',
-          borderRadius: '30px',
-          padding: '8px 16px',
+          borderRadius: '24px',
+          padding: '6px 12px',
           color: 'var(--primary)',
-          fontSize: '0.82rem',
+          fontSize: '0.74rem',
           fontWeight: 700,
           cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.7)',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '6px'
         }}
       >
-        <span>⚡ Prototype Sandbox</span>
-        <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(Expand)</span>
+        <span>⚡ Prototype</span>
+        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>(Expand)</span>
       </div>
     );
   }

@@ -872,9 +872,27 @@ p, span, label, input, select, button, td, th {
   animation: spin 0.8s linear infinite;
 }
 
+
 /* ==========================================================================
-   ADAPTIVE DEVICE SYSTEM: IOS (IPHONE/IPAD) & ANDROID & DESKTOP
+   ADAPTIVE DEVICE SYSTEM: COLLAPSIBLE MOBILE DRAWER & DESKTOP SIDEBAR
    ========================================================================== */
+
+/* Hide mobile elements on desktop by default */
+.mobile-top-bar {
+  display: none;
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.mobile-sidebar-close {
+  display: none;
+}
 
 /* Universal Mobile & iOS WebKit Fixes */
 html, body {
@@ -884,259 +902,188 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Fix iOS Safari 16px input zoom issue */
-@media (max-width: 768px) {
+/* Responsive Breakpoint for Mobile & Tablet (<= 900px) */
+@media (max-width: 900px) {
+  /* Fix 16px input zoom on iOS Safari */
   input, select, textarea {
     font-size: 16px !important;
   }
-}
 
-/* ----------------------------------------------------
-   🍎 iOS ADAPTIVE LAYOUT & CUPERTINO FROSTED GLASS
-   ---------------------------------------------------- */
-.device-ios {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-  background-color: #0D0D0F;
-}
+  /* App container switches to vertical layout */
+  .app-container {
+    flex-direction: column !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    padding-bottom: 75px !important;
+    overflow-x: hidden !important;
+  }
 
-.device-ios .app-container {
-  flex-direction: column !important;
-  min-height: 100dvh !important;
-  padding-bottom: calc(env(safe-area-inset-bottom) + 75px) !important;
-}
+  /* Main content expands to full screen width */
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 14px 12px 90px 12px !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
 
-.device-ios .sidebar {
-  display: none !important;
-}
+  /* Mobile Top Navigation Header */
+  .mobile-top-bar {
+    display: flex !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1000 !important;
+    background: rgba(13, 13, 15, 0.94) !important;
+    -webkit-backdrop-filter: blur(25px) !important;
+    backdrop-filter: blur(25px) !important;
+    border-bottom: 1px solid var(--border-glass) !important;
+    padding: 10px 14px !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  }
 
-.device-ios .main-content {
-  margin-left: 0 !important;
-  padding: 12px 14px calc(env(safe-area-inset-bottom) + 85px) 14px !important;
-  width: 100% !important;
-  -webkit-overflow-scrolling: touch !important;
-}
+  .mobile-hamburger-btn {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border: 1px solid var(--border-glass) !important;
+    color: var(--primary) !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+  }
 
-/* iOS Top Header Bar */
-.ios-header-bar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(13, 13, 15, 0.82);
-  -webkit-backdrop-filter: blur(25px);
-  backdrop-filter: blur(25px);
-  border-bottom: 0.5px solid rgba(255, 255, 255, 0.12);
-  padding: 12px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: -12px -14px 16px -14px;
-}
+  .mobile-hamburger-btn:active {
+    background: rgba(212, 161, 92, 0.2) !important;
+    transform: scale(0.95);
+  }
 
-.ios-title {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-body);
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+  .mobile-header-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
 
-/* iOS Frosted Bottom Tab Bar Dock */
-.ios-bottom-tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(18, 18, 22, 0.88);
-  -webkit-backdrop-filter: blur(30px);
-  backdrop-filter: blur(30px);
-  border-top: 0.5px solid rgba(255, 255, 255, 0.15);
-  padding: 6px 8px calc(max(10px, env(safe-area-inset-bottom))) 8px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.6);
-}
+  /* Backdrop Overlay for Slide-Over Drawer */
+  .sidebar-backdrop {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.75) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+    backdrop-filter: blur(5px) !important;
+    z-index: 1190 !important;
+    animation: fadeIn 0.2s ease !important;
+  }
 
-.ios-tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  background: transparent;
-  border: none;
-  color: #8E8E93;
-  font-size: 0.65rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 10px;
-  transition: all 0.15s ease;
-  flex: 1;
-}
+  /* Collapsible Slide-Over Sidebar Drawer */
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 300px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 1200 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    background: #141417 !important;
+    border-right: 1px solid var(--border-gold) !important;
+    box-shadow: 12px 0 45px rgba(0, 0, 0, 0.9) !important;
+    overflow-y: auto !important;
+    padding: 20px 16px !important;
+  }
 
-.ios-tab-item.active {
-  color: var(--primary);
-  font-weight: 700;
-}
+  .sidebar.mobile-open {
+    transform: translateX(0) !important;
+  }
 
-.ios-tab-icon {
-  font-size: 1.2rem;
-  line-height: 1;
-}
+  .mobile-sidebar-close {
+    display: flex !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid var(--border-glass) !important;
+    color: var(--color-text-secondary) !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.9rem !important;
+    cursor: pointer !important;
+  }
 
-/* iOS Segmented Control Pill Switcher */
-.ios-segmented-control {
-  display: flex;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 3px;
-  gap: 2px;
-  margin-bottom: 16px;
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
+  /* Fixed Bottom Quick Navigation Dock */
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 1050 !important;
+    background: rgba(18, 18, 22, 0.94) !important;
+    -webkit-backdrop-filter: blur(30px) !important;
+    backdrop-filter: blur(30px) !important;
+    border-top: 1px solid var(--border-glass) !important;
+    padding: 6px 8px calc(max(6px, env(safe-area-inset-bottom))) 8px !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+    box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.6) !important;
+  }
 
-.ios-segment-btn {
-  flex: 1;
-  padding: 7px 10px;
-  border-radius: 9px;
-  border: none;
-  background: transparent;
-  color: #A1A1A6;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: center;
-  white-space: nowrap;
-}
+  .mobile-nav-btn {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 2px !important;
+    background: transparent !important;
+    border: none !important;
+    color: #8E8E93 !important;
+    font-size: 0.65rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    padding: 4px 6px !important;
+    border-radius: 10px !important;
+    flex: 1 !important;
+    transition: all 0.15s ease !important;
+  }
 
-.ios-segment-btn.active {
-  background: #2C2C2E;
-  color: #FFFFFF;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.35);
-  font-weight: 700;
-}
+  .mobile-nav-btn.active {
+    color: var(--primary) !important;
+    font-weight: 700 !important;
+  }
 
-/* iOS Grouped Cards */
-.device-ios .card {
-  border-radius: 20px !important;
-  background: #1C1C1E !important;
-  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
-}
+  .mobile-nav-icon {
+    font-size: 1.2rem !important;
+    line-height: 1 !important;
+  }
 
-/* ----------------------------------------------------
-   🤖 ANDROID ADAPTIVE LAYOUT (MATERIAL 3 DARK)
-   ---------------------------------------------------- */
-.device-android .app-container {
-  flex-direction: column !important;
-  min-height: 100dvh !important;
-  padding-bottom: 75px !important;
-}
+  /* Adjust filters panel and cards on mobile */
+  .filters-panel {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
 
-.device-android .sidebar {
-  display: none !important;
-}
+  .filter-group {
+    width: 100% !important;
+  }
 
-.device-android .main-content {
-  margin-left: 0 !important;
-  padding: 14px 14px 85px 14px !important;
-  width: 100% !important;
-}
+  .select-input, .form-input {
+    width: 100% !important;
+  }
 
-.android-bottom-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: #141416;
-  border-top: 1px solid var(--border-glass);
-  padding: 6px 4px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
-}
-
-.android-tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: 0.7rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 16px;
-  transition: all 0.2s ease;
-  flex: 1;
-}
-
-.android-tab-item.active {
-  color: var(--primary);
-  font-weight: 700;
-}
-
-.android-tab-indicator {
-  padding: 3px 14px;
-  border-radius: 16px;
-  background: rgba(212, 161, 92, 0.18);
-  font-size: 1.15rem;
-}
-
-/* ==========================================================================
-   MOBILE SIMULATION & TOUCH-FRIENDLY RESPONSIVE STYLES
-   ========================================================================== */
-
-.mobile-simulator-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 100vh;
-  background: #060608;
-  padding: 24px 12px;
-}
-
-.mobile-phone-frame {
-  width: 100%;
-  max-width: 420px;
-  height: 860px;
-  background: var(--bg-primary);
-  border: 10px solid #282830;
-  border-radius: 40px;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.9), 0 0 40px rgba(212, 161, 92, 0.15);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.mobile-phone-speaker {
-  width: 80px;
-  height: 5px;
-  background: #444;
-  border-radius: 4px;
-  margin: 10px auto 6px auto;
-  flex-shrink: 0;
-}
-
-.mobile-phone-screen {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  .header-container {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
 }
 
 /* ==========================================================================
@@ -1148,88 +1095,48 @@ html, body {
     size: A4 landscape;
     margin: 8mm;
   }
-  
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 8pt !important;
   }
 
-  .sidebar, 
-  .filters-panel, 
-  .header-container, 
-  .alert-banner, 
-  .btn, 
-  .sidebar-footer,
-  .logo-container {
+  .sidebar, .nav-links, .demo-bar, .filters-panel, .btn, .mobile-top-bar, .mobile-bottom-nav {
     display: none !important;
   }
 
   .main-content {
     margin-left: 0 !important;
     padding: 0 !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  .tab-content-container {
-    overflow: visible !important;
-    height: auto !important;
-  }
-
-  .roster-grid-container {
-    overflow: visible !important;
-    max-height: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: transparent !important;
-    backdrop-filter: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .roster-table {
     width: 100% !important;
+  }
+
+  .card {
+    border: 1px solid #000000 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .table-container {
+    box-shadow: none !important;
+    border: 1px solid #000000 !important;
+  }
+
+  .data-table {
     border-collapse: collapse !important;
-    color: #000000 !important;
-    page-break-inside: avoid;
+    width: 100% !important;
   }
 
-  .roster-table th, 
-  .roster-table td {
-    border: 1px solid #000000 !important;
+  .data-table th, .data-table td {
+    border: 1px solid #333333 !important;
     color: #000000 !important;
-    background: #ffffff !important;
+    font-size: 9pt !important;
     padding: 4px 6px !important;
-    font-size: 7.5pt !important;
   }
 
-  .roster-table th.freeze-col, 
-  .roster-table td.freeze-col {
-    position: static !important;
-    background: #ffffff !important;
-    border-right: 1px solid #000000 !important;
-  }
-
-  .cell-rest {
-    background-color: #f3f4f6 !important;
-    color: #4b5563 !important;
-    font-weight: normal !important;
-  }
-
-  .cell-duty {
-    background-color: transparent !important;
-    color: #000000 !important;
+  .status-badge {
     border: 1px solid #000000 !important;
-  }
-
-  .cell-override {
-    background-color: #fef3c7 !important;
-    color: #b45309 !important;
-    border: 1px solid #b45309 !important;
-  }
-  
-  .cell-info-indicator {
-    display: none !important;
+    color: #000000 !important;
   }
 }
