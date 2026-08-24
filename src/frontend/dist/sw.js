@@ -1,20 +1,7 @@
-// Service Worker for Railway Roster PWA (iOS Safari & Android compatible)
-const CACHE_NAME = 'railway-roster-cache-v2';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.svg'
-];
+// Service Worker for Railway Roster PWA (Network-First Strategy)
+const CACHE_NAME = 'railway-roster-cache-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).catch((err) => {
-      console.warn('SW cache install warning:', err);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -22,7 +9,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => caches.delete(key))
       );
     })
   );
@@ -30,27 +17,35 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // CRITICAL FOR IOS SAFARI: Never call respondWith on non-GET or API requests
+  // Never intercept non-GET or API requests
   if (event.request.method !== 'GET' || event.request.url.includes('/api')) {
     return;
   }
 
-  // Only handle http/https requests
   if (!event.request.url.startsWith('http')) {
     return;
   }
 
+  // Network-First: Always fetch fresh assets to prevent stale hash 404s
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).catch((err) => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
         }
-        throw err;
-      });
-    })
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
+      })
   );
 });

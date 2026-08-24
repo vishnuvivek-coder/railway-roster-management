@@ -1280,66 +1280,125 @@ export default function App() {
   }
 
   const renderAppContent = () => (
-    <div className="app-container">
-      {/* Sidebar Navigation */}
-      <div className="sidebar">
-        <div className="logo-container">
-          <div className="logo-icon">🚆</div>
-          <div className="logo-text">Roster Manager</div>
+    <div className={`app-container device-${device}`}>
+      {/* Mobile Top Navigation Header with Hamburger Button */}
+      <div className="mobile-top-bar">
+        <button 
+          type="button" 
+          className="mobile-hamburger-btn"
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          aria-label="Open Navigation Menu"
+        >
+          <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>☰</span>
+        </button>
+
+        <div className="mobile-header-brand">
+          <span style={{ fontSize: '1.2rem' }}>🚆</span>
+          <span style={{ fontWeight: 800, fontFamily: 'Fraunces, serif', fontSize: '1.05rem', color: 'var(--primary)' }}>
+            Roster Manager
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="user-avatar" style={{ width: '30px', height: '30px', fontSize: '0.75rem', flexShrink: 0 }}>
+            {currentUser?.name ? currentUser.name[0].toUpperCase() : 'U'}
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Log Out"
+            style={{
+              background: 'rgba(189, 90, 90, 0.15)',
+              border: '1px solid rgba(189, 90, 90, 0.3)',
+              borderRadius: '6px',
+              padding: '4px 8px',
+              color: 'var(--danger)',
+              cursor: 'pointer',
+              fontSize: '0.72rem',
+              fontWeight: 600
+            }}
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+
+      {/* Backdrop overlay when mobile drawer is open */}
+      {isMobileMenuOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setIsMobileMenuOpen(false)} 
+        />
+      )}
+
+      {/* Collapsible Slide-Over Sidebar Navigation */}
+      <div className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+        <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="logo-icon">🚆</div>
+            <div className="logo-text">Roster Manager</div>
+          </div>
+          <button 
+            type="button" 
+            className="mobile-sidebar-close"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
         </div>
 
         <ul className="nav-links">
           <li 
             className={`nav-item ${activeTab === 'daily' ? 'active' : ''}`}
-            onClick={() => setActiveTab('daily')}
+            onClick={() => { setActiveTab('daily'); setIsMobileMenuOpen(false); }}
           >
             <span>👤</span> Employee Monthly View
           </li>
           <li 
             className={`nav-item ${activeTab === 'daily-summary' ? 'active' : ''}`}
-            onClick={() => setActiveTab('daily-summary')}
+            onClick={() => { setActiveTab('daily-summary'); setIsMobileMenuOpen(false); }}
           >
             <span>📋</span> Daily Summary Table
           </li>
           <li 
             className={`nav-item ${activeTab === 'roster' ? 'active' : ''}`}
-            onClick={() => setActiveTab('roster')}
+            onClick={() => { setActiveTab('roster'); setIsMobileMenuOpen(false); }}
           >
             <span>📅</span> Roster Grid
           </li>
           <li 
             className={`nav-item ${activeTab === 'links' ? 'active' : ''}`}
-            onClick={() => setActiveTab('links')}
+            onClick={() => { setActiveTab('links'); setIsMobileMenuOpen(false); }}
           >
             <span>🚆</span> Train Roster
           </li>
           <li 
             className={`nav-item ${activeTab === 'staff' ? 'active' : ''}`}
-            onClick={() => setActiveTab('staff')}
+            onClick={() => { setActiveTab('staff'); setIsMobileMenuOpen(false); }}
           >
             <span>👥</span> Staff Roster
           </li>
           <li 
             className={`nav-item ${activeTab === 'leaves' ? 'active' : ''}`}
-            onClick={() => setActiveTab('leaves')}
+            onClick={() => { setActiveTab('leaves'); setIsMobileMenuOpen(false); }}
           >
             <span>✉️</span> Leave / Swap
           </li>
           <li 
             className={`nav-item ${activeTab === 'register' ? 'active' : ''}`}
-            onClick={() => setActiveTab('register')}
+            onClick={() => { setActiveTab('register'); setIsMobileMenuOpen(false); }}
           >
             <span>📝</span> Duty Register
           </li>
           <li 
             className={`nav-item ${activeTab === 'lookups' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lookups')}
+            onClick={() => { setActiveTab('lookups'); setIsMobileMenuOpen(false); }}
           >
             <span>🔍</span> Lookups & Reports
           </li>
           <li 
             className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`}
-            onClick={() => setActiveTab('audit')}
+            onClick={() => { setActiveTab('audit'); setIsMobileMenuOpen(false); }}
           >
             <span>📜</span> Audit Logs
           </li>
@@ -1348,7 +1407,7 @@ export default function App() {
           {currentUser?.role === 'Admin' && (
             <li 
               className={`nav-item ${activeTab === 'user-management' ? 'active' : ''}`}
-              onClick={() => setActiveTab('user-management')}
+              onClick={() => { setActiveTab('user-management'); setIsMobileMenuOpen(false); }}
               style={{
                 marginTop: '10px',
                 borderTop: '1px solid var(--border-subtle)',

@@ -1574,11 +1574,30 @@ const possibleDistPaths = [
 
 let frontendDistPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html')));
 
+// Disable caching for HTML and Service Worker so asset hash updates load instantly
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html') || req.path === '/sw.js') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 if (frontendDistPath) {
   console.log(`[Production] Serving frontend from: ${frontendDistPath}`);
-  app.use(express.static(frontendDistPath));
+  app.use(express.static(frontendDistPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
 } else {

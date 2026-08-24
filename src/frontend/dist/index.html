@@ -14,15 +14,37 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <title>Railway Staff Link-Rotation Roster Manager</title>
-    <script type="module" crossorigin src="/assets/index-CK-15qh7.js"></script>
+    <script type="module" crossorigin src="/assets/index-DCsziL5Q.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BL8gsGER.css">
   </head>
   <body>
     <div id="root"></div>
     <script>
+      // Automatic recovery for stale chunks upon new deployments
+      window.addEventListener('error', function(e) {
+        if (e && e.message && (e.message.indexOf('dynamically imported module') !== -1 || e.message.indexOf('Loading chunk') !== -1 || e.message.indexOf('Unexpected token') !== -1)) {
+          var reloaded = sessionStorage.getItem('sw_chunk_reload');
+          if (!reloaded) {
+            sessionStorage.setItem('sw_chunk_reload', '1');
+            window.location.reload(true);
+          }
+        }
+      });
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch((err) => {
+          navigator.serviceWorker.register('/sw.js').then((reg) => {
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    window.location.reload();
+                  }
+                };
+              }
+            };
+          }).catch((err) => {
             console.log('SW registration note:', err);
           });
         });
