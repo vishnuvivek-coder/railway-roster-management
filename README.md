@@ -12,17 +12,11 @@
 
 ---
 
-## 🔑 Default Login Credentials
+## 🔑 Login Access
 
-| Role / Persona | Username | Password | Permissions & Access Level |
+| Role | Railway Officer ID / Username | Password | Permissions & Capabilities |
 | :--- | :--- | :--- | :--- |
-| 👑 **Master Administrator** | `admin` | `admin123` | **Full Read/Write**: User verification portal, manual duty overrides, leave approvals, daily register logging, link master editing. |
-| 👷 **Employee 1 (COR Conductor)** | `employee1_cor` | `staff123` | **Read-Only**: 21-day cyclic duty schedule, personal duty spotlight, submit leave/swap requests. |
-| 🚆 **Employee 5 (Sleeper Staff)** | `employee5_sleeper` | `staff123` | **Read-Only**: 63-day sleeper train roster, route details, submit leave/swap requests. |
-| 👩 **Employee 1 (Ladies Squad)** | `employee1_ladies` | `staff123` | **Read-Only**: 7-day squad roster, submit leave/swap requests. |
-| 🆕 **Pending Applicant** | `pending_user` | `staff123` | **Blocked**: Demonstrates the new user workflow waiting for Master Admin verification. |
-
-> ⚡ **Quick Switcher**: You can also use the floating **Prototype Sandbox** toolbar at the top to toggle between any persona with 1 click without typing passwords.
+| 👑 **Railway Administrator / Officer** | `12345` | `CLICKME` | **Full Administrative Access**: Manage 21-day COR, 63-day Sleeper, and 7-day Ladies link rotations, approve duty swaps/leaves, log physical duty registers, perform manual duty overrides, and export reports. |
 
 ---
 
@@ -43,28 +37,24 @@ Link Number = [((Seniority Index + Day Offset - 1) mod Cycle Length)] + 1
 
 ---
 
-## 📱 Mobile PWA & Adaptive Layouts
+## 📱 Mobile PWA & Responsive Layout
 
-- **🍎 iOS Layout (iPhone / iPad)**:
-  - Cupertino blur navigation bar with Dynamic Island / Notch safe-area spacing (`viewport-fit=cover`).
-  - Frosted glass bottom dock with SF-style iconography.
-  - Form inputs set to `16px` to prevent disruptive iOS Safari auto-zooming.
-- **🤖 Android Layout**:
-  - Material 3 dark surface with quick category chips and bottom navigation bar.
 - **Collapsible Drawer (`☰` Menu)**:
   - Full-width responsive dashboard on mobile devices.
   - Slide-over navigation drawer triggered via top hamburger menu.
-- **Install to Home Screen**:
-  - **Android (Chrome)**: Tap `⋮` ➔ **"Install app"** or **"Add to Home screen"**.
-  - **iPhone (Safari)**: Tap Share `⎕↑` ➔ **"Add to Home Screen"**.
+- **Fixed Bottom Dock**:
+  - 1-tap quick navigation for *My Duty*, *Daily Summary*, *Roster Grid*, *Leaves*, and *Menu*.
+- **iOS Safari & Android PWA**:
+  - Cupertino safe-area spacing for Dynamic Island / iPhone notch.
+  - 16px form input zoom protection.
+  - *"Add to Home Screen"* standalone application support.
 
 ---
 
 ## 🔒 Security & Data Integrity
 
 - **Role-Based Access Control (RBAC)**: All mutating endpoints (`POST /api/categories`, `POST /api/staff`, `POST /api/links`, `POST /api/overrides`, `POST /api/leave-requests/:id/approve`, `POST /api/duty-register`) strictly require `Admin` JWT tokens.
-- **Non-Admin Lockdown**: All staff, guest, and viewer accounts are restricted to read-only mode (`403 Forbidden` on unauthorized modifications).
-- **User Approval Pipeline**: New account registrations are set to `PENDING` status and cannot access rosters until explicitly verified by the Master Admin.
+- **User Verification Pipeline**: New account registrations are set to `PENDING` status until verified by the Administrator.
 - **Audit Logging**: Every administrative action, duty override, and account verification is permanently logged with timestamps and user roles.
 
 ---
@@ -100,25 +90,6 @@ npm test
 npm run build
 npm start
 ```
-
----
-
-## 📡 REST API Overview
-
-| Method | Endpoint | Access Level | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/login` | Public | Authenticate user & issue JWT token |
-| `POST` | `/api/auth/register` | Public | Register new staff account (creates `PENDING` user) |
-| `POST` | `/api/auth/demo-switch` | Public | Fast-switch persona for prototype demonstrations |
-| `GET` | `/api/categories` | Authenticated | List all 3 duty categories & cycle parameters |
-| `GET` | `/api/staff` | Authenticated | Get seniority staff roster by category |
-| `GET` | `/api/links` | Authenticated | Get link definitions (train pairs, coaches, routes) |
-| `GET` | `/api/roster` | Authenticated | Calculate full monthly cyclic link rotation grid |
-| `POST` | `/api/overrides` | **Admin Only** | Apply manual link override or emergency sick leave |
-| `POST` | `/api/duty-register` | **Admin Only** | Record daily physical log entries & actual duties |
-| `GET` | `/api/duty-register/compare`| Authenticated | Compare planned rotation links vs actual physical register |
-| `GET` | `/api/admin/users` | **Admin Only** | Directory of pending, approved, and rejected users |
-| `POST` | `/api/admin/users/:id/approve` | **Admin Only** | Approve pending staff applicant |
 
 ---
 

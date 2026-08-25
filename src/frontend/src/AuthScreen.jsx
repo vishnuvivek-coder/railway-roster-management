@@ -137,7 +137,7 @@ export default function AuthScreen({ onLoginSuccess }) {
   };
 
   const fillAdminCredentials = () => {
-    setLoginForm({ username: 'admin', password: 'admin123' });
+    setLoginForm({ username: '12345', password: 'CLICKME' });
     setErrorMessage('');
     setStatusNotice(null);
   };
@@ -349,12 +349,12 @@ export default function AuthScreen({ onLoginSuccess }) {
         {!isRegister ? (
           <form onSubmit={handleLoginSubmit}>
             <div className="form-group">
-              <label className="form-label">Username or Email</label>
+              <label className="form-label">Railway Officer ID / Username</label>
               <input
                 type="text"
                 required
                 className="form-input"
-                placeholder="e.g. admin or employee1"
+                placeholder="e.g. 12345"
                 value={loginForm.username}
                 onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
               />
@@ -381,7 +381,7 @@ export default function AuthScreen({ onLoginSuccess }) {
                 type={showPassword ? 'text' : 'password'}
                 required
                 className="form-input"
-                placeholder="Enter password"
+                placeholder="Enter password (e.g. CLICKME)"
                 value={loginForm.password}
                 onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               />
@@ -402,7 +402,7 @@ export default function AuthScreen({ onLoginSuccess }) {
               {loading ? 'Authenticating...' : 'Sign In to Portal →'}
             </button>
 
-            {/* Helper for Master Admin Test Login */}
+            {/* Quick Fill Registered Credentials */}
             <div style={{
               marginTop: '24px',
               paddingTop: '18px',
@@ -410,7 +410,7 @@ export default function AuthScreen({ onLoginSuccess }) {
               textAlign: 'center'
             }}>
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
-                Need Master Admin access?
+                Quick Login Access:
               </p>
               <button
                 type="button"
@@ -427,7 +427,7 @@ export default function AuthScreen({ onLoginSuccess }) {
                   transition: 'all 0.2s ease'
                 }}
               >
-                ⚡ Fill Default Admin Credentials (admin / admin123)
+                🔑 Fill Registered ID (12345 / CLICKME)
               </button>
             </div>
           </form>

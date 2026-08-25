@@ -54,36 +54,22 @@ async function initDb() {
     )
   `);
 
-  // Seed default Master Admin account if not existing
-  const adminUser = await get("SELECT * FROM users WHERE username = 'admin'");
-  if (!adminUser) {
-    const hash = await bcrypt.hash('admin123', 10);
+  // Seed Registered Admin Account (ID: 12345 / Password: CLICKME)
+  const clickmeHash = await bcrypt.hash('CLICKME', 10);
+  const primaryAdmin = await get("SELECT * FROM users WHERE username = '12345'");
+  if (!primaryAdmin) {
     await run(
       `INSERT INTO users (username, name, email, password_hash, role, status, approved_at, approved_by)
        VALUES (?, ?, ?, ?, 'Admin', 'APPROVED', CURRENT_TIMESTAMP, 'SYSTEM')`,
-      ['admin', 'Master Administrator', 'admin@railway.gov.in', hash]
+      ['12345', 'Railway Officer / Administrator', 'admin12345@railway.gov.in', clickmeHash]
     );
-    console.log('Master Admin account seeded (username: admin / password: admin123)');
-  }
-
-  // Seed demo staff users
-  const staffHash = await bcrypt.hash('staff123', 10);
-  const demoUsers = [
-    { username: 'employee1_cor', name: 'Employee 1 (COR Conductor)', email: 'emp1.cor@railway.gov.in', role: 'Staff', status: 'APPROVED', staff_id: 1 },
-    { username: 'employee5_sleeper', name: 'Employee 5 (Sleeper Staff)', email: 'emp5.sleeper@railway.gov.in', role: 'Staff', status: 'APPROVED', staff_id: 26 },
-    { username: 'employee1_ladies', name: 'Employee 1 (Ladies Squad)', email: 'emp1.ladies@railway.gov.in', role: 'Staff', status: 'APPROVED', staff_id: 85 },
-    { username: 'pending_user', name: 'New Staff Applicant', email: 'applicant@railway.gov.in', role: 'Staff', status: 'PENDING', staff_id: null }
-  ];
-
-  for (const u of demoUsers) {
-    const existing = await get("SELECT * FROM users WHERE username = ?", [u.username]);
-    if (!existing) {
-      await run(
-        `INSERT INTO users (username, name, email, password_hash, role, status, staff_id, approved_at, approved_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'SYSTEM')`,
-        [u.username, u.name, u.email, staffHash, u.role, u.status, u.staff_id]
-      );
-    }
+    console.log('Admin account registered (ID: 12345 / Password: CLICKME)');
+  } else {
+    // Ensure password and role are updated to CLICKME / Admin
+    await run(
+      `UPDATE users SET password_hash = ?, role = 'Admin', status = 'APPROVED' WHERE username = '12345'`,
+      [clickmeHash]
+    );
   }
   // Create tables
   await run(`

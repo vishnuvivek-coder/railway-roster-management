@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import AuthScreen from './AuthScreen';
-import DemoBar from './DemoBar';
 import { useDevice } from './useDevice';
 
 const API_BASE = '/api';
@@ -99,8 +98,7 @@ export default function App() {
   // Derived Admin Role status
   const isAdmin = currentUser?.role === 'Admin';
   const { device, isIOS, isAndroid, isMobile, isDesktop, deviceMode, setDeviceMode, detectedPlatform } = useDevice();
-  const [isMobileSimulated, setIsMobileSimulated] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // User Verification & Role Administration State
   const [registeredUsers, setRegisteredUsers] = useState([]);
@@ -325,49 +323,6 @@ export default function App() {
     setCurrentUser(null);
     setAuthToken(null);
     setActiveTab('daily');
-  };
-
-  // Fast Persona Switching for Prototype Showcases
-  const handleSwitchPersona = async (personaKey) => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/demo-switch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personaKey })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Failed to switch persona');
-        return;
-      }
-      setCurrentUser(data.user);
-      setAuthToken(data.token);
-      setUserRole(data.user.role);
-      localStorage.setItem('railway_auth_token', data.token);
-      localStorage.setItem('railway_user', JSON.stringify(data.user));
-      if (data.user.staff_id) {
-        setSelectedStaffId(data.user.staff_id.toString());
-      }
-    } catch (err) {
-      alert('Error switching demo persona: ' + err.message);
-    }
-  };
-
-  // 1-Click Guided Operational Scenarios
-  const handleRunScenario = async (scenarioType) => {
-    if (scenarioType === 'rotation') {
-      setSelectedDate(getLocalDateString());
-      setActiveTab('daily');
-      setDailyViewMode('table');
-    } else if (scenarioType === 'swap') {
-      await handleSwitchPersona('admin');
-      setActiveTab('leaves');
-    } else if (scenarioType === 'reconciliation') {
-      await handleSwitchPersona('admin');
-      setActiveTab('register');
-      setSubTab('reco');
-      fetchReconciliation();
-    }
   };
 
   // Load Categories on startup
@@ -1249,33 +1204,13 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
-        <DemoBar 
-          currentUser={currentUser}
-          device={device}
-          deviceMode={deviceMode}
-          setDeviceMode={setDeviceMode}
-          detectedPlatform={detectedPlatform}
-          onSwitchPersona={handleSwitchPersona}
-          onRunScenario={handleRunScenario}
-          isMobileSimulated={isMobileSimulated}
-          onToggleMobileSimulated={() => setIsMobileSimulated(!isMobileSimulated)}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          categories={categories}
-          selectedCatId={selectedCatId}
-          setSelectedCatId={setSelectedCatId}
-        />
-        <div style={{ flex: 1 }}>
-          <AuthScreen 
-            onLoginSuccess={(user, token) => {
-              setCurrentUser(user);
-              setAuthToken(token);
-              setUserRole(user.role);
-            }} 
-          />
-        </div>
-      </div>
+      <AuthScreen 
+        onLoginSuccess={(user, token) => {
+          setCurrentUser(user);
+          setAuthToken(token);
+          setUserRole(user.role);
+        }} 
+      />
     );
   }
 
@@ -4225,36 +4160,5 @@ export default function App() {
     </div>
   );
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
-      <DemoBar 
-        currentUser={currentUser}
-        device={device}
-        deviceMode={deviceMode}
-        setDeviceMode={setDeviceMode}
-        detectedPlatform={detectedPlatform}
-        onSwitchPersona={handleSwitchPersona}
-        onRunScenario={handleRunScenario}
-        isMobileSimulated={isMobileSimulated}
-        onToggleMobileSimulated={() => setIsMobileSimulated(!isMobileSimulated)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        categories={categories}
-        selectedCatId={selectedCatId}
-        setSelectedCatId={setSelectedCatId}
-      />
-      {isMobileSimulated ? (
-        <div className="mobile-simulator-wrapper">
-          <div className="mobile-phone-frame">
-            <div className="mobile-phone-speaker"></div>
-            <div className="mobile-phone-screen">
-              {renderAppContent()}
-            </div>
-          </div>
-        </div>
-      ) : (
-        renderAppContent()
-      )}
-    </div>
-  );
+  return renderAppContent();
 }
