@@ -1283,33 +1283,81 @@ export const NAME_ALIASES = {
   'B PAVAN KUMAR': 'B PAVAN KUAMR'
 };
 
+// Official Designation Seniority Hierarchy:
+// 1. CTI (Chief Ticket Inspector)
+// 2. TTI (Travelling Ticket Inspector)
+// 3. SRTE (Senior Ticket Examiner)
+// 4. Sr.CCTC / SRCCTC (Senior Commercial cum Ticket Clerk)
+// 5. CCTC (Commercial cum Ticket Clerk)
+export const DESIGNATION_HIERARCHY = [
+  { tier: 1, code: 'CTI', title: 'Chief Ticket Inspector' },
+  { tier: 2, code: 'TTI', title: 'Travelling Ticket Inspector' },
+  { tier: 3, code: 'SRTE', title: 'Senior Ticket Examiner' },
+  { tier: 4, code: 'Sr.CCTC', altCode: 'SRCCTC', title: 'Senior Commercial cum Ticket Clerk' },
+  { tier: 5, code: 'CCTC', title: 'Commercial cum Ticket Clerk' }
+];
+
+export function getDesignationTier(desg) {
+  if (!desg) return 999;
+  const s = String(desg).trim().toUpperCase();
+  if (s === 'CTI' || s.includes('CHIEF TICKET')) return 1;
+  if (s === 'TTI' || s.includes('TRAVELLING TICKET')) return 2;
+  if (s === 'SRTE' || s === 'SR.TE' || s === 'SR TE' || s.includes('SENIOR TICKET')) return 3;
+  if (s === 'SRCCTC' || s === 'SR.CCTC' || s === 'SR CCTC' || s.includes('SR. COMMERCIAL') || s.includes('SENIOR COMMERCIAL') || s.includes('SR.CCTC')) return 4;
+  if (s === 'CCTC' || s.includes('COMMERCIAL CUM TICKET')) return 5;
+  return 999;
+}
+
 // Helper: Normalize name string for reliable matching
 export function normalizeName(name) {
   if (!name) return '';
   return name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 }
 
-// Map for fast O(1) lookup
-const NAME_TO_RANK_MAP = new Map();
-const PF_TO_RANK_MAP = new Map();
+// Build Enhanced Seniority List with within-designation ranks and hierarchy tiers
+const desgCounters = {};
+export const ENHANCED_SENIORITY_LIST = SENIORITY_LIST.map(item => {
+  const desg = (item.desg || item.designation || '').trim();
+  const tier = getDesignationTier(desg);
+  desgCounters[desg] = (desgCounters[desg] || 0) + 1;
+  const desgRank = desgCounters[desg];
+  const sortScore = tier * 1000 + desgRank;
+  const badgeText = `${desg} #${desgRank}`;
+  return {
+    ...item,
+    tier,
+    desg_rank: desgRank,
+    sort_score: sortScore,
+    badge_text: badgeText
+  };
+});
 
-SENIORITY_LIST.forEach(item => {
+// Maps for fast O(1) lookup
+const NAME_TO_RECORD_MAP = new Map();
+const PF_TO_RECORD_MAP = new Map();
+
+ENHANCED_SENIORITY_LIST.forEach(item => {
   const norm = normalizeName(item.name);
-  if (norm) NAME_TO_RANK_MAP.set(norm, item.sl_no);
-  if (item.pf_number && item.pf_number !== '--') {
-    PF_TO_RANK_MAP.set(item.pf_number.trim(), item.sl_no);
+  if (norm) NAME_TO_RECORD_MAP.set(norm, item);
+  if (item.pf && item.pf !== '--') {
+    PF_TO_RECORD_MAP.set(item.pf.trim(), item);
   }
 });
 
-// Helper: Get seniority rank (1 to 139) for a staff member. Returns 999 if vacant or unlisted.
-export function getSeniorityRank(staff) {
-  if (!staff) return 999;
+/**
+ * Get comprehensive seniority details for a staff member.
+ * Returns { sl_no, name, desg, tier, desgRank, badgeText, sortScore, isVacant }
+ */
+export function getSeniorityDetails(staff) {
+  if (!staff) {
+    return { sl_no: 999, name: 'VACANT', desg: '', tier: 999, desgRank: 999, badgeText: '', sortScore: 999999, isVacant: true };
+  }
   if (staff.isVacant || staff.isVacantAdvance || staff.isVacantUpgrade || staff.isVacantShifted) {
-    return 999;
+    return { sl_no: 999, name: staff.name || 'VACANT', desg: '', tier: 999, desgRank: 999, badgeText: '', sortScore: 999999, isVacant: true };
   }
   const rawName = (staff.name || '').trim();
   if (!rawName || rawName.startsWith('[') || rawName.toUpperCase().includes('VACANT') || rawName.toUpperCase().includes('UNMANNED')) {
-    return 999;
+    return { sl_no: 999, name: rawName || 'VACANT', desg: '', tier: 999, desgRank: 999, badgeText: '', sortScore: 999999, isVacant: true };
   }
 
   const upper = rawName.toUpperCase();
@@ -1318,26 +1366,111 @@ export function getSeniorityRank(staff) {
 
   // 1. Try PF number match if available
   const pf = (staff.pf_no || staff.pf_number || '').trim();
-  if (pf && pf !== '--' && PF_TO_RANK_MAP.has(pf)) {
-    return PF_TO_RANK_MAP.get(pf);
+  if (pf && pf !== '--' && PF_TO_RECORD_MAP.has(pf)) {
+    const rec = PF_TO_RECORD_MAP.get(pf);
+    return {
+      sl_no: rec.sl_no,
+      name: rec.name,
+      desg: rec.desg,
+      tier: rec.tier,
+      desgRank: rec.desg_rank,
+      badgeText: rec.badge_text,
+      sortScore: rec.sort_score,
+      isVacant: false
+    };
   }
 
   // 2. Try normalized name match
   const norm = normalizeName(searchName);
-  if (norm && NAME_TO_RANK_MAP.has(norm)) {
-    return NAME_TO_RANK_MAP.get(norm);
+  if (norm && NAME_TO_RECORD_MAP.has(norm)) {
+    const rec = NAME_TO_RECORD_MAP.get(norm);
+    return {
+      sl_no: rec.sl_no,
+      name: rec.name,
+      desg: rec.desg,
+      tier: rec.tier,
+      desgRank: rec.desg_rank,
+      badgeText: rec.badge_text,
+      sortScore: rec.sort_score,
+      isVacant: false
+    };
   }
 
-  // 3. Try substring/fuzzy match on SENIORITY_LIST
-  for (const item of SENIORITY_LIST) {
+  // 3. Try substring/fuzzy match on ENHANCED_SENIORITY_LIST
+  for (const item of ENHANCED_SENIORITY_LIST) {
     const itemNorm = normalizeName(item.name);
-    if (itemNorm === norm) return item.sl_no;
-    if (norm.length >= 4 && (itemNorm.includes(norm) || norm.includes(itemNorm))) {
-      return item.sl_no;
+    if (itemNorm === norm || (norm.length >= 4 && (itemNorm.includes(norm) || norm.includes(itemNorm)))) {
+      return {
+        sl_no: item.sl_no,
+        name: item.name,
+        desg: item.desg,
+        tier: item.tier,
+        desgRank: item.desg_rank,
+        badgeText: item.badge_text,
+        sortScore: item.sort_score,
+        isVacant: false
+      };
     }
   }
 
-  return 999; // Default for unlisted staff
+  // 4. Fallback for unlisted staff with known designation
+  const tier = getDesignationTier(staff.designation || '');
+  const desgLabel = staff.designation || 'Staff';
+  return {
+    sl_no: 999,
+    name: rawName,
+    desg: staff.designation || '',
+    tier: tier,
+    desgRank: 999,
+    badgeText: tier < 999 ? `${desgLabel} (Unlisted)` : '',
+    sortScore: tier * 1000 + 999,
+    isVacant: false
+  };
+}
+
+/**
+ * Compare seniority of two staff members according to rules:
+ * 1. Compare across designations: 1. CTI > 2. TTI > 3. SRTE > 4. SRCCTC > 5. CCTC
+ * 2. If same designation: compare seniority within that designation
+ *
+ * Returns negative if staffA is MORE SENIOR than staffB
+ * Returns positive if staffB is MORE SENIOR than staffA
+ * Returns 0 if equal
+ */
+export function compareSeniority(staffA, staffB) {
+  const a = getSeniorityDetails(staffA);
+  const b = getSeniorityDetails(staffB);
+
+  if (a.isVacant && b.isVacant) return 0;
+  if (a.isVacant) return 1;
+  if (b.isVacant) return -1;
+
+  // 1. Compare across designations (Hierarchy: 1. CTI > 2. TTI > 3. SRTE > 4. SRCCTC > 5. CCTC)
+  if (a.tier !== b.tier) {
+    return a.tier - b.tier; // Lower tier number = higher seniority
+  }
+
+  // 2. Same designation: check seniority within that designation
+  return a.desgRank - b.desgRank; // Lower rank = higher seniority
+}
+
+/**
+ * Check if staffA is more senior than staffB
+ */
+export function isSenior(staffA, staffB) {
+  return compareSeniority(staffA, staffB) < 0;
+}
+
+// Helper: Get seniority rank (1 to 139) for backward compatibility. Returns 999 if vacant or unlisted.
+export function getSeniorityRank(staff) {
+  const details = getSeniorityDetails(staff);
+  return details.sl_no;
+}
+
+// Helper: Get designation badge string, e.g. "CTI #17", "TTI #1"
+export function getSeniorityBadge(staff) {
+  const details = getSeniorityDetails(staff);
+  return details.badgeText;
 }
 
 // Helper to swap staff identity between two duty slots while retaining link numbers and coach definitions
@@ -1365,11 +1498,15 @@ export function shiftStaffDuties(dutyA, dutyB, reason) {
 
 /**
  * Apply Seniority Coach Allocation to duties in a train slot:
- * 1. If 2 COR employees on the train:
- *    - Highest seniority person is allotted coaches H1,H2,A1,A2,A3
- *    - Second seniority person is allotted coaches B1,B2,B3,B4
+ *
+ * RULE 1: If 2 COR employees on the train:
+ *    - Seniority is evaluated: 1. CTI > 2. TTI > 3. SRTE > 4. SRCCTC > 5. CCTC, and within designation.
+ *    - Highest seniority person is allotted coaches H1,H2,A1,A2,A3 (Link 10)
+ *    - Second seniority person is allotted coaches B1,B2,B3,B4 (Link 18)
  *    - Link numbers remain unchanged, persons are shifted.
- * 2. If 2 TTE employees on the train (where one is AC+SL and other is SL):
+ *
+ * RULE 2: If 2 TTE employees on the train (where one is AC+SL and other is SL):
+ *    - Seniority is evaluated: 1. CTI > 2. TTI > 3. SRTE > 4. SRCCTC > 5. CCTC, and within designation.
  *    - Highest seniority person is allotted coaches AC+SL
  *    - Second seniority person is allotted coaches SL
  *    - Link numbers remain unchanged, persons are shifted.
@@ -1394,12 +1531,14 @@ export function applySeniorityCoachAllocation(dutiesInSlot) {
       if (/COR-1/i.test(dutyH1.firstCoaches)) dutyH1.firstCoaches = 'H1,H2,A1,A2,A3';
       if (/COR-2/i.test(dutyB1.firstCoaches)) dutyB1.firstCoaches = 'B1,B2,B3,B4';
 
-      const rankH1 = getSeniorityRank(dutyH1);
-      const rankB1 = getSeniorityRank(dutyB1);
+      const detailsH1 = getSeniorityDetails(dutyH1);
+      const detailsB1 = getSeniorityDetails(dutyB1);
 
-      // If dutyB1 has higher seniority (smaller rank number) than dutyH1, swap the persons
-      if (rankB1 < rankH1) {
-        shiftStaffDuties(dutyH1, dutyB1, 'COR Seniority: Rank #' + rankB1 + ' senior to Rank #' + rankH1);
+      // If dutyB1 has higher seniority than dutyH1, swap the persons
+      if (isSenior(dutyB1, dutyH1)) {
+        const bBadge = detailsB1.badgeText || detailsB1.name;
+        const hBadge = detailsH1.badgeText || detailsH1.name;
+        shiftStaffDuties(dutyH1, dutyB1, `COR Seniority: ${bBadge} is senior to ${hBadge} (Allotted H1,H2,A1,A2,A3)`);
       }
     }
   }
@@ -1409,7 +1548,7 @@ export function applySeniorityCoachAllocation(dutiesInSlot) {
   const tteDuties = dutiesInSlot.filter(d => 
     parseInt(d.categoryId, 10) === 2 || 
     parseInt(d.categoryId, 10) === 3 ||
-    ['TTI', 'SRTE', 'Sr.CCTC', 'CCTC'].includes(d.designation) ||
+    ['TTI', 'SRTE', 'Sr.CCTC', 'SRCCTC', 'CCTC'].includes(d.designation) ||
     (d.firstCoaches && /AC\+SL|SL/i.test(d.firstCoaches))
   );
 
@@ -1418,19 +1557,25 @@ export function applySeniorityCoachAllocation(dutiesInSlot) {
     let dutySl = tteDuties.find(d => d.firstCoaches && (d.firstCoaches.trim() === 'SL' || /S1-S\d/i.test(d.firstCoaches)));
 
     if (dutyAcSl && dutySl && dutyAcSl !== dutySl) {
-      const rankAcSl = getSeniorityRank(dutyAcSl);
-      const rankSl = getSeniorityRank(dutySl);
+      const detailsAcSl = getSeniorityDetails(dutyAcSl);
+      const detailsSl = getSeniorityDetails(dutySl);
 
-      // If dutySl has higher seniority (smaller rank number) than dutyAcSl, swap the persons
-      if (rankSl < rankAcSl) {
-        shiftStaffDuties(dutyAcSl, dutySl, 'TTE Seniority: Rank #' + rankSl + ' senior to Rank #' + rankAcSl);
+      // If dutySl has higher seniority than dutyAcSl, swap the persons
+      if (isSenior(dutySl, dutyAcSl)) {
+        const slBadge = detailsSl.badgeText || detailsSl.name;
+        const acBadge = detailsAcSl.badgeText || detailsAcSl.name;
+        shiftStaffDuties(dutyAcSl, dutySl, `TTE Seniority: ${slBadge} is senior to ${acBadge} (Allotted AC+SL)`);
       }
     }
   }
 
-  // Annotate all duties with their seniority rank for display
+  // Annotate all duties with their seniority details for display
   dutiesInSlot.forEach(d => {
-    d.seniorityRank = getSeniorityRank(d);
+    const details = getSeniorityDetails(d);
+    d.seniorityRank = details.sl_no;
+    d.seniorityBadge = details.badgeText;
+    d.seniorityTier = details.tier;
+    d.seniorityDesgRank = details.desgRank;
   });
 
   return dutiesInSlot;

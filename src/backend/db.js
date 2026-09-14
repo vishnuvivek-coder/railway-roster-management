@@ -1120,6 +1120,7 @@ async function initDb() {
 
   // ----------------------------------------------------
   // SENIORITY LIST TABLE & SEEDING (139 STAFF MEMBERS)
+  // Hierarchy Priority: 1. CTI > 2. TTI > 3. SRTE > 4. Sr.CCTC > 5. CCTC
   // ----------------------------------------------------
   await run(`
     CREATE TABLE IF NOT EXISTS seniority_list (
@@ -1131,9 +1132,19 @@ async function initDb() {
       contact_number TEXT,
       pf_number TEXT,
       email TEXT,
+      desg_rank INTEGER,
+      hierarchy_tier INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Ensure desg_rank and hierarchy_tier columns exist on existing DBs
+  try {
+    await run('ALTER TABLE seniority_list ADD COLUMN desg_rank INTEGER');
+  } catch (e) {}
+  try {
+    await run('ALTER TABLE seniority_list ADD COLUMN hierarchy_tier INTEGER');
+  } catch (e) {}
 
   const seniorityCount = await get("SELECT COUNT(*) as count FROM seniority_list");
   if (seniorityCount.count === 0) {
@@ -1141,14 +1152,29 @@ async function initDb() {
       const seedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'seniority_seed.json'), 'utf8'));
       for (const item of seedData) {
         await run(
-          `INSERT INTO seniority_list (sl_no, name, designation, cug_number, contact_number, pf_number, email)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [item.sl_no, item.name, item.desg, item.cug, item.contact, item.pf, item.email]
+          `INSERT INTO seniority_list (sl_no, name, designation, cug_number, contact_number, pf_number, email, desg_rank, hierarchy_tier)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [item.sl_no, item.name, item.desg, item.cug, item.contact, item.pf, item.email, item.desg_rank, item.tier]
         );
       }
       console.log(`Seeded ${seedData.length} ticket checking staff into seniority_list.`);
     } catch (e) {
       console.error('Failed to seed seniority_list:', e.message);
+    }
+  } else {
+    // Backfill any null desg_rank or hierarchy_tier in existing table
+    try {
+      const tierMap = { 'CTI': 1, 'TTI': 2, 'SRTE': 3, 'Sr.CCTC': 4, 'SRCCTC': 4, 'CCTC': 5 };
+      const allRows = await all("SELECT id, designation, sl_no FROM seniority_list ORDER BY sl_no ASC");
+      const counters = {};
+      for (const r of allRows) {
+        const d = r.designation;
+        counters[d] = (counters[d] || 0) + 1;
+        const tier = tierMap[d] || 999;
+        await run("UPDATE seniority_list SET desg_rank = ?, hierarchy_tier = ? WHERE id = ?", [counters[d], tier, r.id]);
+      }
+    } catch (e) {
+      console.error('Failed to backfill desg_rank in seniority_list:', e.message);
     }
   }
 }

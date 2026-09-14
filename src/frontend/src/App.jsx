@@ -3907,10 +3907,10 @@ export default function App() {
                                             <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
                                               ({d.designation || '-'})
                                             </span>
-                                            {d.seniorityRank && d.seniorityRank !== 999 && (
+                                            {(d.seniorityBadge || (d.seniorityRank && d.seniorityRank !== 999)) && (
                                               <span 
                                                 className="badge no-print" 
-                                                title={d.seniorityShiftReason || `Seniority Rank #${d.seniorityRank}`}
+                                                title={d.seniorityShiftReason || `Seniority: ${d.seniorityBadge || ('#' + d.seniorityRank)} (List SL #${d.seniorityRank || '-'}) | Priority: 1.CTI > 2.TTI > 3.SRTE > 4.Sr.CCTC > 5.CCTC`}
                                                 style={{ 
                                                   background: d.shiftedBySeniority ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)', 
                                                   color: d.shiftedBySeniority ? '#f59e0b' : 'var(--color-text-secondary)', 
@@ -3920,7 +3920,7 @@ export default function App() {
                                                   fontWeight: 700 
                                                 }}
                                               >
-                                                🏅 #{d.seniorityRank}{d.shiftedBySeniority ? ' ⚡' : ''}
+                                                🏅 {d.seniorityBadge || (`#${d.seniorityRank}`)}{d.shiftedBySeniority ? ' ⚡' : ''}
                                               </span>
                                             )}
                                             {d.isExtraStaff && (

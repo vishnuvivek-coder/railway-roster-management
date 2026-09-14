@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
+const TIER_MAP = {
+  'CTI': 1,
+  'TTI': 2,
+  'SRTE': 3,
+  'Sr.CCTC': 4,
+  'SRCCTC': 4,
+  'CCTC': 5
+};
+
 export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin }) {
   const [seniorityList, setSeniorityList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [desgFilter, setDesgFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('hierarchy'); // 'hierarchy' | 'sl_no'
 
   const fetchSeniority = async () => {
     try {
@@ -29,16 +39,31 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
     fetchSeniority();
   }, []);
 
-  // Filtered list
+  // Compute within-designation rank map
+  const desgCounters = useMemo(() => {
+    const counts = {};
+    const rankMap = new Map();
+    const sorted = [...seniorityList].sort((a, b) => a.sl_no - b.sl_no);
+    sorted.forEach(item => {
+      const d = item.designation || 'OTHER';
+      counts[d] = (counts[d] || 0) + 1;
+      rankMap.set(item.sl_no, counts[d]);
+    });
+    return { counts, rankMap };
+  }, [seniorityList]);
+
+  // Filtered and Sorted list
   const filteredList = useMemo(() => {
-    return seniorityList.filter(item => {
+    let list = seniorityList.filter(item => {
       if (desgFilter !== 'ALL' && item.designation !== desgFilter) {
         return false;
       }
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
+      const desgRank = item.desg_rank || desgCounters.rankMap.get(item.sl_no) || '';
       return (
         String(item.sl_no).includes(q) ||
+        String(desgRank).includes(q) ||
         (item.name && item.name.toLowerCase().includes(q)) ||
         (item.designation && item.designation.toLowerCase().includes(q)) ||
         (item.cug_number && item.cug_number.toLowerCase().includes(q)) ||
@@ -47,7 +72,21 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         (item.email && item.email.toLowerCase().includes(q))
       );
     });
-  }, [seniorityList, desgFilter, searchQuery]);
+
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'hierarchy') {
+        const tierA = a.hierarchy_tier || TIER_MAP[a.designation] || 999;
+        const tierB = b.hierarchy_tier || TIER_MAP[b.designation] || 999;
+        if (tierA !== tierB) return tierA - tierB;
+        const rankA = a.desg_rank != null ? a.desg_rank : (desgCounters.rankMap.get(a.sl_no) || a.sl_no);
+        const rankB = b.desg_rank != null ? b.desg_rank : (desgCounters.rankMap.get(b.sl_no) || b.sl_no);
+        return rankA - rankB;
+      }
+      return a.sl_no - b.sl_no;
+    });
+
+    return list;
+  }, [seniorityList, desgFilter, searchQuery, sortBy, desgCounters]);
 
   // Designation counts
   const counts = useMemo(() => {
@@ -62,9 +101,11 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
   // Export CSV
   const handleExportCSV = () => {
     if (filteredList.length === 0) return;
-    let csv = 'Seniority Rank,Name of Employee,Designation,CUG Number,Contact Number,PF Number,Email ID\n';
+    let csv = 'Official Seniority Rank,Name of Employee,Designation,Rank in Designation,Designation Hierarchy Priority,CUG Number,Contact Number,PF Number,Email ID\n';
     filteredList.forEach(item => {
-      csv += `"${item.sl_no}","${item.name || ''}","${item.designation || ''}","${item.cug_number || ''}","${item.contact_number || ''}","${item.pf_number || ''}","${item.email || ''}"\n`;
+      const rankInDesg = item.desg_rank != null ? item.desg_rank : (desgCounters.rankMap.get(item.sl_no) || '');
+      const tier = item.hierarchy_tier || TIER_MAP[item.designation] || '';
+      csv += `"${item.sl_no}","${item.name || ''}","${item.designation || ''}","${item.designation} #${rankInDesg}","${tier}","${item.cug_number || ''}","${item.contact_number || ''}","${item.pf_number || ''}","${item.email || ''}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -150,7 +191,39 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         </div>
       </div>
 
-      {/* Designation Filter Pills & Search */}
+      {/* Designation Hierarchy Priority Banner */}
+      <div style={{
+        padding: '12px 18px',
+        marginBottom: '16px',
+        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(168, 85, 247, 0.08))',
+        border: '1px solid rgba(59, 130, 246, 0.3)',
+        borderRadius: '10px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 800, color: '#60a5fa', fontSize: '0.92rem' }}>⚖️ Seniority Hierarchy:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '0.85rem', fontWeight: 700 }}>
+            <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(217, 119, 6, 0.2)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)' }}>1. CTI</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.4)' }}>2. TTI</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(192, 132, 252, 0.4)' }}>3. SRTE</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.4)' }}>4. Sr.CCTC (SRCCTC)</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', border: '1px solid rgba(244, 114, 182, 0.4)' }}>5. CCTC</span>
+          </div>
+        </div>
+        <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
+          💡 <em>Seniority evaluated within same designation &amp; compared across designations by hierarchy priority</em>
+        </div>
+      </div>
+
+      {/* Designation Filter Pills, Search & Sort Toggle */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -184,42 +257,83 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
           ))}
         </div>
 
-        {/* Search Bar */}
-        <div style={{ position: 'relative', minWidth: '280px', flex: '1', maxWidth: '420px' }}>
-          <input
-            type="text"
-            className="form-input"
-            placeholder="🔍 Search by name, rank, designation, PF, CUG..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              paddingRight: searchQuery ? '36px' : '14px',
-              background: 'var(--bg-secondary)',
-              borderRadius: '8px',
-              fontSize: '0.88rem',
-              width: '100%'
-            }}
-          />
-          {searchQuery && (
+        {/* Search Bar & Sort Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: '1', justifyContent: 'flex-end' }}>
+          {/* Sort Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => setSortBy('hierarchy')}
+              title="Sort by Designation Hierarchy (1. CTI > 2. TTI > 3. SRTE > 4. Sr.CCTC > 5. CCTC)"
               style={{
-                position: 'absolute',
-                right: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--color-text-secondary)',
+                fontSize: '0.78rem',
+                padding: '5px 10px',
+                borderRadius: '6px',
                 cursor: 'pointer',
-                fontSize: '0.85rem'
+                border: 'none',
+                fontWeight: 700,
+                background: sortBy === 'hierarchy' ? 'var(--primary)' : 'transparent',
+                color: sortBy === 'hierarchy' ? '#fff' : 'var(--color-text-secondary)'
               }}
-              title="Clear search"
             >
-              ✕
+              ⚖️ Hierarchy
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => setSortBy('sl_no')}
+              title="Sort by Official List SL NO (1–139)"
+              style={{
+                fontSize: '0.78rem',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                border: 'none',
+                fontWeight: 700,
+                background: sortBy === 'sl_no' ? 'var(--primary)' : 'transparent',
+                color: sortBy === 'sl_no' ? '#fff' : 'var(--color-text-secondary)'
+              }}
+            >
+              🔢 Sl No (1–139)
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div style={{ position: 'relative', minWidth: '240px', maxWidth: '340px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="🔍 Search by name, rank, PF, CUG..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                paddingRight: searchQuery ? '36px' : '14px',
+                background: 'var(--bg-secondary)',
+                borderRadius: '8px',
+                fontSize: '0.86rem',
+                width: '100%'
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -243,12 +357,13 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
           overflowX: 'auto',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
         }}>
-          <table className="roster-table seniority-table" style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse' }}>
+          <table className="roster-table seniority-table" style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#18181b' }}>
                 <th className="seniority-col-rank" style={{ width: '70px', textAlign: 'center', padding: '12px 6px' }}>SL NO.</th>
                 <th className="seniority-col-name" style={{ width: '220px', textAlign: 'left', padding: '12px 14px' }}>NAME OF THE EMPLOYEE</th>
-                <th style={{ width: '100px', textAlign: 'center', padding: '12px 8px' }}>DESG.</th>
+                <th style={{ width: '90px', textAlign: 'center', padding: '12px 8px' }}>DESG.</th>
+                <th style={{ width: '110px', textAlign: 'center', padding: '12px 8px' }}>DESG. RANK</th>
                 <th style={{ width: '130px', textAlign: 'center', padding: '12px 8px' }}>CUG NUMBER</th>
                 <th style={{ width: '130px', textAlign: 'center', padding: '12px 8px' }}>CONTACT NUMBER</th>
                 <th style={{ width: '140px', textAlign: 'center', padding: '12px 8px' }}>PF NUMBER</th>
@@ -258,13 +373,14 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             <tbody>
               {filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>
                     No employees match your search query: "<strong>{searchQuery}</strong>"
                   </td>
                 </tr>
               ) : (
                 filteredList.map((emp) => {
                   const desgStyle = getDesgBadgeStyle(emp.designation);
+                  const rankInDesg = emp.desg_rank != null ? emp.desg_rank : (desgCounters.rankMap.get(emp.sl_no) || '-');
                   return (
                     <tr key={emp.sl_no} style={{ borderBottom: '1px solid var(--border-glass)', transition: 'background 0.15s ease' }}>
                       {/* Rank / SL NO */}
@@ -302,6 +418,22 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                           ...desgStyle
                         }}>
                           {emp.designation}
+                        </span>
+                      </td>
+
+                      {/* Rank in Designation */}
+                      <td style={{ textAlign: 'center', padding: '10px 8px' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '3px 8px',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          color: 'var(--color-text-primary)',
+                          border: '1px solid var(--border-glass)'
+                        }}>
+                          #{rankInDesg}
                         </span>
                       </td>
 

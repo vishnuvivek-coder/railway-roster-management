@@ -1012,7 +1012,7 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
 // SENIORITY LIST API (139 STAFF MEMBERS OF GUNTUR DIVISION)
 // ----------------------------------------------------
 app.get('/api/seniority-list', async (req, res) => {
-  const { q, designation } = req.query;
+  const { q, designation, sort } = req.query;
   try {
     let sql = 'SELECT * FROM seniority_list WHERE 1=1';
     const params = [];
@@ -1025,7 +1025,11 @@ app.get('/api/seniority-list', async (req, res) => {
       sql += ' AND (name LIKE ? OR designation LIKE ? OR pf_number LIKE ? OR contact_number LIKE ? OR cug_number LIKE ? OR email LIKE ? OR CAST(sl_no AS TEXT) LIKE ?)';
       params.push(term, term, term, term, term, term, term);
     }
-    sql += ' ORDER BY sl_no ASC';
+    if (sort === 'hierarchy') {
+      sql += ' ORDER BY hierarchy_tier ASC, desg_rank ASC, sl_no ASC';
+    } else {
+      sql += ' ORDER BY sl_no ASC';
+    }
     const list = await all(sql, params);
     res.json(list);
   } catch (err) {
