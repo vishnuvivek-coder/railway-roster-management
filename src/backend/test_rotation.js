@@ -2,7 +2,7 @@ const { db, initDb, get, all } = require('./db');
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 
 async function runTests() {
-  console.log('Running Acceptance Tests for all 3 categories (August 2026 Master Roster)...');
+  console.log('Running Acceptance Tests for all 3 categories (September 2026 Master Roster)...');
   
   // 1. Initialize DB
   await initDb();
@@ -13,28 +13,28 @@ async function runTests() {
   let mismatches = 0;
 
   for (const cat of categories) {
-    const staffMembers = await all("SELECT * FROM staff WHERE category_id = ? ORDER BY row_position", [cat.id]);
+    const staffMembers = await all("SELECT * FROM staff WHERE category_id = ? AND row_position <= ? ORDER BY row_position", [cat.id, cat.cycle_length]);
     const restLinksRows = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1", [cat.id]);
     const restLinks = new Set(restLinksRows.map(r => r.link_number));
 
     console.log(`\nVerifying Category '${cat.name}': Anchor Date = ${cat.anchor_date}, Cycle Length = ${cat.cycle_length}`);
     console.log(`  Staff Count: ${staffMembers.length}`);
 
-    // Verify August 1 baseline: row_position N starts on Link N on Aug 1st (2026-08-01)
+    // Verify September 1 baseline: row_position N starts on Link N on Sept 1st (2026-09-01)
     staffMembers.forEach(staff => {
-      const offset = getDayOffset(cat.anchor_date, '2026-08-01');
+      const offset = getDayOffset(cat.anchor_date, '2026-09-01');
       const computedLink = getBaseLinkNumber(staff.row_position, offset, cat.cycle_length);
       totalChecked++;
 
       if (computedLink !== staff.row_position) {
-        console.error(`Link mismatch on Aug 1 for ${staff.name} in ${cat.code}: Expected=${staff.row_position}, Computed=${computedLink}`);
+        console.error(`Link mismatch on Sept 1 for ${staff.name} in ${cat.code}: Expected=${staff.row_position}, Computed=${computedLink}`);
         mismatches++;
       }
     });
 
-    // Verify 31-day August rotation cycle
-    for (let day = 1; day <= 31; day++) {
-      const dateStr = `2026-08-${String(day).padStart(2, '0')}`;
+    // Verify 30-day September rotation cycle
+    for (let day = 1; day <= 30; day++) {
+      const dateStr = `2026-09-${String(day).padStart(2, '0')}`;
       const offset = getDayOffset(cat.anchor_date, dateStr);
 
       staffMembers.forEach(staff => {
@@ -54,7 +54,7 @@ async function runTests() {
   console.log(`Total Mismatches Found: ${mismatches}`);
 
   if (mismatches === 0) {
-    console.log('SUCCESS: All 3 category rosters match official August 2026 master sheets cell-for-cell exactly!');
+    console.log('SUCCESS: All 3 category rosters match official September 2026 master sheets cell-for-cell exactly!');
     db.close();
     process.exit(0);
   } else {

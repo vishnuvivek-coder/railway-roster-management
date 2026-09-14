@@ -56,7 +56,7 @@ export default function AuthScreen({ onLoginSuccess }) {
         width: '450px',
         height: '450px',
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(212, 161, 92, 0.08) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(212, 161, 92, 0.12) 0%, transparent 70%)',
         pointerEvents: 'none'
       }} />
       <div style={{
@@ -66,7 +66,7 @@ export default function AuthScreen({ onLoginSuccess }) {
         width: '500px',
         height: '500px',
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(108, 100, 153, 0.1) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(108, 100, 153, 0.16) 0%, transparent 70%)',
         pointerEvents: 'none'
       }} />
 
@@ -74,11 +74,11 @@ export default function AuthScreen({ onLoginSuccess }) {
       <div className="card" style={{
         width: '100%',
         maxWidth: '440px',
-        background: 'rgba(26, 26, 29, 0.92)',
-        border: '1px solid rgba(212, 161, 92, 0.25)',
-        borderRadius: '20px',
+        background: 'rgba(26, 26, 29, 0.94)',
+        border: '1px solid rgba(212, 161, 92, 0.28)',
+        borderRadius: '16px',
         padding: '40px 36px',
-        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 35px rgba(212, 161, 92, 0.08)',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(212, 161, 92, 0.08)',
         backdropFilter: 'blur(20px)',
         position: 'relative',
         zIndex: 10
@@ -91,7 +91,7 @@ export default function AuthScreen({ onLoginSuccess }) {
             justifyContent: 'center',
             width: '56px',
             height: '56px',
-            borderRadius: '16px',
+            borderRadius: '14px',
             background: 'linear-gradient(135deg, #D4A15C 0%, #6C6499 100%)',
             color: '#0D0D0F',
             fontSize: '1.8rem',
@@ -100,7 +100,7 @@ export default function AuthScreen({ onLoginSuccess }) {
             boxShadow: '0 0 28px rgba(212, 161, 92, 0.35)',
             border: '1px solid rgba(255, 255, 255, 0.2)'
           }}>
-            🚆
+            ✨
           </div>
           <h1 style={{
             fontSize: '1.85rem',
@@ -113,13 +113,6 @@ export default function AuthScreen({ onLoginSuccess }) {
           }}>
             Railway Crew Portal
           </h1>
-          <p style={{
-            color: 'var(--color-text-secondary)',
-            fontSize: '0.88rem',
-            letterSpacing: '0.02em'
-          }}>
-            Staff Link-Rotation & Seniority System
-          </p>
         </div>
 
         {/* Error Alert */}
