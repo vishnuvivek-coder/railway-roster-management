@@ -591,25 +591,226 @@ p, span, label, input, select, button, td, th {
   letter-spacing: 0.02em;
 }
 
-/* Frozen column for staff seniority */
+/* Frozen column base styles */
 .roster-table th.freeze-col, .roster-table td.freeze-col {
   position: sticky;
-  left: 0;
   background: #17171A;
   z-index: 15;
-  border-right: 2px solid var(--border-gold);
   text-align: left;
+}
+
+.roster-table th.freeze-col {
+  z-index: 25;
 }
 
 .roster-table td.freeze-col {
   background: var(--bg-secondary);
   font-weight: 600;
   color: var(--color-text-primary);
+  z-index: 5;
 }
 
 .roster-table tr:hover td.freeze-col {
   background: #202024 !important;
   color: var(--primary) !important;
+}
+
+/* Roster Grid Column-Specific Frozen Widths (Desktop) */
+.roster-table th.freeze-col-slno, .roster-table td.freeze-col-slno {
+  left: 0px;
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+  text-align: center;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.roster-table th.freeze-col-name, .roster-table td.freeze-col-name {
+  left: 50px;
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  text-align: left;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg {
+  left: 200px;
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+  text-align: center;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
+  left: 270px;
+  width: 105px;
+  min-width: 105px;
+  max-width: 105px;
+  text-align: center;
+  border-right: 2px solid var(--border-gold);
+}
+
+/* Muster Roll Freeze Columns (Desktop) */
+.muster-table th.muster-col-sno, .muster-table td.muster-col-sno {
+  position: sticky;
+  left: 0;
+  width: 45px;
+  min-width: 45px;
+  max-width: 45px;
+  text-align: center;
+  border-right: 1px solid var(--border-glass);
+}
+.muster-table th.muster-col-sno {
+  background: #18181b;
+  z-index: 25;
+}
+.muster-table td.muster-col-sno {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  z-index: 8;
+}
+
+.muster-table th.muster-col-name, .muster-table td.muster-col-name {
+  position: sticky;
+  left: 45px;
+  width: 220px;
+  min-width: 200px;
+  text-align: left;
+  border-right: 1px solid var(--border-glass);
+}
+.muster-table th.muster-col-name {
+  background: #18181b;
+  z-index: 25;
+}
+.muster-table td.muster-col-name {
+  background: var(--bg-secondary);
+  z-index: 8;
+  padding: 8px 12px;
+}
+
+.muster-table th.muster-col-cat, .muster-table td.muster-col-cat {
+  position: sticky;
+  left: 265px;
+  width: 90px;
+  min-width: 90px;
+  text-align: center;
+  border-right: 2px solid var(--border-gold);
+}
+.muster-table th.muster-col-cat {
+  background: #18181b;
+  z-index: 25;
+}
+.muster-table td.muster-col-cat {
+  background: var(--bg-secondary);
+  z-index: 8;
+  padding: 4px 6px;
+  border-right: 2px solid var(--border-gold);
+}
+
+.muster-footer-label {
+  position: sticky;
+  left: 0;
+  background: #18181b;
+  z-index: 12;
+  padding: 10px 14px;
+  font-weight: 800;
+  color: var(--primary);
+  font-size: 0.88rem;
+  border-right: 2px solid var(--border-gold);
+}
+
+/* Leave Reserve Sheet (LR List) Freeze Columns (Desktop) */
+.lr-table th.lr-col-slno, .lr-table td.lr-col-slno {
+  position: sticky;
+  left: 0;
+  width: 45px;
+  min-width: 45px;
+  max-width: 45px;
+  text-align: center;
+  border-right: 1px solid var(--border-glass);
+}
+.lr-table th.lr-col-slno {
+  background: #17171a;
+  z-index: 25;
+  padding: 10px 4px;
+}
+.lr-table td.lr-col-slno {
+  background: #141416;
+  z-index: 5;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  padding: 8px 4px;
+}
+
+.lr-table th.lr-col-name, .lr-table td.lr-col-name {
+  position: sticky;
+  left: 45px;
+  width: 200px;
+  min-width: 180px;
+  text-align: left;
+  border-right: 1px solid var(--border-glass);
+}
+.lr-table th.lr-col-name {
+  background: #17171a;
+  z-index: 25;
+  padding: 10px 10px;
+}
+.lr-table td.lr-col-name {
+  background: #141416;
+  z-index: 5;
+  padding: 8px 10px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.lr-table th.lr-col-desg, .lr-table td.lr-col-desg {
+  position: sticky;
+  left: 245px;
+  width: 75px;
+  min-width: 75px;
+  text-align: center;
+  border-right: 1px solid var(--border-glass);
+}
+.lr-table th.lr-col-desg {
+  background: #17171a;
+  z-index: 25;
+  padding: 10px 4px;
+}
+.lr-table td.lr-col-desg {
+  background: #141416;
+  z-index: 5;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  padding: 8px 4px;
+}
+
+.lr-table th.lr-col-rest, .lr-table td.lr-col-rest {
+  position: sticky;
+  left: 320px;
+  width: 60px;
+  min-width: 60px;
+  text-align: center;
+  border-right: 2px solid var(--border-gold);
+}
+.lr-table th.lr-col-rest {
+  background: #17171a;
+  z-index: 25;
+  padding: 10px 4px;
+}
+.lr-table td.lr-col-rest {
+  background: #141416;
+  z-index: 5;
+  text-align: center;
+  font-weight: 700;
+  color: #a78bfa;
+  padding: 8px 4px;
+  border-right: 2px solid var(--border-gold);
 }
 
 /* Date header rows */
@@ -1157,6 +1358,193 @@ html, body {
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 8px !important;
+  }
+
+  /* ==========================================================================
+     MOBILE RESPONSIVE TABLES (ROSTER GRID, MUSTER DETAILS, LR SHEET)
+     ========================================================================== */
+
+  /* Prevent container overflow clipping */
+  .roster-grid-container,
+  .table-responsive,
+  .muster-card,
+  .lr-table-container,
+  .muster-table-container {
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+
+  .muster-card {
+    padding: 10px 6px !important;
+  }
+
+  /* 1. ROSTER GRID MOBILE RESPONSIVE OVERRIDES */
+  .roster-table th.freeze-col-slno, .roster-table td.freeze-col-slno {
+    left: 0px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    padding: 6px 2px !important;
+    font-size: 0.76rem !important;
+    text-align: center !important;
+  }
+
+  .roster-table th.freeze-col-name, .roster-table td.freeze-col-name {
+    left: 38px !important;
+    width: 125px !important;
+    min-width: 125px !important;
+    max-width: 125px !important;
+    padding: 6px 8px !important;
+    border-right: 2px solid var(--border-gold) !important;
+    font-size: 0.8rem !important;
+  }
+  .roster-table td.freeze-col-name strong {
+    display: block !important;
+    max-width: 110px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg,
+  .roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
+    position: static !important;
+    left: auto !important;
+    border-right: 1px solid var(--border-glass) !important;
+    box-shadow: none !important;
+    z-index: 1 !important;
+  }
+  .roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg {
+    width: 58px !important;
+    min-width: 58px !important;
+    max-width: 58px !important;
+    padding: 6px 4px !important;
+    font-size: 0.76rem !important;
+  }
+  .roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    padding: 6px 4px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .roster-table tr.header-days th,
+  .roster-table tr.header-dates th,
+  .roster-table tr.header-offsets th {
+    padding: 4px 6px !important;
+    min-width: 48px !important;
+  }
+  .roster-cell {
+    min-width: 48px !important;
+    height: 38px !important;
+    padding: 4px 6px !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* 2. MUSTER ROLL MOBILE RESPONSIVE OVERRIDES */
+  .muster-table th.muster-col-sno, .muster-table td.muster-col-sno {
+    left: 0 !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    padding: 6px 2px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .muster-table th.muster-col-name, .muster-table td.muster-col-name {
+    left: 36px !important;
+    width: 130px !important;
+    min-width: 130px !important;
+    max-width: 130px !important;
+    padding: 6px 8px !important;
+    border-right: 2px solid var(--border-gold) !important;
+  }
+  .muster-table td.muster-col-name strong {
+    max-width: 114px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 0.82rem !important;
+    display: block !important;
+  }
+  .muster-table td.muster-col-name span {
+    max-width: 114px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 0.68rem !important;
+    display: block !important;
+  }
+
+  .muster-table th.muster-col-cat, .muster-table td.muster-col-cat {
+    position: static !important;
+    left: auto !important;
+    width: 70px !important;
+    min-width: 70px !important;
+    max-width: 70px !important;
+    border-right: 1px solid var(--border-glass) !important;
+    z-index: 1 !important;
+    box-shadow: none !important;
+  }
+
+  .muster-footer-label {
+    left: 0 !important;
+    width: 166px !important;
+    max-width: 166px !important;
+    border-right: 2px solid var(--border-gold) !important;
+    font-size: 0.78rem !important;
+    padding: 8px 6px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* 3. LEAVE RESERVE SHEET (LR LIST) MOBILE RESPONSIVE OVERRIDES */
+  .lr-table th.lr-col-slno, .lr-table td.lr-col-slno {
+    left: 0 !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    padding: 6px 2px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .lr-table th.lr-col-name, .lr-table td.lr-col-name {
+    left: 36px !important;
+    width: 125px !important;
+    min-width: 125px !important;
+    max-width: 125px !important;
+    padding: 6px 8px !important;
+    border-right: 2px solid var(--border-gold) !important;
+    font-size: 0.8rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .lr-table th.lr-col-desg, .lr-table td.lr-col-desg,
+  .lr-table th.lr-col-rest, .lr-table td.lr-col-rest {
+    position: static !important;
+    left: auto !important;
+    border-right: 1px solid var(--border-glass) !important;
+    box-shadow: none !important;
+    z-index: 1 !important;
+  }
+  .lr-table th.lr-col-desg, .lr-table td.lr-col-desg {
+    width: 58px !important;
+    min-width: 58px !important;
+    max-width: 58px !important;
+    padding: 6px 4px !important;
+    font-size: 0.76rem !important;
+  }
+  .lr-table th.lr-col-rest, .lr-table td.lr-col-rest {
+    width: 55px !important;
+    min-width: 55px !important;
+    max-width: 55px !important;
+    padding: 6px 4px !important;
+    font-size: 0.76rem !important;
   }
 }
 

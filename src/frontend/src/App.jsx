@@ -120,6 +120,12 @@ export default function App() {
   const [adminActionMsg, setAdminActionMsg] = useState('');
 
   const [activeTab, setActiveTab] = useState('daily'); // default is daily duties view
+  useEffect(() => {
+    window.__setActiveTab = (tab) => {
+      setActiveTab(tab);
+      setIsMobileMenuOpen(false);
+    };
+  }, []);
   const [docSubTab, setDocSubTab] = useState('ta'); // 'ta' | 'nda' | 'diary'
   const [userRole, setUserRole] = useState(() => currentUser?.role || 'Admin');
   const [categories, setCategories] = useState([]);
@@ -5914,28 +5920,28 @@ export default function App() {
                   <table className="roster-table">
                     <thead>
                       <tr className="header-days">
-                        <th className="freeze-col" style={{ left: '0px', width: '50px', minWidth: '50px', maxWidth: '50px', top: 0 }}>SL NO</th>
-                        <th className="freeze-col" style={{ left: '50px', width: '150px', minWidth: '150px', maxWidth: '150px', top: 0 }}>NAME</th>
-                        <th className="freeze-col" style={{ left: '200px', width: '70px', minWidth: '70px', maxWidth: '70px', top: 0 }}>DESG</th>
-                        <th className="freeze-col" style={{ left: '270px', width: '105px', minWidth: '105px', maxWidth: '105px', top: 0, textAlign: 'center' }}>CR Available</th>
+                        <th className="freeze-col freeze-col-slno" style={{ top: 0 }}>SL NO</th>
+                        <th className="freeze-col freeze-col-name" style={{ top: 0 }}>NAME</th>
+                        <th className="freeze-col freeze-col-desg" style={{ top: 0 }}>DESG</th>
+                        <th className="freeze-col freeze-col-cr" style={{ top: 0, textAlign: 'center' }}>CR Available</th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOfWeek}</th>
                         ))}
                       </tr>
                       <tr className="header-dates">
-                        <th className="freeze-col" style={{ left: '0px', width: '50px', minWidth: '50px', maxWidth: '50px' }}></th>
-                        <th className="freeze-col" style={{ left: '50px', width: '150px', minWidth: '150px', maxWidth: '150px' }}></th>
-                        <th className="freeze-col" style={{ left: '200px', width: '70px', minWidth: '70px', maxWidth: '70px' }}></th>
-                        <th className="freeze-col" style={{ left: '270px', width: '105px', minWidth: '105px', maxWidth: '105px' }}></th>
+                        <th className="freeze-col freeze-col-slno"></th>
+                        <th className="freeze-col freeze-col-name"></th>
+                        <th className="freeze-col freeze-col-desg"></th>
+                        <th className="freeze-col freeze-col-cr"></th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOfMonth}</th>
                         ))}
                       </tr>
                       <tr className="header-offsets">
-                        <th className="freeze-col" style={{ left: '0px', width: '50px', minWidth: '50px', maxWidth: '50px' }}>Day Offset</th>
-                        <th className="freeze-col" style={{ left: '50px', width: '150px', minWidth: '150px', maxWidth: '150px' }}></th>
-                        <th className="freeze-col" style={{ left: '200px', width: '70px', minWidth: '70px', maxWidth: '70px' }}></th>
-                        <th className="freeze-col" style={{ left: '270px', width: '105px', minWidth: '105px', maxWidth: '105px' }}></th>
+                        <th className="freeze-col freeze-col-slno" style={{ fontSize: '0.74rem' }}>Day Offset</th>
+                        <th className="freeze-col freeze-col-name"></th>
+                        <th className="freeze-col freeze-col-desg"></th>
+                        <th className="freeze-col freeze-col-cr"></th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOffset}</th>
                         ))}
@@ -6022,16 +6028,16 @@ export default function App() {
 
                           return (
                             <tr key={row.staffId}>
-                              <td className="freeze-col" style={{ left: '0px', width: '50px', minWidth: '50px', maxWidth: '50px' }}>{row.slNo}</td>
-                              <td className="freeze-col" style={{ left: '50px', width: '150px', minWidth: '150px', maxWidth: '150px' }}>
+                              <td className="freeze-col freeze-col-slno">{row.slNo}</td>
+                              <td className="freeze-col freeze-col-name">
                                 <strong style={{ color: isNameMatched ? 'var(--primary)' : 'inherit' }}>
                                   {row.staffName || '(VACANT)'}
                                 </strong>
                               </td>
-                              <td className="freeze-col" style={{ left: '200px', width: '70px', minWidth: '70px', maxWidth: '70px', color: isDesgMatched ? 'var(--primary)' : 'var(--color-text-secondary)', fontWeight: isDesgMatched ? 700 : 400 }}>
+                              <td className="freeze-col freeze-col-desg" style={{ color: isDesgMatched ? 'var(--primary)' : 'var(--color-text-secondary)', fontWeight: isDesgMatched ? 700 : 400 }}>
                                 {row.designation || '-'}
                               </td>
-                              <td className="freeze-col" style={{ left: '270px', width: '105px', minWidth: '105px', maxWidth: '105px', textAlign: 'center' }}>
+                              <td className="freeze-col freeze-col-cr" style={{ textAlign: 'center' }}>
                                 {row.cr_available ? (
                                   <span className="badge" style={{ 
                                     background: 'rgba(139, 92, 246, 0.18)', 

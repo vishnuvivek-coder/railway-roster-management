@@ -443,26 +443,26 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
           <button className="btn btn-secondary" onClick={() => fetchSheet(year, month)}>Retry</button>
         </div>
       ) : sheetData ? (
-        <div className="table-responsive" style={{
+        <div className="table-responsive lr-table-container" style={{
           background: 'var(--bg-secondary)',
           borderRadius: '12px',
           border: '1px solid var(--border-glass)',
           overflowX: 'auto',
           boxShadow: '0 8px 32px rgba(0,0,0,0.36)'
         }}>
-          <table className="roster-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <table className="roster-table lr-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '2px solid var(--border-glass)' }}>
-                <th style={{ width: '45px', textAlign: 'center', position: 'sticky', left: 0, background: '#17171a', zIndex: 10, padding: '10px 4px' }}>
+                <th className="lr-col-slno">
                   SL NO
                 </th>
-                <th style={{ width: '200px', minWidth: '180px', position: 'sticky', left: 45, background: '#17171a', zIndex: 10, padding: '10px 10px', textAlign: 'left' }}>
+                <th className="lr-col-name">
                   NAME
                 </th>
-                <th style={{ width: '75px', textAlign: 'center', position: 'sticky', left: 245, background: '#17171a', zIndex: 10, padding: '10px 4px' }}>
+                <th className="lr-col-desg">
                   DESG
                 </th>
-                <th style={{ width: '60px', textAlign: 'center', position: 'sticky', left: 320, background: '#17171a', zIndex: 10, padding: '10px 4px', borderRight: '2px solid var(--border-glass)' }}>
+                <th className="lr-col-rest">
                   REST
                 </th>
 
@@ -518,53 +518,16 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                     }}
                   >
                     {/* Fixed Columns */}
-                    <td style={{
-                      textAlign: 'center',
-                      fontWeight: 700,
-                      color: 'var(--color-text-secondary)',
-                      position: 'sticky',
-                      left: 0,
-                      background: '#141416',
-                      zIndex: 5,
-                      padding: '8px 4px'
-                    }}>
+                    <td className="lr-col-slno">
                       {staff.slNo}
                     </td>
-                    <td style={{
-                      position: 'sticky',
-                      left: 45,
-                      background: '#141416',
-                      zIndex: 5,
-                      padding: '8px 10px',
-                      fontWeight: 700,
-                      color: 'var(--primary)',
-                      whiteSpace: 'nowrap'
-                    }}>
+                    <td className="lr-col-name">
                       {staff.name}
                     </td>
-                    <td style={{
-                      textAlign: 'center',
-                      color: 'var(--color-text-secondary)',
-                      fontSize: '0.78rem',
-                      position: 'sticky',
-                      left: 245,
-                      background: '#141416',
-                      zIndex: 5,
-                      padding: '8px 4px'
-                    }}>
+                    <td className="lr-col-desg">
                       {staff.designation || '-'}
                     </td>
-                    <td style={{
-                      textAlign: 'center',
-                      fontWeight: 700,
-                      color: '#a78bfa',
-                      position: 'sticky',
-                      left: 320,
-                      background: '#141416',
-                      zIndex: 5,
-                      padding: '8px 4px',
-                      borderRight: '2px solid var(--border-glass)'
-                    }}>
+                    <td className="lr-col-rest">
                       {staff.restDay || '-'}
                     </td>
 

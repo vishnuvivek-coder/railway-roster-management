@@ -556,25 +556,24 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       {/* 3. Main Master Muster Grid */}
       {!loading && !error && cycleData && (
-        <div className="card" style={{
+        <div className="card muster-card" style={{
           background: 'var(--bg-secondary)',
           borderRadius: '14px',
-          padding: '16px',
           border: '1px solid var(--border-glass)',
           overflow: 'hidden'
         }}>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '72vh' }}>
-            <table className="roster-table muster-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+          <div className="muster-table-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '72vh' }}>
+            <table className="roster-table muster-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#18181b' }}>
                 {/* Top Row: Headers */}
                 <tr>
-                  <th style={{ width: '45px', textAlign: 'center', position: 'sticky', left: 0, background: '#18181b', zIndex: 12 }}>
+                  <th className="muster-col-sno">
                     S.No
                   </th>
-                  <th style={{ width: '220px', minWidth: '200px', textAlign: 'left', position: 'sticky', left: '45px', background: '#18181b', zIndex: 12 }}>
+                  <th className="muster-col-name">
                     Name of Employee
                   </th>
-                  <th style={{ width: '90px', textAlign: 'center', position: 'sticky', left: '265px', background: '#18181b', zIndex: 12 }}>
+                  <th className="muster-col-cat">
                     Category
                   </th>
 
@@ -615,46 +614,24 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 {filteredStaff.map((staff, sIdx) => (
                   <tr key={staff.id} style={{ borderBottom: '1px solid var(--border-glass)' }}>
                     {/* Fixed Left S.No */}
-                    <td style={{
-                      textAlign: 'center',
-                      fontWeight: 600,
-                      position: 'sticky',
-                      left: 0,
-                      background: 'var(--bg-secondary)',
-                      zIndex: 8,
-                      fontSize: '0.82rem',
-                      color: 'var(--color-text-secondary)'
-                    }}>
+                    <td className="muster-col-sno">
                       {sIdx + 1}
                     </td>
 
                     {/* Fixed Left Name */}
-                    <td style={{
-                      position: 'sticky',
-                      left: '45px',
-                      background: 'var(--bg-secondary)',
-                      zIndex: 8,
-                      padding: '8px 12px'
-                    }}>
+                    <td className="muster-col-name">
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <strong style={{ fontSize: '0.88rem', color: '#f3f4f6', whiteSpace: 'nowrap' }}>
+                        <strong>
                           {staff.name}
                         </strong>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                        <span>
                           {staff.designation || '-'} (Row #{staff.rowPosition})
                         </span>
                       </div>
                     </td>
 
                     {/* Fixed Left Category */}
-                    <td style={{
-                      position: 'sticky',
-                      left: '265px',
-                      background: 'var(--bg-secondary)',
-                      zIndex: 8,
-                      textAlign: 'center',
-                      padding: '4px 6px'
-                    }}>
+                    <td className="muster-col-cat">
                       <span className="badge" style={{
                         background: 'rgba(255,255,255,0.05)',
                         color: 'var(--color-text-secondary)',
@@ -763,18 +740,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               {/* Table Footer: Division Totals */}
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#18181b', borderTop: '2px solid var(--border-gold)' }}>
                 <tr>
-                  <td colSpan={3} style={{
-                    position: 'sticky',
-                    left: 0,
-                    background: '#18181b',
-                    zIndex: 12,
-                    padding: '10px 14px',
-                    fontWeight: 800,
-                    color: 'var(--primary)',
-                    fontSize: '0.88rem'
-                  }}>
+                  <td colSpan={2} className="muster-footer-label">
                     DIVISION TOTALS ({filteredStaff.length} Employees)
                   </td>
+                  <td className="muster-col-cat"></td>
 
                   {cycleData.cycle.dates.map(d => (
                     <td key={d.dateStr} style={{ textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', padding: '6px 2px' }}>
