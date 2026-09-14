@@ -1009,6 +1009,53 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// SENIORITY LIST API (139 STAFF MEMBERS OF GUNTUR DIVISION)
+// ----------------------------------------------------
+app.get('/api/seniority-list', async (req, res) => {
+  const { q, designation } = req.query;
+  try {
+    let sql = 'SELECT * FROM seniority_list WHERE 1=1';
+    const params = [];
+    if (designation && designation !== 'ALL') {
+      sql += ' AND designation = ?';
+      params.push(designation);
+    }
+    if (q && q.trim()) {
+      const term = `%${q.trim()}%`;
+      sql += ' AND (name LIKE ? OR designation LIKE ? OR pf_number LIKE ? OR contact_number LIKE ? OR cug_number LIKE ? OR email LIKE ? OR CAST(sl_no AS TEXT) LIKE ?)';
+      params.push(term, term, term, term, term, term, term);
+    }
+    sql += ' ORDER BY sl_no ASC';
+    const list = await all(sql, params);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, designation, cug_number, contact_number, pf_number, email } = req.body;
+  try {
+    await run(
+      `UPDATE seniority_list 
+       SET name = COALESCE(?, name),
+           designation = COALESCE(?, designation),
+           cug_number = COALESCE(?, cug_number),
+           contact_number = COALESCE(?, contact_number),
+           pf_number = COALESCE(?, pf_number),
+           email = COALESCE(?, email)
+       WHERE id = ?`,
+      [name, designation, cug_number, contact_number, pf_number, email, id]
+    );
+    await logAudit(req.user?.name || 'Admin', 'UPDATE_SENIORITY', `Updated Seniority record ID ${id} (${name || ''})`);
+    res.json({ message: 'Seniority record updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
 // STAFF API
 // ----------------------------------------------------
 app.get('/api/staff', async (req, res) => {

@@ -1117,6 +1117,40 @@ async function initDb() {
       );
     }
   }
+
+  // ----------------------------------------------------
+  // SENIORITY LIST TABLE & SEEDING (139 STAFF MEMBERS)
+  // ----------------------------------------------------
+  await run(`
+    CREATE TABLE IF NOT EXISTS seniority_list (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sl_no INTEGER UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      designation TEXT NOT NULL,
+      cug_number TEXT,
+      contact_number TEXT,
+      pf_number TEXT,
+      email TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  const seniorityCount = await get("SELECT COUNT(*) as count FROM seniority_list");
+  if (seniorityCount.count === 0) {
+    try {
+      const seedData = JSON.parse(fs.readFileSync(path.join(__dirname, 'seniority_seed.json'), 'utf8'));
+      for (const item of seedData) {
+        await run(
+          `INSERT INTO seniority_list (sl_no, name, designation, cug_number, contact_number, pf_number, email)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [item.sl_no, item.name, item.desg, item.cug, item.contact, item.pf, item.email]
+        );
+      }
+      console.log(`Seeded ${seedData.length} ticket checking staff into seniority_list.`);
+    } catch (e) {
+      console.error('Failed to seed seniority_list:', e.message);
+    }
+  }
 }
 
 module.exports = {

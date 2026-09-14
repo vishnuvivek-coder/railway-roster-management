@@ -11,6 +11,8 @@ import LRList from './LRList';
 import AvailabilitySheet from './AvailabilitySheet';
 import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
+import SeniorityList from './SeniorityList';
+import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData';
 import { useDevice } from './useDevice';
 
 const API_BASE = '/api';
@@ -2034,6 +2036,12 @@ export default function App() {
             <span>🟢</span> Staff Availability
           </li>
           <li 
+            className={`nav-item ${activeTab === 'seniority' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('seniority'); setIsMobileMenuOpen(false); }}
+          >
+            <span>🏅</span> Seniority List
+          </li>
+          <li 
             className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`}
             onClick={() => { setActiveTab('audit'); setIsMobileMenuOpen(false); }}
           >
@@ -3203,8 +3211,8 @@ export default function App() {
                     firstTrain: '12734',
                     lastTrain: '20630',
                     links: [
-                      { categoryId: 1, linkNum: 10, firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
-                      { categoryId: 1, linkNum: 18, firstCoach: 'COR-2', lastTrain: '17262', lastCoach: 'AC' }
+                      { categoryId: 1, linkNum: 10, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
+                      { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' }
                     ]
                   },
                   {
@@ -3501,6 +3509,9 @@ export default function App() {
                         isRestLink: slot.isRestLink
                       });
                     }
+
+                    // Apply Seniority Coach Allocation for trains with multiple COR or TTE working
+                    applySeniorityCoachAllocation(dutiesInSlot);
 
                     if (dutiesInSlot.length > 0) {
                       resolvedRows.push({
@@ -3896,6 +3907,22 @@ export default function App() {
                                             <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
                                               ({d.designation || '-'})
                                             </span>
+                                            {d.seniorityRank && d.seniorityRank !== 999 && (
+                                              <span 
+                                                className="badge no-print" 
+                                                title={d.seniorityShiftReason || `Seniority Rank #${d.seniorityRank}`}
+                                                style={{ 
+                                                  background: d.shiftedBySeniority ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)', 
+                                                  color: d.shiftedBySeniority ? '#f59e0b' : 'var(--color-text-secondary)', 
+                                                  border: d.shiftedBySeniority ? '1px solid #f59e0b' : '1px solid var(--border-glass)', 
+                                                  fontSize: '0.68rem', 
+                                                  padding: '1px 6px', 
+                                                  fontWeight: 700 
+                                                }}
+                                              >
+                                                🏅 #{d.seniorityRank}{d.shiftedBySeniority ? ' ⚡' : ''}
+                                              </span>
+                                            )}
                                             {d.isExtraStaff && (
                                               <span className="badge no-print" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #60a5fa', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
                                                 ➕ Extra Crew (Down Below)
@@ -8395,6 +8422,15 @@ export default function App() {
           <AvailabilitySheet
             isAdmin={isAdmin}
             openDutyEditModal={openDutyEditModal}
+          />
+        )}
+
+        {/* SENIORITY LIST (139 Ticket Checking Staff of Guntur Division) */}
+        {activeTab === 'seniority' && (
+          <SeniorityList
+            isAdmin={isAdmin}
+            authToken={authToken}
+            API_BASE={API_BASE}
           />
         )}
       </div>

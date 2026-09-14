@@ -1546,6 +1546,51 @@ html, body {
     padding: 6px 4px !important;
     font-size: 0.76rem !important;
   }
+
+  /* 4. SENIORITY LIST MOBILE RESPONSIVE OVERRIDES */
+  .seniority-table-container {
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+  .seniority-table th.seniority-col-rank,
+  .seniority-table td.seniority-col-rank {
+    position: sticky !important;
+    left: 0 !important;
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    background: #141416 !important;
+    z-index: 5 !important;
+    padding: 8px 4px !important;
+  }
+  .seniority-table th.seniority-col-rank {
+    background: #18181b !important;
+    z-index: 25 !important;
+  }
+  .seniority-table th.seniority-col-name,
+  .seniority-table td.seniority-col-name {
+    position: sticky !important;
+    left: 48px !important;
+    width: 135px !important;
+    min-width: 135px !important;
+    max-width: 135px !important;
+    background: #141416 !important;
+    border-right: 2px solid var(--border-gold) !important;
+    z-index: 5 !important;
+    padding: 8px 8px !important;
+  }
+  .seniority-table th.seniority-col-name {
+    background: #18181b !important;
+    z-index: 25 !important;
+  }
+  .seniority-table td.seniority-col-name span {
+    display: block !important;
+    max-width: 118px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
 }
 
 /* ==========================================================================
