@@ -1017,13 +1017,20 @@ app.get('/api/seniority-list', async (req, res) => {
     let sql = 'SELECT * FROM seniority_list WHERE 1=1';
     const params = [];
     if (designation && designation !== 'ALL') {
-      sql += ' AND designation = ?';
-      params.push(designation);
+      if (designation === 'TTI') {
+        // VS Chandrika is kept in TTI list for working purpose
+        sql += " AND (designation = 'TTI' OR working_designation = 'TTI' OR name LIKE '%CHANDRIKA%')";
+      } else if (designation === 'COR') {
+        sql += " AND designation = 'COR' AND name NOT LIKE '%CHANDRIKA%'";
+      } else {
+        sql += ' AND designation = ?';
+        params.push(designation);
+      }
     }
     if (q && q.trim()) {
       const term = `%${q.trim()}%`;
-      sql += ' AND (name LIKE ? OR designation LIKE ? OR pf_number LIKE ? OR contact_number LIKE ? OR cug_number LIKE ? OR email LIKE ? OR CAST(sl_no AS TEXT) LIKE ?)';
-      params.push(term, term, term, term, term, term, term);
+      sql += ' AND (name LIKE ? OR designation LIKE ? OR working_designation LIKE ? OR pf_number LIKE ? OR contact_number LIKE ? OR cug_number LIKE ? OR email LIKE ? OR CAST(sl_no AS TEXT) LIKE ?)';
+      params.push(term, term, term, term, term, term, term, term);
     }
     if (sort === 'hierarchy') {
       sql += ' ORDER BY hierarchy_tier ASC, desg_rank ASC, sl_no ASC';

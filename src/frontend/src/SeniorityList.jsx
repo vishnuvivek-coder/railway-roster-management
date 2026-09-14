@@ -55,8 +55,17 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
   // Filtered and Sorted list
   const filteredList = useMemo(() => {
     let list = seniorityList.filter(item => {
-      if (desgFilter !== 'ALL' && item.designation !== desgFilter) {
-        return false;
+      const isChandrika = item.name && item.name.includes('CHANDRIKA');
+      if (desgFilter !== 'ALL') {
+        if (desgFilter === 'TTI') {
+          // Keep VS Chandrika in TTI list for working purpose
+          if (item.designation !== 'TTI' && !isChandrika) return false;
+        } else if (desgFilter === 'COR') {
+          // VS Chandrika is not in COR list for working purpose
+          if (item.designation !== 'COR' || isChandrika) return false;
+        } else if (item.designation !== desgFilter) {
+          return false;
+        }
       }
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
@@ -66,6 +75,8 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         String(desgRank).includes(q) ||
         (item.name && item.name.toLowerCase().includes(q)) ||
         (item.designation && item.designation.toLowerCase().includes(q)) ||
+        (item.working_designation && item.working_designation.toLowerCase().includes(q)) ||
+        (isChandrika && (q === 'tti' || q === 'cor')) ||
         (item.cug_number && item.cug_number.toLowerCase().includes(q)) ||
         (item.contact_number && item.contact_number.toLowerCase().includes(q)) ||
         (item.pf_number && item.pf_number.toLowerCase().includes(q)) ||
@@ -405,6 +416,24 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                       {/* Employee Name */}
                       <td className="seniority-col-name" style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--primary)' }}>
                         <span style={{ fontSize: '0.92rem' }}>{emp.name}</span>
+                        {emp.name && emp.name.includes('CHANDRIKA') && (
+                          <span 
+                            className="badge no-print" 
+                            title="Kept in TTI list (not in COR list) for working purpose only"
+                            style={{
+                              background: 'rgba(59, 130, 246, 0.18)',
+                              color: '#60a5fa',
+                              border: '1px solid rgba(96, 165, 250, 0.4)',
+                              fontSize: '0.72rem',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              marginLeft: '8px',
+                              fontWeight: 700
+                            }}
+                          >
+                            🛠️ Working in TTI (not in COR)
+                          </span>
+                        )}
                       </td>
 
                       {/* Designation */}
@@ -419,6 +448,11 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                         }}>
                           {emp.designation}
                         </span>
+                        {emp.name && emp.name.includes('CHANDRIKA') && (
+                          <span style={{ fontSize: '0.7rem', color: '#60a5fa', display: 'block', marginTop: '3px', fontWeight: 700 }}>
+                            Working: TTI
+                          </span>
+                        )}
                       </td>
 
                       {/* Rank in Designation */}

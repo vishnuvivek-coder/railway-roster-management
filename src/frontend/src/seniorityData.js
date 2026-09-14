@@ -1364,6 +1364,22 @@ export function getSeniorityDetails(staff) {
   const alias = NAME_ALIASES[upper] || NAME_ALIASES[upper.replace(/\./g, '')];
   const searchName = alias || upper;
 
+  // Special Rule: "keep vs chandrika in tti list not in cor list for working purpouse only"
+  if (searchName.includes('CHANDRIKA')) {
+    return {
+      sl_no: 2,
+      name: 'V S CHANDRIKA',
+      desg: 'CTI', // Official designation
+      workingDesg: 'TTI', // Working designation
+      tier: 2, // Tier 2 (TTI) for working roster purposes
+      desgRank: 1, // Top ranking in working TTI list
+      badgeText: 'TTI #1 (CTI)',
+      sortScore: 2000, // Top of TTI list (senior to other TTIs, but in TTI list not COR list)
+      isVacant: false,
+      isWorkingTTI: true
+    };
+  }
+
   // 1. Try PF number match if available
   const pf = (staff.pf_no || staff.pf_number || '').trim();
   if (pf && pf !== '--' && PF_TO_RECORD_MAP.has(pf)) {
@@ -1514,12 +1530,17 @@ export function shiftStaffDuties(dutyA, dutyB, reason) {
 export function applySeniorityCoachAllocation(dutiesInSlot) {
   if (!Array.isArray(dutiesInSlot) || dutiesInSlot.length < 2) return dutiesInSlot;
 
+  const isChandrika = (duty) => (duty.name || '').toUpperCase().includes('CHANDRIKA');
+
   // RULE 1: COR Employees (Conductors)
   // Target: One duty with H1,H2,A1,A2,A3 coaches, other with B1,B2,B3,B4 coaches
+  // Note: VS Chandrika is kept in TTI list, NOT in COR list for working purposes
   const corDuties = dutiesInSlot.filter(d => 
-    parseInt(d.categoryId, 10) === 1 || 
-    d.designation === 'CTI' ||
-    (d.firstCoaches && /H1|B1|COR-1|COR-2/i.test(d.firstCoaches))
+    !isChandrika(d) && (
+      parseInt(d.categoryId, 10) === 1 || 
+      (d.designation === 'CTI' && !isChandrika(d)) ||
+      (d.firstCoaches && /H1|B1|COR-1|COR-2/i.test(d.firstCoaches))
+    )
   );
 
   if (corDuties.length === 2) {
@@ -1545,9 +1566,11 @@ export function applySeniorityCoachAllocation(dutiesInSlot) {
 
   // RULE 2: TTE Employees (Train Ticket Examiners)
   // Target: One duty with AC+SL coaches, other with SL coaches
+  // Note: VS Chandrika is included in TTI duties for working purposes
   const tteDuties = dutiesInSlot.filter(d => 
     parseInt(d.categoryId, 10) === 2 || 
     parseInt(d.categoryId, 10) === 3 ||
+    isChandrika(d) ||
     ['TTI', 'SRTE', 'Sr.CCTC', 'SRCCTC', 'CCTC'].includes(d.designation) ||
     (d.firstCoaches && /AC\+SL|SL/i.test(d.firstCoaches))
   );
