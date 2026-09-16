@@ -985,18 +985,47 @@ export default function App() {
       return acc.concat((cat.staff || []).map(s => ({ ...s, categoryId: cat.categoryId })));
     }, []);
     const d = flatDuties.find(s => s.staffId === staffId);
-    if (!d) return null;
     if (d) {
+      // 1. Extra / Non-daily train
       if (d.extra_train_no) {
         return `Train ${d.extra_train_no} (Non-Daily / Extra)`;
       }
-      if (d.link_number !== null && d.link_number !== undefined && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) && !d.isRest) {
+
+      // 2. Substitute assignment on another staff's duty
+      const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
+      if (subDuty) {
+        const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
+        return `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`;
+      }
+
+      // 3. Status checks: REST, SICK, LEAVE, CR, ABSENT, AVAILABLE_FOR_BOOKING are NOT busy on a train
+      if (
+        d.isRest ||
+        ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(d.status) ||
+        d.train_numbers === 'REST' ||
+        d.leave_type
+      ) {
+        return null;
+      }
+
+      // 4. Category 4 (LR Pool): Available unless explicitly assigned to a real link in Cat 1, 2, 3
+      if (d.categoryId === 4) {
+        if (d.isOverridden && d.status === 'CHANGED_LINK' && d.target_category_id !== 4) {
+          const tr = d.train_numbers ? ` (Tr ${d.train_numbers})` : '';
+          return `Link #${d.link_number}${tr}`;
+        }
+        return null; // LR Standby Pool is AVAILABLE!
+      }
+
+      // 5. Working cyclic train link
+      if (d.link_number !== null && d.link_number !== undefined) {
         const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.train_numbers)
           ? ` (Tr ${d.train_numbers})`
           : '';
         return `Link #${d.link_number}${tr}`;
       }
     }
+
     const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
     if (subDuty) {
       const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';

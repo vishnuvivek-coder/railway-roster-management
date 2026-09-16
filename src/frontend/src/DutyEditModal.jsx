@@ -242,6 +242,74 @@ export default function DutyEditModal({
     if (matchesSelectedDate && allDailyStaffDuties.length > 0) {
       const activeDuty = allDailyStaffDuties.find(d => String(d.staffId) === String(staffMember.id));
       if (activeDuty) {
+        // 1. Extra / Non-daily train
+        if (activeDuty.extra_train_no) {
+          return {
+            label: `Train ${activeDuty.extra_train_no} (Extra)`,
+            isRest: false,
+            isLr: false,
+            linkNum: null
+          };
+        }
+
+        // 2. Substitute assignment
+        const subDuty = allDailyStaffDuties.find(s => s.substituteStaffId === staffMember.id);
+        if (subDuty) {
+          const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
+          return {
+            label: `Substitute on Link #${subDuty.link_number}${tr}`,
+            isRest: false,
+            isLr: false,
+            linkNum: subDuty.link_number
+          };
+        }
+
+        // 3. Rest & Leaves
+        if (activeDuty.isRest || activeDuty.status === 'REST' || activeDuty.train_numbers === 'REST') {
+          return {
+            label: '🏖️ Weekly REST',
+            isRest: true,
+            isLr: staffMember.category_id === 4,
+            linkNum: activeDuty.link_number
+          };
+        }
+        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
+          return {
+            label: '⚡ Available for Booking (HQ)',
+            isRest: false,
+            isLr: false,
+            linkNum: null
+          };
+        }
+        if (['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) || activeDuty.leave_type) {
+          const code = activeDuty.leave_type || activeDuty.status;
+          return {
+            label: `${activeDuty.status} [${code}]`,
+            isRest: true,
+            isLr: false,
+            linkNum: null
+          };
+        }
+
+        // 4. Category 4 (LR Relief Pool)
+        if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
+          if (activeDuty.isOverridden && activeDuty.status === 'CHANGED_LINK' && activeDuty.target_category_id !== 4) {
+            return {
+              label: `Link #${activeDuty.link_number} (Tr ${activeDuty.train_numbers})`,
+              isRest: false,
+              isLr: true,
+              linkNum: activeDuty.link_number
+            };
+          }
+          return {
+            label: '🟢 LR Standby Pool (Available)',
+            isRest: false,
+            isLr: true,
+            linkNum: null
+          };
+        }
+
+        // 5. Working cyclic train link
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
           const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
@@ -250,32 +318,8 @@ export default function DutyEditModal({
           return {
             label: `Link #${lNum}${trStr ? ` (${trStr})` : ''}`,
             isRest: false,
-            isLr: staffMember.category_id === 4,
+            isLr: false,
             linkNum: lNum
-          };
-        }
-        if (activeDuty.isRest || activeDuty.status === 'REST') {
-          return {
-            label: 'Weekly REST',
-            isRest: true,
-            isLr: staffMember.category_id === 4,
-            linkNum: null
-          };
-        }
-        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
-          return {
-            label: '⚡ Available for Booking',
-            isRest: false,
-            isLr: false,
-            linkNum: null
-          };
-        }
-        if (['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status)) {
-          return {
-            label: `${activeDuty.status} [${activeDuty.leave_type || activeDuty.status}]`,
-            isRest: true,
-            isLr: false,
-            linkNum: null
           };
         }
       }
@@ -283,7 +327,7 @@ export default function DutyEditModal({
 
     if (staffMember.category_id === 4) {
       return {
-        label: staffMember.rest_day && staffMember.rest_day !== '-' ? `LR Pool [Rest: ${staffMember.rest_day}]` : 'LR Relief Pool',
+        label: staffMember.rest_day && staffMember.rest_day !== '-' ? `🟢 LR Pool [Rest: ${staffMember.rest_day}]` : '🟢 LR Standby Pool',
         isRest: false,
         isLr: true,
         linkNum: null
@@ -316,6 +360,7 @@ export default function DutyEditModal({
     if (matchesSelectedDate && allDailyStaffDuties.length > 0) {
       const activeDuty = allDailyStaffDuties.find(d => String(d.staffId) === String(staffMember.id));
       if (activeDuty) {
+        // 1. Extra / Non-daily train assignment
         if (activeDuty.extra_train_no) {
           return {
             isAssigned: true,
@@ -324,6 +369,44 @@ export default function DutyEditModal({
             trainNo: activeDuty.extra_train_no
           };
         }
+
+        // 2. Substitute assignment on another staff's duty
+        const subDuty = allDailyStaffDuties.find(s => s.substituteStaffId === staffMember.id);
+        if (subDuty) {
+          const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
+          return {
+            isAssigned: true,
+            trainDesc: `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`,
+            linkNum: subDuty.link_number,
+            trainNo: subDuty.train_numbers
+          };
+        }
+
+        // 3. Status checks: REST, SICK, LEAVE, CR, ABSENT, AVAILABLE_FOR_BOOKING are NOT busy on a train
+        if (
+          activeDuty.isRest || 
+          ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(activeDuty.status) ||
+          activeDuty.train_numbers === 'REST' ||
+          activeDuty.leave_type
+        ) {
+          return { isAssigned: false, trainDesc: activeDuty.status || 'REST', linkNum: null };
+        }
+
+        // 4. Category 4 (LR Relief Pool): If not assigned to extra train or substitute, they are AVAILABLE!
+        if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
+          if (activeDuty.isOverridden && activeDuty.status === 'CHANGED_LINK' && activeDuty.target_category_id !== 4) {
+            // Assigned to a real link in Cat 1, 2, or 3
+            return {
+              isAssigned: true,
+              trainDesc: `Link #${activeDuty.link_number} (Tr ${activeDuty.train_numbers})`,
+              linkNum: activeDuty.link_number,
+              trainNo: activeDuty.train_numbers
+            };
+          }
+          return { isAssigned: false, trainDesc: 'LR Relief Pool (Available)', linkNum: null };
+        }
+
+        // 5. Regular cyclic link duty (Cat 1, 2, 3)
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
           const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
@@ -336,17 +419,11 @@ export default function DutyEditModal({
             trainNo: trStr
           };
         }
-        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
-          return { isAssigned: false, trainDesc: 'Available for Booking (HQ)', linkNum: null };
-        }
-        if (['SICK', 'LEAVE', 'CR', 'ABSENT', 'REST'].includes(activeDuty.status) || activeDuty.isRest) {
-          return { isAssigned: false, trainDesc: activeDuty.status, linkNum: null };
-        }
       }
     }
 
     if (staffMember.category_id === 4) {
-      return { isAssigned: false, trainDesc: 'LR Relief Pool', linkNum: null };
+      return { isAssigned: false, trainDesc: 'LR Relief Pool (Available)', linkNum: null };
     }
 
     const cat = (categories || []).find(c => c.id === staffMember.category_id);
