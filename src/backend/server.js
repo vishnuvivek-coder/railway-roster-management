@@ -2311,6 +2311,18 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
       );
 
+      // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
+      await run(
+        'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+        [staff_id, date]
+      );
+
+      // Keep non_daily_trains template table clean
+      await run(
+        'UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?',
+        [staff_id]
+      );
+
       // Check if Day 1 was a scheduled REST day
       const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
       const dObj = new Date(date + 'T12:00:00');
@@ -3196,6 +3208,12 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
       ]
     );
 
+    // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
+    await run(
+      'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+      [staff.id, date]
+    );
+
     // Check if Day 1 was a scheduled REST day
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const dObj = new Date(date + 'T12:00:00');
@@ -3387,13 +3405,17 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
       [staff.id, date, `Train ${finalTrainNo}`]
     );
 
-    // Update non_daily_trains template record if present
-    if (trainObj && trainObj.id) {
-      await run(
-        `UPDATE non_daily_trains SET assigned_staff_id = ?, assigned_staff_name = ? WHERE id = ?`,
-        [staff.id, staff.name, trainObj.id]
-      );
-    }
+    // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
+    await run(
+      'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+      [staff.id, date]
+    );
+
+    // Keep non_daily_trains template table clean (assignments are date-specific in overrides)
+    await run(
+      'UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?',
+      [staff.id]
+    );
 
     // Sync TA, NDA, Diary
     await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, date, {

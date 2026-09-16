@@ -283,6 +283,11 @@ export default function App() {
   const [nonDailyInitialDay, setNonDailyInitialDay] = useState('SUNDAY');
   const [nonDailySubTab, setNonDailySubTab] = useState('today'); // 'today' | 'all'
   const [dragOverNonDailyId, setDragOverNonDailyId] = useState(null);
+  // Global Shift Confirmation Modal state for Drag & Drop and Non-Daily shifts
+  const [appShiftConfirm, setAppShiftConfirm] = useState(null);
+  const [quickAssignNonDailyTrain, setQuickAssignNonDailyTrain] = useState(null);
+  const [quickAssignSearch, setQuickAssignSearch] = useState('');
+  const [quickAssignShowBusy, setQuickAssignShowBusy] = useState(false);
 
   const [selectedStaffId, setSelectedStaffId] = useState('');
 
@@ -805,22 +810,34 @@ export default function App() {
       return;
     }
     const rawStaffId = staffDuty.staffId || staffDuty.id;
-    const isVacant = staffDuty.isVacant || staffDuty.isVacantUpgrade || staffDuty.isVacantShifted || staffDuty.isVacantAdvance || staffDuty.isVacantAvailableReturn;
-    const staffId = typeof rawStaffId === 'string' && (rawStaffId.startsWith('vacant-upgrade-') || rawStaffId.startsWith('vacant-shifted-') || rawStaffId.startsWith('vacant-advance-') || rawStaffId.startsWith('vacant-avl-'))
-      ? parseInt(rawStaffId.replace('vacant-upgrade-', '').replace('vacant-shifted-', '').replace('vacant-advance-', '').replace('vacant-avl-', ''), 10)
+    const isVacant = Boolean(
+      staffDuty.isVacant || 
+      staffDuty.isVacantUpgrade || 
+      staffDuty.isVacantShifted || 
+      staffDuty.isVacantAdvance || 
+      staffDuty.isVacantAvailableReturn || 
+      (staffDuty.name && staffDuty.name.toUpperCase().includes('VACANT'))
+    );
+    const staffId = typeof rawStaffId === 'string' && (rawStaffId.startsWith('vacant-') || rawStaffId.startsWith('vacant-upgrade-') || rawStaffId.startsWith('vacant-shifted-') || rawStaffId.startsWith('vacant-advance-') || rawStaffId.startsWith('vacant-avl-'))
+      ? parseInt(rawStaffId.replace('vacant-upgrade-', '').replace('vacant-shifted-', '').replace('vacant-advance-', '').replace('vacant-avl-', '').replace(/^vacant-.*?-(\d+)$/, '$1').replace(/^vacant-\d+$/, ''), 10) || null
       : rawStaffId;
-    const staffObj = allStaffList.find(s => s.id === staffId);
+    const staffObj = typeof staffId === 'number' ? allStaffList.find(s => s.id === staffId) : null;
     const staffName = isVacant ? (staffDuty.name || (staffObj ? staffObj.name : 'Vacant Slot')) : (staffDuty.name || staffDuty.staffName);
     const designation = staffDuty.designation || '';
-    const categoryId = staffDuty.categoryId || (staffObj ? staffObj.category_id : parseInt(selectedCatId, 10));
+    const currentLink = staffDuty.link_number !== undefined && staffDuty.link_number !== null
+      ? staffDuty.link_number
+      : (staffDuty.actualLinkNumber !== undefined ? staffDuty.actualLinkNumber : null);
+    const originalLink = staffDuty.original_link_number !== undefined && staffDuty.original_link_number !== null
+      ? staffDuty.original_link_number
+      : (staffDuty.calculatedLinkNumber !== undefined ? staffDuty.calculatedLinkNumber : null);
+    const categoryId = staffDuty.target_category_id || staffDuty.categoryId || (staffObj ? staffObj.category_id : parseInt(selectedCatId, 10));
+    const targetCategoryId = staffDuty.target_category_id || staffDuty.categoryId || (staffObj ? staffObj.category_id : parseInt(selectedCatId, 10));
     const categoryName = categories.find(c => c.id === categoryId)?.name || '';
-    const currentLink = staffDuty.link_number !== undefined ? staffDuty.link_number : (staffDuty.actualLinkNumber !== undefined ? staffDuty.actualLinkNumber : null);
-    const originalLink = staffDuty.original_link_number !== undefined ? staffDuty.original_link_number : (staffDuty.calculatedLinkNumber !== undefined ? staffDuty.calculatedLinkNumber : null);
     const status = staffDuty.status || (staffDuty.isRest ? 'REST' : staffDuty.isOverridden ? 'CHANGED_LINK' : 'DUTY');
 
     setDutyEditModal({
       staffId: isVacant ? (staffDuty.isVacantShifted || staffDuty.isVacantAdvance || staffDuty.isVacantUpgrade ? staffId : null) : staffId,
-      originalStaffId: staffId,
+      originalStaffId: staffDuty.originalStaffId || staffId,
       shiftedStaffId: (staffDuty.isVacantShifted || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-shifted-'))) ? staffId : null,
       advanceStaffId: (staffDuty.isVacantAdvance || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-advance-'))) ? staffId : null,
       originalStaffName: staffDuty.originalStaffName || null,
@@ -828,6 +845,9 @@ export default function App() {
       designation,
       categoryId,
       categoryName,
+      target_category_id: targetCategoryId,
+      targetCategoryId: targetCategoryId,
+      link_number: currentLink || staffDuty.link_number || originalLink,
       date: dateStr || selectedDate,
       currentLink,
       originalLink,
@@ -850,7 +870,7 @@ export default function App() {
       isVacantAdvance: staffDuty.isVacantAdvance || false,
       advanceTrainNo: staffDuty.advanceTrainNo || null,
       isUpgraded: staffDuty.isUpgraded || false,
-      initialMode: staffDuty.initialMode || (isVacant ? 'REPLACE_STAFF' : undefined)
+      initialMode: staffDuty.initialMode || (isVacant ? 'ASSIGN_DUTY' : undefined)
     });
   };
 
@@ -958,26 +978,35 @@ export default function App() {
     }
   };
 
-  const handleDragDropOnTrain = async (dragData, targetGroup, targetSpecificDuty = null, forceExtra = false) => {
-    if (!isAdmin) return;
-    if (!dragData || !targetGroup) return;
-
-    const staffId = typeof dragData.staffId === 'number' ? dragData.staffId : parseInt(dragData.staffId, 10);
-    if (!staffId || isNaN(staffId)) {
-      alert('Could not determine employee to move.');
-      return;
+  // Helper to determine if a staff member is already assigned to a train or link on selectedDate
+  const getStaffCurrentWorkingTrain = (staffId) => {
+    if (!staffId || !dailyDuties || !dailyDuties.categories) return null;
+    const flatDuties = dailyDuties.categories.reduce((acc, cat) => {
+      return acc.concat((cat.staff || []).map(s => ({ ...s, categoryId: cat.categoryId })));
+    }, []);
+    const d = flatDuties.find(s => s.staffId === staffId);
+    if (!d) return null;
+    if (d) {
+      if (d.extra_train_no) {
+        return `Train ${d.extra_train_no} (Non-Daily / Extra)`;
+      }
+      if (d.link_number !== null && d.link_number !== undefined && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) && !d.isRest) {
+        const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.train_numbers)
+          ? ` (Tr ${d.train_numbers})`
+          : '';
+        return `Link #${d.link_number}${tr}`;
+      }
     }
+    const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
+    if (subDuty) {
+      const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
+      return `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`;
+    }
+    return null;
+  };
 
-    const staffName = dragData.staffName || 'Employee';
+  const doActualDropStaff = async (staffId, staffName, targetGroup, forceExtra, targetSpecificDuty, dragData) => {
     const targetTrain = targetGroup.firstTrain;
-
-    // Check if target group already contains this staff member
-    if (targetGroup.duties && targetGroup.duties.some(d => d.staffId === staffId)) {
-      alert(`${staffName} is already assigned to Train ${targetTrain}.`);
-      return;
-    }
-
-    // Determine target vacant slot if available
     let vacantDuty = null;
     if (!forceExtra) {
       if (targetSpecificDuty && (targetSpecificDuty.isVacantUpgrade || targetSpecificDuty.isVacantShifted || targetSpecificDuty.isVacantAdvance || targetSpecificDuty.isVacantAvailableReturn || targetSpecificDuty.isVacant || (targetSpecificDuty.name && targetSpecificDuty.name.includes('VACANT')))) {
@@ -1032,18 +1061,41 @@ export default function App() {
     }
   };
 
-  const handleAssignStaffToNonDailyTrain = async (dragData, trainItem) => {
+  const handleDragDropOnTrain = async (dragData, targetGroup, targetSpecificDuty = null, forceExtra = false) => {
     if (!isAdmin) return;
-    if (!dragData || !trainItem) return;
+    if (!dragData || !targetGroup) return;
 
     const staffId = typeof dragData.staffId === 'number' ? dragData.staffId : parseInt(dragData.staffId, 10);
     if (!staffId || isNaN(staffId)) {
-      alert('Could not determine employee to assign.');
+      alert('Could not determine employee to move.');
       return;
     }
-    const staffName = dragData.staffName || 'Employee';
-    const trainNo = trainItem.train_number;
 
+    const staffName = dragData.staffName || 'Employee';
+    const targetTrain = targetGroup.firstTrain;
+
+    // Check if target group already contains this staff member
+    if (targetGroup.duties && targetGroup.duties.some(d => d.staffId === staffId)) {
+      alert(`${staffName} is already assigned to Train ${targetTrain}.`);
+      return;
+    }
+
+    const currentWorkingTrain = getStaffCurrentWorkingTrain(staffId);
+    if (currentWorkingTrain) {
+      setAppShiftConfirm({
+        staffName,
+        currentTrainDesc: currentWorkingTrain,
+        targetTrainDesc: `Train ${targetTrain}`,
+        onConfirm: () => doActualDropStaff(staffId, staffName, targetGroup, forceExtra, targetSpecificDuty, dragData)
+      });
+      return;
+    }
+
+    await doActualDropStaff(staffId, staffName, targetGroup, forceExtra, targetSpecificDuty, dragData);
+  };
+
+  const doActualAssignNonDaily = async (staffId, staffName, trainItem, dragData) => {
+    const trainNo = trainItem.train_number;
     try {
       const res = await fetch(`${API_BASE}/duty/assign-non-daily-train`, {
         method: 'POST',
@@ -1056,7 +1108,7 @@ export default function App() {
           date: selectedDate,
           non_daily_train_id: trainItem.id,
           train_number: trainNo,
-          source_link: dragData.sourceLink
+          source_link: dragData?.sourceLink
         })
       });
       const data = await res.json();
@@ -1071,6 +1123,36 @@ export default function App() {
     } catch (err) {
       alert(err.message);
     }
+  };
+
+  const handleAssignStaffToNonDailyTrain = async (dragData, trainItem) => {
+    if (!isAdmin) return;
+    if (!dragData || !trainItem) return;
+
+    const staffId = typeof dragData.staffId === 'number' ? dragData.staffId : parseInt(dragData.staffId, 10);
+    if (!staffId || isNaN(staffId)) {
+      alert('Could not determine employee to assign.');
+      return;
+    }
+    const staffName = dragData.staffName || 'Employee';
+    const trainNo = trainItem.train_number;
+
+    const currentWorkingTrain = getStaffCurrentWorkingTrain(staffId);
+    if (currentWorkingTrain) {
+      if (currentWorkingTrain.includes(trainNo)) {
+        alert(`${staffName} is already assigned to Train ${trainNo}.`);
+        return;
+      }
+      setAppShiftConfirm({
+        staffName,
+        currentTrainDesc: currentWorkingTrain,
+        targetTrainDesc: `Non-Daily Train ${trainNo}`,
+        onConfirm: () => doActualAssignNonDaily(staffId, staffName, trainItem, dragData)
+      });
+      return;
+    }
+
+    await doActualAssignNonDaily(staffId, staffName, trainItem, dragData);
   };
 
   const handleUnassignStaffFromNonDailyTrain = async (staffId, trainId) => {
@@ -3348,6 +3430,9 @@ export default function App() {
 
                         dutiesInSlot.push({
                           ...staffDuty,
+                          categoryId: lDef.categoryId,
+                          target_category_id: lDef.categoryId,
+                          link_number: lDef.linkNum,
                           firstTrain: slot.firstTrain,
                           firstCoaches: lDef.firstCoach,
                           lastTrain: lDef.lastTrain || slot.lastTrain,
@@ -3368,11 +3453,14 @@ export default function App() {
                             name: `[UNMANNED / VACANT]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
                             firstTrain: slot.firstTrain,
                             firstCoaches: lDef.firstCoach,
                             lastTrain: lDef.lastTrain || slot.lastTrain,
                             lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
                             isVacantAdvance: true,
+                            isVacant: true,
                             advanceTrainNo: advanceTrainNo || '---',
                             isLeave: false,
                             isSick: false,
@@ -3388,11 +3476,14 @@ export default function App() {
                             name: `[VACANT - ${originalSickOrLeaveDuty.name} UPGRADED TO COR]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
                             firstTrain: slot.firstTrain,
                             firstCoaches: lDef.firstCoach,
                             lastTrain: lDef.lastTrain || slot.lastTrain,
                             lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
                             isVacantUpgrade: true,
+                            isVacant: true,
                             isLeave: false,
                             isSick: false,
                             isCr: false,
@@ -3412,11 +3503,14 @@ export default function App() {
                             name: `[VACANT - ${originalSickOrLeaveDuty.name} SHIFTED TO ${shiftTargetDesc}]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
                             firstTrain: slot.firstTrain,
                             firstCoaches: lDef.firstCoach,
                             lastTrain: lDef.lastTrain || slot.lastTrain,
                             lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
                             isVacantShifted: true,
+                            isVacant: true,
                             isLeave: false,
                             isSick: false,
                             isCr: false,
@@ -3431,6 +3525,8 @@ export default function App() {
                             name: `[UNMANNED / VACANT]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
                             firstTrain: slot.firstTrain,
                             firstCoaches: lDef.firstCoach,
                             lastTrain: lDef.lastTrain || slot.lastTrain,
@@ -3452,10 +3548,13 @@ export default function App() {
                             name: originalSickOrLeaveDuty.substituteName || `[UNMANNED / VACANT]`,
                             designation: originalSickOrLeaveDuty.substituteName ? 'Relief TTE' : '-',
                             link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
                             firstTrain: slot.firstTrain,
                             firstCoaches: lDef.firstCoach,
                             lastTrain: lDef.lastTrain || slot.lastTrain,
                             lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            isVacant: !originalSickOrLeaveDuty.substituteName,
                             isLeave: originalSickOrLeaveDuty.status === 'LEAVE',
                             isSick: originalSickOrLeaveDuty.status === 'SICK',
                             isCr: originalSickOrLeaveDuty.status === 'CR',
@@ -3464,6 +3563,22 @@ export default function App() {
                             isRestLink: slot.isRestLink || lDef.isRest
                           });
                         }
+                      } else {
+                        // Completely unmanned link slot definition
+                        dutiesInSlot.push({
+                          staffId: `vacant-slot-${slot.slotId}-link-${lDef.linkNum}`,
+                          name: '[UNMANNED / VACANT]',
+                          designation: 'VACANT',
+                          link_number: lDef.linkNum,
+                          categoryId: lDef.categoryId,
+                          target_category_id: lDef.categoryId,
+                          firstTrain: slot.firstTrain,
+                          firstCoaches: lDef.firstCoach,
+                          lastTrain: lDef.lastTrain || slot.lastTrain,
+                          lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                          isVacant: true,
+                          isRestLink: slot.isRestLink || lDef.isRest
+                        });
                       }
                     });
 
@@ -3492,23 +3607,6 @@ export default function App() {
                         isRestLink: false
                       });
                     });
-
-                    // Ensure slot is represented even if unmanned
-                    if (dutiesInSlot.length === 0 && slot.linkNum) {
-                      dutiesInSlot.push({
-                        staffId: `vacant-${slot.slotId}`,
-                        name: '[VACANT / UNMANNED]',
-                        designation: 'VACANT',
-                        link_number: slot.linkNum,
-                        categoryId: slot.categoryId,
-                        firstTrain: slot.firstTrain,
-                        firstCoaches: slot.firstCoach,
-                        lastTrain: slot.lastTrain,
-                        lastCoaches: slot.lastCoach,
-                        isVacant: true,
-                        isRestLink: slot.isRestLink
-                      });
-                    }
 
                     // Apply Seniority Coach Allocation for trains with multiple COR or TTE working
                     applySeniorityCoachAllocation(dutiesInSlot);
@@ -4992,8 +5090,7 @@ export default function App() {
                         const staffOnTrain = staffDuties.find(s => 
                           s.extra_train_no && String(s.extra_train_no).trim() === String(item.train_number).trim()
                         );
-                        const staffObj = staffOnTrain || (allStaffList || []).find(s => s.id === item.assigned_staff_id);
-                        const staffName = staffOnTrain ? staffOnTrain.name : (staffObj ? staffObj.name : (item.assigned_staff_name || ''));
+                        const staffName = staffOnTrain ? staffOnTrain.name : '';
                         const trainMatch = item.train_number && item.train_number.toLowerCase().includes(q);
                         const stnMatch = (item.departure_station && item.departure_station.toLowerCase().includes(q)) || 
                                          (item.arrival_station && item.arrival_station.toLowerCase().includes(q));
@@ -5380,11 +5477,10 @@ export default function App() {
                                     const staffOnTrain = staffDuties.find(s => 
                                       s.extra_train_no && String(s.extra_train_no).trim() === String(item.train_number).trim()
                                     );
-                                    const fallbackStaff = item.assigned_staff_id ? (allStaffList || []).find(s => s.id === item.assigned_staff_id) : null;
-                                    const assignedStaff = staffOnTrain || fallbackStaff;
-                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : (fallbackStaff ? fallbackStaff.name : item.assigned_staff_name);
-                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : (fallbackStaff ? (fallbackStaff.designation || 'TTI') : '');
-                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : (fallbackStaff ? fallbackStaff.id : item.assigned_staff_id);
+                                    const assignedStaff = staffOnTrain || null;
+                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : null;
+                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : '';
+                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : null;
 
                                     const isRowOver = dragOverNonDailyId === item.id;
 
@@ -5481,7 +5577,44 @@ export default function App() {
                                                   </button>
                                                 )}
                                               </div>
-                                            ) : null}
+                                            ) : (
+                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                                <span className="badge" style={{ 
+                                                  fontSize: '0.78rem', 
+                                                  padding: '4px 8px', 
+                                                  background: 'rgba(239, 68, 68, 0.1)', 
+                                                  color: '#f87171', 
+                                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                                  fontWeight: 600
+                                                }}>
+                                                  ⚠️ Vacant / Unassigned
+                                                </span>
+                                                {isAdmin && (
+                                                  <button
+                                                    type="button"
+                                                    className="btn btn-primary"
+                                                    onClick={() => {
+                                                      setQuickAssignNonDailyTrain(item);
+                                                      setQuickAssignSearch('');
+                                                      setQuickAssignShowBusy(false);
+                                                    }}
+                                                    style={{
+                                                      padding: '4px 10px',
+                                                      fontSize: '0.74rem',
+                                                      fontWeight: 700,
+                                                      borderRadius: '6px',
+                                                      cursor: 'pointer',
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: '4px'
+                                                    }}
+                                                    title={`Assign staff to Train ${item.train_number}`}
+                                                  >
+                                                    ➕ Assign Staff
+                                                  </button>
+                                                )}
+                                              </div>
+                                            )}
 
                                             {/* Drop Target Box */}
                                             {isAdmin && (
@@ -8515,6 +8648,364 @@ export default function App() {
             authToken={authToken}
             API_BASE={API_BASE}
           />
+        );
+      })()}
+
+      {/* ---------------------------------------------------- */}
+      {/* GLOBAL SHIFT CONFIRMATION MODAL                      */}
+      {/* ---------------------------------------------------- */}
+      {appShiftConfirm && (
+        <div 
+          className="modal-overlay" 
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(0,0,0,0.78)', 
+            backdropFilter: 'blur(6px)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 99999,
+            padding: '20px'
+          }}
+          onClick={() => setAppShiftConfirm(null)}
+        >
+          <div 
+            className="card" 
+            style={{ 
+              maxWidth: '520px', 
+              width: '100%', 
+              background: 'var(--bg-card, #1e293b)', 
+              border: '2px solid #eab308', 
+              borderRadius: '16px', 
+              padding: '26px', 
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              color: 'var(--color-text-primary, #f8fafc)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
+              <span style={{ fontSize: '2.4rem' }}>⚠️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#facc15' }}>
+                  Confirm Employee Duty Shift
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary, #94a3b8)' }}>
+                  Reassigning an already working employee
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.3)',
+              borderRadius: '10px',
+              padding: '16px',
+              marginBottom: '20px',
+              fontSize: '0.92rem',
+              lineHeight: 1.6
+            }}>
+              <strong>{appShiftConfirm.staffName}</strong> is currently assigned to{' '}
+              <strong style={{ color: '#60a5fa' }}>{appShiftConfirm.currentTrainDesc}</strong> on {selectedDate}.
+              <br /><br />
+              Are you sure you want to shift them to{' '}
+              <strong style={{ color: '#34d399' }}>{appShiftConfirm.targetTrainDesc}</strong>?
+              <br /><br />
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                color: '#f87171',
+                fontWeight: 700,
+                fontSize: '0.85rem'
+              }}>
+                ℹ️ The slot on their previous train will immediately be marked as <strong>VACANT</strong>.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setAppShiftConfirm(null)}
+                style={{ padding: '10px 18px', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const onConf = appShiftConfirm.onConfirm;
+                  setAppShiftConfirm(null);
+                  if (onConf) onConf();
+                }}
+                style={{
+                  padding: '10px 22px',
+                  fontWeight: 800,
+                  backgroundColor: '#eab308',
+                  color: '#000',
+                  border: 'none',
+                  boxShadow: '0 4px 14px rgba(234, 179, 8, 0.4)',
+                  cursor: 'pointer'
+                }}
+              >
+                ✓ Confirm Shift & Vacate Old Train
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* QUICK ASSIGN STAFF TO NON-DAILY TRAIN MODAL          */}
+      {/* ---------------------------------------------------- */}
+      {quickAssignNonDailyTrain && (() => {
+        const q = quickAssignSearch.toLowerCase().trim();
+
+        // 1. Gather all non-vacant staff
+        const validStaff = (allStaffList || []).filter(s => 
+          s.name && !s.name.toUpperCase().includes('VACANT')
+        );
+
+        // 2. Filter with busy check
+        const filteredStaff = validStaff.filter(s => {
+          const currentWorking = getStaffCurrentWorkingTrain(s.id);
+          const isBusy = Boolean(currentWorking);
+          if (isBusy && !quickAssignShowBusy) return false;
+
+          if (q) {
+            const nameMatch = s.name && s.name.toLowerCase().includes(q);
+            const desgMatch = s.designation && s.designation.toLowerCase().includes(q);
+            const pfMatch = s.pf_number && s.pf_number.toLowerCase().includes(q);
+            return nameMatch || desgMatch || pfMatch;
+          }
+          return true;
+        });
+
+        const handleSelectStaffForNonDaily = (s) => {
+          const currentWorking = s.currentWorking || getStaffCurrentWorkingTrain(s.id);
+          const targetTrain = quickAssignNonDailyTrain;
+          setQuickAssignNonDailyTrain(null);
+
+          if (currentWorking) {
+            setAppShiftConfirm({
+              staffName: s.name,
+              currentTrainDesc: currentWorking,
+              targetTrainDesc: `Non-Daily Train ${targetTrain.train_number}`,
+              onConfirm: () => doActualAssignNonDaily(s.id, s.name, targetTrain, null)
+            });
+          } else {
+            doActualAssignNonDaily(s.id, s.name, targetTrain, null);
+          }
+        };
+
+        return (
+          <div 
+            className="modal-overlay" 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              backgroundColor: 'rgba(0,0,0,0.8)', 
+              backdropFilter: 'blur(6px)',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              zIndex: 99998,
+              padding: '20px'
+            }}
+            onClick={() => setQuickAssignNonDailyTrain(null)}
+          >
+            <div 
+              className="card" 
+              style={{ 
+                maxWidth: '680px', 
+                width: '100%', 
+                maxHeight: '85vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'var(--bg-card, #1e293b)', 
+                border: '1px solid var(--border-glass)', 
+                borderRadius: '16px', 
+                padding: '24px', 
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+                color: 'var(--color-text-primary, #f8fafc)'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>
+                    ➕ Assign Staff to Train {quickAssignNonDailyTrain.train_number}
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary)' }}>
+                    {quickAssignNonDailyTrain.departure_station} ({quickAssignNonDailyTrain.departure_time || '-'}) ➔ {quickAssignNonDailyTrain.arrival_station} ({quickAssignNonDailyTrain.arrival_time || '-'}) • Date: {selectedDate}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQuickAssignNonDailyTrain(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '1.4rem',
+                    cursor: 'pointer',
+                    padding: '4px 8px'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Search & Busy Filter Controls */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Search employee by name, designation, or PF..."
+                  value={quickAssignSearch}
+                  onChange={e => setQuickAssignSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '0.9rem'
+                  }}
+                  autoFocus
+                />
+
+                <label style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  cursor: 'pointer', 
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  color: quickAssignShowBusy ? '#facc15' : 'var(--color-text-secondary)',
+                  background: quickAssignShowBusy ? 'rgba(234, 179, 8, 0.12)' : 'rgba(255,255,255,0.04)',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: quickAssignShowBusy ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-glass)',
+                  alignSelf: 'flex-start'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={quickAssignShowBusy}
+                    onChange={e => setQuickAssignShowBusy(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  ⚠️ Show busy / assigned staff (to shift duty)
+                </label>
+              </div>
+
+              {/* Staff List */}
+              <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {filteredStaff.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                    No eligible staff members found.
+                    {!quickAssignShowBusy && (
+                      <div style={{ marginTop: '8px', fontSize: '0.82rem' }}>
+                        (Busy / currently assigned staff are hidden. Check <em>"Show busy / assigned staff"</em> above to shift an assigned employee).
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  filteredStaff.map(s => {
+                    const currentWorking = getStaffCurrentWorkingTrain(s.id);
+                    const isBusy = Boolean(currentWorking);
+                    const isLR = s.category_id === 4;
+
+                    return (
+                      <div
+                        key={s.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          background: isBusy ? 'rgba(234, 179, 8, 0.06)' : 'var(--bg-secondary)',
+                          border: isBusy ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid var(--border-glass)',
+                          borderRadius: '8px',
+                          gap: '12px',
+                          transition: 'background 0.15s'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: '0.92rem' }}>{s.name}</strong>
+                            <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.08)' }}>
+                              {s.designation || 'TTI'}
+                            </span>
+                            {isLR && (
+                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}>
+                                LR Pool
+                              </span>
+                            )}
+                            {isBusy ? (
+                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(234, 179, 8, 0.2)', color: '#facc15', fontWeight: 700 }}>
+                                ⚠️ Working: {currentWorking}
+                              </span>
+                            ) : (
+                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 700 }}>
+                                🟢 Available
+                              </span>
+                            )}
+                          </div>
+                          {s.pf_number && (
+                            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                              PF: {s.pf_number}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          className={isBusy ? 'btn btn-secondary' : 'btn btn-primary'}
+                          onClick={() => handleSelectStaffForNonDaily({ ...s, currentWorking })}
+                          style={{
+                            padding: '6px 14px',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            backgroundColor: isBusy ? '#eab308' : undefined,
+                            color: isBusy ? '#000' : undefined,
+                            border: isBusy ? 'none' : undefined
+                          }}
+                        >
+                          {isBusy ? '⇄ Shift Duty' : '✓ Assign'}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-glass)' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setQuickAssignNonDailyTrain(null)}
+                  style={{ padding: '8px 18px', fontWeight: 600 }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         );
       })()}
 

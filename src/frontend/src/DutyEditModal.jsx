@@ -103,9 +103,15 @@ export default function DutyEditModal({
 
   // EXACTLY TWO OPTIONS: 'DELETE' or 'ASSIGN_DUTY'
   const [activeMode, setActiveMode] = useState(() => {
+    if (dutyModal.initialMode === 'ASSIGN_DUTY' || dutyModal.initialMode === 'ASSIGN_DAILY' || dutyModal.initialMode === 'REPLACE_STAFF') return 'ASSIGN_DUTY';
     if (isSlotVacant) return 'ASSIGN_DUTY';
     return 'DELETE';
   });
+
+  // Toggle to show busy / already-assigned staff to shift them to this duty
+  const [showAlreadyAssigned, setShowAlreadyAssigned] = useState(false);
+  // Shift confirmation modal state: { staffName, currentTrainDesc, targetDesc, onConfirm }
+  const [shiftConfirmDialog, setShiftConfirmDialog] = useState(null);
 
   // SUB-OPTIONS UNDER DELETE: 'LEAVE', 'SICK', 'ADVANCE_BOOKED', 'ABSENT', 'SHIFTED'
   const [deleteReason, setDeleteReason] = useState(() => {
@@ -173,9 +179,21 @@ export default function DutyEditModal({
   // Fixed link & category calculation:
   // "In delete and assign duty option name of the employe should only change there is no any change in link"
   const targetCategoryId = useMemo(() => {
+    if (dutyModal.target_category_id) return String(dutyModal.target_category_id);
+    if (dutyModal.targetCategoryId) return String(dutyModal.targetCategoryId);
+    const linkNum = dutyModal.link_number ?? dutyModal.currentLink ?? dutyModal.originalLink;
+    if (linkNum !== null && linkNum !== undefined && linkNum !== '' && allLinksList) {
+      const parsedLinkNum = parseInt(linkNum, 10);
+      if (dutyModal.categoryId && dutyModal.categoryId !== 4) {
+        const directMatch = allLinksList.find(l => l.link_number === parsedLinkNum && l.category_id === dutyModal.categoryId);
+        if (directMatch) return String(directMatch.category_id);
+      }
+      const anyMatch = allLinksList.find(l => l.link_number === parsedLinkNum);
+      if (anyMatch) return String(anyMatch.category_id);
+    }
     if (dutyModal.categoryId && dutyModal.categoryId !== 4) return String(dutyModal.categoryId);
     return '1';
-  }, [dutyModal.categoryId]);
+  }, [dutyModal, allLinksList]);
 
   const targetLink = useMemo(() => {
     if (dutyModal.currentLink !== null && dutyModal.currentLink !== undefined && dutyModal.currentLink !== '') {
@@ -290,7 +308,67 @@ export default function DutyEditModal({
     };
   }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
 
+  // Helper to determine whether an employee is already assigned to a train or active duty on targetDateStr
+  const getStaffAssignmentStatus = useCallback((staffMember, targetDateStr) => {
+    if (!staffMember) return { isAssigned: false, trainDesc: '', linkNum: null };
+
+    const matchesSelectedDate = !dailyDuties?.date || dailyDuties.date === targetDateStr;
+    if (matchesSelectedDate && allDailyStaffDuties.length > 0) {
+      const activeDuty = allDailyStaffDuties.find(d => String(d.staffId) === String(staffMember.id));
+      if (activeDuty) {
+        if (activeDuty.extra_train_no) {
+          return {
+            isAssigned: true,
+            trainDesc: `Train ${activeDuty.extra_train_no} (Non-Daily / Extra)`,
+            linkNum: null,
+            trainNo: activeDuty.extra_train_no
+          };
+        }
+        if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
+          const lNum = parseInt(activeDuty.link_number, 10);
+          const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
+            ? `Tr ${activeDuty.train_numbers}`
+            : '';
+          return {
+            isAssigned: true,
+            trainDesc: `Link #${lNum}${trStr ? ` (${trStr})` : ''}`,
+            linkNum: lNum,
+            trainNo: trStr
+          };
+        }
+        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
+          return { isAssigned: false, trainDesc: 'Available for Booking (HQ)', linkNum: null };
+        }
+        if (['SICK', 'LEAVE', 'CR', 'ABSENT', 'REST'].includes(activeDuty.status) || activeDuty.isRest) {
+          return { isAssigned: false, trainDesc: activeDuty.status, linkNum: null };
+        }
+      }
+    }
+
+    if (staffMember.category_id === 4) {
+      return { isAssigned: false, trainDesc: 'LR Relief Pool', linkNum: null };
+    }
+
+    const cat = (categories || []).find(c => c.id === staffMember.category_id);
+    if (!cat) return { isAssigned: false, trainDesc: '', linkNum: null };
+
+    const dOffset = getDayOffset(cat.anchor_date, targetDateStr);
+    const linkNum = getBaseLinkNumber(staffMember.row_position, dOffset, cat.cycle_length);
+    const linkDef = (allLinksList || []).find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
+
+    if (!linkDef || linkDef.is_rest) {
+      return { isAssigned: false, trainDesc: `Link #${linkNum} (Weekly REST)`, linkNum };
+    }
+    return {
+      isAssigned: true,
+      trainDesc: `Link #${linkNum} (${linkDef.train_numbers ? `Tr ${linkDef.train_numbers}` : 'Duty'})`,
+      linkNum,
+      trainNo: linkDef.train_numbers
+    };
+  }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
+
   // Eligible replacement staff for Delete mode (Strictly in Alphabetical Order A to Z)
+  // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
   const eligibleReplacementStaff = useMemo(() => {
     if (!allStaffList) return [];
     return allStaffList
@@ -300,10 +378,14 @@ export default function DutyEditModal({
         if (replacementCatId && replacementCatId !== 'ALL') {
           if (String(s.category_id) !== String(replacementCatId)) return false;
         }
+        if (!showAlreadyAssigned) {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          if (assignStatus.isAssigned) return false;
+        }
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, dutyModal.staffId, replacementCatId]);
+  }, [allStaffList, dutyModal.staffId, replacementCatId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus]);
 
   // Selected replacement staff object
   const selectedReplacementStaffObj = useMemo(() => {
@@ -312,6 +394,7 @@ export default function DutyEditModal({
   }, [replacementStaffId, allStaffList]);
 
   // Eligible staff for Assign Duty mode (Strictly in Alphabetical Order A to Z)
+  // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
   const eligibleAssignStaff = useMemo(() => {
     if (!allStaffList) return [];
     return allStaffList
@@ -320,10 +403,15 @@ export default function DutyEditModal({
         if (assignCatId && assignCatId !== 'ALL') {
           if (String(s.category_id) !== String(assignCatId)) return false;
         }
+        if (dutyModal.staffId && s.id === dutyModal.staffId) return false;
+        if (!showAlreadyAssigned) {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          if (assignStatus.isAssigned) return false;
+        }
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, assignCatId]);
+  }, [allStaffList, assignCatId, dutyModal.staffId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus]);
 
   // Selected assign staff object
   const selectedAssignStaffObj = useMemo(() => {
@@ -434,6 +522,98 @@ export default function DutyEditModal({
     }
   };
 
+  const doExecuteDelete = async (payload) => {
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/duty/change-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update duty status');
+
+      onSuccess(data.message || `Duty updated: ${dutyModal.name} marked ${deleteReason} on ${selectedDate}!`);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const doExecuteAssign = async (assignedStaffObj, linkNum, targetCatIdNum) => {
+    setSubmitting(true);
+    try {
+      const assignPayload = {
+        staff_id: assignedStaffObj.id,
+        date: selectedDate,
+        action: 'CHANGED_LINK',
+        new_link_number: linkNum,
+        target_category_id: targetCatIdNum,
+        reason: assignReason || (linkNum ? `Assigned to Link #${linkNum}` : 'Assigned duty link')
+      };
+
+      const res = await fetch('/api/duty/change-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(assignPayload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to assign employee to duty link');
+
+      // If the slot had an original employee on leave/sick, link them as replacement
+      const origId = dutyModal.originalStaffId || (dutyModal.staffId && isSlotVacant ? dutyModal.staffId : null);
+      if (origId && origId !== assignedStaffObj.id) {
+        await fetch('/api/duty/change-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({
+            staff_id: origId,
+            date: selectedDate,
+            action: dutyModal.status || 'LEAVE',
+            leave_type: dutyModal.leave_type || null,
+            replacement_type: 'OTHER_COLUMN',
+            replacement_staff_id: assignedStaffObj.id,
+            replacement_name: assignedStaffObj.name,
+            reason: dutyModal.overrideReason || `Covered by replacement ${assignedStaffObj.name}`
+          })
+        });
+      }
+
+      // If the current slot had an active incumbent employee who is not vacant and not the same person,
+      // relieve them to HQ (Available for Booking / Standby)
+      if (dutyModal.staffId && !isSlotVacant && dutyModal.staffId !== assignedStaffObj.id) {
+        const relievePayload = {
+          staff_id: dutyModal.staffId,
+          date: selectedDate,
+          action: 'CHANGED_LINK',
+          new_link_number: null,
+          target_category_id: dutyModal.categoryId || targetCatIdNum,
+          reason: `Relieved from Link #${linkNum} by ${assignedStaffObj.name}`
+        };
+        await fetch('/api/duty/change-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify(relievePayload)
+        });
+      }
+
+      onSuccess(`Assigned ${assignedStaffObj.name} to Link #${linkNum || 'Duty'} on ${selectedDate}!`);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -441,7 +621,6 @@ export default function DutyEditModal({
       alert('Only administrators can modify employee duties.');
       return;
     }
-    setSubmitting(true);
     setErrorMsg('');
 
     try {
@@ -508,19 +687,21 @@ export default function DutyEditModal({
           replacement_name: repStaffName
         };
 
-        const res = await fetch('/api/duty/change-status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to update duty status');
+        // If replacement employee is currently working another train/duty, confirm before shifting
+        if (deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
+          const repStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
+          if (repStatus.isAssigned) {
+            setShiftConfirmDialog({
+              staffName: selectedReplacementStaffObj.name,
+              currentTrainDesc: repStatus.trainDesc,
+              targetDesc: targetLink ? `Link #${targetLink}` : 'Duty',
+              onConfirm: () => doExecuteDelete(payload)
+            });
+            return;
+          }
+        }
 
-        onSuccess(data.message || `Duty updated: ${dutyModal.name} marked ${deleteReason} on ${selectedDate}!`);
-        onClose();
+        await doExecuteDelete(payload);
         return;
       }
 
@@ -534,54 +715,30 @@ export default function DutyEditModal({
         }
 
         const assignedStaffObj = allStaffList.find(s => String(s.id) === String(assignStaffId));
+        if (!assignedStaffObj) {
+          throw new Error('Selected employee not found.');
+        }
+
         const linkNum = targetLink ? parseInt(targetLink, 10) : null;
         const targetCatIdNum = parseInt(targetCategoryId, 10);
 
-        const assignPayload = {
-          staff_id: parseInt(assignStaffId, 10),
-          date: selectedDate,
-          action: 'CHANGED_LINK',
-          new_link_number: linkNum,
-          target_category_id: targetCatIdNum,
-          reason: assignReason || (linkNum ? `Assigned to Link #${linkNum}` : 'Assigned duty link')
-        };
-
-        const res = await fetch('/api/duty/change-status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify(assignPayload)
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to assign employee to duty link');
-
-        // If the current slot had an active employee who is not vacant and not the same person,
-        // relieve them to HQ (Available for Booking / Standby)
-        if (dutyModal.staffId && !isSlotVacant && dutyModal.staffId !== parseInt(assignStaffId, 10)) {
-          const relievePayload = {
-            staff_id: dutyModal.staffId,
-            date: selectedDate,
-            action: 'CHANGED_LINK',
-            new_link_number: null,
-            target_category_id: dutyModal.categoryId || targetCatIdNum,
-            reason: `Relieved from Link #${linkNum} by ${assignedStaffObj?.name || 'replacement staff'}`
-          };
-          await fetch('/api/duty/change-status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify(relievePayload)
+        // If employee is already working another train/duty, confirm before shifting
+        const assignStatus = getStaffAssignmentStatus(assignedStaffObj, selectedDate);
+        if (assignStatus.isAssigned) {
+          setShiftConfirmDialog({
+            staffName: assignedStaffObj.name,
+            currentTrainDesc: assignStatus.trainDesc,
+            targetDesc: linkNum ? `Link #${linkNum}` : 'Duty',
+            onConfirm: () => doExecuteAssign(assignedStaffObj, linkNum, targetCatIdNum)
           });
+          return;
         }
 
-        onSuccess(`Assigned ${assignedStaffObj?.name} to Link #${linkNum || 'Duty'} on ${selectedDate}!`);
-        onClose();
+        await doExecuteAssign(assignedStaffObj, linkNum, targetCatIdNum);
         return;
       }
     } catch (err) {
       setErrorMsg(err.message);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -1507,6 +1664,20 @@ export default function DutyEditModal({
                         ))}
                       </div>
 
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem', margin: 0 }}>
+                          Choose Replacement Employee:
+                        </label>
+                        <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={showAlreadyAssigned}
+                            onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
+                          />
+                          <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                        </label>
+                      </div>
+
                       {/* Dropdown */}
                       <select
                         className="form-input"
@@ -1522,33 +1693,54 @@ export default function DutyEditModal({
                         <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} available) --</option>
                         {eligibleReplacementStaff.map(s => {
                           const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                           const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
                           return (
                             <option key={s.id} value={s.id}>
-                              {s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                              {assignStatus.isAssigned ? `⚠️ [BUSY: ${assignStatus.trainDesc}] ` : ''}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
                             </option>
                           );
                         })}
                       </select>
 
-                      {selectedReplacementStaffObj && (
-                        <div style={{
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          background: 'rgba(16, 185, 129, 0.1)',
-                          border: '1px solid rgba(16, 185, 129, 0.3)',
-                          fontSize: '0.78rem',
-                          color: '#34d399',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}>
-                          <span>✅</span>
-                          <span>
-                            <strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).
-                          </span>
-                        </div>
-                      )}
+                      {selectedReplacementStaffObj && (() => {
+                        const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
+                        return repAssignStatus.isAssigned ? (
+                          <div style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            background: 'rgba(245, 158, 11, 0.12)',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                            fontSize: '0.78rem',
+                            color: '#fbbf24',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span>⚠️</span>
+                            <span>
+                              <strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            fontSize: '0.78rem',
+                            color: '#34d399',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span>✅</span>
+                            <span>
+                              <strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -1642,9 +1834,19 @@ export default function DutyEditModal({
 
                 {/* Employee Selector Dropdown */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: '0.8rem' }}>
-                    Select Employee to Assign:
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', margin: 0 }}>
+                      Select Employee to Assign:
+                    </label>
+                    <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={showAlreadyAssigned}
+                        onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
+                      />
+                      <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                    </label>
+                  </div>
                   <select
                     className="form-input"
                     value={assignStaffId}
@@ -1654,10 +1856,11 @@ export default function DutyEditModal({
                     <option value="">-- Choose Employee to Assign ({eligibleAssignStaff.length} candidates) --</option>
                     {eligibleAssignStaff.map(s => {
                       const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                      const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                       const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
                       return (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                          {assignStatus.isAssigned ? `⚠️ [BUSY: ${assignStatus.trainDesc}] ` : ''}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
                         </option>
                       );
                     })}
@@ -1665,30 +1868,35 @@ export default function DutyEditModal({
                 </div>
 
                 {/* Selected Assignee Card */}
-                {selectedAssignStaffObj && (
-                  <div style={{
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    background: 'rgba(59, 130, 246, 0.12)',
-                    border: '1px solid rgba(59, 130, 246, 0.35)',
-                    fontSize: '0.82rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ color: '#93c5fd' }}>
-                        👤 {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'})
-                      </strong>
-                      <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#60a5fa', fontSize: '0.72rem' }}>
-                        {getStaffDutyInfo(selectedAssignStaffObj, selectedDate).label}
-                      </span>
+                {selectedAssignStaffObj && (() => {
+                  const selAssignStatus = getStaffAssignmentStatus(selectedAssignStaffObj, selectedDate);
+                  return (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: selAssignStatus.isAssigned ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                      border: selAssignStatus.isAssigned ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(59, 130, 246, 0.35)',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ color: selAssignStatus.isAssigned ? '#fbbf24' : '#93c5fd' }}>
+                          {selAssignStatus.isAssigned ? '⚠️' : '👤'} {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'})
+                        </strong>
+                        <span className="badge" style={{ background: selAssignStatus.isAssigned ? 'rgba(245, 158, 11, 0.25)' : 'rgba(59, 130, 246, 0.25)', color: selAssignStatus.isAssigned ? '#fbbf24' : '#60a5fa', fontSize: '0.72rem' }}>
+                          {selAssignStatus.isAssigned ? `Busy on ${selAssignStatus.trainDesc}` : getStaffDutyInfo(selectedAssignStaffObj, selectedDate).label}
+                        </span>
+                      </div>
+                      <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.76rem' }}>
+                        {selAssignStatus.isAssigned
+                          ? <span>Will be shifted to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> and previous slot vacated.</span>
+                          : <span>Will be assigned to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong>.</span>}
+                      </div>
                     </div>
-                    <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.76rem' }}>
-                      Will be assigned to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong>.
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Assign Reason */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1770,6 +1978,89 @@ export default function DutyEditModal({
             </div>
           </div>
         </form>
+
+        {/* Shift Confirmation Pop-up Modal */}
+        {shiftConfirmDialog && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.88)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+            padding: '16px'
+          }}>
+            <div style={{
+              maxWidth: '460px',
+              width: '100%',
+              background: '#18181b',
+              border: '2px solid #f59e0b',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(245, 158, 11, 0.25)',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>⚠️</div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f59e0b', margin: '0 0 10px 0' }}>
+                Confirm Employee Shift
+              </h3>
+              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
+                <strong>{shiftConfirmDialog.staffName}</strong> is already working{' '}
+                <span style={{ color: '#60a5fa', fontWeight: 700 }}>{shiftConfirmDialog.currentTrainDesc}</span> on {selectedDate}.
+              </p>
+              <div style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                fontSize: '0.84rem',
+                color: '#fbbf24',
+                marginBottom: '20px',
+                textAlign: 'left'
+              }}>
+                📌 <strong>What will happen:</strong>
+                <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                  <li>Staff will be shifted to <strong>{shiftConfirmDialog.targetDesc}</strong>.</li>
+                  <li>Their slot on <strong>{shiftConfirmDialog.currentTrainDesc}</strong> will immediately show as <strong style={{ color: '#ef4444' }}>[VACANT]</strong>.</li>
+                </ul>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShiftConfirmDialog(null)}
+                  style={{ padding: '8px 18px', fontSize: '0.86rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const cb = shiftConfirmDialog.onConfirm;
+                    setShiftConfirmDialog(null);
+                    if (cb) cb();
+                  }}
+                  style={{
+                    padding: '8px 22px',
+                    fontSize: '0.86rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    border: 'none',
+                    color: '#000'
+                  }}
+                >
+                  Confirm & Shift Staff
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
