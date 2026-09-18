@@ -4926,13 +4926,46 @@ app.get('/api/roster', async (req, res) => {
               overrideReason = `Muster: Absent (O)${muster.remarks ? ` (${muster.remarks})` : ''}`;
             }
           } else if (directOv) {
-            linkNum = directOv.overridden_link_number; // can be null (REST / SICK / LEAVE)
             isOverridden = true;
-            status = directOv.status || (directOv.overridden_link_number === null ? 'REST' : 'CHANGED_LINK');
             substituteStaffId = directOv.substitute_staff_id;
             substituteName = directOv.substitute_name;
             overrideReason = directOv.reason;
             leaveType = directOv.leave_type;
+
+            if (directOv.status === 'AVAILABLE_FOR_BOOKING' || (directOv.reason && (directOv.reason.toLowerCase().includes('available for booking') || directOv.reason.toLowerCase().includes('available for other duty') || directOv.reason.toLowerCase().includes('removed from link') || directOv.reason.toLowerCase().includes('relieved to hq')))) {
+              status = 'AVAILABLE_FOR_BOOKING';
+              linkNum = null;
+              overrideReason = directOv.reason || 'Available for Booking Duty at HQ';
+            } else if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(directOv.status)) {
+              status = directOv.status;
+              linkNum = null;
+            } else if (directOv.status === 'EXTRA_CREW' || directOv.extra_train_no || directOv.advance_train_no) {
+              status = 'DUTY';
+              linkNum = null;
+              customTrainNo = directOv.extra_train_no || directOv.advance_train_no || 'EXTRA';
+              customFrom = 'GNT';
+              customTo = '---';
+              customCoaches = '-';
+              customSetType = 'Extra Crew';
+              overrideReason = directOv.reason || `Assigned to Extra Train ${customTrainNo}`;
+            } else {
+              linkNum = directOv.overridden_link_number;
+              status = directOv.status || (directOv.overridden_link_number === null ? 'REST' : 'CHANGED_LINK');
+              if (directOv.target_category_id) {
+                targetCatId = directOv.target_category_id;
+              }
+            }
+          } else if (subOv && subOv.status !== 'AVAILABLE_FOR_BOOKING') {
+            isOverridden = true;
+            const assignedLink = subOv.overridden_link_number !== null && subOv.overridden_link_number !== undefined
+              ? subOv.overridden_link_number
+              : subOv.original_link_number;
+            if (assignedLink) {
+              linkNum = assignedLink;
+              targetCatId = subOv.target_category_id || (assignedLink > 21 ? 2 : parseInt(category_id, 10));
+              status = 'DUTY';
+              overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'} on Link #${linkNum}`;
+            }
           } else {
             linkNum = getBaseLinkNumber(staff.row_position, d.dayOffset, category.cycle_length);
             const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, category_id, staff.row_position, category.cycle_length, category.anchor_date, d.dateString);
@@ -4948,7 +4981,7 @@ app.get('/api/roster', async (req, res) => {
 
           let dutyDetails = null;
           if (linkNum !== null) {
-            dutyDetails = await getActiveLinkDef(category_id, linkNum, d.dateString);
+            dutyDetails = await getActiveLinkDef(targetCatId || category_id, linkNum, d.dateString);
           }
 
           let lrRestInfo = null;
@@ -4961,7 +4994,7 @@ app.get('/api/roster', async (req, res) => {
             dayOffset: d.dayOffset,
             calculatedLinkNumber: getBaseLinkNumber(staff.row_position, d.dayOffset, category.cycle_length),
             actualLinkNumber: linkNum,
-            target_category_id: parseInt(category_id, 10),
+            target_category_id: targetCatId || parseInt(category_id, 10),
             isRest: linkNum === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING',
             isOverridden,
             status,
@@ -4974,11 +5007,11 @@ app.get('/api/roster', async (req, res) => {
             substituteName,
             overrideReason,
             leave_type: leaveType,
-            train_numbers: status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST')),
-            from_station: status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : ''),
-            to_station: status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : ''),
-            coaches: status === 'AVAILABLE_FOR_BOOKING' ? '-' : (dutyDetails ? dutyDetails.coaches : ''),
-            set_type: status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : 'Other / REST')
+            train_numbers: status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (customTrainNo || (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST'))),
+            from_station: status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : (customFrom || '')),
+            to_station: status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : (customTo || '')),
+            coaches: status === 'AVAILABLE_FOR_BOOKING' ? '-' : (dutyDetails ? dutyDetails.coaches : (customCoaches || '')),
+            set_type: status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : (customSetType || (status === 'REST' ? 'Weekly Rest' : 'Train Duty')))
           });
         }
       }

@@ -1,5 +1,138 @@
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 
+const KNOWN_LINK_SETS = {
+  1: [
+    [1, 2, 3],
+    [4, 5, 6],
+    [8, 9, 10],
+    [11, 12, 13],
+    [15, 16, 17],
+    [18, 19, 20]
+  ],
+  2: [
+    [1, 2],
+    [3, 4],
+    [5, 6],
+    [8, 9, 10],
+    [11, 12, 13],
+    [15, 16],
+    [17, 18],
+    [19, 20],
+    [22, 23, 24],
+    [25, 26, 27],
+    [29, 30],
+    [31, 32],
+    [33, 34],
+    [36, 37, 38],
+    [39, 40, 41],
+    [43, 44, 45, 46],
+    [47, 48],
+    [50, 51, 52],
+    [53, 54, 55],
+    [57, 58, 59]
+  ],
+  3: [
+    [1, 2, 3],
+    [4, 5, 6]
+  ]
+};
+
+function getLinkSetDetails(categoryId, linkNumber) {
+  const catId = parseInt(categoryId, 10);
+  const linkNum = parseInt(linkNumber, 10);
+  if (!catId || !linkNum) return null;
+
+  const sets = KNOWN_LINK_SETS[catId];
+  if (sets) {
+    for (const s of sets) {
+      const idx = s.indexOf(linkNum);
+      if (idx !== -1) {
+        return {
+          setLength: s.length,
+          dayIndexInSet: idx + 1,
+          isFirstDayOfSet: idx === 0,
+          setLinks: s,
+          remainingLinks: s.slice(idx + 1)
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function checkMultiDayLeaveReturnSync(staffId, categoryId, rowPosition, cycleLength, anchorDate, targetDateStr, musterMap, overrideMap) {
+  function checkStaffLeave(dateStr) {
+    const muster = musterMap ? musterMap[dateStr] : null;
+    if (muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(muster.code.toUpperCase())) {
+      return { isLeave: true, status: muster.code.toUpperCase() };
+    }
+    const ov = overrideMap ? overrideMap[dateStr] : null;
+    if (ov) {
+      if (ov.status === 'AVAILABLE_FOR_BOOKING' || (ov.reason && ov.reason.toLowerCase().includes('available for booking'))) {
+        return null;
+      }
+      if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(ov.status) || ov.leave_type) {
+        return { isLeave: true, status: ov.leave_type || ov.status };
+      }
+      if (ov.overridden_link_number === null && ov.reason && (ov.reason.toLowerCase().includes('leave') || ov.reason.toLowerCase().includes('sick'))) {
+        return { isLeave: true, status: ov.reason.toLowerCase().includes('sick') ? 'SICK' : 'LEAVE' };
+      }
+    }
+    return null;
+  }
+
+  // 1. If staff is on leave today, return null
+  const todayLeave = checkStaffLeave(targetDateStr);
+  if (todayLeave) return null;
+
+  // 2. Today's scheduled cyclic link
+  const todayDayOffset = getDayOffset(anchorDate, targetDateStr);
+  const todayLinkNum = getBaseLinkNumber(rowPosition, todayDayOffset, cycleLength);
+  if (todayLinkNum === null) return null;
+
+  // 3. Check Day T - 1 (Yesterday)
+  const d1 = new Date(targetDateStr + 'T12:00:00');
+  d1.setDate(d1.getDate() - 1);
+  const prevDateStr = d1.toISOString().split('T')[0];
+
+  const prevLeave = checkStaffLeave(prevDateStr);
+  if (prevLeave) {
+    const prevDayOffset = getDayOffset(anchorDate, prevDateStr);
+    const prevLinkNum = getBaseLinkNumber(rowPosition, prevDayOffset, cycleLength);
+    const prevLinkSet = getLinkSetDetails(categoryId, prevLinkNum);
+
+    if (prevLinkSet && prevLinkSet.isFirstDayOfSet && prevLinkSet.remainingLinks.length >= 1) {
+      return {
+        isAvailable: true,
+        status: 'AVAILABLE_FOR_BOOKING',
+        reason: `Available for Booking Duty at HQ (Took 1-day ${prevLeave.status} on Link #${prevLinkNum})`
+      };
+    }
+  }
+
+  // 4. Check Day T - 2 (For Day 3 of 3-day links)
+  const d2 = new Date(targetDateStr + 'T12:00:00');
+  d2.setDate(d2.getDate() - 2);
+  const prev2DateStr = d2.toISOString().split('T')[0];
+
+  const prev2Leave = checkStaffLeave(prev2DateStr);
+  if (prev2Leave && !prevLeave) {
+    const prev2DayOffset = getDayOffset(anchorDate, prev2DateStr);
+    const prev2LinkNum = getBaseLinkNumber(rowPosition, prev2DayOffset, cycleLength);
+    const prev2LinkSet = getLinkSetDetails(categoryId, prev2LinkNum);
+
+    if (prev2LinkSet && prev2LinkSet.isFirstDayOfSet && prev2LinkSet.remainingLinks.length >= 2) {
+      return {
+        isAvailable: true,
+        status: 'AVAILABLE_FOR_BOOKING',
+        reason: `Available for Booking Duty at HQ (Took 1-day ${prev2Leave.status} on Link #${prev2LinkNum})`
+      };
+    }
+  }
+
+  return null;
+}
+
 function parseMinutes(timeStr) {
   if (!timeStr || timeStr === '---') return null;
   const match = timeStr.match(/(\d{1,2}):(\d{2})/);
@@ -572,6 +705,9 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
 function resolveDutyCodeToRows(dutyCode) {
   if (!dutyCode) return [];
   const code = String(dutyCode).trim();
+  if (code === 'REST' || code === 'OFF' || code === 'AVL' || code === 'SPARE (HQ)' || code === '---' || code === '-') {
+    return [];
+  }
   if (code.includes('12604 / 12603') || code.includes('12604/12603') || code === '12604') {
     return [{ train_no: '12604', from: 'GNT', to: '---', dep: '22:40', arr: '---', ta: 0.3 }];
   }
@@ -590,6 +726,12 @@ function resolveDutyCodeToRows(dutyCode) {
     return [
       { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:05', ta: null },
       { train_no: '18047', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
+    ];
+  }
+  if (code === '18048' || code.includes('18048')) {
+    return [
+      { train_no: '18048', from: 'GTL', to: 'BZA', dep: '14:30', arr: '22:45', ta: 0.7 },
+      { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 0.3 }
     ];
   }
   if (code === '12734' || code.includes('12734')) {
@@ -625,6 +767,12 @@ function resolveDutyCodeToRows(dutyCode) {
   if (code === '17252' || code.includes('17252')) {
     return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7 }];
   }
+  if (code === '17251' || code.includes('17251')) {
+    return [{ train_no: '17251', from: 'GNT', to: 'DHNE', dep: '16:30', arr: '05:00', ta: 0.7 }];
+  }
+  if (code === '17254' || code.includes('17254')) {
+    return [{ train_no: '17254', from: 'DHNE', to: 'GNT', dep: '16:30', arr: '23:45', ta: 0.7 }];
+  }
   if (code.includes('12747') || code.includes('12748')) {
     return [
       { train_no: '12747', from: 'GNT', to: 'VKB', dep: '05:45', arr: '12:00', ta: null },
@@ -635,6 +783,44 @@ function resolveDutyCodeToRows(dutyCode) {
     return [
       { train_no: '17201', from: 'GNT', to: 'KZJ', dep: '06:00', arr: '12:00', ta: null },
       { train_no: '17202', from: 'KZJ', to: 'GNT', dep: '15:45', arr: '21:30', ta: 0.7 }
+    ];
+  }
+  if (code.includes('17281') || code.includes('17282')) {
+    return [
+      { train_no: '17281', from: 'GNT', to: 'NS', dep: '17:45', arr: '22:30', ta: 0.7 },
+      { train_no: '17282', from: 'NS', to: 'GNT', dep: '06:00', arr: '10:45', ta: 0.7 }
+    ];
+  }
+  if (code.includes('17255') || code.includes('17256')) {
+    return [
+      { train_no: '17255', from: 'GNT', to: 'HYB', dep: '22:30', arr: '05:00', ta: 0.7 },
+      { train_no: '17256', from: 'HYB', to: 'GNT', dep: '21:45', arr: '04:15', ta: 0.7 }
+    ];
+  }
+  if (code.includes('17645') || code.includes('17646')) {
+    return [
+      { train_no: '17646', from: 'GNT', to: 'SC', dep: '07:15', arr: '14:30', ta: 0.7 },
+      { train_no: '17645', from: 'SC', to: 'GNT', dep: '16:00', arr: '23:15', ta: 0.7 }
+    ];
+  }
+  if (code.includes('12705') || code.includes('12795')) {
+    return [
+      { train_no: '12705', from: 'GNT', to: 'SC', dep: '15:30', arr: '22:15', ta: 0.7 }
+    ];
+  }
+  if (code.includes('12805') || code.includes('12806')) {
+    return [
+      { train_no: '12805', from: 'BZA', to: 'GNT', dep: '12:00', arr: '13:15', ta: 0.3 }
+    ];
+  }
+  if (code.includes('12756')) {
+    return [
+      { train_no: '12756', from: 'SC', to: 'BZA', dep: '12:30', arr: '19:45', ta: 0.7 }
+    ];
+  }
+  if (code.includes('07227') || code.includes('7227')) {
+    return [
+      { train_no: '07227', from: 'GNT', to: '---', dep: '19:30', arr: '---', ta: 0.7 }
     ];
   }
   if (code.includes('57201')) {
@@ -649,7 +835,7 @@ function resolveDutyCodeToRows(dutyCode) {
       { train_no: '17225', from: 'BZA', to: '---', dep: '20:00', arr: '---', ta: 0.7 }
     ];
   }
-  const singleMatch = code.match(/\b\d{5}\b/);
+  const singleMatch = code.match(/\b\d{4,5}\b/);
   if (singleMatch) {
     return [{ train_no: singleMatch[0], from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
   }
@@ -747,15 +933,22 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
 
   const allOverrides = await all(
     staffId
-      ? 'SELECT * FROM overrides WHERE staff_id = ? AND date >= ? AND date <= ?'
-      : 'SELECT * FROM overrides WHERE date >= ? AND date <= ?',
-    staffId ? [staffId, startDateStr, endDateStr] : [startDateStr, endDateStr]
+      ? 'SELECT o.*, s1.name as regular_staff_name, s1.category_id as regular_staff_category FROM overrides o LEFT JOIN staff s1 ON o.staff_id = s1.id WHERE (o.staff_id = ? OR o.substitute_staff_id = ?) AND o.date >= ? AND o.date <= ?'
+      : 'SELECT o.*, s1.name as regular_staff_name, s1.category_id as regular_staff_category FROM overrides o LEFT JOIN staff s1 ON o.staff_id = s1.id WHERE o.date >= ? AND o.date <= ?',
+    staffId ? [staffId, staffId, startDateStr, endDateStr] : [startDateStr, endDateStr]
   );
-  const overrideMapByStaff = {};
+  const directOverrideMapByStaff = {};
+  const subOverrideMapByStaff = {};
   if (Array.isArray(allOverrides)) {
     allOverrides.forEach(o => {
-      if (!overrideMapByStaff[o.staff_id]) overrideMapByStaff[o.staff_id] = {};
-      overrideMapByStaff[o.staff_id][o.date] = o;
+      if (o.staff_id) {
+        if (!directOverrideMapByStaff[o.staff_id]) directOverrideMapByStaff[o.staff_id] = {};
+        directOverrideMapByStaff[o.staff_id][o.date] = o;
+      }
+      if (o.substitute_staff_id) {
+        if (!subOverrideMapByStaff[o.substitute_staff_id]) subOverrideMapByStaff[o.substitute_staff_id] = {};
+        subOverrideMapByStaff[o.substitute_staff_id][o.date] = o;
+      }
     });
   }
 
@@ -770,6 +963,20 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
     allLrRecords.forEach(r => {
       if (!lrMapByStaff[r.staff_id]) lrMapByStaff[r.staff_id] = {};
       lrMapByStaff[r.staff_id][r.date] = r;
+    });
+  }
+
+  const allEarnings = await all(
+    staffId
+      ? 'SELECT * FROM daily_earnings_entries WHERE staff_id = ? AND date >= ? AND date <= ?'
+      : 'SELECT * FROM daily_earnings_entries WHERE date >= ? AND date <= ?',
+    staffId ? [staffId, startDateStr, endDateStr] : [startDateStr, endDateStr]
+  );
+  const earningsMapByStaff = {};
+  if (Array.isArray(allEarnings)) {
+    allEarnings.forEach(e => {
+      if (!earningsMapByStaff[e.staff_id]) earningsMapByStaff[e.staff_id] = {};
+      earningsMapByStaff[e.staff_id][e.date] = e;
     });
   }
 
@@ -789,8 +996,10 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
 
       const ndaMap = ndaMapByStaff[staff.id] || {};
       const musterMap = musterMapByStaff[staff.id] || {};
-      const overrideMap = overrideMapByStaff[staff.id] || {};
+      const directOverrideMap = directOverrideMapByStaff[staff.id] || {};
+      const subOverrideMap = subOverrideMapByStaff[staff.id] || {};
       const lrMap = lrMapByStaff[staff.id] || {};
+      const earningsMap = earningsMapByStaff[staff.id] || {};
 
       const daRate = staff.pay_amount >= 53100 ? 800 : (staff.pay_amount >= 35400 ? 500 : 800);
 
@@ -803,37 +1012,88 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         const musterCode = muster ? muster.code.toUpperCase() : null;
         const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
 
-        const override = overrideMap[dateStrIso];
-        const isOverrideLeave = override && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(override.status) || override.leave_type);
-        const isEffectiveLeave = isMusterLeave || isOverrideLeave;
+        const directOverride = directOverrideMap[dateStrIso];
+        const subOverride = subOverrideMap[dateStrIso];
+        const lrEntry = lrMap[dateStrIso];
+        const earnEntry = earningsMap[dateStrIso];
+
+        const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(directOverride.status) || directOverride.leave_type);
+        const isEffectiveLeave = isMusterLeave || isDirectLeave;
 
         let duties = [];
         let linkNum = null;
+        let isStandbyHq = false;
 
-        if (override && (override.status === 'CHANGED_LINK' || override.status === 'SUBSTITUTE')) {
-          const targetCatId = override.target_category_id || category.id;
-          linkNum = override.overridden_link_number;
-          duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
-        } else if (override && (override.status === 'EXTRA_CREW' || override.is_extra === 1 || override.extra_train_no)) {
-          const trNo = override.extra_train_no || 'EXTRA';
-          duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
-        } else if (override && (override.status === 'UTILISED_ADVANCE' || override.advance_train_no)) {
-          const trNo = override.advance_train_no || 'ADVANCE';
-          duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
-        } else if (category.id === 4) {
-          const lrEntry = lrMap[dateStrIso];
-          const dutyCode = lrEntry ? lrEntry.duty_code : null;
-          if (!dutyCode || dutyCode === 'AVL' || dutyCode === 'OFF' || dutyCode === 'REST' || dutyCode === 'R' || isEffectiveLeave) {
+        if (isEffectiveLeave) {
+          duties = [];
+        } else if (directOverride && (directOverride.status === 'AVAILABLE_FOR_BOOKING' || (directOverride.reason && (directOverride.reason.toLowerCase().includes('available for booking') || directOverride.reason.toLowerCase().includes('available for other duty') || directOverride.reason.toLowerCase().includes('removed from link') || directOverride.reason.toLowerCase().includes('relieved to hq'))))) {
+          // Standby / Available at HQ -> 0 TA
+          isStandbyHq = true;
+          duties = [];
+        } else if (directOverride && (directOverride.status === 'CHANGED_LINK' || directOverride.status === 'SUBSTITUTE')) {
+          linkNum = directOverride.overridden_link_number;
+          if (linkNum === null) {
             duties = [];
+          } else {
+            const targetCatId = directOverride.target_category_id || (linkNum > 21 ? 2 : category.id);
+            duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
+            if (duties.length === 0 && linkNum > 100) {
+              duties = resolveDutyCodeToRows(String(linkNum));
+            }
+          }
+        } else if (directOverride && (directOverride.status === 'EXTRA_CREW' || directOverride.is_extra === 1 || directOverride.extra_train_no)) {
+          const trNo = directOverride.extra_train_no || 'EXTRA';
+          duties = resolveDutyCodeToRows(trNo);
+          if (duties.length === 0) duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
+        } else if (directOverride && (directOverride.status === 'UTILISED_ADVANCE' || directOverride.advance_train_no)) {
+          const trNo = directOverride.advance_train_no || 'ADVANCE';
+          duties = resolveDutyCodeToRows(trNo);
+          if (duties.length === 0) duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
+        } else if (subOverride && subOverride.status !== 'AVAILABLE_FOR_BOOKING') {
+          // Staff worked as substitute for another employee
+          const assignedLink = subOverride.overridden_link_number !== null && subOverride.overridden_link_number !== undefined
+            ? subOverride.overridden_link_number
+            : subOverride.original_link_number;
+          if (assignedLink) {
+            linkNum = assignedLink;
+            const targetCatId = subOverride.target_category_id || subOverride.regular_staff_category || (linkNum > 21 ? 2 : 1);
+            duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
+            if (duties.length === 0 && linkNum > 100) {
+              duties = resolveDutyCodeToRows(String(linkNum));
+            }
+          }
+        } else if (category.id === 4) {
+          // Category 4: LR Staff
+          const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
+          if (!dutyCode || ['AVL', 'OFF', 'REST', 'R', 'REST_HQ', 'SPARE', 'CL', 'LAP', 'LHAP', 'SICK', 'CR', 'OD', 'CCL', 'SCL', 'NH', '---', '-'].includes(dutyCode.trim().toUpperCase()) || isEffectiveLeave) {
+            duties = [];
+          } else if (/^\d+$/.test(dutyCode.trim())) {
+            const ln = parseInt(dutyCode.trim(), 10);
+            if (ln <= 63) {
+              const targetCat = (ln > 21 ? 2 : 1);
+              duties = getDutyRowsForLinkNumber(targetCat, ln, linkMap[`${targetCat}_${ln}`] || linkMap[ln]);
+            } else {
+              duties = resolveDutyCodeToRows(dutyCode);
+            }
           } else {
             duties = resolveDutyCodeToRows(dutyCode);
           }
         } else {
-          const offset = getDayOffset(category.anchor_date, dateStrIso);
-          linkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
-          const link = linkMap[`${category.id}_${linkNum}`];
-          duties = getDutyRowsForLinkNumber(category.id, linkNum, link);
+          // Regular staff: check multi-day leave return
+          const multiDayLeaveReturn = checkMultiDayLeaveReturnSync(
+            staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dateStrIso, musterMap, directOverrideMap
+          );
+          if (multiDayLeaveReturn) {
+            isStandbyHq = true;
+            duties = [];
+          } else {
+            const offset = getDayOffset(category.anchor_date, dateStrIso);
+            linkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+            const link = linkMap[`${category.id}_${linkNum}`];
+            duties = getDutyRowsForLinkNumber(category.id, linkNum, link);
+          }
         }
+
         const dutiesWithTimings = duties.map(duty => {
           let actualDep = duty.dep || '---';
           let actualArr = duty.arr || '---';
@@ -873,7 +1133,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           const taPct = duty.ta_percentage !== undefined ? duty.ta_percentage : (duty.days_claiming_ta !== undefined ? duty.days_claiming_ta : duty.ta);
           const absenceHours = duty.absence_hours || 0;
           const claimAmt = taPct !== null && taPct !== undefined ? Math.round(taPct * daRate) : 0;
-          const effLeaveCode = musterCode || (override ? (override.leave_type || override.status) : 'LEAVE');
+          const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
           const claimStatus = isEffectiveLeave ? 'REJECTED' : 'APPROVED';
           const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : '';
 
@@ -1079,12 +1339,25 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
        AND ((date >= ? AND date <= ?) OR (from_date <= ? AND to_date >= ?))`,
     [staffId, queryStart, queryEnd, queryEnd, queryStart]
   );
-  const overrides = await all(
-    `SELECT * FROM overrides 
-     WHERE staff_id = ? AND date >= ? AND date <= ? 
-       AND (status IN ('LEAVE', 'SICK', 'CR', 'REST', 'ABSENT') OR leave_type IS NOT NULL)`,
-    [staffId, queryStart, queryEnd]
+  const allStaffOverrides = await all(
+    'SELECT * FROM overrides WHERE (staff_id = ? OR substitute_staff_id = ?) AND date >= ? AND date <= ?',
+    [staffId, staffId, queryStart, queryEnd]
   );
+  const staffOverrideMap = {};
+  if (Array.isArray(allStaffOverrides)) {
+    allStaffOverrides.forEach(o => {
+      if (o.staff_id === staffId) {
+        staffOverrideMap[o.date] = o;
+      }
+    });
+  }
+
+  const musterMap = {};
+  if (Array.isArray(musterList)) {
+    musterList.forEach(m => {
+      musterMap[m.date] = m;
+    });
+  }
 
   const leaveInfoMap = {};
   if (Array.isArray(musterList)) {
@@ -1109,14 +1382,16 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       }
     });
   }
-  if (Array.isArray(overrides)) {
-    overrides.forEach(o => {
-      if (!leaveInfoMap[o.date]) {
-        const code = o.leave_type || (o.status === 'SICK' ? 'SICK' : (o.status === 'REST' ? 'R' : (o.status === 'CR' ? 'CR' : (o.status === 'ABSENT' ? 'O' : 'LEAVE'))));
-        leaveInfoMap[o.date] = {
-          code,
-          natureOfLeave: formatNatureOfLeave(code, o.reason)
-        };
+  if (Array.isArray(allStaffOverrides)) {
+    allStaffOverrides.forEach(o => {
+      if (o.staff_id === staffId && !leaveInfoMap[o.date]) {
+        if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(o.status) || o.leave_type) {
+          const code = o.leave_type || (o.status === 'SICK' ? 'SICK' : (o.status === 'REST' ? 'R' : (o.status === 'CR' ? 'CR' : (o.status === 'ABSENT' ? 'O' : 'LEAVE'))));
+          leaveInfoMap[o.date] = {
+            code,
+            natureOfLeave: formatNatureOfLeave(code, o.reason)
+          };
+        }
       }
     });
   }
@@ -1127,8 +1402,20 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   if (savedEntries && savedEntries.length > 0) {
     savedEntries.forEach(r => {
       const dIso = resolveDutyDateIso(r);
-      if (dIso) savedDateSet.add(dIso);
-      sourceRows.push({ ...r, _isSaved: true });
+      if (dIso) {
+        const ov = staffOverrideMap[dIso];
+        const isStandby = ov && (ov.status === 'AVAILABLE_FOR_BOOKING' || (ov.reason && (ov.reason.toLowerCase().includes('available for booking') || ov.reason.toLowerCase().includes('available for other duty') || ov.reason.toLowerCase().includes('removed from link') || ov.reason.toLowerCase().includes('relieved to hq'))));
+        const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dIso, musterMap, staffOverrideMap);
+        const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
+
+        // If duty was changed via roster override, or staff is on leave / standby at HQ, discard stale saved entry
+        if (isStandby || isMultiDayReturn || leaveInfoMap[dIso] || hasDutyOverride) {
+          return;
+        }
+
+        savedDateSet.add(dIso);
+        sourceRows.push({ ...r, _isSaved: true });
+      }
     });
   }
   if (approvedClaims && approvedClaims.length > 0) {
@@ -1251,11 +1538,12 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         continue;
       }
       if (prevIso && prevIso >= actualStart) {
-        const hasDep = finalRows.some(x => {
+        const hasMatchingDep = finalRows.some(x => {
           const xIso = x.duty_date || x.date_iso || resolveDutyDateIso(x);
-          return xIso === prevIso && x.train_no === r.train_no && x.dep_time && x.dep_time !== '---';
+          if (xIso !== prevIso || x.is_leave || !x.dep_time || x.dep_time === '---') return false;
+          return x.train_no === r.train_no || (r.to_station && (x.to_station === r.to_station || x.to_station === '---'));
         });
-        if (!hasDep) {
+        if (!hasMatchingDep) {
           // Matching departure is missing on the previous day in this journal
           continue;
         }
@@ -1275,11 +1563,12 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
           return xIso === nextIso;
         });
         if (hasNextDayInRows) {
-          const hasArr = finalRows.some(x => {
+          const hasMatchingArr = finalRows.some(x => {
             const xIso = x.duty_date || x.date_iso || resolveDutyDateIso(x);
-            return xIso === nextIso && x.train_no === r.train_no && x.arr_time && x.arr_time !== '---';
+            if (xIso !== nextIso || x.is_leave || !x.arr_time || x.arr_time === '---') return false;
+            return x.train_no === r.train_no || (r.from_station && (x.from_station === r.from_station || x.from_station === '---'));
           });
-          if (!hasArr) {
+          if (!hasMatchingArr) {
             // Matching arrival is missing on the next day in this journal
             continue;
           }
