@@ -582,7 +582,7 @@ async function initDb() {
       {
             "pos": 15,
             "name": "BP RAJA KUMAR",
-            "desg": "CTI"
+            "desg": "TTI"
       },
       {
             "pos": 16,
