@@ -5022,6 +5022,8 @@ app.get('/api/roster', async (req, res) => {
         staffId: staff.id,
         staffName: staff.name,
         designation: staff.designation,
+        pf_no: staff.pf_no,
+        seniority_no: staff.seniority_no,
         rowPosition: staff.row_position,
         active: staff.active,
         rest_day: staff.rest_day,
