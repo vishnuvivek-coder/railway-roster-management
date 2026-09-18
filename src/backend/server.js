@@ -1939,6 +1939,149 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       return res.json({ success: true, message: userMsg });
     }
 
+    if (action === 'WRONG_ALLOTMENT') {
+      const undoSnapshots = [];
+      const linkNum = req.body.link_number || req.body.new_link_number;
+      const targetCatId = target_category_id || staff.category_id;
+      const subAction = req.body.wrong_allotment_action || (replacement_staff_id ? 'REPLACE' : (replacement_type === 'RESET' ? 'RESET' : 'VACANT'));
+
+      for (const dStr of datesToProcess) {
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+        let existingSubOverride = null;
+        let existingSubMuster = null;
+        if (replacement_staff_id) {
+          existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+        }
+        undoSnapshots.push({
+          date: dStr,
+          override: existingOverride || null,
+          muster: existingMuster || null,
+          subOverride: existingSubOverride || null,
+          subMuster: existingSubMuster || null
+        });
+
+        // 1. Relieve the wrongly allotted employee (staff_id)
+        if (existingOverride && (existingOverride.status === 'CHANGED_LINK' || existingOverride.status === 'SUBSTITUTE')) {
+          // If staff_id was a substitute or placed on this link via override, clear that assignment
+          if (existingOverride.substitute_staff_id) {
+            await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existingOverride.substitute_staff_id, dStr]);
+          }
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          if (staff.category_id === 4) {
+            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          }
+        } else if (subAction === 'RESET') {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          if (staff.category_id === 4) {
+            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          }
+        } else {
+          // staff_id was cyclic occupant of this link, relieve them as AVAILABLE_FOR_BOOKING at HQ
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const origLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+             VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               overridden_link_number = NULL,
+               status = 'AVAILABLE_FOR_BOOKING',
+               reason = excluded.reason`,
+            [
+              staff_id,
+              dStr,
+              origLink,
+              reason || 'Wrong allotment removed (Available at HQ)',
+              staff.category_id
+            ]
+          );
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+             VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               code = 'P',
+               remarks = excluded.remarks,
+               updated_by = excluded.updated_by,
+               updated_at = CURRENT_TIMESTAMP`,
+            [staff_id, dStr, 'Available at HQ (Wrong allotment removed)']
+          );
+        }
+
+        // 2. If replacement employee is selected, assign them to this link
+        if (replacement_staff_id) {
+          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+          if (subStaff) {
+            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+            const targetLinkVal = linkNum ? parseInt(linkNum, 10) : (existingOverride?.overridden_link_number || existingOverride?.original_link_number || null);
+
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+               VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?)
+               ON CONFLICT(staff_id, date) DO UPDATE SET
+                 overridden_link_number = excluded.overridden_link_number,
+                 status = 'CHANGED_LINK',
+                 reason = excluded.reason,
+                 target_category_id = excluded.target_category_id`,
+              [
+                subStaff.id,
+                dStr,
+                subOrigLink,
+                targetLinkVal,
+                reason || `Assigned to Link #${targetLinkVal} (Replaced wrong allotment of ${staff.name})`,
+                targetCatId
+              ]
+            );
+
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+               VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+               ON CONFLICT(staff_id, date) DO UPDATE SET
+                 code = 'P',
+                 remarks = excluded.remarks,
+                 updated_by = excluded.updated_by,
+                 updated_at = CURRENT_TIMESTAMP`,
+              [subStaff.id, dStr, `Working Link #${targetLinkVal}`]
+            );
+
+            if (subStaff.category_id === 4) {
+              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+              const dObj = new Date(dStr + 'T12:00:00');
+              const dayOfWeek = dayNames[dObj.getDay()];
+              const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+              if (resolvedSubDuty && resolvedSubDuty.code) {
+                await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLinkVal}`);
+              }
+            }
+          }
+        }
+      }
+
+      const auditMsg = replacement_staff_id
+        ? `Removed wrong allotment for ${staff.name} on ${date} and replaced with ${replacement_name || 'selected employee'}`
+        : `Removed wrong allotment for ${staff.name} on ${date}`;
+
+      await logAudit('Admin', 'WRONG_ALLOTMENT', auditMsg, {
+        staff_id,
+        staff_name: staff.name,
+        action: 'WRONG_ALLOTMENT',
+        subAction,
+        replacement_staff_id,
+        snapshots: undoSnapshots
+      });
+
+      const returnMsg = replacement_staff_id
+        ? `Wrong allotment removed! ${staff.name} relieved and replaced by ${replacement_name || 'selected employee'}.`
+        : (subAction === 'RESET'
+          ? `Wrong allotment removed! Restored to regular cyclic roster.`
+          : `Wrong allotment removed! ${staff.name} relieved from this duty.`);
+
+      return res.json({ success: true, message: returnMsg });
+    }
+
     if (action === 'SICK' || action === 'LEAVE' || action === 'CR' || action === 'ABSENT') {
       let finalSubstituteName = replacement_name;
       if (!finalSubstituteName && replacement_staff_id) {
@@ -3161,14 +3304,7 @@ async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
       await run(`DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?`, [staffId, date]);
     } else {
       const train = targetTrain || (targetLink ? `Link ${targetLink}` : 'Duty');
-      await run(
-        `INSERT INTO lr_sheet_records (staff_id, date, train_number, status)
-         VALUES (?, ?, ?, 'UTILISED')
-         ON CONFLICT(staff_id, date) DO UPDATE SET
-           train_number = excluded.train_number,
-           status = 'UTILISED'`,
-        [staffId, date, train]
-      );
+      await syncLRSheetRecord(staffId, date, train, 'UTILISED', 'Roster System');
     }
   }
 }

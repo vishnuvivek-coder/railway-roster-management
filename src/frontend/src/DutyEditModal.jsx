@@ -855,6 +855,12 @@ export default function DutyEditModal({
             throw new Error('Please enter a shifted place/duty or select a train link.');
           }
           if (!finalReason) finalReason = `Shifted to ${placeDesc}`;
+        } else if (deleteReason === 'WRONG_ALLOTMENT') {
+          actionCode = 'WRONG_ALLOTMENT';
+          if (!finalReason) finalReason = 'Wrong Allotment Removed';
+          if (deleteSlotAction === 'REPLACE' && !repStaffIdNum) {
+            throw new Error('Please choose a replacement employee to assign to this link duty.');
+          }
         }
 
         const payload = {
@@ -868,11 +874,14 @@ export default function DutyEditModal({
           shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : null,
           shifted_link_number: shiftedMode === 'LINK' && shiftedLinkNum ? parseInt(shiftedLinkNum, 10) : null,
           shifted_category_id: shiftedMode === 'LINK' && shiftedCatId ? parseInt(shiftedCatId, 10) : null,
+          link_number: targetLink ? parseInt(targetLink, 10) : null,
+          target_category_id: targetCategoryId ? parseInt(targetCategoryId, 10) : null,
           reason: finalReason,
           new_link_number: null,
-          replacement_type: deleteSlotAction === 'REPLACE' ? 'OTHER_COLUMN' : 'NONE',
+          replacement_type: deleteSlotAction === 'REPLACE' ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE'),
           replacement_staff_id: repStaffIdNum,
-          replacement_name: repStaffName
+          replacement_name: repStaffName,
+          wrong_allotment_action: deleteSlotAction
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
@@ -1323,19 +1332,31 @@ export default function DutyEditModal({
                   </span>
                 </div>
 
-                {/* 5 Reasons for Delete Buttons */}
+                {/* 6 Reasons for Delete Buttons */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {[
                     { id: 'LEAVE', label: '1. Leave', icon: '🏖️', desc: 'CL, LAP, LHAP, etc.' },
                     { id: 'SICK', label: '2. Sick', icon: '🤒', desc: 'Medical sick leave' },
                     { id: 'ADVANCE_BOOKED', label: '3. Advance Booked', icon: '⚡', desc: 'Utilised on advance train' },
                     { id: 'ABSENT', label: '4. Absent', icon: '🚫', desc: 'Unauthorized [O]' },
-                    { id: 'SHIFTED', label: '5. Shifted Place', icon: '🔄', desc: 'Shifted to place / link' }
+                    { id: 'SHIFTED', label: '5. Shifted Place', icon: '🔄', desc: 'Shifted to place / link' },
+                    { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '❌', desc: 'Remove mistaken allotment' }
                   ].map(r => (
                     <button
                       key={r.id}
                       type="button"
-                      onClick={() => setDeleteReason(r.id)}
+                      onClick={() => {
+                        setDeleteReason(r.id);
+                        if (r.id === 'WRONG_ALLOTMENT') {
+                          if (dutyModal.isOverridden) {
+                            setDeleteSlotAction('RESET');
+                          } else {
+                            setDeleteSlotAction('REPLACE');
+                          }
+                        } else if (deleteSlotAction === 'RESET') {
+                          setDeleteSlotAction('REPLACE');
+                        }
+                      }}
                       style={{
                         padding: '10px 6px',
                         borderRadius: '8px',
@@ -1774,6 +1795,48 @@ export default function DutyEditModal({
                   </div>
                 )}
 
+                {/* SUB-OPTION 6: WRONG ALLOTMENT */}
+                {deleteReason === 'WRONG_ALLOTMENT' && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.05)',
+                    border: '1px solid rgba(239, 68, 68, 0.28)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#f87171' }}>
+                        ❌ Remove as Wrong Allotment:
+                      </label>
+                      <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                        Correction
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text)', lineHeight: 1.45 }}>
+                      Remove <strong>{dutyModal.name || 'this employee'}</strong> from <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> because they were wrongly allotted.
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.76rem' }}>Correction Note / Remarks:</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Allotted by mistake / Wrong employee selected"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        style={{ fontSize: '0.84rem' }}
+                      />
+                    </div>
+
+                    <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
+                      ℹ️ The employee's mistaken allotment on this link will be removed and their duty assignment corrected.
+                    </div>
+                  </div>
+                )}
+
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.02)',
@@ -1793,12 +1856,33 @@ export default function DutyEditModal({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {deleteReason === 'WRONG_ALLOTMENT' && dutyModal.isOverridden && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteSlotAction('RESET')}
+                        style={{
+                          flex: 1,
+                          minWidth: '160px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: deleteSlotAction === 'RESET' ? '2px solid #3b82f6' : '1px solid var(--border-glass)',
+                          background: deleteSlotAction === 'RESET' ? 'rgba(59, 130, 246, 0.16)' : 'rgba(255,255,255,0.02)',
+                          color: deleteSlotAction === 'RESET' ? '#60a5fa' : 'var(--color-text-secondary)',
+                          fontWeight: deleteSlotAction === 'RESET' ? 700 : 500,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⏮️ Revert to Original Roster
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setDeleteSlotAction('REPLACE')}
                       style={{
                         flex: 1,
+                        minWidth: '160px',
                         padding: '8px 12px',
                         borderRadius: '6px',
                         border: deleteSlotAction === 'REPLACE' ? '2px solid #10b981' : '1px solid var(--border-glass)',
@@ -1809,13 +1893,14 @@ export default function DutyEditModal({
                         cursor: 'pointer'
                       }}
                     >
-                      🔄 Replace with Another Employee
+                      {deleteReason === 'WRONG_ALLOTMENT' ? '🔄 Replace with Correct Employee' : '🔄 Replace with Another Employee'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setDeleteSlotAction('VACANT')}
                       style={{
                         flex: 1,
+                        minWidth: '140px',
                         padding: '8px 12px',
                         borderRadius: '6px',
                         border: deleteSlotAction === 'VACANT' ? '2px solid #ef4444' : '1px solid var(--border-glass)',
@@ -1829,6 +1914,32 @@ export default function DutyEditModal({
                       🚫 Leave Slot Vacant
                     </button>
                   </div>
+
+                  {deleteSlotAction === 'RESET' && (
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      fontSize: '0.8rem',
+                      color: '#93c5fd'
+                    }}>
+                      ℹ️ This will undo the mistaken assignment on <strong>Link #{targetLink || 'Duty'}</strong> and restore the original cyclic roster baseline.
+                    </div>
+                  )}
+
+                  {deleteSlotAction === 'VACANT' && deleteReason === 'WRONG_ALLOTMENT' && (
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      fontSize: '0.8rem',
+                      color: '#fca5a5'
+                    }}>
+                      ℹ️ <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
+                    </div>
+                  )}
 
                   {deleteSlotAction === 'REPLACE' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
@@ -2187,7 +2298,11 @@ export default function DutyEditModal({
                 }}
               >
                 {submitting ? 'Saving...' :
-                 activeMode === 'DELETE' ? (deleteReason === 'SHIFTED' ? '🔄 Shift & Save Duty' : `🗑️ Delete & Save Status`) :
+                 activeMode === 'DELETE' ? (
+                   deleteReason === 'WRONG_ALLOTMENT'
+                     ? (deleteSlotAction === 'REPLACE' ? '🔄 Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '⏮️ Revert Wrong Allotment' : '❌ Remove Wrong Allotment'))
+                     : (deleteReason === 'SHIFTED' ? '🔄 Shift & Save Duty' : `🗑️ Delete & Save Status`)
+                 ) :
                  `➕ Assign to Link #${targetLink || 'Duty'}`}
               </button>
             </div>
