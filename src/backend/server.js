@@ -2167,7 +2167,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       return res.json({ success: true, message: returnMsg });
     }
 
-    if (action === 'SICK' || action === 'LEAVE' || action === 'CR' || action === 'ABSENT') {
+    if (action === 'SICK' || action === 'LEAVE' || action === 'CR' || action === 'ABSENT' || action === 'REST') {
       let finalSubstituteName = replacement_name;
       if (!finalSubstituteName && replacement_staff_id) {
         const subStaffObj = await get('SELECT name FROM staff WHERE id = ?', [replacement_staff_id]);
@@ -2184,11 +2184,15 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         effectiveLeaveType = 'CR';
       } else if (action === 'ABSENT') {
         effectiveLeaveType = 'ABSENT';
+      } else if (action === 'REST') {
+        effectiveLeaveType = leave_type || 'REST';
       }
 
       let musterCode = effectiveLeaveType.toUpperCase();
       if (action === 'ABSENT') {
         musterCode = 'O';
+      } else if (action === 'REST' || effectiveLeaveType === 'REST' || effectiveLeaveType === 'R') {
+        musterCode = 'R';
       } else if (!ALLOWED_MUSTER_CODES.includes(musterCode)) {
         musterCode = action === 'LEAVE' ? 'CL' : (action === 'SICK' ? 'LHAP' : 'CR');
       }
@@ -2224,13 +2228,19 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         if (action === 'LEAVE' && dayLeaveType === 'CR') {
           dayAction = 'CR';
+        } else if (action === 'LEAVE' && (dayLeaveType === 'REST' || dayLeaveType === 'R')) {
+          dayAction = 'REST';
         } else if (action === 'CR' && dayLeaveType !== 'CR') {
-          dayAction = 'LEAVE';
+          dayAction = (dayLeaveType === 'REST' || dayLeaveType === 'R') ? 'REST' : 'LEAVE';
+        } else if (action === 'REST' && (dayLeaveType !== 'REST' && dayLeaveType !== 'R')) {
+          dayAction = dayLeaveType === 'CR' ? 'CR' : 'LEAVE';
         }
 
         let dayMusterCode = dayLeaveType.toUpperCase();
         if (dayAction === 'ABSENT') {
           dayMusterCode = 'O';
+        } else if (dayAction === 'REST' || dayLeaveType === 'REST' || dayLeaveType === 'R') {
+          dayMusterCode = 'R';
         } else if (!ALLOWED_MUSTER_CODES.includes(dayMusterCode)) {
           dayMusterCode = dayAction === 'LEAVE' ? 'CL' : (dayAction === 'SICK' ? 'LHAP' : 'CR');
         }
@@ -2412,7 +2422,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       // - The scheduled link slot on that day is vacated for relief allotment ([UNMANNED / VACANT] with Assign Staff button).
       // - If a substitute was assigned on Day 1, the substitute works the train for the return leg as well.
       let multiDaySetNotice = '';
-      if (datesToProcess.length === 1 && (action === 'LEAVE' || action === 'SICK')) {
+      if (datesToProcess.length === 1 && (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST')) {
         const singleDate = datesToProcess[0];
         const dayOffset = getDayOffset(category.anchor_date, singleDate);
         const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);

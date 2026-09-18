@@ -123,11 +123,11 @@ export default function DutyEditModal({
     return 'LEAVE';
   });
 
-  // All 8 Leave Types under Leave: CL, LAP, LHAP, SCL, OD, CCL, CR, NH
+  // All 9 Leave / Rest Types under Leave: CL, LAP, LHAP, SCL, OD, CCL, CR, NH, REST
   const [leaveType, setLeaveType] = useState(() => {
     if (dutyModal.leave_type) return dutyModal.leave_type.toUpperCase();
     if (dutyModal.overrideReason) {
-      const match = dutyModal.overrideReason.match(/\b(CL|LAP|LHAP|SCL|OD|CCL|CR|NH)\b/i);
+      const match = dutyModal.overrideReason.match(/\b(CL|LAP|LHAP|SCL|OD|CCL|CR|NH|REST|R)\b/i);
       if (match) return match[1].toUpperCase();
     }
     return 'CL';
@@ -197,7 +197,7 @@ export default function DutyEditModal({
   // Multi-day date range for Leave / Sick / Absent / Shifted
   const [leaveToDate, setLeaveToDate] = useState(dutyModal.date || selectedDate);
 
-  // All 8 official Leave Types definition
+  // All 9 official Leave / Rest Types definition
   const LEAVE_TYPES = useMemo(() => [
     { code: 'CL', label: 'CL', title: 'Casual Leave', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' },
     { code: 'LAP', label: 'LAP', title: 'Leave Avg Pay', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.18)' },
@@ -206,7 +206,8 @@ export default function DutyEditModal({
     { code: 'OD', label: 'OD', title: 'On Duty', color: '#10b981', bg: 'rgba(16, 185, 129, 0.18)' },
     { code: 'CCL', label: 'CCL', title: 'Child Care', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.18)' },
     { code: 'CR', label: 'CR', title: 'Compensatory Rest', color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.18)' },
-    { code: 'NH', label: 'NH', title: 'National Holiday', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' }
+    { code: 'NH', label: 'NH', title: 'National Holiday', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' },
+    { code: 'REST', label: 'REST', title: 'Weekly Rest', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.18)' }
   ], []);
 
   // Multi-day date array between selectedDate and leaveToDate
@@ -247,6 +248,7 @@ export default function DutyEditModal({
         updated[d] = {
           ...(updated[d] || {}),
           leaveType: code,
+          reason: code === 'REST' ? 'Weekly Rest' : (code === 'CR' ? (updated[d]?.reason || 'Compensatory Rest (CR)') : `${code} Leave`),
           ...(code === 'CR' && !updated[d]?.crEarnedDate && dueDates.length > 0 ? {
             crEarnedDate: dueDates[0].date,
             reason: `CR availed against rest day worked on ${dueDates[0].dateDisplay || dueDates[0].date} (${dueDates[0].duty})`
@@ -275,6 +277,8 @@ export default function DutyEditModal({
         } else if (!newReason) {
           newReason = 'Compensatory Rest (CR)';
         }
+      } else if (code === 'REST') {
+        newReason = 'Weekly Rest';
       } else {
         newReason = `${code} Leave`;
       }
@@ -1044,7 +1048,7 @@ export default function DutyEditModal({
             const dReason = dayWiseLeaves[dStr]?.reason || (
               dType === 'CR' && selectedDueDateObj
                 ? `CR availed against rest day worked on ${selectedDueDateObj.dateDisplay || selectedDueDateObj.date} (${selectedDueDateObj.duty})`
-                : (dType === 'CR' ? 'Compensatory Rest (CR)' : `${dType} Leave`)
+                : (dType === 'CR' ? 'Compensatory Rest (CR)' : (dType === 'REST' ? 'Weekly Rest' : `${dType} Leave`))
             );
             dayWisePayload[dStr] = {
               leave_type: dType,
@@ -1064,9 +1068,9 @@ export default function DutyEditModal({
                 const dp = d.split('-');
                 return `${dp[2]}/${dp[1]}: ${t}`;
               });
-              finalReason = `Leave (${summaryParts.join(', ')})`;
+              finalReason = `Leave / Rest (${summaryParts.join(', ')})`;
             } else {
-              finalReason = `${leaveType} Leave`;
+              finalReason = leaveType === 'REST' ? 'Weekly Rest' : `${leaveType} Leave`;
             }
           }
         } else if (deleteReason === 'SICK') {
@@ -1613,7 +1617,7 @@ export default function DutyEditModal({
                   ))}
                 </div>
 
-                {/* SUB-OPTION 1: LEAVE (all 8 types: CL, LAP, LHAP, SCL, OD, CCL, CR, NH) */}
+                {/* SUB-OPTION 1: LEAVE (all 9 types: CL, LAP, LHAP, SCL, OD, CCL, CR, NH, REST) */}
                 {deleteReason === 'LEAVE' && (
                   <div style={{
                     background: 'rgba(245, 158, 11, 0.05)',
@@ -1625,9 +1629,9 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                      📋 {leaveDates.length > 1 ? 'Select Default Leave Type (Applies to all days):' : 'Select Leave Type (All 8 types available):'}
+                      📋 {leaveDates.length > 1 ? 'Select Default Leave Type (Applies to all days):' : 'Select Leave / Rest Type (All 9 options available):'}
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px' }}>
                       {LEAVE_TYPES.map(l => {
                         const isSelected = leaveType === l.code;
                         return (
@@ -1783,12 +1787,12 @@ export default function DutyEditModal({
                                     color: (LEAVE_TYPES.find(x => x.code === curDayType) || {}).color || '#fff',
                                     border: `1px solid ${(LEAVE_TYPES.find(x => x.code === curDayType) || {}).color || '#fff'}55`
                                   }}>
-                                    Muster Code: [{curDayType}]
+                                    Muster Code: [{curDayType === 'REST' ? 'R' : curDayType}]
                                   </span>
                                 </div>
 
-                                {/* 8 Leave Type Choice Pills for This Specific Day */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px' }}>
+                                {/* 9 Leave / Rest Type Choice Pills for This Specific Day */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '4px' }}>
                                   {LEAVE_TYPES.map(l => {
                                     const isDaySelected = curDayType === l.code;
                                     return (
