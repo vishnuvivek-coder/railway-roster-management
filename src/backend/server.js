@@ -1895,6 +1895,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
     to_date, // Optional multi-day range
     action, // 'SICK', 'LEAVE', 'CR', 'CHANGED_LINK', 'RESET'
     leave_type, // 'CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'SICK', 'CR'
+    day_wise_leaves, // Optional day-wise map or array: { [date]: { leave_type, reason, cr_earned_date } }
     reason,
     new_link_number,
     target_category_id,
@@ -2197,6 +2198,42 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const dayOffset = getDayOffset(category.anchor_date, dStr);
         const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
+        // Determine day-specific leave type and reason
+        let dayLeaveType = effectiveLeaveType;
+        let dayReason = reason;
+        let dayAction = action;
+
+        if (day_wise_leaves) {
+          let dayConfig = null;
+          if (Array.isArray(day_wise_leaves)) {
+            dayConfig = day_wise_leaves.find(item => item && item.date === dStr);
+          } else if (typeof day_wise_leaves === 'object') {
+            dayConfig = day_wise_leaves[dStr];
+          }
+
+          if (dayConfig) {
+            if (typeof dayConfig === 'string') {
+              dayLeaveType = dayConfig.toUpperCase();
+            } else if (typeof dayConfig === 'object') {
+              if (dayConfig.leave_type) dayLeaveType = dayConfig.leave_type.toUpperCase();
+              if (dayConfig.reason) dayReason = dayConfig.reason;
+            }
+          }
+        }
+
+        if (action === 'LEAVE' && dayLeaveType === 'CR') {
+          dayAction = 'CR';
+        } else if (action === 'CR' && dayLeaveType !== 'CR') {
+          dayAction = 'LEAVE';
+        }
+
+        let dayMusterCode = dayLeaveType.toUpperCase();
+        if (dayAction === 'ABSENT') {
+          dayMusterCode = 'O';
+        } else if (!ALLOWED_MUSTER_CODES.includes(dayMusterCode)) {
+          dayMusterCode = dayAction === 'LEAVE' ? 'CL' : (dayAction === 'SICK' ? 'LHAP' : 'CR');
+        }
+
         const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
         const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
         let existingSubOverride = null;
@@ -2229,17 +2266,17 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             staff_id,
             dStr,
             originalLink,
-            action,
+            dayAction,
             replacement_staff_id || null,
             finalSubstituteName || null,
-            reason || `${action} - ${effectiveLeaveType}`,
+            dayReason || `${dayAction} - ${dayLeaveType}`,
             staff.category_id,
-            effectiveLeaveType
+            dayLeaveType
           ]
         );
 
         // 2. Automatically sync with muster_records table
-        const musterRemarks = `${action} [${effectiveLeaveType}]${finalSubstituteName ? ` - Sub: ${finalSubstituteName}` : ''}${reason ? ` (${reason})` : ''}`;
+        const musterRemarks = `${dayAction} [${dayLeaveType}]${finalSubstituteName ? ` - Sub: ${finalSubstituteName}` : ''}${dayReason ? ` (${dayReason})` : ''}`;
         await run(
           `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
@@ -2248,13 +2285,13 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, dStr, musterCode, musterRemarks]
+          [staff_id, dStr, dayMusterCode, musterRemarks]
         );
 
         // Sync main staff with LR sheet if staff is in Category 4
         if (staff.category_id === 4) {
-          const lrMusterCode = musterCode === 'SICK' ? 'S' : musterCode;
-          await syncLRSheetRecord(staff.id, dStr, lrMusterCode, reason || `${action} - ${effectiveLeaveType}`);
+          const lrMusterCode = dayMusterCode === 'SICK' ? 'S' : dayMusterCode;
+          await syncLRSheetRecord(staff.id, dStr, lrMusterCode, dayReason || `${dayAction} - ${dayLeaveType}`);
         }
 
         // If replacement is an existing staff member in another column or LR pool
@@ -2266,8 +2303,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             
             const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1;
             const subReason = isUpgrade
-              ? `Upgraded to COR Link ${originalLink} in place of ${staff.name} (${effectiveLeaveType})`
-              : `Substitute for ${staff.name} (${effectiveLeaveType}) on Link ${originalLink}`;
+              ? `Upgraded to COR Link ${originalLink} in place of ${staff.name} (${dayLeaveType})`
+              : `Substitute for ${staff.name} (${dayLeaveType}) on Link ${originalLink}`;
 
             await run(
               `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
@@ -2493,6 +2530,22 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         }
       }
 
+      let dayWiseSummary = '';
+      if (day_wise_leaves && datesToProcess.length > 1) {
+        const parts = datesToProcess.map(dStr => {
+          let t = effectiveLeaveType;
+          if (Array.isArray(day_wise_leaves)) {
+            const f = day_wise_leaves.find(x => x && x.date === dStr);
+            if (f && f.leave_type) t = f.leave_type;
+          } else if (typeof day_wise_leaves === 'object' && day_wise_leaves[dStr]) {
+            t = typeof day_wise_leaves[dStr] === 'string' ? day_wise_leaves[dStr] : (day_wise_leaves[dStr].leave_type || t);
+          }
+          const dParts = dStr.split('-');
+          return `${dParts[2]}/${dParts[1]}: ${t}`;
+        });
+        dayWiseSummary = ` (${parts.join(', ')})`;
+      }
+
       const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
       const undoData = {
         action,
@@ -2505,13 +2558,13 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       await logAudit(
         'Admin',
         `STAFF_${action}`,
-        `Marked ${staff.name} as ${action} (${effectiveLeaveType}) on ${dateRangeStr}. Replacement: ${finalSubstituteName || 'None'}. Reason: ${reason || action}.${multiDaySetNotice ? ' ' + multiDaySetNotice : ''} Updated Muster Sheet.`,
+        `Marked ${staff.name} as ${action}${dayWiseSummary || ` (${effectiveLeaveType})`} on ${dateRangeStr}. Replacement: ${finalSubstituteName || 'None'}. Reason: ${reason || action}.${multiDaySetNotice ? ' ' + multiDaySetNotice : ''} Updated Muster Sheet.`,
         undoData
       );
 
       return res.json({
         success: true,
-        message: `Updated ${staff.name} to ${action} [${effectiveLeaveType}] with replacement ${finalSubstituteName || 'None'}${multiDaySetNotice ? ' - ' + multiDaySetNotice : ''} and updated Muster Sheet!`
+        message: `Updated ${staff.name} to ${action}${dayWiseSummary || ` [${effectiveLeaveType}]`} with replacement ${finalSubstituteName || 'None'}${multiDaySetNotice ? ' - ' + multiDaySetNotice : ''} and updated Muster Sheet!`
       });
     }
 
@@ -4503,7 +4556,8 @@ app.get('/api/roster', async (req, res) => {
             overrideReason = `Muster: SICK${muster.remarks ? ` (${muster.remarks})` : ''}`;
           } else if (musterCode === 'CR') {
             status = 'CR';
-            overrideReason = `Muster: Compensatory Rest (CR)${muster.remarks ? ` (${muster.remarks})` : ''}`;
+            leaveType = 'CR';
+            overrideReason = (override && override.reason) ? override.reason : `Muster: Compensatory Rest (CR)${muster.remarks ? ` (${muster.remarks})` : ''}`;
           } else if (musterCode === 'R') {
             status = 'REST';
             overrideReason = `Muster: Weekly Rest (R)${muster.remarks ? ` (${muster.remarks})` : ''}`;

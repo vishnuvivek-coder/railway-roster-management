@@ -196,6 +196,113 @@ export default function DutyEditModal({
   // Multi-day date range for Leave / Sick / Absent / Shifted
   const [leaveToDate, setLeaveToDate] = useState(dutyModal.date || selectedDate);
 
+  // All 8 official Leave Types definition
+  const LEAVE_TYPES = useMemo(() => [
+    { code: 'CL', label: 'CL', title: 'Casual Leave', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' },
+    { code: 'LAP', label: 'LAP', title: 'Leave Avg Pay', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.18)' },
+    { code: 'LHAP', label: 'LHAP', title: 'Half Avg Pay', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.18)' },
+    { code: 'SCL', label: 'SCL', title: 'Special Casual', color: '#38bdf8', bg: 'rgba(14, 165, 233, 0.18)' },
+    { code: 'OD', label: 'OD', title: 'On Duty', color: '#10b981', bg: 'rgba(16, 185, 129, 0.18)' },
+    { code: 'CCL', label: 'CCL', title: 'Child Care', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.18)' },
+    { code: 'CR', label: 'CR', title: 'Compensatory Rest', color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.18)' },
+    { code: 'NH', label: 'NH', title: 'National Holiday', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' }
+  ], []);
+
+  // Multi-day date array between selectedDate and leaveToDate
+  const leaveDates = useMemo(() => {
+    if (!selectedDate) return [];
+    const start = new Date(selectedDate + 'T12:00:00');
+    const end = (leaveToDate && leaveToDate >= selectedDate) ? new Date(leaveToDate + 'T12:00:00') : start;
+    const dates = [];
+    const cur = new Date(start);
+    while (cur <= end) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      dates.push(`${y}-${m}-${d}`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
+  }, [selectedDate, leaveToDate]);
+
+  // Day-wise leave assignments: { [dateStr]: { leaveType, reason, crEarnedDate } }
+  const [dayWiseLeaves, setDayWiseLeaves] = useState({});
+
+  // Check if any day has CR selected (either as global default or in day-wise map)
+  const hasCrInLeave = useMemo(() => {
+    if (leaveType === 'CR') return true;
+    if (leaveDates.length > 1) {
+      return leaveDates.some(d => (dayWiseLeaves[d]?.leaveType || leaveType) === 'CR');
+    }
+    return false;
+  }, [leaveType, leaveDates, dayWiseLeaves]);
+
+  // Handler when clicking top-level default leave type
+  const handleSelectPrimaryLeaveType = (code) => {
+    setLeaveType(code);
+    setDayWiseLeaves(prev => {
+      const updated = { ...prev };
+      leaveDates.forEach(d => {
+        updated[d] = {
+          ...(updated[d] || {}),
+          leaveType: code,
+          ...(code === 'CR' && !updated[d]?.crEarnedDate && dueDates.length > 0 ? {
+            crEarnedDate: dueDates[0].date,
+            reason: `CR availed against rest day worked on ${dueDates[0].dateDisplay || dueDates[0].date} (${dueDates[0].duty})`
+          } : {})
+        };
+      });
+      return updated;
+    });
+  };
+
+  // Handler for individual day leave type pill clicks
+  const handleDayLeaveTypeChange = (dStr, code) => {
+    setDayWiseLeaves(prev => {
+      const cur = prev[dStr] || { leaveType };
+      let newCrDate = cur.crEarnedDate;
+      let newReason = cur.reason || '';
+
+      if (code === 'CR') {
+        if (!newCrDate && dueDates.length > 0) {
+          const pickedDates = Object.entries(prev)
+            .filter(([k, v]) => k !== dStr && v && v.leaveType === 'CR' && v.crEarnedDate)
+            .map(([k, v]) => v.crEarnedDate);
+          const availableDueDate = dueDates.find(dd => !pickedDates.includes(dd.date)) || dueDates[0];
+          newCrDate = availableDueDate.date;
+          newReason = `CR availed against rest day worked on ${availableDueDate.dateDisplay || availableDueDate.date} (${availableDueDate.duty})`;
+        } else if (!newReason) {
+          newReason = 'Compensatory Rest (CR)';
+        }
+      } else {
+        newReason = `${code} Leave`;
+      }
+
+      return {
+        ...prev,
+        [dStr]: {
+          ...cur,
+          leaveType: code,
+          crEarnedDate: code === 'CR' ? newCrDate : null,
+          reason: newReason
+        }
+      };
+    });
+  };
+
+  // Handler for selecting specific CR due date for a specific day
+  const handleDayCrDateSelect = (dStr, crItem) => {
+    setDayWiseLeaves(prev => ({
+      ...prev,
+      [dStr]: {
+        ...(prev[dStr] || {}),
+        leaveType: 'CR',
+        crEarnedDate: crItem.date,
+        reason: `CR availed against rest day worked on ${crItem.dateDisplay || crItem.date} (${crItem.duty})`
+      }
+    }));
+  };
+
   // Slot action under Delete: 'REPLACE' (name changes, link fixed) or 'VACANT'
   const [deleteSlotAction, setDeleteSlotAction] = useState('REPLACE');
   const [replacementStaffId, setReplacementStaffId] = useState('');
@@ -924,10 +1031,41 @@ export default function DutyEditModal({
         let selectedLeaveType = null;
         let finalReason = reason;
 
+        let dayWisePayload = null;
+        if (deleteReason === 'LEAVE' && leaveDates.length > 1) {
+          dayWisePayload = {};
+          for (const dStr of leaveDates) {
+            const dType = dayWiseLeaves[dStr]?.leaveType || leaveType;
+            const curCrDate = dayWiseLeaves[dStr]?.crEarnedDate || (dType === 'CR' ? (dueDates[0]?.date || null) : null);
+            const selectedDueDateObj = dueDates.find(dd => dd.date === curCrDate);
+            const dReason = dayWiseLeaves[dStr]?.reason || (
+              dType === 'CR' && selectedDueDateObj
+                ? `CR availed against rest day worked on ${selectedDueDateObj.dateDisplay || selectedDueDateObj.date} (${selectedDueDateObj.duty})`
+                : (dType === 'CR' ? 'Compensatory Rest (CR)' : `${dType} Leave`)
+            );
+            dayWisePayload[dStr] = {
+              leave_type: dType,
+              reason: dReason,
+              cr_earned_date: curCrDate
+            };
+          }
+        }
+
         if (deleteReason === 'LEAVE') {
           actionCode = 'LEAVE';
           selectedLeaveType = leaveType;
-          if (!finalReason) finalReason = `${leaveType} Leave`;
+          if (!finalReason) {
+            if (leaveDates.length > 1 && dayWisePayload) {
+              const summaryParts = leaveDates.map(d => {
+                const t = dayWisePayload[d]?.leave_type || leaveType;
+                const dp = d.split('-');
+                return `${dp[2]}/${dp[1]}: ${t}`;
+              });
+              finalReason = `Leave (${summaryParts.join(', ')})`;
+            } else {
+              finalReason = `${leaveType} Leave`;
+            }
+          }
         } else if (deleteReason === 'SICK') {
           actionCode = 'SICK';
           selectedLeaveType = sickType;
@@ -962,6 +1100,7 @@ export default function DutyEditModal({
           to_date: effectiveToDate,
           action: actionCode,
           leave_type: selectedLeaveType,
+          day_wise_leaves: dayWisePayload,
           advance_train_no: advanceTrainNo,
           vacate_next_link: advanceVacateNext,
           shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : null,
@@ -1483,25 +1622,16 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                      📋 Select Leave Type (All 8 types available):
+                      📋 {leaveDates.length > 1 ? 'Select Default Leave Type (Applies to all days):' : 'Select Leave Type (All 8 types available):'}
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                      {[
-                        { code: 'CL', label: 'CL', title: 'Casual Leave', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.18)' },
-                        { code: 'LAP', label: 'LAP', title: 'Leave Avg Pay', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.18)' },
-                        { code: 'LHAP', label: 'LHAP', title: 'Half Avg Pay', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.18)' },
-                        { code: 'SCL', label: 'SCL', title: 'Special Casual', color: '#38bdf8', bg: 'rgba(14, 165, 233, 0.18)' },
-                        { code: 'OD', label: 'OD', title: 'On Duty', color: '#10b981', bg: 'rgba(16, 185, 129, 0.18)' },
-                        { code: 'CCL', label: 'CCL', title: 'Child Care', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.18)' },
-                        { code: 'CR', label: 'CR', title: 'Compensatory Rest', color: '#a78bfa', bg: 'rgba(167, 139, 250, 0.18)' },
-                        { code: 'NH', label: 'NH', title: 'National Holiday', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)' }
-                      ].map(l => {
+                      {LEAVE_TYPES.map(l => {
                         const isSelected = leaveType === l.code;
                         return (
                           <button
                             key={l.code}
                             type="button"
-                            onClick={() => setLeaveType(l.code)}
+                            onClick={() => handleSelectPrimaryLeaveType(l.code)}
                             style={{
                               padding: '8px 6px',
                               borderRadius: '6px',
@@ -1547,12 +1677,201 @@ export default function DutyEditModal({
                       </div>
                     </div>
 
-                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Muster Roll attendance marked as <strong style={{ color: '#fbbf24' }}>[{leaveType}]</strong>.
-                    </div>
+                    {/* Multi-Day Specific Day-Wise Breakdown */}
+                    {leaveDates.length > 1 ? (
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1.5px solid rgba(251, 191, 36, 0.45)',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>🗓️</span>
+                            <strong style={{ fontSize: '0.88rem', color: '#fbbf24' }}>
+                              Day-Wise Specific Leave Options ({leaveDates.length} Days Applied):
+                            </strong>
+                          </div>
+                          {/* Summary badges of chosen leaves */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            {(() => {
+                              const counts = {};
+                              leaveDates.forEach(d => {
+                                const t = dayWiseLeaves[d]?.leaveType || leaveType;
+                                counts[t] = (counts[t] || 0) + 1;
+                              });
+                              return Object.entries(counts).map(([type, count]) => {
+                                const lt = LEAVE_TYPES.find(x => x.code === type) || { color: '#fbbf24', bg: 'rgba(251,191,36,0.2)' };
+                                return (
+                                  <span key={type} style={{
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    padding: '2px 8px',
+                                    borderRadius: '5px',
+                                    background: lt.bg,
+                                    color: lt.color,
+                                    border: `1px solid ${lt.color}66`
+                                  }}>
+                                    {count} × {type}
+                                  </span>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
+                          Click a pill below to set each day's specific leave type (e.g. <strong>Day 1: CR</strong>, <strong>Day 2: CL</strong> or <strong>LAP</strong>):
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '340px', overflowY: 'auto', paddingRight: '2px' }}>
+                          {leaveDates.map((dStr, idx) => {
+                            const dObj = new Date(dStr + 'T12:00:00');
+                            const dayNamesLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                            const dNameLong = dayNamesLong[dObj.getDay()];
+                            const dParts = dStr.split('-');
+                            const dDisplay = `${dParts[2]}/${dParts[1]}/${dParts[0]}`;
+
+                            const curDayType = dayWiseLeaves[dStr]?.leaveType || leaveType;
+                            const curCrDate = dayWiseLeaves[dStr]?.crEarnedDate || (curDayType === 'CR' ? (dueDates[0]?.date || null) : null);
+                            const selectedDueDateObj = dueDates.find(dd => dd.date === curCrDate);
+
+                            return (
+                              <div
+                                key={dStr}
+                                style={{
+                                  background: curDayType === 'CR' ? 'rgba(167, 139, 250, 0.09)' : 'rgba(255, 255, 255, 0.03)',
+                                  border: curDayType === 'CR' ? '1.5px solid rgba(167, 139, 250, 0.45)' : '1px solid var(--border-glass)',
+                                  borderRadius: '8px',
+                                  padding: '10px 12px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '8px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                      fontSize: '0.72rem',
+                                      fontWeight: 800,
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'rgba(255, 255, 255, 0.1)',
+                                      color: 'var(--color-text-primary)'
+                                    }}>
+                                      Day {idx + 1}
+                                    </span>
+                                    <strong style={{ fontSize: '0.86rem', color: '#f3f4f6' }}>
+                                      {dDisplay}
+                                    </strong>
+                                    <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
+                                      ({dNameLong})
+                                    </span>
+                                  </div>
+                                  <span style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 800,
+                                    padding: '2px 8px',
+                                    borderRadius: '5px',
+                                    background: (LEAVE_TYPES.find(x => x.code === curDayType) || {}).bg || 'rgba(255,255,255,0.1)',
+                                    color: (LEAVE_TYPES.find(x => x.code === curDayType) || {}).color || '#fff',
+                                    border: `1px solid ${(LEAVE_TYPES.find(x => x.code === curDayType) || {}).color || '#fff'}55`
+                                  }}>
+                                    Muster Code: [{curDayType}]
+                                  </span>
+                                </div>
+
+                                {/* 8 Leave Type Choice Pills for This Specific Day */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px' }}>
+                                  {LEAVE_TYPES.map(l => {
+                                    const isDaySelected = curDayType === l.code;
+                                    return (
+                                      <button
+                                        key={l.code}
+                                        type="button"
+                                        onClick={() => handleDayLeaveTypeChange(dStr, l.code)}
+                                        style={{
+                                          padding: '6px 2px',
+                                          borderRadius: '5px',
+                                          border: isDaySelected ? `2px solid ${l.color}` : '1px solid rgba(255, 255, 255, 0.08)',
+                                          background: isDaySelected ? l.bg : 'rgba(255, 255, 255, 0.02)',
+                                          color: isDaySelected ? l.color : 'var(--color-text-secondary)',
+                                          fontWeight: isDaySelected ? 800 : 500,
+                                          fontSize: '0.74rem',
+                                          cursor: 'pointer',
+                                          textAlign: 'center',
+                                          transition: 'all 0.12s ease'
+                                        }}
+                                        title={`${l.code} - ${l.title}`}
+                                      >
+                                        {l.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Special Inline Due Date Selector when Day is CR */}
+                                {curDayType === 'CR' && (
+                                  <div style={{
+                                    background: 'rgba(167, 139, 250, 0.12)',
+                                    border: '1px dashed rgba(167, 139, 250, 0.45)',
+                                    borderRadius: '6px',
+                                    padding: '8px 10px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px',
+                                    marginTop: '2px'
+                                  }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#ddd6fe' }}>
+                                      <span>💤 <strong>Avail CR Against Forgone Rest Date:</strong></span>
+                                      <span style={{ fontSize: '0.7rem', color: crCount > 0 ? '#c4b5fd' : '#f87171' }}>
+                                        {crCount > 0 ? `(${crCount} Available)` : '(0 Due)'}
+                                      </span>
+                                    </div>
+                                    {dueDates.length > 0 ? (
+                                      <select
+                                        className="form-input"
+                                        value={curCrDate || ''}
+                                        onChange={(e) => {
+                                          const matched = dueDates.find(dd => dd.date === e.target.value);
+                                          if (matched) handleDayCrDateSelect(dStr, matched);
+                                        }}
+                                        style={{ fontSize: '0.78rem', padding: '4px 8px', background: 'rgba(20, 20, 26, 0.9)', color: '#fff', border: '1px solid rgba(167, 139, 250, 0.5)' }}
+                                      >
+                                        {dueDates.map(dd => (
+                                          <option key={dd.date} value={dd.date}>
+                                            🗓️ {dd.dateDisplay || dd.date} ({dd.dayOfWeek}) — {dd.duty} [{dd.restType}]
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <div style={{ fontSize: '0.72rem', color: '#fca5a5' }}>
+                                        ⚠️ No unredeemed rest-worked dates on record for this staff member.
+                                      </div>
+                                    )}
+                                    {selectedDueDateObj && (
+                                      <div style={{ fontSize: '0.72rem', color: '#a78bfa' }}>
+                                        ✓ Redeeming rest earned on <strong>{selectedDueDateObj.dateDisplay || selectedDueDateObj.date}</strong> ({selectedDueDateObj.duty})
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                        ℹ️ Muster Roll attendance marked as <strong style={{ color: '#fbbf24' }}>[{leaveType}]</strong>.
+                      </div>
+                    )}
 
                     {/* Dedicated Compensatory Rest (CR) Due Dates & Eligibility Card */}
-                    {leaveType === 'CR' && (
+                    {hasCrInLeave && (
                       <div style={{
                         background: 'rgba(167, 139, 250, 0.08)',
                         border: '1.5px solid rgba(167, 139, 250, 0.35)',
