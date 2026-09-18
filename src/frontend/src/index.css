@@ -748,6 +748,58 @@ p, span, label, input, select, button, td, th {
   border-right: 2px solid var(--border-gold);
 }
 
+/* Muster Row Drag & Drop Styles */
+.muster-table tbody tr.muster-row-draggable {
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.muster-table tbody tr.muster-row-dragging {
+  opacity: 0.4;
+  background: rgba(212, 161, 92, 0.15) !important;
+}
+.muster-table tbody tr.muster-row-dragging td {
+  background: rgba(212, 161, 92, 0.1) !important;
+}
+
+.muster-table tbody tr.muster-row-drag-over-above td {
+  border-top: 3px solid #10b981 !important;
+}
+
+.muster-table tbody tr.muster-row-drag-over-below td {
+  border-bottom: 3px solid #10b981 !important;
+}
+
+.muster-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  color: var(--color-text-muted);
+  cursor: grab;
+  user-select: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  transition: all 0.15s ease;
+}
+.muster-drag-handle:hover {
+  color: var(--primary);
+  background: rgba(212, 161, 92, 0.15);
+}
+.muster-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Editable Hover styling */
+.muster-editable-hover {
+  transition: background 0.15s ease, border-color 0.15s ease;
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.muster-editable-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .muster-footer-label {
   position: sticky;
   left: 0;

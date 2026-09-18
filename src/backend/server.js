@@ -1350,16 +1350,18 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
       }
     }
 
-    const targetDesg = designation !== undefined ? designation : currentStaff.designation;
-    const targetHrms = hrms_id !== undefined ? hrms_id : currentStaff.hrms_id;
+    const targetName = name !== undefined ? name.trim() : currentStaff.name;
+    const targetDesg = designation !== undefined ? designation.trim() : currentStaff.designation;
+    const targetHrms = hrms_id !== undefined ? hrms_id.trim() : currentStaff.hrms_id;
+    const targetPf = pf_no !== undefined ? pf_no.trim() : currentStaff.pf_no;
 
     await run(
       `UPDATE staff 
-       SET name = COALESCE(?, name), 
+       SET name = ?, 
            designation = ?, 
            row_position = COALESCE(?, row_position), 
            active = COALESCE(?, active),
-           pf_no = COALESCE(?, pf_no),
+           pf_no = ?,
            bill_unit = COALESCE(?, bill_unit),
            pay_amount = COALESCE(?, pay_amount),
            doa = COALESCE(?, doa),
@@ -1368,18 +1370,24 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
            hrms_id = ?,
            seniority_no = COALESCE(?, seniority_no)
        WHERE id = ?`,
-      [name || null, targetDesg, row_position || null, active !== undefined ? active : null, pf_no || null, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
+      [targetName, targetDesg, row_position || null, active !== undefined ? active : null, targetPf, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
     );
 
     // Sync seniority_list if matching pf_no or seniority_no exists
     try {
-      if (designation && (currentStaff.seniority_no || currentStaff.pf_no)) {
-        await run('UPDATE seniority_list SET designation = ? WHERE sl_no = ? OR pf_number = ?', [designation, currentStaff.seniority_no, currentStaff.pf_no]);
+      if (currentStaff.seniority_no || currentStaff.pf_no || targetPf) {
+        await run(`UPDATE seniority_list 
+                   SET name = ?,
+                       designation = ?,
+                       pf_number = ?
+                   WHERE sl_no = ? OR pf_number = ? OR pf_number = ?`,
+          [targetName, targetDesg, targetPf, currentStaff.seniority_no, currentStaff.pf_no, targetPf]
+        );
       }
     } catch (e) {}
 
     const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
-    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${name || currentStaff.name}, Desg: ${targetDesg}, HRMS: ${targetHrms})`);
+    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${targetName}, PF: ${targetPf}, Desg: ${targetDesg}, HRMS: ${targetHrms})`);
     res.json({ message: 'Staff updated successfully', staff: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -7990,6 +7998,31 @@ app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
   } catch (err) {
     await run('ROLLBACK');
     console.error('Error batch updating muster records:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/muster/reorder - Reorder staff rows in Muster Roll (persists custom order / seniority_no)
+app.post('/api/muster/reorder', requireAdmin, async (req, res) => {
+  try {
+    const { staff_ids } = req.body; // Array of staff IDs in the new order [id1, id2, id3, ...]
+    if (!Array.isArray(staff_ids) || staff_ids.length === 0) {
+      return res.status(400).json({ error: 'staff_ids array is required' });
+    }
+
+    await run('BEGIN TRANSACTION');
+    for (let index = 0; index < staff_ids.length; index++) {
+      const staffId = staff_ids[index];
+      const newSeniorityNo = index + 1;
+      await run('UPDATE staff SET seniority_no = ? WHERE id = ?', [newSeniorityNo, staffId]);
+    }
+    await run('COMMIT');
+
+    await logAudit('Admin', 'MUSTER_REORDER', `Reordered ${staff_ids.length} staff members in Muster Roll`);
+    res.json({ success: true, message: 'Muster roll staff order updated successfully' });
+  } catch (err) {
+    await run('ROLLBACK');
+    console.error('Error reordering muster staff:', err);
     res.status(500).json({ error: err.message });
   }
 });

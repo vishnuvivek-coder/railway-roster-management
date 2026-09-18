@@ -34,12 +34,106 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [cellRemarks, setCellRemarks] = useState('');
   const [savingCell, setSavingCell] = useState(false);
 
-  // Designation & HRMS ID editing state
+  // Name, Designation & HRMS ID editing state
+  const [editNameModal, setEditNameModal] = useState(null);
   const [editDesgModal, setEditDesgModal] = useState(null);
   const [customDesgInput, setCustomDesgInput] = useState('');
   const [editingHrmsId, setEditingHrmsId] = useState(null);
   const [hrmsInputVal, setHrmsInputVal] = useState('');
   const [savingStaffField, setSavingStaffField] = useState(false);
+
+  // Drag & Drop reordering state for the combined 3 columns
+  const [draggedStaffId, setDraggedStaffId] = useState(null);
+  const [dragOverStaffId, setDragOverStaffId] = useState(null);
+  const [dragOverPos, setDragOverPos] = useState(null); // 'above' | 'below'
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(prev => (prev === msg ? null : prev));
+    }, 3200);
+  };
+
+  const handleDragStart = (e, staff, index) => {
+    if (!isAdmin) return;
+    setDraggedStaffId(staff.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ staffId: staff.id, index }));
+  };
+
+  const handleDragOverRow = (e, staff, index) => {
+    if (!isAdmin || !draggedStaffId || draggedStaffId === staff.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const pos = e.clientY < midY ? 'above' : 'below';
+
+    if (dragOverStaffId !== staff.id || dragOverPos !== pos) {
+      setDragOverStaffId(staff.id);
+      setDragOverPos(pos);
+    }
+  };
+
+  const handleDragLeaveRow = (e) => {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragOverStaffId(null);
+    setDragOverPos(null);
+  };
+
+  const handleDropRow = async (e, targetStaff, targetIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sourceId = draggedStaffId;
+    const pos = dragOverPos;
+    setDraggedStaffId(null);
+    setDragOverStaffId(null);
+    setDragOverPos(null);
+
+    if (!isAdmin || !sourceId || sourceId === targetStaff.id) return;
+    if (!cycleData || !cycleData.staff) return;
+
+    const currentList = [...cycleData.staff];
+    const fromIdx = currentList.findIndex(s => s.id === sourceId);
+    if (fromIdx === -1) return;
+
+    const [movedItem] = currentList.splice(fromIdx, 1);
+    const targetIdxAfterSplice = currentList.findIndex(s => s.id === targetStaff.id);
+    if (targetIdxAfterSplice === -1) return;
+
+    const insertIdx = pos === 'below' ? targetIdxAfterSplice + 1 : targetIdxAfterSplice;
+    currentList.splice(insertIdx, 0, movedItem);
+
+    // Optimistically update list in state
+    setCycleData(prev => ({
+      ...prev,
+      staff: currentList
+    }));
+
+    showToast(`✓ Moved "${movedItem.name}" to position #${insertIdx + 1}`);
+
+    // Persist new ordering to backend database
+    try {
+      const token = authToken || localStorage.getItem('token');
+      const staffIds = currentList.map(s => s.id);
+      const res = await fetch('/api/muster/reorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ staff_ids: staffIds })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to persist order');
+    } catch (err) {
+      console.error('Failed to reorder staff in database:', err);
+      showToast('⚠️ Could not save new order: ' + err.message);
+    }
+  };
 
   // Generate available cycles for quick jump (last 6 months to next 3 months)
   const availableCycles = useMemo(() => {
@@ -198,6 +292,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           if (s.id !== staffId) return s;
           return {
             ...s,
+            ...(updates.name !== undefined ? { name: updates.name } : {}),
+            ...(updates.pf_no !== undefined ? { pf_no: updates.pf_no } : {}),
             ...(updates.designation !== undefined ? { designation: updates.designation } : {}),
             ...(updates.hrms_id !== undefined ? { hrms_id: updates.hrms_id } : {})
           };
@@ -205,8 +301,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         return { ...prev, staff: newStaff };
       });
 
+      setEditNameModal(null);
       setEditDesgModal(null);
       setEditingHrmsId(null);
+      showToast(`✓ Updated employee details`);
     } catch (err) {
       alert('Error updating employee details: ' + err.message);
     } finally {
@@ -618,17 +716,29 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#18181b' }}>
                 {/* Top Row: Headers */}
                 <tr>
-                  <th className="muster-col-sno">
-                    S.No
+                  <th className="muster-col-sno" title={isAdmin ? "Drag rows to reorder employees" : undefined}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                      {isAdmin && <span style={{ fontSize: '0.75rem', opacity: 0.7 }} title="Drag rows to reorder">⠿</span>}
+                      <span>S.No</span>
+                    </div>
                   </th>
-                  <th className="muster-col-name">
-                    Name of Employee
+                  <th className="muster-col-name" title={isAdmin ? "Click any name or ✏️ to edit Name / PF No" : undefined}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Name of Employee</span>
+                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                    </div>
                   </th>
                   <th className="muster-col-desg" title={isAdmin ? "Click on any employee's designation to edit" : undefined}>
-                    Designation {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>✏️</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                      <span>Designation</span>
+                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                    </div>
                   </th>
                   <th className="muster-col-hrms" title={isAdmin ? "Click on any employee's HRMS ID to edit" : undefined}>
-                    HRMS ID {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>✏️</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                      <span>HRMS ID</span>
+                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                    </div>
                   </th>
 
                   {/* Day Date Headers */}
@@ -665,74 +775,127 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               </thead>
 
               <tbody>
-                {filteredStaff.map((staff, sIdx) => (
-                  <tr key={staff.id} style={{ borderBottom: '1px solid var(--border-glass)' }}>
-                    {/* Fixed Left S.No */}
-                    <td className="muster-col-sno">
-                      {sIdx + 1}
-                    </td>
+                {filteredStaff.map((staff, sIdx) => {
+                  const isDraggingThis = draggedStaffId === staff.id;
+                  const isDragOverThis = dragOverStaffId === staff.id;
+                  const dragClass = isDraggingThis
+                    ? 'muster-row-dragging'
+                    : isDragOverThis
+                    ? dragOverPos === 'above'
+                      ? 'muster-row-drag-over-above'
+                      : 'muster-row-drag-over-below'
+                    : '';
 
-                    {/* Fixed Left Name with PF NO below */}
-                    <td className="muster-col-name">
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <strong style={{ fontSize: '0.84rem' }}>
-                          {staff.name}
-                        </strong>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
-                          PF NO: {staff.pf_no || '-'}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Fixed Left Designation - Editable */}
-                    <td
-                      className="muster-col-desg"
-                      onClick={() => {
-                        if (isAdmin) {
-                          setEditDesgModal({
-                            staffId: staff.id,
-                            staffName: staff.name,
-                            currentDesg: staff.designation || 'TTI',
-                            pfNo: staff.pf_no
-                          });
-                          setCustomDesgInput('');
-                        }
-                      }}
-                      style={{ cursor: isAdmin ? 'pointer' : 'default' }}
-                      title={isAdmin ? `Click to edit designation for ${staff.name} (Current: ${staff.designation || '-'})` : undefined}
+                  return (
+                    <tr
+                      key={staff.id}
+                      draggable={isAdmin}
+                      onDragStart={(e) => handleDragStart(e, staff, sIdx)}
+                      onDragOver={(e) => handleDragOverRow(e, staff, sIdx)}
+                      onDragLeave={handleDragLeaveRow}
+                      onDrop={(e) => handleDropRow(e, staff, sIdx)}
+                      className={`muster-row-draggable ${dragClass}`}
+                      style={{ borderBottom: '1px solid var(--border-glass)' }}
                     >
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', position: 'relative' }}>
-                        <span className="badge" style={{
-                          background: 'rgba(59, 130, 246, 0.12)',
-                          color: '#93c5fd',
-                          border: '1px solid rgba(59, 130, 246, 0.25)',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          cursor: isAdmin ? 'pointer' : 'default'
-                        }}>
-                          {staff.designation || '-'}
-                        </span>
-                        {isAdmin && (
-                          <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
-                            ✏️
+                      {/* Fixed Left S.No with Drag Grip */}
+                      <td className="muster-col-sno" style={{ userSelect: 'none' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                          {isAdmin && (
+                            <span
+                              className="muster-drag-handle"
+                              title="Drag to reorder employee row (all 3 columns combinedly)"
+                              style={{ cursor: 'grab', fontSize: '0.85rem' }}
+                            >
+                              ⠿
+                            </span>
+                          )}
+                          <span>{sIdx + 1}</span>
+                        </div>
+                      </td>
+
+                      {/* Fixed Left Name with PF NO below - Editable */}
+                      <td
+                        className="muster-col-name muster-editable-hover"
+                        onClick={() => {
+                          if (isAdmin) {
+                            setEditNameModal({
+                              staffId: staff.id,
+                              name: staff.name,
+                              pfNo: staff.pf_no || ''
+                            });
+                          }
+                        }}
+                        style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                        title={isAdmin ? `Click to edit Name / PF NO for ${staff.name}` : undefined}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <strong style={{ fontSize: '0.84rem', color: '#f8fafc' }}>
+                                {staff.name}
+                              </strong>
+                              {isAdmin && (
+                                <span style={{ fontSize: '0.62rem', opacity: 0.6 }} title="Edit Name & PF">
+                                  ✏️
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
+                              PF NO: {staff.pf_no || '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Fixed Left Designation - Editable */}
+                      <td
+                        className="muster-col-desg muster-editable-hover"
+                        onClick={() => {
+                          if (isAdmin) {
+                            setEditDesgModal({
+                              staffId: staff.id,
+                              staffName: staff.name,
+                              currentDesg: staff.designation || 'TTI',
+                              pfNo: staff.pf_no
+                            });
+                            setCustomDesgInput('');
+                          }
+                        }}
+                        style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                        title={isAdmin ? `Click to edit designation for ${staff.name} (Current: ${staff.designation || '-'})` : undefined}
+                      >
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', position: 'relative' }}>
+                          <span className="badge" style={{
+                            background: 'rgba(59, 130, 246, 0.12)',
+                            color: '#93c5fd',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            cursor: isAdmin ? 'pointer' : 'default'
+                          }}>
+                            {staff.designation || '-'}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                          {isAdmin && (
+                            <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
+                              ✏️
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Fixed Left HRMS ID - Editable */}
-                    <td
-                      className="muster-col-hrms"
-                      onClick={() => {
-                        if (isAdmin && editingHrmsId !== staff.id) {
-                          setEditingHrmsId(staff.id);
-                          setHrmsInputVal(staff.hrms_id || '');
-                        }
-                      }}
-                      style={{ cursor: isAdmin && editingHrmsId !== staff.id ? 'pointer' : 'default' }}
-                      title={isAdmin && editingHrmsId !== staff.id ? `Click to edit HRMS ID for ${staff.name}` : undefined}
-                    >
+                      {/* Fixed Left HRMS ID - Editable */}
+                      <td
+                        className="muster-col-hrms muster-editable-hover"
+                        onClick={() => {
+                          if (isAdmin && editingHrmsId !== staff.id) {
+                            setEditingHrmsId(staff.id);
+                            setHrmsInputVal(staff.hrms_id || '');
+                          }
+                        }}
+                        style={{ cursor: isAdmin && editingHrmsId !== staff.id ? 'pointer' : 'default' }}
+                        title={isAdmin && editingHrmsId !== staff.id ? `Click to edit HRMS ID for ${staff.name}` : undefined}
+                      >
                       {editingHrmsId === staff.id ? (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
                           <input
@@ -909,7 +1072,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#f43f5e', fontSize: '0.84rem' }}>{staff.counts.totalLeaves}</td>
                     <td style={{ textAlign: 'center', fontWeight: 900, color: 'var(--primary)', fontSize: '0.88rem' }}>{staff.counts.totalDays}</td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
 
               {/* Table Footer: Division Totals */}
@@ -1186,6 +1350,122 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Employee Name & PF Number Edit Modal */}
+      {editNameModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '420px',
+            maxWidth: '100%',
+            background: 'var(--bg-secondary)',
+            borderRadius: '14px',
+            padding: '24px',
+            border: '1.5px solid var(--border-gold)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
+                👤 Edit Employee Name & PF No
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditNameModal(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '14px' }}>
+              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '6px', display: 'block', fontWeight: 700 }}>
+                Employee Full Name:
+              </label>
+              <input
+                type="text"
+                autoFocus
+                className="form-input"
+                placeholder="e.g. BRK REDDY"
+                value={editNameModal.name}
+                onChange={e => setEditNameModal(prev => ({ ...prev, name: e.target.value }))}
+                style={{ fontSize: '0.88rem', padding: '8px 12px', textTransform: 'uppercase', width: '100%', borderRadius: '8px' }}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '6px', display: 'block', fontWeight: 700 }}>
+                PF Number (PF NO):
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. 24609273846"
+                value={editNameModal.pfNo}
+                onChange={e => setEditNameModal(prev => ({ ...prev, pfNo: e.target.value }))}
+                style={{ fontSize: '0.88rem', padding: '8px 12px', textTransform: 'uppercase', width: '100%', borderRadius: '8px' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditNameModal(null)}
+                style={{ fontSize: '0.82rem', padding: '7px 16px', borderRadius: '8px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={savingStaffField || !editNameModal.name.trim()}
+                onClick={() => handleSaveStaffField(editNameModal.staffId, {
+                  name: editNameModal.name.trim().toUpperCase(),
+                  pf_no: editNameModal.pfNo.trim().toUpperCase()
+                })}
+                style={{ fontSize: '0.82rem', padding: '7px 18px', fontWeight: 800, borderRadius: '8px' }}
+              >
+                {savingStaffField ? 'Saving...' : '💾 Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'linear-gradient(135deg, #10b981, #059669)',
+          color: '#fff',
+          padding: '10px 18px',
+          borderRadius: '10px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+          fontWeight: 800,
+          fontSize: '0.86rem',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <span>{toastMessage}</span>
         </div>
       )}
       </>
