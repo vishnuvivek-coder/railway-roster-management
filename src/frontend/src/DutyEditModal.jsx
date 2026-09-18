@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 
 // Multi-day link sets for Indian Railways train roster
 export const KNOWN_LINK_SETS = {
@@ -131,6 +131,43 @@ export default function DutyEditModal({
     }
     return 'CL';
   });
+
+  // Compensatory Rest (CR) tracking & due dates for the employee being relieved/edited
+  const currentStaffId = dutyModal.staffId || dutyModal.originalStaffId;
+  const initialStaffObj = allStaffList?.find(s => String(s.id) === String(currentStaffId));
+
+  const [staffCrDetails, setStaffCrDetails] = useState(() => {
+    if (initialStaffObj && initialStaffObj.cr_due_dates) {
+      return {
+        count: initialStaffObj.cr_count || 0,
+        due_dates: initialStaffObj.cr_due_dates || [],
+        redeemed_dates: []
+      };
+    }
+    return null;
+  });
+  const [selectedCrEarnedDate, setSelectedCrEarnedDate] = useState(null);
+  const [showRedeemedHistory, setShowRedeemedHistory] = useState(false);
+
+  useEffect(() => {
+    if (!currentStaffId) return;
+    if (leaveType === 'CR' || deleteReason === 'LEAVE') {
+      fetch(`/api/staff/${currentStaffId}/cr-details`, {
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) {
+            setStaffCrDetails(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentStaffId, leaveType, deleteReason, authToken]);
+
+  const crCount = staffCrDetails?.count ?? (initialStaffObj?.cr_count || 0);
+  const dueDates = staffCrDetails?.due_dates || initialStaffObj?.cr_due_dates || [];
+  const redeemedDates = staffCrDetails?.redeemed_dates || [];
 
   // Sick medical classification: LHAP (MC), SICK (Hospital), CL (Minor)
   const [sickType, setSickType] = useState(() => {
@@ -312,6 +349,15 @@ export default function DutyEditModal({
         // 5. Working cyclic train link
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
+          const isNonDaily = [60, 61, 62].includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
+          if (isNonDaily && !activeDuty.extra_train_no) {
+            return {
+              label: `🟢 Non-Daily Link #${lNum} (Available)`,
+              isRest: false,
+              isLr: false,
+              linkNum: lNum
+            };
+          }
           const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
             ? `Tr ${activeDuty.train_numbers}`
             : '';
@@ -356,6 +402,15 @@ export default function DutyEditModal({
 
     if (!linkDef || linkDef.is_rest) {
       return { label: `Link #${linkNum} (Weekly REST)`, isRest: true, isLr: false, linkNum };
+    }
+    const isNonDaily = [60, 61, 62].includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
+    if (isNonDaily) {
+      return {
+        label: `🟢 Non-Daily Link #${linkNum} (Available)`,
+        isRest: false,
+        isLr: false,
+        linkNum
+      };
     }
     return {
       label: `Link #${linkNum} (${linkDef.train_numbers ? `Tr ${linkDef.train_numbers}` : 'Duty'})`,
@@ -487,6 +542,17 @@ export default function DutyEditModal({
         // 7. Regular cyclic link duty (Cat 1, 2, 3)
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
+          const isNonDaily = [60, 61, 62].includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
+          if (isNonDaily && !activeDuty.extra_train_no) {
+            return {
+              isAssigned: false,
+              isUnavailable: false,
+              unavailableReason: '',
+              trainDesc: `Non-Daily Link #${lNum} (Available)`,
+              linkNum: lNum,
+              trainNo: null
+            };
+          }
           const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
             ? `Tr ${activeDuty.train_numbers}`
             : '';
@@ -541,6 +607,17 @@ export default function DutyEditModal({
         trainNo: null
       };
     }
+    const isNonDaily = [60, 61, 62].includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
+    if (isNonDaily) {
+      return {
+        isAssigned: false,
+        isUnavailable: false,
+        unavailableReason: '',
+        trainDesc: `Non-Daily Link #${linkNum} (Available)`,
+        linkNum,
+        trainNo: null
+      };
+    }
     return {
       isAssigned: true,
       isUnavailable: false,
@@ -560,7 +637,15 @@ export default function DutyEditModal({
       .filter(s => {
         if (s.id === dutyModal.staffId) return false;
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
-        if (replacementCatId && replacementCatId !== 'ALL') {
+        if (replacementCatId === 'NON_DAILY') {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          const dutyInfo = getStaffDutyInfo(s, selectedDate);
+          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+                       (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
+                       (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
+          if (!isND) return false;
+        } else if (replacementCatId && replacementCatId !== 'ALL') {
           if (String(s.category_id) !== String(replacementCatId)) return false;
         }
         const assignStatus = getStaffAssignmentStatus(s, selectedDate);
@@ -571,7 +656,7 @@ export default function DutyEditModal({
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, dutyModal.staffId, replacementCatId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus]);
+  }, [allStaffList, dutyModal.staffId, replacementCatId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
 
   // Selected replacement staff object
   const selectedReplacementStaffObj = useMemo(() => {
@@ -587,7 +672,15 @@ export default function DutyEditModal({
     return allStaffList
       .filter(s => {
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
-        if (assignCatId && assignCatId !== 'ALL') {
+        if (assignCatId === 'NON_DAILY') {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          const dutyInfo = getStaffDutyInfo(s, selectedDate);
+          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+                       (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
+                       (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
+          if (!isND) return false;
+        } else if (assignCatId && assignCatId !== 'ALL') {
           if (String(s.category_id) !== String(assignCatId)) return false;
         }
         if (dutyModal.staffId && s.id === dutyModal.staffId) return false;
@@ -599,7 +692,7 @@ export default function DutyEditModal({
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, assignCatId, dutyModal.staffId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus]);
+  }, [allStaffList, assignCatId, dutyModal.staffId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
 
   // Selected assign staff object
   const selectedAssignStaffObj = useMemo(() => {
@@ -1458,6 +1551,167 @@ export default function DutyEditModal({
                       ℹ️ Muster Roll attendance marked as <strong style={{ color: '#fbbf24' }}>[{leaveType}]</strong>.
                     </div>
 
+                    {/* Dedicated Compensatory Rest (CR) Due Dates & Eligibility Card */}
+                    {leaveType === 'CR' && (
+                      <div style={{
+                        background: 'rgba(167, 139, 250, 0.08)',
+                        border: '1.5px solid rgba(167, 139, 250, 0.35)',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>💤</span>
+                            <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#c4b5fd' }}>
+                              Compensatory Rest (CR) Balance & Due Dates:
+                            </span>
+                          </div>
+                          <span className="badge" style={{
+                            background: crCount > 0 ? 'rgba(167, 139, 250, 0.25)' : 'rgba(239, 68, 68, 0.18)',
+                            color: crCount > 0 ? '#ddd6fe' : '#f87171',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            border: crCount > 0 ? '1px solid rgba(167, 139, 250, 0.5)' : '1px solid rgba(239, 68, 68, 0.35)'
+                          }}>
+                            {crCount > 0 ? `✨ ${crCount} CR Available` : '⚠️ 0 CR Due'}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>
+                          Dates on which <strong>{dutyModal.name || 'this employee'}</strong> worked without availing scheduled rest:
+                        </div>
+
+                        {/* Due Dates List */}
+                        {dueDates.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto' }}>
+                            {dueDates.map((item, idx) => {
+                              const isSelected = selectedCrEarnedDate === item.date;
+                              return (
+                                <div
+                                  key={item.date || idx}
+                                  style={{
+                                    background: isSelected ? 'rgba(167, 139, 250, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                    border: isSelected ? '1.5px solid #a78bfa' : '1px solid rgba(167, 139, 250, 0.2)',
+                                    borderRadius: '8px',
+                                    padding: '10px 12px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#f3f4f6' }}>
+                                        🗓️ {item.dateDisplay || item.date}
+                                      </span>
+                                      <span style={{ fontSize: '0.72rem', color: '#c4b5fd', fontWeight: 600 }}>
+                                        ({item.dayOfWeekLong || item.dayOfWeek})
+                                      </span>
+                                      <span style={{
+                                        fontSize: '0.7rem',
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(59, 130, 246, 0.15)',
+                                        color: '#93c5fd',
+                                        border: '1px solid rgba(59, 130, 246, 0.3)'
+                                      }}>
+                                        {item.restType}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.76rem', color: '#e5e7eb' }}>
+                                      🚆 <strong>Duty Worked:</strong> {item.duty}
+                                    </div>
+                                    {item.reason && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                        📝 <em>{item.reason}</em>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCrEarnedDate(item.date);
+                                      setReason(`CR availed against rest day worked on ${item.dateDisplay || item.date} (${item.duty})`);
+                                    }}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: '6px',
+                                      fontSize: '0.76rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap',
+                                      background: isSelected ? '#a78bfa' : 'rgba(167, 139, 250, 0.15)',
+                                      color: isSelected ? '#000000' : '#c4b5fd',
+                                      border: isSelected ? 'none' : '1px solid rgba(167, 139, 250, 0.4)'
+                                    }}
+                                  >
+                                    {isSelected ? '✓ Selected' : '👉 Avail Against This Date'}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            fontSize: '0.78rem',
+                            color: '#fca5a5',
+                            lineHeight: 1.45
+                          }}>
+                            <div><strong>⚠️ No Compensatory Rest (CR) Due Recorded:</strong></div>
+                            <div style={{ marginTop: '2px' }}>
+                              No record found of <strong>{dutyModal.name || 'this employee'}</strong> working on any scheduled weekly rest or cyclic rest days without availing rest.
+                            </div>
+                            <div style={{ marginTop: '4px', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                              ℹ️ If granting a special administrative sanction, please specify the approval reference in the Remarks field.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Redeemed CR History (Collapsible) */}
+                        {redeemedDates.length > 0 && (
+                          <div style={{ marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setShowRedeemedHistory(!showRedeemedHistory)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--color-text-secondary)',
+                                fontSize: '0.74rem',
+                                cursor: 'pointer',
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <span>{showRedeemedHistory ? '▼' : '▶'}</span>
+                              <span>📜 View Previously Redeemed CRs ({redeemedDates.length} availed)</span>
+                            </button>
+                            {showRedeemedHistory && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                                {redeemedDates.map((r, i) => (
+                                  <div key={i} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', padding: '2px 6px' }}>
+                                    • Availed on <strong>{r.dateDisplay || r.date}</strong> — {r.reason || 'CR Availed'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Multi-day Link Set Note if 1-day leave on Day 1 */}
                     {(!leaveToDate || leaveToDate === selectedDate) && (() => {
                       const detectedLinkSet = getLinkSetDetails(dutyModal.categoryId, targetLink);
@@ -1950,7 +2204,8 @@ export default function DutyEditModal({
                           { id: '1', label: 'Conductors' },
                           { id: '2', label: 'Sleeper' },
                           { id: '3', label: 'Ladies' },
-                          { id: '4', label: 'LR Pool' }
+                          { id: '4', label: 'LR Pool' },
+                          { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
                         ].map(c => (
                           <button
                             key={c.id}
@@ -2126,7 +2381,8 @@ export default function DutyEditModal({
                       { id: '1', label: 'Conductors (COR)' },
                       { id: '2', label: 'Sleeper / TTI' },
                       { id: '3', label: 'Ladies / TTE' },
-                      { id: '4', label: 'LR Relief Pool' }
+                      { id: '4', label: 'LR Relief Pool' },
+                      { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
                     ].map(c => (
                       <button
                         key={c.id}

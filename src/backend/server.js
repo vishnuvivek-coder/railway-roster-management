@@ -566,6 +566,11 @@ async function calculateStaffCrBalances() {
   allMuster.forEach(m => {
     musterMap[`${m.staff_id}_${m.date}`] = m;
   });
+  const allLrSheet = await all("SELECT * FROM lr_sheet_records ORDER BY date ASC");
+  const lrSheetMap = {};
+  allLrSheet.forEach(l => {
+    lrSheetMap[`${l.staff_id}_${l.date}`] = l;
+  });
   
   function formatDateDisplay(iso) {
     if (!iso) return '';
@@ -581,22 +586,30 @@ async function calculateStaffCrBalances() {
     if (!cat) continue;
 
     const staffOverrides = allOverrides.filter(o => o.staff_id === staff.id);
-    const restForgoneDates = [];
+    const staffMuster = allMuster.filter(m => m.staff_id === staff.id);
+    const staffLr = allLrSheet.filter(l => l.staff_id === staff.id);
+    const restForgoneRecords = [];
     const crRedeemedDates = [];
 
-    // Collect all unique dates with overrides or muster records for this staff
+    // Collect all unique dates with overrides, muster records, or LR sheet for this staff
     const relevantDates = new Set();
     staffOverrides.forEach(o => relevantDates.add(o.date));
-    allMuster.filter(m => m.staff_id === staff.id).forEach(m => relevantDates.add(m.date));
+    staffMuster.forEach(m => relevantDates.add(m.date));
+    staffLr.forEach(l => relevantDates.add(l.date));
     const sortedDates = Array.from(relevantDates).sort();
 
     for (const dStr of sortedDates) {
       const o = staffOverrides.find(ov => ov.date === dStr);
       const m = musterMap[`${staff.id}_${dStr}`];
+      const lr = lrSheetMap[`${staff.id}_${dStr}`];
 
       // Check if CR was redeemed / availed on this date
-      if ((o && o.status === 'CR') || (m && m.code === 'CR')) {
-        crRedeemedDates.push(dStr);
+      if ((o && (o.status === 'CR' || o.leave_type === 'CR')) || (m && m.code === 'CR') || (lr && lr.duty_code === 'CR')) {
+        crRedeemedDates.push({
+          date: dStr,
+          dateDisplay: formatDateDisplay(dStr),
+          reason: (o && o.reason) || (m && m.remarks) || (lr && lr.remarks) || 'Compensatory Rest Availed'
+        });
         continue;
       }
 
@@ -607,54 +620,85 @@ async function calculateStaffCrBalances() {
       let isOrigRest = false;
       const dObj = new Date(dStr + 'T12:00:00');
       const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dayNamesLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const dayName = days[dObj.getDay()];
+      const dayLong = dayNamesLong[dObj.getDay()];
 
+      let restTypeDesc = '';
       if (staff.category_id === 4) {
         if (staff.name.toUpperCase().includes(dayName + ' REST') || (staff.rest_day && staff.rest_day.toUpperCase() === dayName)) {
           isOrigRest = true;
+          restTypeDesc = `Weekly Rest (${dayName})`;
         }
       } else {
         if (origLink === null || linkRestMap[cat.id + '_' + origLink] === 1) {
           isOrigRest = true;
-        }
-        // Also check if employee's weekly rest day matches
-        if (staff.rest_day && staff.rest_day.toUpperCase() === dayName) {
+          restTypeDesc = origLink ? `Cyclic Rest (Link #${origLink})` : `Cyclic Rest`;
+        } else if (staff.rest_day && staff.rest_day.toUpperCase() === dayName) {
           isOrigRest = true;
+          restTypeDesc = `Weekly Rest (${dayName})`;
         }
       }
 
-      // Check if employee worked on this date (via override or muster Present)
+      // Check if employee worked on this date (via override, muster Present, or LR duty)
       const isWorkingOverride = o && (
         o.overridden_link_number !== null ||
         o.is_extra === 1 ||
         o.extra_train_no ||
         o.advance_train_no ||
+        o.shifted_place ||
         o.status === 'EXTRA_CREW' ||
         o.status === 'CHANGED_LINK' ||
         o.status === 'SUBSTITUTE'
-      ) && o.status !== 'REST' && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'CR';
+      ) && o.status !== 'REST' && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'CR' && o.status !== 'ABSENT';
 
       const isWorkingMuster = m && m.code === 'P';
+      const isWorkingLr = lr && lr.duty_code && !['R', 'REST', 'L', 'SICK', 'CR', 'O', 'S'].includes(lr.duty_code.toUpperCase());
 
       const explicitRestWorked = (o && o.reason && /rest day worked|cr credit|cr against rest/i.test(o.reason)) ||
-                                (m && m.remarks && /rest day worked|cr credit|cr against rest/i.test(m.remarks));
+                                (m && m.remarks && /rest day worked|cr credit|cr against rest/i.test(m.remarks)) ||
+                                (lr && lr.remarks && /rest day worked|cr credit|cr against rest/i.test(lr.remarks));
 
-      if ((isOrigRest && (isWorkingOverride || isWorkingMuster)) || explicitRestWorked) {
-        if (!restForgoneDates.includes(dStr)) {
-          restForgoneDates.push(dStr);
+      if ((isOrigRest && (isWorkingOverride || isWorkingMuster || isWorkingLr)) || explicitRestWorked) {
+        let dutyDesc = '';
+        if (o && o.extra_train_no) dutyDesc = `Train ${o.extra_train_no} (Extra)`;
+        else if (o && o.advance_train_no) dutyDesc = `Train ${o.advance_train_no} (Advance)`;
+        else if (o && o.overridden_link_number) dutyDesc = `Link #${o.overridden_link_number}`;
+        else if (o && o.shifted_place) dutyDesc = `Shifted to ${o.shifted_place}`;
+        else if (o && o.status === 'SUBSTITUTE') dutyDesc = `Substitute${o.substitute_name ? ` for ${o.substitute_name}` : ''}`;
+        else if (lr && lr.duty_code) dutyDesc = `Duty ${lr.duty_code}`;
+        else if (m && m.remarks) dutyDesc = m.remarks;
+        else dutyDesc = 'Duty Performed';
+
+        const recordReason = (o && o.reason) || (m && m.remarks) || (lr && lr.remarks) || 'Worked without availing scheduled rest';
+
+        if (!restForgoneRecords.some(r => r.date === dStr)) {
+          restForgoneRecords.push({
+            date: dStr,
+            dateDisplay: formatDateDisplay(dStr),
+            dayOfWeek: dayName,
+            dayOfWeekLong: dayLong,
+            duty: dutyDesc,
+            restType: restTypeDesc || 'Scheduled Rest',
+            reason: recordReason
+          });
         }
       }
     }
 
-    // Unredeemed rest forgone dates (FIFO deduction)
-    const unredeemed = restForgoneDates.slice(crRedeemedDates.length);
-    const count = unredeemed.length;
+    // Unredeemed rest forgone records (FIFO deduction)
+    const unredeemedRecords = restForgoneRecords.slice(crRedeemedDates.length);
+    const count = unredeemedRecords.length;
+    const unredeemedDates = unredeemedRecords.map(r => r.date);
 
     if (count > 0) {
-      const datesStr = unredeemed.map(d => formatDateDisplay(d)).join(', ');
+      const datesStr = unredeemedRecords.map(r => r.dateDisplay).join(', ');
       crMap[staff.id] = {
         count,
-        dates: unredeemed,
+        dates: unredeemedDates,
+        due_dates: unredeemedRecords,
+        all_forgone_records: restForgoneRecords,
+        redeemed_dates: crRedeemedDates,
         display: count === 1 ? `1 CR (Rest forgone on ${datesStr})` : `${count} CRs (Rest forgone on ${datesStr})`,
         shortDisplay: count === 1 ? `1 CR (${datesStr})` : `${count} CRs (${datesStr})`
       };
@@ -662,6 +706,9 @@ async function calculateStaffCrBalances() {
       crMap[staff.id] = {
         count: 0,
         dates: [],
+        due_dates: [],
+        all_forgone_records: restForgoneRecords,
+        redeemed_dates: crRedeemedDates,
         display: null,
         shortDisplay: '-'
       };
@@ -1089,7 +1136,8 @@ app.get('/api/staff', async (req, res) => {
         cr_available: cr ? cr.display : null,
         cr_short_display: cr ? cr.shortDisplay : '-',
         cr_count: cr ? cr.count : 0,
-        cr_dates: cr ? cr.dates : []
+        cr_dates: cr ? cr.dates : [],
+        cr_due_dates: cr ? cr.due_dates : []
       };
     });
     res.json(staffWithCr);
@@ -1102,6 +1150,41 @@ app.get('/api/staff/cr-balances', async (req, res) => {
   try {
     const balances = await calculateStaffCrBalances();
     res.json(balances);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/staff/:id/cr-details - Detailed CR balance, due records, and redemption history for an employee
+app.get('/api/staff/:id/cr-details', async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+    const crBalances = await calculateStaffCrBalances();
+    const cr = crBalances[staffId] || {
+      count: 0,
+      dates: [],
+      due_dates: [],
+      all_forgone_records: [],
+      redeemed_dates: [],
+      display: null,
+      shortDisplay: '-'
+    };
+    res.json({
+      staff_id: staff.id,
+      staff_name: staff.name,
+      designation: staff.designation,
+      category_id: staff.category_id,
+      rest_day: staff.rest_day,
+      count: cr.count,
+      dates: cr.dates,
+      due_dates: cr.due_dates,
+      all_forgone_records: cr.all_forgone_records,
+      redeemed_dates: cr.redeemed_dates,
+      display: cr.display,
+      shortDisplay: cr.shortDisplay
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5398,6 +5481,25 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           statusReason = 'Weekly rest day at Headquarters GNT; available for call-up / emergency booking (earns CR)';
           currentLocation = '🏠 GNT (Weekly Rest)';
           catBreakdown.available_weekly_rest++;
+        } else if ([60, 61, 62].includes(activeLink) || (dutyDetails && dutyDetails.train_numbers && String(dutyDetails.train_numbers).toUpperCase().includes('NON DAILY'))) {
+          // Category 2 Non-Daily Links (60, 61, 62)
+          if (override && (override.extra_train_no || override.advance_train_no)) {
+            isAvailable = false;
+            dotStatus = 'RED';
+            statusCategory = 'NOT_AVAILABLE_BOOKED';
+            statusLabel = `Not Available (Working Extra Tr. ${override.extra_train_no || override.advance_train_no})`;
+            statusReason = `Assigned to Non-Daily Train ${override.extra_train_no || override.advance_train_no}`;
+            currentLocation = `🚆 Working Train (${override.extra_train_no || override.advance_train_no})`;
+            catBreakdown.booked_to_duty++;
+          } else {
+            isAvailable = true;
+            dotStatus = 'GREEN';
+            statusCategory = 'AVAILABLE_NON_DAILY';
+            statusLabel = `Available (Non-Daily Link #${activeLink})`;
+            statusReason = `In Non-Daily Link #${activeLink} pool at HQ; available for duty booking`;
+            currentLocation = '🏠 GNT (Non-Daily Pool)';
+            catBreakdown.available_standby++;
+          }
         } else if (fromStation && fromStation !== 'GNT' && fromStation !== '---') {
           isAvailable = false;
           dotStatus = 'RED';
