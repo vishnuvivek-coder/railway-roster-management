@@ -1766,6 +1766,9 @@ app.post('/api/overrides', requireAdmin, async (req, res) => {
     const dayOffset = getDayOffset(category.anchor_date, date);
     const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
+    const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
+    const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+
     // Upsert override
     await run(
       `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, reason, target_category_id) 
@@ -1775,11 +1778,21 @@ app.post('/api/overrides', requireAdmin, async (req, res) => {
       [staff_id, date, originalLink, overridden_link_number, reason, target_category_id || null]
     );
 
+    const undoData = {
+      action: 'MANUAL_OVERRIDE',
+      staff_id,
+      staff_name: staff.name,
+      date,
+      previous_override: existingOverride || null,
+      previous_muster: existingMuster || null
+    };
+
     const targetDesc = overridden_link_number === null ? 'REST' : `Link ${overridden_link_number}`;
     await logAudit(
       'Admin',
       'MANUAL_OVERRIDE',
-      `Overrode ${staff.name} on ${date} from Link ${originalLink} to ${targetDesc}. Reason: ${reason}`
+      `Overrode ${staff.name} on ${date} from Link ${originalLink} to ${targetDesc}. Reason: ${reason}`,
+      undoData
     );
 
     res.json({ message: 'Override applied successfully' });
@@ -2743,7 +2756,24 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       const shiftDesc = shiftedLinkNum ? `Link #${shiftedLinkNum}${shiftedPlace ? ` (${shiftedPlace})` : ''}` : (shiftedPlace || 'Another Place / Duty');
       const shiftReason = reason || `Shifted to ${shiftDesc}`;
 
+      const undoSnapshots = [];
       for (const dStr of datesToProcess) {
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+        let subOverride = null;
+        let subMuster = null;
+        if (replacement_staff_id) {
+          subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+        }
+        undoSnapshots.push({
+          date: dStr,
+          override: existingOverride || null,
+          muster: existingMuster || null,
+          subOverride,
+          subMuster
+        });
+
         const dayOffset = getDayOffset(category.anchor_date, dStr);
         const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
@@ -2819,10 +2849,20 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         }
       }
 
+      const undoData = {
+        action: 'SHIFTED',
+        staff_id,
+        staff_name: staff.name,
+        dates: datesToProcess,
+        replacement_staff_id: replacement_staff_id || null,
+        snapshots: undoSnapshots
+      };
+
       await logAudit(
         'Admin',
         'SHIFTED',
-        `Shifted ${staff.name} to ${shiftDesc} on ${date}. Original slot updated.`
+        `Shifted ${staff.name} to ${shiftDesc} on ${date}. Original slot updated.`,
+        undoData
       );
 
       return res.json({
@@ -3361,6 +3401,9 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
     const dayOffset = getDayOffset(cat.anchor_date, date);
     const origLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
 
+    const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
+    const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
+
     const reason = `Assigned to Non-Daily Train ${finalTrainNo}${trainObj && trainObj.departure_station ? ` (${trainObj.departure_station} ➔ ${trainObj.arrival_station})` : ''}`;
     await run(
       `INSERT INTO overrides (
@@ -3423,7 +3466,17 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
       isLeave: false
     });
 
-    await logAudit('Admin', 'ASSIGN_NON_DAILY_TRAIN', `Assigned ${staff.name} to Non-Daily Train ${finalTrainNo} on ${date}`);
+    const undoData = {
+      action: 'ASSIGN_NON_DAILY_TRAIN',
+      staff_id: staff.id,
+      staff_name: staff.name,
+      date,
+      train_number: finalTrainNo,
+      previous_override: existingOverride || null,
+      previous_muster: existingMuster || null
+    };
+
+    await logAudit('Admin', 'ASSIGN_NON_DAILY_TRAIN', `Assigned ${staff.name} to Non-Daily Train ${finalTrainNo} on ${date}`, undoData);
 
     res.json({
       success: true,
@@ -3446,7 +3499,11 @@ app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) =>
       const trainRecord = await get('SELECT assigned_staff_id FROM non_daily_trains WHERE id = ?', [non_daily_train_id]);
       if (trainRecord && trainRecord.assigned_staff_id) resolvedStaffId = trainRecord.assigned_staff_id;
     }
+    let existingOverride = null;
+    let existingMuster = null;
     if (resolvedStaffId && date) {
+      existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [resolvedStaffId, date]);
+      existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [resolvedStaffId, date]);
       await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [resolvedStaffId, date]);
       await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [resolvedStaffId, date]);
       await run(
@@ -3464,7 +3521,15 @@ app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) =>
         [non_daily_train_id]
       );
     }
-    await logAudit('Admin', 'UNASSIGN_NON_DAILY_TRAIN', `Unassigned staff ${staff_id || ''} from Non-Daily Train ID ${non_daily_train_id || ''} on ${date || ''}`);
+    const undoData = {
+      action: 'UNASSIGN_NON_DAILY_TRAIN',
+      staff_id: resolvedStaffId,
+      date,
+      non_daily_train_id,
+      previous_override: existingOverride || null,
+      previous_muster: existingMuster || null
+    };
+    await logAudit('Admin', 'UNASSIGN_NON_DAILY_TRAIN', `Unassigned staff ${staff_id || ''} from Non-Daily Train ID ${non_daily_train_id || ''} on ${date || ''}`, undoData);
     res.json({ success: true, message: 'Unassigned staff from non-daily train successfully' });
   } catch (err) {
     console.error('Error in unassign-non-daily-train:', err);
@@ -3496,6 +3561,88 @@ app.get('/api/audit-logs', async (req, res) => {
   }
 });
 
+// Helper: Restore or delete override and muster records cleanly
+async function restoreOverrideAndMuster(staffId, date, prevOverride, prevMuster) {
+  if (prevOverride) {
+    await run(
+      `INSERT INTO overrides (
+        staff_id, date, original_link_number, overridden_link_number, status,
+        substitute_staff_id, substitute_name, reason, target_category_id,
+        extra_train_no, is_extra, shifted_from_link, shifted_from_train,
+        shifted_place, advance_train_no, is_advance_duty, leave_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(staff_id, date) DO UPDATE SET
+        original_link_number = excluded.original_link_number,
+        overridden_link_number = excluded.overridden_link_number,
+        status = excluded.status,
+        substitute_staff_id = excluded.substitute_staff_id,
+        substitute_name = excluded.substitute_name,
+        reason = excluded.reason,
+        target_category_id = excluded.target_category_id,
+        extra_train_no = excluded.extra_train_no,
+        is_extra = excluded.is_extra,
+        shifted_from_link = excluded.shifted_from_link,
+        shifted_from_train = excluded.shifted_from_train,
+        shifted_place = excluded.shifted_place,
+        advance_train_no = excluded.advance_train_no,
+        is_advance_duty = excluded.is_advance_duty,
+        leave_type = excluded.leave_type`,
+      [
+        prevOverride.staff_id, date, prevOverride.original_link_number, prevOverride.overridden_link_number,
+        prevOverride.status, prevOverride.substitute_staff_id, prevOverride.substitute_name,
+        prevOverride.reason, prevOverride.target_category_id, prevOverride.extra_train_no,
+        prevOverride.is_extra, prevOverride.shifted_from_link, prevOverride.shifted_from_train,
+        prevOverride.shifted_place, prevOverride.advance_train_no, prevOverride.is_advance_duty,
+        prevOverride.leave_type
+      ]
+    );
+  } else {
+    await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staffId, date]);
+  }
+
+  if (prevMuster) {
+    await run(
+      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         code = excluded.code,
+         remarks = excluded.remarks,
+         updated_by = excluded.updated_by,
+         updated_at = CURRENT_TIMESTAMP`,
+      [prevMuster.staff_id, date, prevMuster.code, prevMuster.remarks, prevMuster.updated_by || 'Admin']
+    );
+  } else {
+    await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staffId, date]);
+  }
+
+  // Clear substitute reference if this staff was substituting
+  await run(
+    'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+    [staffId, date]
+  );
+
+  // Sync across modules (TA, NDA, Diary)
+  await syncDutyChangeAcrossAllModules({ get, all, run }, staffId, date, {
+    targetLink: prevOverride?.overridden_link_number || null,
+    targetTrain: prevOverride?.extra_train_no || null,
+    isLeave: ['LEAVE', 'SICK', 'CR', 'ABSENT'].includes(prevOverride?.status)
+  });
+
+  // If LR staff, sync LR sheet record
+  const s = await get('SELECT category_id, rest_day FROM staff WHERE id = ?', [staffId]);
+  if (s && s.category_id === 4) {
+    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const dObj = new Date(date + 'T12:00:00');
+    const dayOfWeek = dayNames[dObj.getDay()];
+    const resolvedDuty = await resolveDutyCodeForLRStaff(staffId, date, dayOfWeek, s.rest_day);
+    if (resolvedDuty && resolvedDuty.code) {
+      await syncLRSheetRecord(staffId, date, resolvedDuty.code, prevOverride?.reason || 'Restored duty');
+    } else {
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, date]);
+    }
+  }
+}
+
 // POST /api/audit-logs/:id/undo - Undo an audited operation and revert its effects
 app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
   const { id } = req.params;
@@ -3521,182 +3668,98 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
     if (undoData) {
       if (undoData.action === 'EXCHANGE_STAFF') {
         const { date, staff_a, staff_b } = undoData;
-        // Restore Staff A
-        if (staff_a.previous_override) {
-          const po = staff_a.previous_override;
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(staff_id, date) DO UPDATE SET
-               overridden_link_number = excluded.overridden_link_number,
-               status = excluded.status,
-               substitute_staff_id = excluded.substitute_staff_id,
-               substitute_name = excluded.substitute_name,
-               reason = excluded.reason,
-               target_category_id = excluded.target_category_id`,
-            [po.staff_id, date, po.original_link_number, po.overridden_link_number, po.status, po.substitute_staff_id, po.substitute_name, po.reason, po.target_category_id]
-          );
-        } else {
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_a.id, date]);
-        }
-        if (staff_a.previous_muster) {
-          const pm = staff_a.previous_muster;
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code, remarks = excluded.remarks, updated_by = excluded.updated_by`,
-            [pm.staff_id, date, pm.code, pm.remarks, pm.updated_by]
-          );
-        } else {
-          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_a.id, date]);
-        }
-
-        // Restore Staff B
-        if (staff_b.previous_override) {
-          const po = staff_b.previous_override;
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(staff_id, date) DO UPDATE SET
-               overridden_link_number = excluded.overridden_link_number,
-               status = excluded.status,
-               substitute_staff_id = excluded.substitute_staff_id,
-               substitute_name = excluded.substitute_name,
-               reason = excluded.reason,
-               target_category_id = excluded.target_category_id`,
-            [po.staff_id, date, po.original_link_number, po.overridden_link_number, po.status, po.substitute_staff_id, po.substitute_name, po.reason, po.target_category_id]
-          );
-        } else {
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_b.id, date]);
-        }
-        if (staff_b.previous_muster) {
-          const pm = staff_b.previous_muster;
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code, remarks = excluded.remarks, updated_by = excluded.updated_by`,
-            [pm.staff_id, date, pm.code, pm.remarks, pm.updated_by]
-          );
-        } else {
-          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_b.id, date]);
-        }
-
+        await restoreOverrideAndMuster(staff_a.id, date, staff_a.previous_override, staff_a.previous_muster);
+        await restoreOverrideAndMuster(staff_b.id, date, staff_b.previous_override, staff_b.previous_muster);
         undoneSuccess = true;
         detailsMsg = `Reverted duty exchange between ${staff_a.name} and ${staff_b.name} on ${date}`;
-      } else if (undoData.action === 'CHANGED_LINK') {
+      } else if (['CHANGED_LINK', 'MANUAL_OVERRIDE', 'REMOVE_FROM_LINK', 'UPGRADE_TO_COR'].includes(undoData.action)) {
+        const { staff_id, staff_name, date, previous_override, previous_muster } = undoData;
+        await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
+        undoneSuccess = true;
+        detailsMsg = `Reverted ${undoData.action} for ${staff_name || `staff ID ${staff_id}`} on ${date}`;
+      } else if (undoData.action === 'DRAG_ASSIGN_DUTY') {
+        const { staff_id, staff_name, date, previous_override, previous_muster } = undoData;
+        await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
+        undoneSuccess = true;
+        detailsMsg = `Reverted drag duty assignment for ${staff_name || `staff ID ${staff_id}`} on ${date}`;
+      } else if (undoData.action === 'ASSIGN_NON_DAILY_TRAIN') {
+        const { staff_id, staff_name, date, train_number, previous_override, previous_muster } = undoData;
+        await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
+        await run('UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?', [staff_id]);
+        undoneSuccess = true;
+        detailsMsg = `Reverted Non-Daily Train ${train_number || ''} assignment for ${staff_name || `staff ID ${staff_id}`} on ${date}`;
+      } else if (undoData.action === 'UNASSIGN_NON_DAILY_TRAIN') {
         const { staff_id, date, previous_override, previous_muster } = undoData;
-        if (previous_override) {
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(staff_id, date) DO UPDATE SET
-               overridden_link_number = excluded.overridden_link_number,
-               status = excluded.status,
-               substitute_staff_id = excluded.substitute_staff_id,
-               substitute_name = excluded.substitute_name,
-               reason = excluded.reason,
-               target_category_id = excluded.target_category_id`,
-            [previous_override.staff_id, date, previous_override.original_link_number, previous_override.overridden_link_number, previous_override.status, previous_override.substitute_staff_id, previous_override.substitute_name, previous_override.reason, previous_override.target_category_id]
-          );
-        } else {
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
-        }
-        if (previous_muster) {
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code, remarks = excluded.remarks, updated_by = excluded.updated_by`,
-            [previous_muster.staff_id, date, previous_muster.code, previous_muster.remarks, previous_muster.updated_by]
-          );
-        } else {
-          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+        if (staff_id && date) {
+          await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
         }
         undoneSuccess = true;
-        detailsMsg = `Reverted link change for staff ID ${staff_id} on ${date}`;
-      } else if (['SICK', 'LEAVE', 'CR'].includes(undoData.action)) {
-        const { staff_id, dates, replacement_staff_id, snapshots } = undoData;
+        detailsMsg = `Reverted unassign of Non-Daily Train for staff ID ${staff_id || ''} on ${date || ''}`;
+      } else if (['SICK', 'LEAVE', 'CR', 'ABSENT', 'STAFF_SICK', 'STAFF_LEAVE', 'STAFF_CR', 'STAFF_ABSENT'].includes(undoData.action)) {
+        const { staff_id, staff_name, dates, replacement_staff_id, snapshots } = undoData;
         for (const snap of (snapshots || [])) {
           const dStr = snap.date;
-          // Restore or delete substitute
           if (replacement_staff_id) {
-            if (snap.subOverride) {
-              const so = snap.subOverride;
-              await run(
-                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status`,
-                [so.staff_id, dStr, so.original_link_number, so.overridden_link_number, so.status, so.substitute_staff_id, so.substitute_name, so.reason, so.target_category_id]
-              );
-            } else {
-              await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [replacement_staff_id, dStr]);
-            }
-            if (snap.subMuster) {
-              await run(
-                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                 ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code`,
-                [snap.subMuster.staff_id, dStr, snap.subMuster.code, snap.subMuster.remarks, snap.subMuster.updated_by]
-              );
-            } else {
-              await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-            }
+            await restoreOverrideAndMuster(replacement_staff_id, dStr, snap.subOverride, snap.subMuster);
           }
-          // Restore original staff
-          if (snap.override) {
-            const o = snap.override;
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status`,
-              [o.staff_id, dStr, o.original_link_number, o.overridden_link_number, o.status, o.substitute_staff_id, o.substitute_name, o.reason, o.target_category_id]
-            );
-          } else {
-            await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          }
-          if (snap.muster) {
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code`,
-              [snap.muster.staff_id, dStr, snap.muster.code, snap.muster.remarks, snap.muster.updated_by]
-            );
-          } else {
-            await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          }
+          await restoreOverrideAndMuster(staff_id, dStr, snap.override, snap.muster);
         }
         undoneSuccess = true;
-        detailsMsg = `Reverted ${undoData.action} for staff ID ${staff_id} on ${dates ? dates.join(', ') : 'date'}`;
-      } else if (undoData.action === 'RESET' || undoData.action === 'CANCEL_LEAVE') {
-        const { staff_id, snapshots } = undoData;
+        detailsMsg = `Reverted ${undoData.action} for ${staff_name || `staff ID ${staff_id}`} on ${dates ? dates.join(', ') : 'selected dates'}`;
+      } else if (['RESET', 'CANCEL_LEAVE', 'RESET_DUTY'].includes(undoData.action)) {
+        const { staff_id, staff_name, dates, snapshots } = undoData;
         for (const snap of (snapshots || [])) {
           const dStr = snap.date;
-          if (snap.override) {
-            const o = snap.override;
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status, substitute_staff_id = excluded.substitute_staff_id, substitute_name = excluded.substitute_name, reason = excluded.reason, target_category_id = excluded.target_category_id`,
-              [o.staff_id, dStr, o.original_link_number, o.overridden_link_number, o.status, o.substitute_staff_id, o.substitute_name, o.reason, o.target_category_id]
-            );
-          }
-          if (snap.muster) {
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(staff_id, date) DO UPDATE SET code = excluded.code, remarks = excluded.remarks`,
-              [snap.muster.staff_id, dStr, snap.muster.code, snap.muster.remarks, snap.muster.updated_by]
-            );
-          }
-          if (snap.subOverride) {
-            const so = snap.subOverride;
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status, substitute_staff_id = excluded.substitute_staff_id, substitute_name = excluded.substitute_name, reason = excluded.reason, target_category_id = excluded.target_category_id`,
-              [so.staff_id, dStr, so.original_link_number, so.overridden_link_number, so.status, so.substitute_staff_id, so.substitute_name, so.reason, so.target_category_id]
-            );
+          await restoreOverrideAndMuster(staff_id, dStr, snap.override, snap.muster);
+          if (snap.subOverride || snap.subMuster) {
+            const subId = snap.subOverride?.staff_id || snap.subMuster?.staff_id;
+            if (subId) {
+              await restoreOverrideAndMuster(subId, dStr, snap.subOverride, snap.subMuster);
+            }
           }
         }
         undoneSuccess = true;
-        detailsMsg = `Restored previous duty/leave status for staff ID ${staff_id}`;
-      } else if (undoData.action === 'MUSTER_CELL_UPDATE') {
+        detailsMsg = `Reverted reset/cancellation and restored previous duty for ${staff_name || `staff ID ${staff_id}`}`;
+      } else if (['SHIFTED', 'SHIFTED_PLACE'].includes(undoData.action)) {
+        const { staff_id, staff_name, dates, replacement_staff_id, snapshots } = undoData;
+        for (const snap of (snapshots || [])) {
+          const dStr = snap.date;
+          await restoreOverrideAndMuster(staff_id, dStr, snap.override, snap.muster);
+          if (replacement_staff_id) {
+            await restoreOverrideAndMuster(replacement_staff_id, dStr, snap.subOverride, snap.subMuster);
+          }
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted shift for ${staff_name || `staff ID ${staff_id}`} on ${dates ? dates.join(', ') : 'date'}`;
+      } else if (['UTILISED_ADVANCE', 'ADVANCE_DUTY', 'ADVANCE_BOOKED'].includes(undoData.action)) {
+        const { staff_id, staff_name, date, replacement_staff_id, previous_override, previous_muster } = undoData;
+        await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
+        if (replacement_staff_id) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [replacement_staff_id, date]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, date]);
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted advance utilisation for ${staff_name || `staff ID ${staff_id}`} on ${date}`;
+      } else if (undoData.action === 'APPROVE_LEAVE') {
+        const { staff_id, staff_name, from_date, to_date, request_id, snapshots } = undoData;
+        for (const snap of (snapshots || [])) {
+          await restoreOverrideAndMuster(staff_id, snap.date, snap.override, snap.muster);
+        }
+        if (request_id) {
+          await run("UPDATE leave_requests SET status = 'PENDING', approved_by = NULL, approved_at = NULL WHERE id = ?", [request_id]);
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted approved leave for ${staff_name || `staff ID ${staff_id}`} from ${from_date} to ${to_date}`;
+      } else if (undoData.action === 'APPROVE_SWAP') {
+        const { date, staff_a, staff_b, request_id } = undoData;
+        await restoreOverrideAndMuster(staff_a.id, date, staff_a.previous_override, staff_a.previous_muster);
+        await restoreOverrideAndMuster(staff_b.id, date, staff_b.previous_override, staff_b.previous_muster);
+        if (request_id) {
+          await run("UPDATE leave_requests SET status = 'PENDING', approved_by = NULL, approved_at = NULL WHERE id = ?", [request_id]);
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted approved swap between ${staff_a.name} and ${staff_b.name} on ${date}`;
+      } else if (undoData.action === 'MUSTER_CELL_UPDATE' || undoData.action === 'MUSTER_CELL_RESET') {
         const { staff_id, date, previous_code, previous_remarks } = undoData;
         if (previous_code) {
           await run(
@@ -3715,18 +3778,52 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
     // Fallback: Parse description if undoData is not set (e.g. legacy logs)
     if (!undoneSuccess) {
       const desc = log.description || '';
+      const nonDailyMatch = desc.match(/Assigned (.+?) to Non-Daily Train (\w+) on (\d{4}-\d{2}-\d{2})/i);
+      const dragMatch = desc.match(/Assigned (.+?) to (?:Train|Link) (.+?) on (\d{4}-\d{2}-\d{2})/i);
       const linkMatch = desc.match(/Changed link for (.+?) on (\d{4}-\d{2}-\d{2})/i);
-      const leaveMatch = desc.match(/Marked (.+?) as (LEAVE|SICK|CR).*?on (\d{4}-\d{2}-\d{2})/i);
+      const leaveMatch = desc.match(/Marked (.+?) as (LEAVE|SICK|CR|ABSENT).*?on (\d{4}-\d{2}-\d{2})/i);
       const exchMatch = desc.match(/Exchanged duties between (.+?) .*? and (.+?) .*? on (\d{4}-\d{2}-\d{2})/i);
+      const shiftMatch = desc.match(/Shifted (.+?) to (.+?) on (\d{4}-\d{2}-\d{2})/i);
+      const resetMatch = desc.match(/Reset duty status and muster records for (.+?) between (\d{4}-\d{2}-\d{2}) and (\d{4}-\d{2}-\d{2})/i);
+      const cancelLeaveMatch = desc.match(/Cancelled leave for (.+?) between (\d{4}-\d{2}-\d{2}) and (\d{4}-\d{2}-\d{2})/i);
+      const advanceMatch = desc.match(/Marked (.+?) as Utilised in Advance.*?on (\d{4}-\d{2}-\d{2})/i);
+      const upgradeMatch = desc.match(/Upgraded (.+?) from Sleeper Link.*?on (\d{4}-\d{2}-\d{2})/i);
+      const appLeaveMatch = desc.match(/Approved leave for (.+?) from (\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})/i);
+      const appSwapMatch = desc.match(/Approved swap between (.+?) and (.+?) on (\d{4}-\d{2}-\d{2})/i);
       const musterMatch = desc.match(/Assigned muster code '(.+?)' for staff ID (\d+) on (\d{4}-\d{2}-\d{2})/i);
 
-      if (linkMatch) {
+      if (nonDailyMatch) {
+        const staffName = nonDailyMatch[1].trim();
+        const trainNo = nonDailyMatch[2].trim();
+        const dStr = nonDailyMatch[3];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?', [s.id]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+          undoneSuccess = true;
+          detailsMsg = `Reverted Non-Daily Train ${trainNo} assignment for ${staffName} on ${dStr}`;
+        }
+      } else if (dragMatch) {
+        const staffName = dragMatch[1].trim();
+        const dStr = dragMatch[3];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+          undoneSuccess = true;
+          detailsMsg = `Reverted drag assignment for ${staffName} on ${dStr}`;
+        }
+      } else if (linkMatch) {
         const staffName = linkMatch[1].trim();
         const dStr = linkMatch[2];
         const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
         if (s) {
           await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
           await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
           undoneSuccess = true;
           detailsMsg = `Reverted link change for ${staffName} on ${dStr}`;
         }
@@ -3742,6 +3839,7 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
           }
           await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
           await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
           undoneSuccess = true;
           detailsMsg = `Reverted leave for ${staffName} on ${dStr}`;
         }
@@ -3754,13 +3852,85 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
         if (sA) {
           await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [sA.id, dStr]);
           await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [sA.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, sA.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+        }
+        if (sB) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [sB.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [sB.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, sB.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted duty exchange between ${staffAName} and ${staffBName} on ${dStr}`;
+      } else if (shiftMatch) {
+        const staffName = shiftMatch[1].trim();
+        const dStr = shiftMatch[3];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+          undoneSuccess = true;
+          detailsMsg = `Reverted shift for ${staffName} on ${dStr}`;
+        }
+      } else if (resetMatch || cancelLeaveMatch) {
+        const m = resetMatch || cancelLeaveMatch;
+        const staffName = m[1].trim();
+        const fromD = m[2];
+        const toD = m[3];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          undoneSuccess = true;
+          detailsMsg = `Reverted reset for ${staffName} between ${fromD} and ${toD}`;
+        }
+      } else if (advanceMatch) {
+        const staffName = advanceMatch[1].trim();
+        const dStr = advanceMatch[2];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+          undoneSuccess = true;
+          detailsMsg = `Reverted advance duty for ${staffName} on ${dStr}`;
+        }
+      } else if (upgradeMatch) {
+        const staffName = upgradeMatch[1].trim();
+        const dStr = upgradeMatch[2];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [s.id, dStr]);
+          await syncDutyChangeAcrossAllModules({ get, all, run }, s.id, dStr, { targetTrain: null, targetLink: null, isLeave: false });
+          undoneSuccess = true;
+          detailsMsg = `Reverted COR upgrade for ${staffName} on ${dStr}`;
+        }
+      } else if (appLeaveMatch) {
+        const staffName = appLeaveMatch[1].trim();
+        const fromD = appLeaveMatch[2];
+        const toD = appLeaveMatch[3];
+        const s = await get('SELECT id FROM staff WHERE name = ?', [staffName]);
+        if (s) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date >= ? AND date <= ?', [s.id, fromD, toD]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date >= ? AND date <= ?', [s.id, fromD, toD]);
+          undoneSuccess = true;
+          detailsMsg = `Reverted approved leave for ${staffName} from ${fromD} to ${toD}`;
+        }
+      } else if (appSwapMatch) {
+        const staffAName = appSwapMatch[1].trim();
+        const staffBName = appSwapMatch[2].trim();
+        const dStr = appSwapMatch[3];
+        const sA = await get('SELECT id FROM staff WHERE name = ?', [staffAName]);
+        const sB = await get('SELECT id FROM staff WHERE name = ?', [staffBName]);
+        if (sA) {
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [sA.id, dStr]);
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [sA.id, dStr]);
         }
         if (sB) {
           await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [sB.id, dStr]);
           await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [sB.id, dStr]);
         }
         undoneSuccess = true;
-        detailsMsg = `Reverted duty exchange between ${staffAName} and ${staffBName} on ${dStr}`;
+        detailsMsg = `Reverted approved swap between ${staffAName} and ${staffBName} on ${dStr}`;
       } else if (musterMatch) {
         const sId = parseInt(musterMatch[2], 10);
         const dStr = musterMatch[3];
@@ -3842,11 +4012,20 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
       const fromD = request.from_date || request.date;
       const toD = request.to_date || fromD;
 
+      const undoSnapshots = [];
       // Iterate through each date from fromD to toD (inclusive)
       const start = new Date(fromD + 'T00:00:00Z');
       const end = new Date(toD + 'T00:00:00Z');
       for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
         const curDateStr = d.toISOString().split('T')[0];
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, curDateStr]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffA.id, curDateStr]);
+        undoSnapshots.push({
+          date: curDateStr,
+          override: existingOverride || null,
+          muster: existingMuster || null
+        });
+
         const dayOffset = getDayOffset(cat.anchor_date, curDateStr);
         const origLink = getBaseLinkNumber(staffA.row_position, dayOffset, cat.cycle_length);
 
@@ -3889,7 +4068,17 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
         }
       }
 
-      await logAudit('Admin', 'APPROVE_LEAVE', `Approved leave for ${staffA.name} from ${fromD} to ${toD}`);
+      const undoData = {
+        action: 'APPROVE_LEAVE',
+        request_id: id,
+        staff_id: staffA.id,
+        staff_name: staffA.name,
+        from_date: fromD,
+        to_date: toD,
+        snapshots: undoSnapshots
+      };
+
+      await logAudit('Admin', 'APPROVE_LEAVE', `Approved leave for ${staffA.name} from ${fromD} to ${toD}`, undoData);
     } else if (request.type === 'SWAP') {
       const swapDate = request.from_date || request.date;
       const dayOffset = getDayOffset(cat.anchor_date, swapDate);
@@ -3903,11 +4092,13 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
       const origLinkB = getBaseLinkNumber(staffB.row_position, dayOffset, cat.cycle_length);
 
       // Check if there are already overrides to resolve
-      const activeOverrideA = await get('SELECT overridden_link_number FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, swapDate]);
-      const activeOverrideB = await get('SELECT overridden_link_number FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, swapDate]);
+      const activeOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, swapDate]);
+      const activeOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, swapDate]);
+      const existingMusterA = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffA.id, swapDate]);
+      const existingMusterB = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffB.id, swapDate]);
 
-      const dutyA = activeOverrideA !== undefined ? activeOverrideA.overridden_link_number : origLinkA;
-      const dutyB = activeOverrideB !== undefined ? activeOverrideB.overridden_link_number : origLinkB;
+      const dutyA = (activeOverrideA && activeOverrideA.overridden_link_number !== undefined) ? activeOverrideA.overridden_link_number : origLinkA;
+      const dutyB = (activeOverrideB && activeOverrideB.overridden_link_number !== undefined) ? activeOverrideB.overridden_link_number : origLinkB;
 
       // Swap their current active duties on this date
       await run(
@@ -3924,7 +4115,15 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
         [staffB.id, swapDate, origLinkB, dutyA, `Swap with ${staffA.name}`]
       );
 
-      await logAudit('Admin', 'APPROVE_SWAP', `Approved swap between ${staffA.name} and ${staffB.name} on ${swapDate}`);
+      const undoData = {
+        action: 'APPROVE_SWAP',
+        request_id: id,
+        date: swapDate,
+        staff_a: { id: staffA.id, name: staffA.name, previous_override: activeOverrideA || null, previous_muster: existingMusterA || null },
+        staff_b: { id: staffB.id, name: staffB.name, previous_override: activeOverrideB || null, previous_muster: existingMusterB || null }
+      };
+
+      await logAudit('Admin', 'APPROVE_SWAP', `Approved swap between ${staffA.name} and ${staffB.name} on ${swapDate}`, undoData);
     }
 
     // Update request status

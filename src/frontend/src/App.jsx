@@ -1299,16 +1299,48 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/audit-logs`);
       const logs = await res.json();
-      const eligibleLog = logs.find(l => 
-        l.is_undone === 0 && 
-        l.action_type !== 'UNDO' && 
-        (l.description.includes(selectedDate) || ['CHANGED_LINK', 'EXCHANGE_STAFF', 'STAFF_LEAVE', 'STAFF_SICK', 'STAFF_CR', 'CANCEL_LEAVE'].includes(l.action_type))
-      );
+
+      const isDateMatch = (log, targetDate) => {
+        if (!log || log.is_undone === 1 || log.action_type === 'UNDO') return false;
+
+        // Skip user account and structural master actions
+        const nonDutyActions = [
+          'USER_LOGIN', 'USER_REGISTER', 'APPROVE_USER', 'REJECT_USER', 
+          'CHANGE_USER_ROLE', 'DELETE_USER', 'CREATE_CATEGORY', 'UPDATE_CATEGORY', 
+          'DELETE_CATEGORY', 'UPDATE_SENIORITY', 'REORDER_STAFF', 'REORDER_LINKS'
+        ];
+        if (nonDutyActions.includes(log.action_type)) return false;
+
+        let uData = null;
+        if (log.undo_data) {
+          try {
+            uData = typeof log.undo_data === 'string' ? JSON.parse(log.undo_data) : log.undo_data;
+          } catch (e) {}
+        }
+
+        if (uData) {
+          if (uData.date === targetDate) return true;
+          if (Array.isArray(uData.dates) && uData.dates.includes(targetDate)) return true;
+          if (Array.isArray(uData.snapshots) && uData.snapshots.some(s => s.date === targetDate)) return true;
+          if (uData.from_date && uData.to_date && targetDate >= uData.from_date && targetDate <= uData.to_date) return true;
+        }
+
+        // Check description for ISO (YYYY-MM-DD) or Display (DD/MM/YYYY)
+        const parts = targetDate.split('-');
+        const displayDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : targetDate;
+        if (log.description && (log.description.includes(targetDate) || log.description.includes(displayDate))) {
+          return true;
+        }
+
+        return false;
+      };
+
+      const eligibleLog = logs.find(l => isDateMatch(l, selectedDate));
       if (!eligibleLog) {
-        alert('No recent duty changes found to undo on this date.');
+        alert(`No recent duty changes found to undo on ${selectedDate}.`);
         return;
       }
-      if (!window.confirm(`Undo last action:\n\n"${eligibleLog.action_type}: ${eligibleLog.description}"?`)) return;
+      if (!window.confirm(`Undo last action on ${selectedDate}:\n\n"${eligibleLog.action_type}: ${eligibleLog.description}"?`)) return;
       const undoRes = await fetch(`${API_BASE}/audit-logs/${eligibleLog.id}/undo`, {
         method: 'POST',
         headers: {
@@ -1316,11 +1348,14 @@ export default function App() {
           'Authorization': `Bearer ${authToken}`
         }
       });
-      const undoData = await undoRes.json();
-      if (!undoRes.ok) throw new Error(undoData.error || 'Failed to undo last action');
-      alert(undoData.message || 'Action undone successfully');
+      const undoResult = await undoRes.json();
+      if (!undoRes.ok) throw new Error(undoResult.error || 'Failed to undo last action');
+      alert(undoResult.message || 'Action undone successfully');
       fetchDailyDuties();
-      fetchAuditLogs();
+      if (activeTab === 'audit') fetchAuditLogs();
+      try {
+        window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated'));
+      } catch (e) {}
     } catch (err) {
       alert(err.message);
     }
@@ -1342,6 +1377,9 @@ export default function App() {
       alert(data.message || 'Action undone successfully!');
       fetchAuditLogs();
       if (activeTab === 'daily-summary' || activeTab === 'daily') fetchDailyDuties();
+      try {
+        window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated'));
+      } catch (e) {}
     } catch (err) {
       alert(err.message);
     }
@@ -7882,7 +7920,7 @@ export default function App() {
                     const isUndone = log.is_undone === 1;
                     const isReversionLog = log.action_type === 'UNDO';
                     const isEligibleForUndo = !isReversionLog && (
-                      ['CHANGED_LINK', 'EXCHANGE_STAFF', 'STAFF_LEAVE', 'STAFF_SICK', 'STAFF_CR', 'LEAVE', 'SICK', 'CR', 'CANCEL_LEAVE', 'RESET_DUTY', 'MUSTER_CELL_UPDATE', 'APPROVE_LEAVE', 'APPROVE_SWAP'].includes(log.action_type) ||
+                      ['CHANGED_LINK', 'EXCHANGE_STAFF', 'STAFF_LEAVE', 'STAFF_SICK', 'STAFF_CR', 'STAFF_ABSENT', 'LEAVE', 'SICK', 'CR', 'ABSENT', 'CANCEL_LEAVE', 'RESET_DUTY', 'MUSTER_CELL_UPDATE', 'MUSTER_CELL_RESET', 'APPROVE_LEAVE', 'APPROVE_SWAP', 'ASSIGN_NON_DAILY_TRAIN', 'UNASSIGN_NON_DAILY_TRAIN', 'DRAG_ASSIGN_DUTY', 'SHIFTED', 'UPGRADE_TO_COR', 'UTILISED_ADVANCE', 'REMOVE_FROM_LINK', 'MANUAL_OVERRIDE'].includes(log.action_type) ||
                       (log.undo_data !== null && log.undo_data !== undefined)
                     );
 
