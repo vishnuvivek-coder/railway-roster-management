@@ -404,7 +404,9 @@ async function initDb() {
     `ALTER TABLE staff ADD COLUMN pay_amount INTEGER DEFAULT 68000`,
     `ALTER TABLE staff ADD COLUMN doa TEXT DEFAULT '05/08/2000'`,
     `ALTER TABLE staff ADD COLUMN hq_station TEXT DEFAULT 'GNT'`,
-    `ALTER TABLE staff ADD COLUMN t_code_no TEXT DEFAULT '7133'`
+    `ALTER TABLE staff ADD COLUMN t_code_no TEXT DEFAULT '7133'`,
+    `ALTER TABLE staff ADD COLUMN hrms_id TEXT DEFAULT ''`,
+    `ALTER TABLE staff ADD COLUMN seniority_no INTEGER`
   ];
 
   for (const alterSql of staffAddCols) {
@@ -1187,6 +1189,62 @@ async function initDb() {
     } catch (e) {
       console.error('Failed to backfill desg_rank in seniority_list:', e.message);
     }
+  }
+
+  // Sync staff table with seniority_list table (seniority_no, pf_no, designation)
+  try {
+    const norm = (s) => (s || '').toUpperCase().replace(/[\.\s_\-]/g, '');
+    const manualMap = {
+      'BP RAJA KUMAR': 67,
+      'LP KUMAR': 21,
+      'RNR NAIK': 110,
+      'KV SURESH': 76,
+      'B PAVAN KUMAR': 88,
+      'Y SRIKANTH': 71,
+      'K GOPI': 114,
+      'O ANIL': 99,
+      'B KEZIA KUMARI': 73,
+      'AG KRISHNA': 108,
+      'MVS NAGI REDDY': 118,
+      'KB RAO': 121,
+      'NC MEENA': 124,
+      'BR MEENA': 126,
+      'MV ANJANEYULU': 129,
+      'ELN RAO': 137,
+      'B P SINGH': 133
+    };
+
+    const allStaff = await all("SELECT id, name, designation, pf_no, seniority_no FROM staff");
+    const allSeniority = await all("SELECT * FROM seniority_list");
+
+    for (const staff of allStaff) {
+      if (!staff.name || staff.name.toUpperCase().includes('VACANT')) continue;
+      
+      let match = null;
+      if (manualMap[staff.name.trim()]) {
+        const slNo = manualMap[staff.name.trim()];
+        match = allSeniority.find(s => s.sl_no === slNo);
+      }
+
+      if (!match) {
+        const sNorm = norm(staff.name);
+        match = allSeniority.find(sen => norm(sen.name) === sNorm);
+      }
+
+      if (!match) {
+        const sNorm = norm(staff.name);
+        match = allSeniority.find(sen => norm(sen.name).includes(sNorm) || sNorm.includes(norm(sen.name)));
+      }
+
+      if (match) {
+        await run(
+          `UPDATE staff SET seniority_no = ?, pf_no = ?, designation = COALESCE(NULLIF(designation, ''), ?) WHERE id = ?`,
+          [match.sl_no, match.pf_number, match.designation, staff.id]
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Failed to sync staff seniority/pf details:', e.message);
   }
 }
 

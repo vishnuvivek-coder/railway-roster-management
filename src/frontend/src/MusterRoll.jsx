@@ -174,9 +174,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     const q = searchQuery.toLowerCase().trim();
     return cycleData.staff.filter(s => 
       (s.name && s.name.toLowerCase().includes(q)) ||
+      (s.pf_no && s.pf_no.toLowerCase().includes(q)) ||
+      (s.hrms_id && s.hrms_id.toLowerCase().includes(q)) ||
       (s.designation && s.designation.toLowerCase().includes(q)) ||
-      (s.categoryName && s.categoryName.toLowerCase().includes(q)) ||
-      (String(s.rowPosition).includes(q))
+      (s.categoryName && s.categoryName.toLowerCase().includes(q))
     );
   }, [cycleData, searchQuery]);
 
@@ -186,7 +187,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     const headers = [
       'S.No',
       'Name of Employee',
+      'PF No',
       'Designation',
+      'HRMS ID',
       'Category',
       ...cycleData.cycle.dates.map(d => `${d.dayNumber} (${d.dayOfWeek})`),
       'P (Present / Outstation Duty)',
@@ -207,7 +210,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     const rows = filteredStaff.map((s, idx) => [
       idx + 1,
       '"' + s.name + '"',
+      '"' + (s.pf_no || '') + '"',
       '"' + (s.designation || '-') + '"',
+      '"' + (s.hrms_id || '-') + '"',
       '"' + (s.categoryName || '-') + '"',
       ...cycleData.cycle.dates.map(d => (s.days[d.dateStr] && s.days[d.dateStr].code) || 'P'),
       s.counts.P,
@@ -573,8 +578,11 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   <th className="muster-col-name">
                     Name of Employee
                   </th>
-                  <th className="muster-col-cat">
-                    Category
+                  <th className="muster-col-desg">
+                    Designation
+                  </th>
+                  <th className="muster-col-hrms">
+                    HRMS ID
                   </th>
 
                   {/* Day Date Headers */}
@@ -618,27 +626,41 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                       {sIdx + 1}
                     </td>
 
-                    {/* Fixed Left Name */}
+                    {/* Fixed Left Name with PF NO below */}
                     <td className="muster-col-name">
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <strong>
+                        <strong style={{ fontSize: '0.84rem' }}>
                           {staff.name}
                         </strong>
-                        <span>
-                          {staff.designation || '-'} (Row #{staff.rowPosition})
+                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
+                          PF NO: {staff.pf_no || '-'}
                         </span>
                       </div>
                     </td>
 
-                    {/* Fixed Left Category */}
-                    <td className="muster-col-cat">
+                    {/* Fixed Left Designation */}
+                    <td className="muster-col-desg">
                       <span className="badge" style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        color: 'var(--color-text-secondary)',
-                        fontSize: '0.68rem',
-                        padding: '2px 6px'
+                        background: 'rgba(59, 130, 246, 0.12)',
+                        color: '#93c5fd',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px'
                       }}>
-                        {staff.categoryCode || staff.categoryName}
+                        {staff.designation || '-'}
+                      </span>
+                    </td>
+
+                    {/* Fixed Left HRMS ID */}
+                    <td className="muster-col-hrms">
+                      <span style={{
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: staff.hrms_id ? '#f1f5f9' : 'var(--color-text-muted)',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {staff.hrms_id || '-'}
                       </span>
                     </td>
 
@@ -743,7 +765,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   <td colSpan={2} className="muster-footer-label">
                     DIVISION TOTALS ({filteredStaff.length} Employees)
                   </td>
-                  <td className="muster-col-cat"></td>
+                  <td className="muster-col-desg"></td>
+                  <td className="muster-col-hrms"></td>
 
                   {cycleData.cycle.dates.map(d => (
                     <td key={d.dateStr} style={{ textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', padding: '6px 2px' }}>

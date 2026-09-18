@@ -1327,7 +1327,7 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
 
 app.put('/api/staff/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, designation, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day } = req.body;
+  const { name, designation, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no } = req.body;
   try {
     const currentStaff = await get('SELECT * FROM staff WHERE id = ?', [id]);
     if (!currentStaff) {
@@ -1361,9 +1361,11 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
            pay_amount = COALESCE(?, pay_amount),
            doa = COALESCE(?, doa),
            hq_station = COALESCE(?, hq_station),
-           rest_day = COALESCE(?, rest_day)
+           rest_day = COALESCE(?, rest_day),
+           hrms_id = COALESCE(?, hrms_id),
+           seniority_no = COALESCE(?, seniority_no)
        WHERE id = ?`,
-      [name, designation || null, row_position || null, active !== undefined ? active : null, pf_no || null, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, id]
+      [name, designation || null, row_position || null, active !== undefined ? active : null, pf_no || null, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, hrms_id || null, seniority_no || null, id]
     );
 
     const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
@@ -7627,13 +7629,23 @@ app.get('/api/muster', async (req, res) => {
     const { cycle_start, category_id } = req.query;
     const cycle = getMusterCycleDates(cycle_start);
 
-    let staffSql = 'SELECT s.*, c.name as category_name, c.code as category_code, c.cycle_length, c.anchor_date FROM staff s JOIN categories c ON s.category_id = c.id';
+    let staffSql = `
+      SELECT s.*, c.name as category_name, c.code as category_code, c.cycle_length, c.anchor_date 
+      FROM staff s 
+      JOIN categories c ON s.category_id = c.id
+    `;
     let staffParams = [];
     if (category_id && category_id !== 'ALL') {
       staffSql += ' WHERE s.category_id = ?';
       staffParams.push(category_id);
     }
-    staffSql += ' ORDER BY s.category_id, s.row_position';
+    staffSql += `
+      ORDER BY 
+        CASE WHEN UPPER(s.name) LIKE '%VACANT%' THEN 2 ELSE 1 END,
+        CASE WHEN s.seniority_no IS NOT NULL AND s.seniority_no > 0 THEN s.seniority_no ELSE 9999 END,
+        s.category_id, 
+        s.row_position
+    `;
 
     const staffMembers = await all(staffSql, staffParams);
     const links = await all('SELECT * FROM links');
@@ -7718,7 +7730,10 @@ app.get('/api/muster', async (req, res) => {
       staffRows.push({
         id: staff.id,
         name: staff.name,
-        designation: staff.designation,
+        designation: staff.designation || '',
+        pf_no: staff.pf_no || '',
+        hrms_id: staff.hrms_id || '',
+        seniority_no: staff.seniority_no || null,
         categoryId: staff.category_id,
         categoryName: staff.category_name,
         categoryCode: staff.category_code,

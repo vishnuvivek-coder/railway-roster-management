@@ -692,6 +692,43 @@ p, span, label, input, select, button, td, th {
   padding: 8px 12px;
 }
 
+.muster-table th.muster-col-desg, .muster-table td.muster-col-desg {
+  position: sticky;
+  left: 265px;
+  width: 95px;
+  min-width: 90px;
+  text-align: center;
+  border-right: 1px solid var(--border-glass);
+}
+.muster-table th.muster-col-desg {
+  background: #18181b;
+  z-index: 25;
+}
+.muster-table td.muster-col-desg {
+  background: var(--bg-secondary);
+  z-index: 8;
+  padding: 4px 6px;
+}
+
+.muster-table th.muster-col-hrms, .muster-table td.muster-col-hrms {
+  position: sticky;
+  left: 360px;
+  width: 95px;
+  min-width: 90px;
+  text-align: center;
+  border-right: 2px solid var(--border-gold);
+}
+.muster-table th.muster-col-hrms {
+  background: #18181b;
+  z-index: 25;
+}
+.muster-table td.muster-col-hrms {
+  background: var(--bg-secondary);
+  z-index: 8;
+  padding: 4px 6px;
+  border-right: 2px solid var(--border-gold);
+}
+
 .muster-table th.muster-col-cat, .muster-table td.muster-col-cat {
   position: sticky;
   left: 265px;
@@ -1478,12 +1515,14 @@ html, body {
     display: block !important;
   }
 
+  .muster-table th.muster-col-desg, .muster-table td.muster-col-desg,
+  .muster-table th.muster-col-hrms, .muster-table td.muster-col-hrms,
   .muster-table th.muster-col-cat, .muster-table td.muster-col-cat {
     position: static !important;
     left: auto !important;
-    width: 70px !important;
-    min-width: 70px !important;
-    max-width: 70px !important;
+    width: 75px !important;
+    min-width: 75px !important;
+    max-width: 85px !important;
     border-right: 1px solid var(--border-glass) !important;
     z-index: 1 !important;
     box-shadow: none !important;
