@@ -312,12 +312,12 @@ export default function DutyEditModal({
   const [deleteSlotAction, setDeleteSlotAction] = useState('REPLACE');
   const [replacementStaffId, setReplacementStaffId] = useState('');
   const [replacementName, setReplacementName] = useState('');
-  const [replacementCatId, setReplacementCatId] = useState('ALL');
+  const [replacementCatId, setReplacementCatId] = useState('ENTIRE_ROSTER');
   // Assign Duty state (name changes, link fixed)
   const [assignStaffId, setAssignStaffId] = useState(
     isSlotVacant ? '' : (dutyModal.staffId ? String(dutyModal.staffId) : '')
   );
-  const [assignCatId, setAssignCatId] = useState('ALL');
+  const [assignCatId, setAssignCatId] = useState('ENTIRE_ROSTER');
   const [assignReason, setAssignReason] = useState('');
 
   // Remarks & general reason
@@ -743,14 +743,20 @@ export default function DutyEditModal({
   }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
 
   // Eligible replacement staff for Delete mode (Strictly in Alphabetical Order A to Z)
-  // Unavailable staff (Weekly REST, Sick, Leave, CR, Absent) are NEVER shown
-  // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
+  // When replacementCatId === 'ENTIRE_ROSTER': ALL staff members across the entire roster are included!
+  // When specific category or ALL is selected: filters apply according to category and availability
   const eligibleReplacementStaff = useMemo(() => {
     if (!allStaffList) return [];
     return allStaffList
       .filter(s => {
         if (s.id === dutyModal.staffId) return false;
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
+
+        // When Entire Roster is selected, show every employee without filtering
+        if (replacementCatId === 'ENTIRE_ROSTER') {
+          return true;
+        }
+
         if (replacementCatId === 'NON_DAILY') {
           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           const dutyInfo = getStaffDutyInfo(s, selectedDate);
@@ -779,13 +785,20 @@ export default function DutyEditModal({
   }, [replacementStaffId, allStaffList]);
 
   // Eligible staff for Assign Duty mode (Strictly in Alphabetical Order A to Z)
-  // Unavailable staff (Weekly REST, Sick, Leave, CR, Absent) are NEVER shown
-  // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
+  // When assignCatId === 'ENTIRE_ROSTER': ALL staff members across the entire roster are included!
+  // When specific category or ALL is selected: filters apply according to category and availability
   const eligibleAssignStaff = useMemo(() => {
     if (!allStaffList) return [];
     return allStaffList
       .filter(s => {
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
+        if (dutyModal.staffId && s.id === dutyModal.staffId && !isSlotVacant) return false;
+
+        // When Entire Roster is selected, show every employee without filtering
+        if (assignCatId === 'ENTIRE_ROSTER') {
+          return true;
+        }
+
         if (assignCatId === 'NON_DAILY') {
           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           const dutyInfo = getStaffDutyInfo(s, selectedDate);
@@ -797,7 +810,6 @@ export default function DutyEditModal({
         } else if (assignCatId && assignCatId !== 'ALL') {
           if (String(s.category_id) !== String(assignCatId)) return false;
         }
-        if (dutyModal.staffId && s.id === dutyModal.staffId) return false;
         const assignStatus = getStaffAssignmentStatus(s, selectedDate);
         if (assignStatus.isUnavailable) return false;
         if (!showAlreadyAssigned) {
@@ -806,7 +818,7 @@ export default function DutyEditModal({
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, assignCatId, dutyModal.staffId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
+  }, [allStaffList, assignCatId, dutyModal.staffId, isSlotVacant, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
 
   // Selected assign staff object
   const selectedAssignStaffObj = useMemo(() => {
@@ -1126,8 +1138,8 @@ export default function DutyEditModal({
         // If replacement employee is currently working another train/duty, confirm before shifting
         if (deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
           const repStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
-          if (repStatus.isUnavailable) {
-            throw new Error(`${selectedReplacementStaffObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement.`);
+          if (repStatus.isUnavailable && replacementCatId !== 'ENTIRE_ROSTER') {
+            throw new Error(`${selectedReplacementStaffObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
           }
           if (repStatus.isAssigned) {
             setShiftConfirmDialog({
@@ -1161,10 +1173,10 @@ export default function DutyEditModal({
         const linkNum = targetLink ? parseInt(targetLink, 10) : null;
         const targetCatIdNum = parseInt(targetCategoryId, 10);
 
-        // If employee is unavailable, block assignment
+        // If employee is unavailable and not entire roster selection, block assignment
         const assignStatus = getStaffAssignmentStatus(assignedStaffObj, selectedDate);
-        if (assignStatus.isUnavailable) {
-          throw new Error(`${assignedStaffObj.name} is currently on ${assignStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned to duty.`);
+        if (assignStatus.isUnavailable && assignCatId !== 'ENTIRE_ROSTER') {
+          throw new Error(`${assignedStaffObj.name} is currently on ${assignStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned to duty. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
         }
 
         // If employee is already working another train/duty, confirm before shifting
@@ -2526,7 +2538,8 @@ export default function DutyEditModal({
                       {/* Filter by Category */}
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         {[
-                          { id: 'ALL', label: 'All Staff' },
+                          { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
+                          { id: 'ALL', label: '🟢 All Available' },
                           { id: '1', label: 'Conductors' },
                           { id: '2', label: 'Sleeper' },
                           { id: '3', label: 'Ladies' },
@@ -2548,6 +2561,7 @@ export default function DutyEditModal({
                               background: replacementCatId === c.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.02)',
                               color: replacementCatId === c.id ? '#34d399' : 'var(--color-text-secondary)',
                               fontSize: '0.74rem',
+                              fontWeight: replacementCatId === c.id ? 700 : 500,
                               cursor: 'pointer'
                             }}
                           >
@@ -2582,14 +2596,22 @@ export default function DutyEditModal({
                         }}
                         style={{ fontSize: '0.84rem' }}
                       >
-                        <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} available) --</option>
+                        <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} {replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'}) --</option>
                         {eligibleReplacementStaff.map(s => {
                           const dutyInfo = getStaffDutyInfo(s, selectedDate);
                           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                           const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                          let statusPrefix = '';
+                          if (assignStatus.isAssigned) {
+                            statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
+                          } else if (assignStatus.isUnavailable) {
+                            statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
+                          } else {
+                            statusPrefix = '🟢 [AVAILABLE] ';
+                          }
                           return (
                             <option key={s.id} value={s.id}>
-                              {assignStatus.isAssigned ? `⚠️ [BUSY: ${assignStatus.trainDesc}] ` : ''}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                              {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
                             </option>
                           );
                         })}
@@ -2597,45 +2619,60 @@ export default function DutyEditModal({
                       {eligibleReplacementStaff.length === 0 && (
                         <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
                           💡 No employees currently available for booking in this pool.
-                          {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "LR Pool".'}
+                          {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
                         </div>
                       )}
 
                       {selectedReplacementStaffObj && (() => {
                         const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
-                        return repAssignStatus.isAssigned ? (
+                        const dutyInfo = getStaffDutyInfo(selectedReplacementStaffObj, selectedDate);
+                        const catName = categories.find(c => c.id === selectedReplacementStaffObj.category_id)?.name || 'Staff';
+
+                        let badgeColor = '#34d399';
+                        let badgeBg = 'rgba(16, 185, 129, 0.25)';
+                        let cardBorder = 'rgba(16, 185, 129, 0.3)';
+                        let cardBg = 'rgba(16, 185, 129, 0.1)';
+                        let badgeText = dutyInfo.label;
+                        let subText = <span><strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+
+                        if (repAssignStatus.isAssigned) {
+                          badgeColor = '#fbbf24';
+                          badgeBg = 'rgba(245, 158, 11, 0.25)';
+                          cardBorder = 'rgba(245, 158, 11, 0.35)';
+                          cardBg = 'rgba(245, 158, 11, 0.12)';
+                          badgeText = `Busy on ${repAssignStatus.trainDesc}`;
+                          subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.</span>;
+                        } else if (repAssignStatus.isUnavailable) {
+                          badgeColor = '#c084fc';
+                          badgeBg = 'rgba(192, 132, 252, 0.25)';
+                          cardBorder = 'rgba(192, 132, 252, 0.4)';
+                          cardBg = 'rgba(192, 132, 252, 0.1)';
+                          badgeText = repAssignStatus.unavailableReason || 'Rest / Leave';
+                          subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+                        }
+
+                        return (
                           <div style={{
-                            padding: '8px 12px',
+                            padding: '10px 14px',
                             borderRadius: '6px',
-                            background: 'rgba(245, 158, 11, 0.12)',
-                            border: '1px solid rgba(245, 158, 11, 0.35)',
-                            fontSize: '0.78rem',
-                            color: '#fbbf24',
+                            background: cardBg,
+                            border: `1px solid ${cardBorder}`,
+                            fontSize: '0.8rem',
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
+                            flexDirection: 'column',
+                            gap: '4px'
                           }}>
-                            <span>⚠️</span>
-                            <span>
-                              <strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.
-                            </span>
-                          </div>
-                        ) : (
-                          <div style={{
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            background: 'rgba(16, 185, 129, 0.1)',
-                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                            fontSize: '0.78rem',
-                            color: '#34d399',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}>
-                            <span>✅</span>
-                            <span>
-                              <strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).
-                            </span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong style={{ color: badgeColor }}>
+                                👤 {selectedReplacementStaffObj.name} ({selectedReplacementStaffObj.designation || 'Staff'}) • [{catName}]
+                              </strong>
+                              <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
+                                {badgeText}
+                              </span>
+                            </div>
+                            <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.74rem' }}>
+                              {subText}
+                            </div>
                           </div>
                         );
                       })()}
@@ -2703,7 +2740,8 @@ export default function DutyEditModal({
                   </label>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {[
-                      { id: 'ALL', label: 'All Staff' },
+                      { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
+                      { id: 'ALL', label: '🟢 All Available' },
                       { id: '1', label: 'Conductors (COR)' },
                       { id: '2', label: 'Sleeper / TTI' },
                       { id: '3', label: 'Ladies / TTE' },
@@ -2755,14 +2793,22 @@ export default function DutyEditModal({
                     onChange={(e) => setAssignStaffId(e.target.value)}
                     style={{ fontSize: '0.86rem', fontWeight: 600 }}
                   >
-                    <option value="">-- Choose Employee to Assign ({eligibleAssignStaff.length} candidates) --</option>
+                    <option value="">-- Choose Employee to Assign ({eligibleAssignStaff.length} {assignCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'candidates'}) --</option>
                     {eligibleAssignStaff.map(s => {
                       const dutyInfo = getStaffDutyInfo(s, selectedDate);
                       const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                       const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                      let statusPrefix = '';
+                      if (assignStatus.isAssigned) {
+                        statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
+                      } else if (assignStatus.isUnavailable) {
+                        statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
+                      } else {
+                        statusPrefix = '🟢 [AVAILABLE] ';
+                      }
                       return (
                         <option key={s.id} value={s.id}>
-                          {assignStatus.isAssigned ? `⚠️ [BUSY: ${assignStatus.trainDesc}] ` : ''}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                          {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
                         </option>
                       );
                     })}
@@ -2770,7 +2816,7 @@ export default function DutyEditModal({
                   {eligibleAssignStaff.length === 0 && (
                     <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
                       💡 No employees currently available for booking in this pool.
-                      {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "LR Relief Pool".'}
+                      {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
                     </div>
                   )}
                 </div>
@@ -2778,29 +2824,53 @@ export default function DutyEditModal({
                 {/* Selected Assignee Card */}
                 {selectedAssignStaffObj && (() => {
                   const selAssignStatus = getStaffAssignmentStatus(selectedAssignStaffObj, selectedDate);
+                  const dutyInfo = getStaffDutyInfo(selectedAssignStaffObj, selectedDate);
+                  const catName = categories.find(c => c.id === selectedAssignStaffObj.category_id)?.name || 'Staff';
+
+                  let badgeColor = '#60a5fa';
+                  let badgeBg = 'rgba(59, 130, 246, 0.25)';
+                  let cardBorder = 'rgba(59, 130, 246, 0.35)';
+                  let cardBg = 'rgba(59, 130, 246, 0.08)';
+                  let badgeText = dutyInfo.label;
+                  let subText = <span>Will be assigned to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> (Muster: <strong>[P]</strong>).</span>;
+
+                  if (selAssignStatus.isAssigned) {
+                    badgeColor = '#fbbf24';
+                    badgeBg = 'rgba(245, 158, 11, 0.25)';
+                    cardBorder = 'rgba(245, 158, 11, 0.4)';
+                    cardBg = 'rgba(245, 158, 11, 0.12)';
+                    badgeText = `Busy on ${selAssignStatus.trainDesc}`;
+                    subText = <span>⚠️ Currently busy on <strong>{selAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to <strong>Link #{targetLink || 'Duty'}</strong> and vacate their previous slot.</span>;
+                  } else if (selAssignStatus.isUnavailable) {
+                    badgeColor = '#c084fc';
+                    badgeBg = 'rgba(192, 132, 252, 0.25)';
+                    cardBorder = 'rgba(192, 132, 252, 0.4)';
+                    cardBg = 'rgba(192, 132, 252, 0.1)';
+                    badgeText = selAssignStatus.unavailableReason || 'Rest / Leave';
+                    subText = <span>ℹ️ Currently on <strong>{selAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> (Muster: <strong>[P]</strong>).</span>;
+                  }
+
                   return (
                     <div style={{
                       padding: '10px 14px',
                       borderRadius: '8px',
-                      background: selAssignStatus.isAssigned ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)',
-                      border: selAssignStatus.isAssigned ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(59, 130, 246, 0.35)',
+                      background: cardBg,
+                      border: `1px solid ${cardBorder}`,
                       fontSize: '0.82rem',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '4px'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ color: selAssignStatus.isAssigned ? '#fbbf24' : '#93c5fd' }}>
-                          {selAssignStatus.isAssigned ? '⚠️' : '👤'} {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'})
+                        <strong style={{ color: badgeColor }}>
+                          👤 {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'}) • [{catName}]
                         </strong>
-                        <span className="badge" style={{ background: selAssignStatus.isAssigned ? 'rgba(245, 158, 11, 0.25)' : 'rgba(59, 130, 246, 0.25)', color: selAssignStatus.isAssigned ? '#fbbf24' : '#60a5fa', fontSize: '0.72rem' }}>
-                          {selAssignStatus.isAssigned ? `Busy on ${selAssignStatus.trainDesc}` : getStaffDutyInfo(selectedAssignStaffObj, selectedDate).label}
+                        <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
+                          {badgeText}
                         </span>
                       </div>
                       <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.76rem' }}>
-                        {selAssignStatus.isAssigned
-                          ? <span>Will be shifted to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> and previous slot vacated.</span>
-                          : <span>Will be assigned to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong>.</span>}
+                        {subText}
                       </div>
                     </div>
                   );
