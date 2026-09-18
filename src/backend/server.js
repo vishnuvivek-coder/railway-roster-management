@@ -7634,16 +7634,16 @@ app.get('/api/muster', async (req, res) => {
     let staffSql = `
       SELECT s.*, c.name as category_name, c.code as category_code, c.cycle_length, c.anchor_date 
       FROM staff s 
-      JOIN categories c ON s.category_id = c.id
+      LEFT JOIN categories c ON s.category_id = c.id
+      WHERE (s.name NOT LIKE '%VACANT%')
     `;
     let staffParams = [];
     if (category_id && category_id !== 'ALL') {
-      staffSql += ' WHERE s.category_id = ?';
+      staffSql += ' AND s.category_id = ?';
       staffParams.push(category_id);
     }
     staffSql += `
       ORDER BY 
-        CASE WHEN UPPER(s.name) LIKE '%VACANT%' THEN 2 ELSE 1 END,
         CASE WHEN s.seniority_no IS NOT NULL AND s.seniority_no > 0 THEN s.seniority_no ELSE 9999 END,
         s.category_id, 
         s.row_position
@@ -7699,16 +7699,25 @@ app.get('/api/muster', async (req, res) => {
           }
         } else {
           // Cyclic baseline
-          const dayOffset = getDayOffset(staff.anchor_date, d.dateStr);
-          const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, staff.cycle_length);
-          
           let isRest = false;
-          if (staff.category_id === 4) {
-            if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) isRest = true;
-            else if (staff.name.toUpperCase().includes(`${d.dayOfWeek} REST`)) isRest = true;
+          if (staff.category_id && staff.anchor_date && staff.cycle_length && staff.row_position) {
+            const dayOffset = getDayOffset(staff.anchor_date, d.dateStr);
+            const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, staff.cycle_length);
+            
+            if (staff.category_id === 4) {
+              if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) isRest = true;
+              else if (staff.name.toUpperCase().includes(`${d.dayOfWeek} REST`)) isRest = true;
+            } else {
+              const lDef = linkNum !== null ? linkMap[`${staff.category_id}_${linkNum}`] : null;
+              if (linkNum === null || (lDef && lDef.is_rest === 1)) isRest = true;
+            }
           } else {
-            const lDef = linkNum !== null ? linkMap[`${staff.category_id}_${linkNum}`] : null;
-            if (linkNum === null || (lDef && lDef.is_rest === 1)) isRest = true;
+            // Staff without roster grid baseline (e.g. MV PRASAD, P PRATHAP)
+            if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) {
+              isRest = true;
+            } else if (d.dayOfWeek === 'SUN') {
+              isRest = true;
+            }
           }
 
           if (isRest) {

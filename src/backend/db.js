@@ -1191,113 +1191,82 @@ async function initDb() {
     }
   }
 
-  // Populate & Sync staff table across all 4 categories directly from official seniority_list
-  await syncStaffFromSeniorityList();
-}
-
-async function syncStaffFromSeniorityList() {
+  // Sync staff table with seniority_list table (seniority_no, pf_no, designation)
   try {
-    const seniority = await all('SELECT * FROM seniority_list ORDER BY sl_no ASC');
-    if (!seniority || seniority.length === 0) return;
+    const norm = (s) => (s || '').toUpperCase().replace(/[\.\s_\-]/g, '');
+    const manualMap = {
+      'BP RAJA KUMAR': 67,
+      'LP KUMAR': 21,
+      'RNR NAIK': 110,
+      'KV SURESH': 76,
+      'B PAVAN KUMAR': 88,
+      'Y SRIKANTH': 71,
+      'K GOPI': 114,
+      'O ANIL': 99,
+      'B KEZIA KUMARI': 73,
+      'AG KRISHNA': 108,
+      'MVS NAGI REDDY': 118,
+      'KB RAO': 121,
+      'NC MEENA': 124,
+      'BR MEENA': 126,
+      'MV ANJANEYULU': 129,
+      'ELN RAO': 137,
+      'B P SINGH': 133
+    };
 
-    const getBySl = (sl) => seniority.find(s => s.sl_no === sl);
+    const allStaff = await all("SELECT id, name, designation, pf_no, seniority_no FROM staff");
+    const allSeniority = await all("SELECT * FROM seniority_list");
 
-    // Category 1: Conductors (21 senior CTIs starting with #1 MV PRASAD, #3 BRK REDDY, #4 B DAVID BABU, #5 KAKI SRINIVASA RAO, #6 P PRATHAP...)
-    const cat1Sl = [1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24];
-    const cat1 = cat1Sl.map((sl, idx) => {
-      const s = getBySl(sl);
-      return {
-        catId: 1,
-        pos: idx + 1,
-        sl_no: s.sl_no,
-        name: s.name,
-        desg: s.designation,
-        pf: s.pf_number,
-        rest: null
-      };
-    });
+    for (const staff of allStaff) {
+      if (!staff.name || staff.name.toUpperCase().includes('VACANT')) continue;
+      
+      let match = null;
+      if (manualMap[staff.name.trim()]) {
+        const slNo = manualMap[staff.name.trim()];
+        match = allSeniority.find(s => s.sl_no === slNo);
+      }
 
-    // Category 3: Ladies Staff / TTE (7 female staff in seniority order)
-    const cat3Sl = [2, 16, 39, 46, 73, 100, 106];
-    const cat3 = cat3Sl.map((sl, idx) => {
-      const s = getBySl(sl);
-      return {
-        catId: 3,
-        pos: idx + 1,
-        sl_no: s.sl_no,
-        name: s.name,
-        desg: s.designation,
-        pf: s.pf_number,
-        rest: null
-      };
-    });
+      if (!match) {
+        const sNorm = norm(staff.name);
+        match = allSeniority.find(sen => norm(sen.name) === sNorm);
+      }
 
-    // Category 4: LR Pool (23 staff: #10 CTI CH SRINIVASA RAO + Sr.CCTC/CCTC staff in seniority order)
-    const cat4Sl = [10, 108, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135];
-    const cat4Rests = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN', 'MON', 'TUE', 'THU', 'WED', 'THU', 'FRI', 'SAT', 'FRI', 'SUN', 'MON', 'THU', 'SUN', 'THU', 'WED', 'TUE', 'SAT'];
-    const cat4 = cat4Sl.map((sl, idx) => {
-      const s = getBySl(sl);
-      return {
-        catId: 4,
-        pos: idx + 1,
-        sl_no: s.sl_no,
-        name: s.name,
-        desg: s.designation,
-        pf: s.pf_number,
-        rest: cat4Rests[idx]
-      };
-    });
+      if (!match) {
+        const sNorm = norm(staff.name);
+        match = allSeniority.find(sen => norm(sen.name).includes(sNorm) || sNorm.includes(norm(sen.name)));
+      }
 
-    // Category 2: Sleeper Staff (63 staff in seniority order)
-    const assigned = new Set([...cat1Sl, ...cat3Sl, ...cat4Sl]);
-    const cat2 = [];
-    for (const s of seniority) {
-      if (!assigned.has(s.sl_no)) {
-        cat2.push({
-          catId: 2,
-          pos: cat2.length + 1,
-          sl_no: s.sl_no,
-          name: s.name,
-          desg: s.designation,
-          pf: s.pf_number,
-          rest: null
-        });
-        if (cat2.length === 63) break;
+      if (match) {
+        await run(
+          `UPDATE staff SET seniority_no = ?, pf_no = ?, designation = COALESCE(NULLIF(designation, ''), ?) WHERE id = ?`,
+          [match.sl_no, match.pf_number, match.designation, staff.id]
+        );
       }
     }
 
-    const allCategories = [...cat1, ...cat2, ...cat3, ...cat4];
-
-    for (const item of allCategories) {
-      const existing = await get(
-        'SELECT id FROM staff WHERE category_id = ? AND row_position = ?',
-        [item.catId, item.pos]
-      );
-
-      if (existing) {
+    // Ensure MV PRASAD (#1) and P PRATHAP (#6) exist in staff for Muster sheet (category_id = NULL)
+    const musterExtra = [
+      { name: 'MV PRASAD', desg: 'CTI', pf: '24609272641', seniority_no: 1 },
+      { name: 'P PRATHAP', desg: 'CTI', pf: '24603967967', seniority_no: 6 }
+    ];
+    for (const m of musterExtra) {
+      const existing = await get('SELECT id FROM staff WHERE seniority_no = ? AND category_id IS NULL', [m.seniority_no]);
+      if (!existing) {
         await run(
-          `UPDATE staff 
-           SET name = ?, designation = ?, pf_no = ?, seniority_no = ?, rest_day = COALESCE(?, rest_day), active = 1
-           WHERE id = ?`,
-          [item.name, item.desg, item.pf, item.sl_no, item.rest, existing.id]
-        );
-      } else {
-        await run(
-          `INSERT INTO staff (category_id, row_position, name, designation, pf_no, seniority_no, rest_day, active, join_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, '2026-07-01')`,
-          [item.catId, item.pos, item.name, item.desg, item.pf, item.sl_no, item.rest]
+          `INSERT INTO staff (name, designation, category_id, row_position, pf_no, seniority_no, active, join_date, bill_unit, pay_amount, doa, hq_station, rest_day, t_code_no, hrms_id)
+           VALUES (?, ?, NULL, 0, ?, ?, 1, '2026-07-01', '0910629', 68000, '05/08/2000', 'GNT', 'SUN', '7133', '')`,
+          [m.name, m.desg, m.pf, m.seniority_no]
         );
       }
     }
   } catch (e) {
-    console.error('Failed to sync staff from seniority list:', e.message);
+    console.error('Failed to sync staff seniority/pf details:', e.message);
   }
 }
 
 module.exports = {
   db,
   initDb,
-  syncStaffFromSeniorityList,
   run,
   all,
   get
