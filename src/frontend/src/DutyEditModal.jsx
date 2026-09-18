@@ -326,8 +326,21 @@ export default function DutyEditModal({
     }
 
     if (staffMember.category_id === 4) {
+      const dObj = new Date(targetDateStr);
+      const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+      const shortDay = shortDays[dObj.getDay()];
+      const fullDay = fullDays[dObj.getDay()];
+      const isRest = (staffMember.rest_day && (
+        staffMember.rest_day.toUpperCase() === shortDay ||
+        staffMember.rest_day.toUpperCase() === fullDay
+      )) || (staffMember.name && staffMember.name.toUpperCase().includes(shortDay + ' REST'));
+
+      if (isRest) {
+        return { label: '🏖️ Weekly REST', isRest: true, isLr: true, linkNum: null };
+      }
       return {
-        label: staffMember.rest_day && staffMember.rest_day !== '-' ? `🟢 LR Pool [Rest: ${staffMember.rest_day}]` : '🟢 LR Standby Pool',
+        label: '🟢 LR Standby Pool (Available)',
         isRest: false,
         isLr: true,
         linkNum: null
@@ -352,9 +365,26 @@ export default function DutyEditModal({
     };
   }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
 
-  // Helper to determine whether an employee is already assigned to a train or active duty on targetDateStr
+  // Helper to determine whether an employee is already assigned to a train or active duty on targetDateStr,
+  // or is completely unavailable for booking (Weekly REST, Sick, Leave, CR, Absent)
   const getStaffAssignmentStatus = useCallback((staffMember, targetDateStr) => {
-    if (!staffMember) return { isAssigned: false, trainDesc: '', linkNum: null };
+    if (!staffMember) {
+      return { isAssigned: false, isUnavailable: true, unavailableReason: 'Unknown', trainDesc: '', linkNum: null, trainNo: null };
+    }
+
+    const dObj = new Date(targetDateStr);
+    const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const shortDay = shortDays[dObj.getDay()];
+    const fullDay = fullDays[dObj.getDay()];
+    const isCat4 = staffMember.category_id === 4;
+    const isRestDayForLr = isCat4 && (
+      (staffMember.rest_day && (
+        staffMember.rest_day.toUpperCase() === shortDay ||
+        staffMember.rest_day.toUpperCase() === fullDay
+      )) ||
+      (staffMember.name && staffMember.name.toUpperCase().includes(shortDay + ' REST'))
+    );
 
     const matchesSelectedDate = !dailyDuties?.date || dailyDuties.date === targetDateStr;
     if (matchesSelectedDate && allDailyStaffDuties.length > 0) {
@@ -364,6 +394,8 @@ export default function DutyEditModal({
         if (activeDuty.extra_train_no) {
           return {
             isAssigned: true,
+            isUnavailable: false,
+            unavailableReason: '',
             trainDesc: `Train ${activeDuty.extra_train_no} (Non-Daily / Extra)`,
             linkNum: null,
             trainNo: activeDuty.extra_train_no
@@ -376,37 +408,83 @@ export default function DutyEditModal({
           const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
           return {
             isAssigned: true,
+            isUnavailable: false,
+            unavailableReason: '',
             trainDesc: `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`,
             linkNum: subDuty.link_number,
             trainNo: subDuty.train_numbers
           };
         }
 
-        // 3. Status checks: REST, SICK, LEAVE, CR, ABSENT, AVAILABLE_FOR_BOOKING are NOT busy on a train
+        // 3. Weekly REST checks (cyclic rest link and LR weekly rest)
         if (
-          activeDuty.isRest || 
-          ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(activeDuty.status) ||
+          activeDuty.status === 'REST' ||
           activeDuty.train_numbers === 'REST' ||
-          activeDuty.leave_type
+          (isCat4 && (isRestDayForLr || activeDuty.isRest)) ||
+          (!isCat4 && activeDuty.isRest && activeDuty.status !== 'AVAILABLE_FOR_BOOKING')
         ) {
-          return { isAssigned: false, trainDesc: activeDuty.status || 'REST', linkNum: null };
+          return {
+            isAssigned: false,
+            isUnavailable: true,
+            unavailableReason: 'Weekly REST',
+            trainDesc: 'Weekly REST',
+            linkNum: activeDuty.link_number || null,
+            trainNo: null
+          };
         }
 
-        // 4. Category 4 (LR Relief Pool): If not assigned to extra train or substitute, they are AVAILABLE!
-        if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
+        // 4. Leave, Sick, CR, Absent
+        if (
+          ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) ||
+          activeDuty.leave_type ||
+          (activeDuty.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(activeDuty.muster_code.toUpperCase()))
+        ) {
+          const reason = activeDuty.leave_type || activeDuty.muster_code || activeDuty.status;
+          return {
+            isAssigned: false,
+            isUnavailable: true,
+            unavailableReason: reason,
+            trainDesc: reason,
+            linkNum: null,
+            trainNo: null
+          };
+        }
+
+        // 5. Released / Available for booking at HQ
+        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
+          return {
+            isAssigned: false,
+            isUnavailable: false,
+            unavailableReason: '',
+            trainDesc: 'Available for Booking (HQ)',
+            linkNum: null,
+            trainNo: null
+          };
+        }
+
+        // 6. Category 4 (LR Relief Pool)
+        if (isCat4 || activeDuty.categoryId === 4) {
           if (activeDuty.isOverridden && activeDuty.status === 'CHANGED_LINK' && activeDuty.target_category_id !== 4) {
-            // Assigned to a real link in Cat 1, 2, or 3
             return {
               isAssigned: true,
+              isUnavailable: false,
+              unavailableReason: '',
               trainDesc: `Link #${activeDuty.link_number} (Tr ${activeDuty.train_numbers})`,
               linkNum: activeDuty.link_number,
               trainNo: activeDuty.train_numbers
             };
           }
-          return { isAssigned: false, trainDesc: 'LR Relief Pool (Available)', linkNum: null };
+          return {
+            isAssigned: false,
+            isUnavailable: false,
+            unavailableReason: '',
+            trainDesc: 'LR Standby Pool (Available)',
+            linkNum: null,
+            trainNo: null
+          };
         }
 
-        // 5. Regular cyclic link duty (Cat 1, 2, 3)
+        // 7. Regular cyclic link duty (Cat 1, 2, 3)
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
           const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
@@ -414,6 +492,8 @@ export default function DutyEditModal({
             : '';
           return {
             isAssigned: true,
+            isUnavailable: false,
+            unavailableReason: '',
             trainDesc: `Link #${lNum}${trStr ? ` (${trStr})` : ''}`,
             linkNum: lNum,
             trainNo: trStr
@@ -422,22 +502,49 @@ export default function DutyEditModal({
       }
     }
 
-    if (staffMember.category_id === 4) {
-      return { isAssigned: false, trainDesc: 'LR Relief Pool (Available)', linkNum: null };
+    // Fallback when activeDuty not found in allDailyStaffDuties
+    if (isCat4) {
+      if (isRestDayForLr) {
+        return {
+          isAssigned: false,
+          isUnavailable: true,
+          unavailableReason: 'Weekly REST',
+          trainDesc: 'Weekly REST',
+          linkNum: null,
+          trainNo: null
+        };
+      }
+      return {
+        isAssigned: false,
+        isUnavailable: false,
+        unavailableReason: '',
+        trainDesc: 'LR Relief Pool (Available)',
+        linkNum: null,
+        trainNo: null
+      };
     }
 
     const cat = (categories || []).find(c => c.id === staffMember.category_id);
-    if (!cat) return { isAssigned: false, trainDesc: '', linkNum: null };
+    if (!cat) return { isAssigned: false, isUnavailable: false, unavailableReason: '', trainDesc: '', linkNum: null, trainNo: null };
 
     const dOffset = getDayOffset(cat.anchor_date, targetDateStr);
     const linkNum = getBaseLinkNumber(staffMember.row_position, dOffset, cat.cycle_length);
     const linkDef = (allLinksList || []).find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
 
     if (!linkDef || linkDef.is_rest) {
-      return { isAssigned: false, trainDesc: `Link #${linkNum} (Weekly REST)`, linkNum };
+      return {
+        isAssigned: false,
+        isUnavailable: true,
+        unavailableReason: 'Weekly REST',
+        trainDesc: `Link #${linkNum} (Weekly REST)`,
+        linkNum,
+        trainNo: null
+      };
     }
     return {
       isAssigned: true,
+      isUnavailable: false,
+      unavailableReason: '',
       trainDesc: `Link #${linkNum} (${linkDef.train_numbers ? `Tr ${linkDef.train_numbers}` : 'Duty'})`,
       linkNum,
       trainNo: linkDef.train_numbers
@@ -445,6 +552,7 @@ export default function DutyEditModal({
   }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
 
   // Eligible replacement staff for Delete mode (Strictly in Alphabetical Order A to Z)
+  // Unavailable staff (Weekly REST, Sick, Leave, CR, Absent) are NEVER shown
   // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
   const eligibleReplacementStaff = useMemo(() => {
     if (!allStaffList) return [];
@@ -455,8 +563,9 @@ export default function DutyEditModal({
         if (replacementCatId && replacementCatId !== 'ALL') {
           if (String(s.category_id) !== String(replacementCatId)) return false;
         }
+        const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+        if (assignStatus.isUnavailable) return false;
         if (!showAlreadyAssigned) {
-          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           if (assignStatus.isAssigned) return false;
         }
         return true;
@@ -471,6 +580,7 @@ export default function DutyEditModal({
   }, [replacementStaffId, allStaffList]);
 
   // Eligible staff for Assign Duty mode (Strictly in Alphabetical Order A to Z)
+  // Unavailable staff (Weekly REST, Sick, Leave, CR, Absent) are NEVER shown
   // When showAlreadyAssigned is false, staff already assigned to another train/link are excluded
   const eligibleAssignStaff = useMemo(() => {
     if (!allStaffList) return [];
@@ -481,8 +591,9 @@ export default function DutyEditModal({
           if (String(s.category_id) !== String(assignCatId)) return false;
         }
         if (dutyModal.staffId && s.id === dutyModal.staffId) return false;
+        const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+        if (assignStatus.isUnavailable) return false;
         if (!showAlreadyAssigned) {
-          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           if (assignStatus.isAssigned) return false;
         }
         return true;
@@ -767,6 +878,9 @@ export default function DutyEditModal({
         // If replacement employee is currently working another train/duty, confirm before shifting
         if (deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
           const repStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
+          if (repStatus.isUnavailable) {
+            throw new Error(`${selectedReplacementStaffObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement.`);
+          }
           if (repStatus.isAssigned) {
             setShiftConfirmDialog({
               staffName: selectedReplacementStaffObj.name,
@@ -799,8 +913,13 @@ export default function DutyEditModal({
         const linkNum = targetLink ? parseInt(targetLink, 10) : null;
         const targetCatIdNum = parseInt(targetCategoryId, 10);
 
-        // If employee is already working another train/duty, confirm before shifting
+        // If employee is unavailable, block assignment
         const assignStatus = getStaffAssignmentStatus(assignedStaffObj, selectedDate);
+        if (assignStatus.isUnavailable) {
+          throw new Error(`${assignedStaffObj.name} is currently on ${assignStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned to duty.`);
+        }
+
+        // If employee is already working another train/duty, confirm before shifting
         if (assignStatus.isAssigned) {
           setShiftConfirmDialog({
             staffName: assignedStaffObj.name,
@@ -1725,7 +1844,11 @@ export default function DutyEditModal({
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => setReplacementCatId(c.id)}
+                            onClick={() => {
+                              setReplacementCatId(c.id);
+                              setReplacementStaffId('');
+                              setReplacementName('');
+                            }}
                             style={{
                               padding: '4px 8px',
                               borderRadius: '4px',
@@ -1779,6 +1902,12 @@ export default function DutyEditModal({
                           );
                         })}
                       </select>
+                      {eligibleReplacementStaff.length === 0 && (
+                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
+                          💡 No employees currently available for booking in this pool.
+                          {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "LR Pool".'}
+                        </div>
+                      )}
 
                       {selectedReplacementStaffObj && (() => {
                         const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
@@ -1891,7 +2020,10 @@ export default function DutyEditModal({
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => setAssignCatId(c.id)}
+                        onClick={() => {
+                          setAssignCatId(c.id);
+                          setAssignStaffId('');
+                        }}
                         style={{
                           padding: '5px 10px',
                           borderRadius: '6px',
@@ -1942,6 +2074,12 @@ export default function DutyEditModal({
                       );
                     })}
                   </select>
+                  {eligibleAssignStaff.length === 0 && (
+                    <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
+                      💡 No employees currently available for booking in this pool.
+                      {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "LR Relief Pool".'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Selected Assignee Card */}

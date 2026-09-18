@@ -8839,8 +8839,39 @@ export default function App() {
           s.name && !s.name.toUpperCase().includes('VACANT')
         );
 
-        // 2. Filter with busy check
+        // 2. Filter with unavailable check and busy check
         const filteredStaff = validStaff.filter(s => {
+          // Exclude unavailable staff (Weekly REST, Sick, Leave, CR, Absent)
+          if (dailyDuties && dailyDuties.categories) {
+            const flatDuties = dailyDuties.categories.reduce((acc, cat) => {
+              return acc.concat((cat.staff || []).map(st => ({ ...st, categoryId: cat.categoryId })));
+            }, []);
+            const d = flatDuties.find(st => String(st.staffId) === String(s.id));
+            if (d) {
+              if (
+                d.isRest ||
+                ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) ||
+                d.train_numbers === 'REST' ||
+                d.leave_type
+              ) {
+                return false;
+              }
+            }
+          }
+          if (s.category_id === 4) {
+            const dObj = new Date(selectedDate);
+            const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+            const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+            const shortDay = shortDays[dObj.getDay()];
+            const fullDay = fullDays[dObj.getDay()];
+            if (
+              (s.rest_day && (s.rest_day.toUpperCase() === shortDay || s.rest_day.toUpperCase() === fullDay)) ||
+              (s.name && s.name.toUpperCase().includes(shortDay + ' REST'))
+            ) {
+              return false;
+            }
+          }
+
           const currentWorking = getStaffCurrentWorkingTrain(s.id);
           const isBusy = Boolean(currentWorking);
           if (isBusy && !quickAssignShowBusy) return false;

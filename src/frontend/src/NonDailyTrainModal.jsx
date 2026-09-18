@@ -38,11 +38,17 @@ export default function NonDailyTrainModal({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 1. LR Staff (Category 4 only, excluding VACANT posts)
-  const lrStaffList = (allStaffList || []).filter(s => 
-    s.category_id === 4 && 
-    (!s.name || !s.name.toUpperCase().includes('VACANT'))
-  );
+  // 1. LR Staff (Category 4 only, excluding VACANT posts and staff on designated weekly rest for formData.day_of_week)
+  const lrStaffList = (allStaffList || []).filter(s => {
+    if (s.category_id !== 4) return false;
+    if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
+    const targetDay = (formData.day_of_week || initialDay || '').toUpperCase();
+    const shortDay = targetDay.substring(0, 3);
+    const restUpper = (s.rest_day || '').toUpperCase();
+    if (restUpper === targetDay || restUpper === shortDay) return false;
+    if (s.name && s.name.toUpperCase().includes(shortDay + ' REST')) return false;
+    return true;
+  });
   
   // 2. Other master staff (all staff not in Category 4, excluding VACANT)
   const otherStaffList = (allStaffList || []).filter(s => 
