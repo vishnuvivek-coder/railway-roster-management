@@ -576,25 +576,33 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                             }}
                             title={isAdmin ? `Click to edit ${staff.name} duty on ${day.dateStr}` : displayCode}
                           >
-                            {displayCode === 'AVL' || rec?.isAvailable ? (
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '2px 6px',
-                                  borderRadius: '5px',
-                                  fontSize: '0.70rem',
-                                  fontWeight: 700,
-                                  color: '#34d399',
-                                  background: 'rgba(16, 185, 129, 0.15)',
-                                  border: '1px solid rgba(16, 185, 129, 0.4)',
-                                  letterSpacing: '0.2px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                title={rec?.remarks || `Available for Duty (${staff.name} - min 8h HQ rest completed)`}
-                              >
-                                Available
-                              </span>
-                            ) : displayCode === 'REST_HQ' || rec?.isInHqRest ? (
+                            {displayCode === 'AVL' || rec?.isAvailable ? (() => {
+                              const arrMatch = rec?.arrivalTime || (rec?.remarks && rec.remarks.match(/arr\s+GNT\s+(\d{1,2}:\d{2})/i)?.[1]);
+                              return (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: 700,
+                                    color: '#34d399',
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                                    letterSpacing: '0.2px',
+                                    whiteSpace: 'nowrap',
+                                    lineHeight: 1.15
+                                  }}
+                                  title={rec?.remarks || `Available for Duty (${staff.name} - min 8h HQ rest completed)`}
+                                >
+                                  <span>Available</span>
+                                  {arrMatch && <span style={{ fontSize: '0.60rem', color: '#6ee7b7', fontWeight: 600 }}>Arr {arrMatch}</span>}
+                                </span>
+                              );
+                            })() : displayCode === 'REST_HQ' || rec?.isInHqRest ? (
                               <span
                                 style={{
                                   display: 'inline-block',

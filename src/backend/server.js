@@ -97,8 +97,9 @@ const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9, 10],
-    [11, 12, 13],
+    [8, 9],
+    [10, 11],
+    [12, 13],
     [15, 16, 17],
     [18, 19, 20]
   ],
@@ -2353,7 +2354,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               // If original link is part of a multi-day link set, automatically book LR substitute for the entire link!
               if (datesToProcess.length === 1) {
                 const subLinkSet = getLinkSetDetails(staff.category_id, originalLink);
-                if (subLinkSet && subLinkSet.isFirstDayOfSet && subLinkSet.remainingLinks.length > 0) {
+                if (subLinkSet && subLinkSet.remainingLinks && subLinkSet.remainingLinks.length > 0) {
                   for (let k = 0; k < subLinkSet.remainingLinks.length; k++) {
                     const remLinkNum = subLinkSet.remainingLinks[k];
                     const nextDate = new Date(dStr + 'T12:00:00');
@@ -2363,7 +2364,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                     const d = String(nextDate.getDate()).padStart(2, '0');
                     const nextDateStr = `${y}-${m}-${d}`;
 
-                    const subLegReason = `Substitute for ${staff.name} on Link #${remLinkNum} (Day ${k + 2} of ${subLinkSet.setLength}-day link set)`;
+                    const subLegReason = `Substitute for ${staff.name} on Link #${remLinkNum} (Day ${subLinkSet.dayIndexInSet + k + 1} of ${subLinkSet.setLength}-day link set)`;
 
                     await run(
                       `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
@@ -2417,7 +2418,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
         const linkSet = getLinkSetDetails(staff.category_id, originalLink);
 
-        if (linkSet && linkSet.isFirstDayOfSet && linkSet.remainingLinks.length > 0) {
+        if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
           multiDaySetNotice = ` Multi-Day Link detected (${linkSet.setLength}-day link #${originalLink}): On the remaining ${linkSet.remainingLinks.length} day(s), staff is marked Available for Booking at HQ [Muster: P], and Link #${linkSet.remainingLinks.join(', #')} vacated for relief allotment.`;
 
           for (let k = 0; k < linkSet.remainingLinks.length; k++) {
@@ -2656,7 +2657,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
       if (targetLink !== null) {
         const linkSet = getLinkSetDetails(resolvedTargetCat, targetLink);
-        if (linkSet && linkSet.isFirstDayOfSet && linkSet.remainingLinks.length > 0) {
+        if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
           for (let k = 0; k < linkSet.remainingLinks.length; k++) {
             const remLinkNum = linkSet.remainingLinks[k];
             const nextDate = new Date(date + 'T12:00:00');
@@ -5366,7 +5367,11 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
 
         let dutyDetails = null;
         if (activeLink !== null) {
-          dutyDetails = await getActiveLinkDef(cat.id, activeLink, targetDate);
+          const targetCatId = override?.target_category_id || cat.id;
+          dutyDetails = await getActiveLinkDef(targetCatId, activeLink, targetDate);
+          if (!dutyDetails) {
+            dutyDetails = await get('SELECT * FROM links WHERE link_number = ?', [activeLink]);
+          }
         }
 
         const isRest = isCat4RestDay || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING';
@@ -5501,29 +5506,30 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           catBreakdown.available_leave_return++;
         } else if (cat.id === 4 && !override && !isCat4RestDay) {
           // LR Staff on regular standby day
+          const arrTimeStr = (lrRestInfo && lrRestInfo.arrivalTime) ? ` (Arr GNT ${lrRestInfo.arrivalTime})` : '';
           if (lrRestInfo && lrRestInfo.restStatus === 'REST_COMPLETED_12H') {
             isAvailable = true;
             dotStatus = 'GREEN';
             statusCategory = 'AVAILABLE_12H_REST';
-            statusLabel = 'Available (12h Rest Complete)';
-            statusReason = lrRestInfo.remarksText || '12h full HQ rest complete; available for duty booking';
-            currentLocation = '🏠 GNT (Headquarters)';
+            statusLabel = `Available${arrTimeStr || ' (12h Rest Complete)'}`;
+            statusReason = lrRestInfo.remarksText || `12h full HQ rest complete; available for duty booking${arrTimeStr}`;
+            currentLocation = `🏠 GNT${arrTimeStr}`;
             catBreakdown.available_12h_rest++;
           } else if (lrRestInfo && lrRestInfo.restStatus === 'REST_COMPLETED_8H') {
             isAvailable = true;
             dotStatus = 'GREEN';
             statusCategory = 'AVAILABLE_8H_REST';
-            statusLabel = 'Available (Min 8h Rest Complete)';
-            statusReason = lrRestInfo.remarksText || 'Statutory min 8h HQ rest complete; ready for duty booking';
-            currentLocation = '🏠 GNT (Headquarters)';
+            statusLabel = `Available${arrTimeStr || ' (Min 8h Rest Complete)'}`;
+            statusReason = lrRestInfo.remarksText || `Statutory min 8h HQ rest complete; ready for duty booking${arrTimeStr}`;
+            currentLocation = `🏠 GNT${arrTimeStr}`;
             catBreakdown.available_8h_rest++;
           } else {
             isAvailable = true;
             dotStatus = 'GREEN';
             statusCategory = 'AVAILABLE_STANDBY';
-            statusLabel = 'Available (HQ Standby Pool)';
+            statusLabel = `Available${arrTimeStr || ' (HQ Standby Pool)'}`;
             statusReason = lrRestInfo?.remarksText || 'In LR Standby Pool at HQ; full rest available';
-            currentLocation = '🏠 GNT (Headquarters)';
+            currentLocation = `🏠 GNT${arrTimeStr}`;
             catBreakdown.available_standby++;
           }
         } else if (isRest || status === 'REST') {
@@ -7641,12 +7647,15 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     muster = dataPool.muster;
     dailyEarnings = dataPool.dailyEarnings;
   } else {
+    const dMinus2Obj = new Date(dateStr + 'T12:00:00');
+    dMinus2Obj.setDate(dMinus2Obj.getDate() - 2);
+    const dMinus2Start = dMinus2Obj.toISOString().split('T')[0];
     overrides = await all(`
       SELECT o.*, s1.name as staff_name, s1.category_id as staff_cat
       FROM overrides o
       JOIN staff s1 ON o.staff_id = s1.id
-      WHERE o.date = ?
-    `, [dateStr]);
+      WHERE o.date >= ? AND o.date <= ?
+    `, [dMinus2Start, dateStr]);
     links = await all('SELECT * FROM links');
     nonDaily = await all('SELECT * FROM non_daily_trains');
     dutyRegister = await all(`
@@ -7661,7 +7670,7 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
 
   // 1. Direct override on LR staff or where LR staff is the substitute
   const direct = overrides ? overrides.find(o => o.staff_id === staffId && o.date === dateStr) : null;
-  const sub = overrides ? overrides.find(o => o.substitute_staff_id === staffId && o.date === dateStr) : null;
+  const sub = overrides ? overrides.find(o => o.substitute_staff_id === staffId && o.date === dateStr && o.status !== 'LEAVE' && o.status !== 'SICK') : null;
   const ov = direct || sub;
 
   if (ov) {
@@ -7715,12 +7724,13 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     }
   }
 
-  // 1.5. Check multi-day link continuation (2-day or 3-day link sets)
+  // 1.5. Check multi-day link continuation (2-day, 3-day, or 4-day link sets)
   if (!ov && overrides && links) {
     const dMinus1 = new Date(dateStr + 'T12:00:00');
     dMinus1.setDate(dMinus1.getDate() - 1);
     const dMinus1Str = dMinus1.toISOString().split('T')[0];
-    const prev1Ov = overrides.find(o => (o.staff_id === staffId || o.substitute_staff_id === staffId) && o.date === dMinus1Str);
+    const prev1Ov = overrides.find(o => o.staff_id === staffId && o.date === dMinus1Str)
+                 || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus1Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
 
     if (prev1Ov && prev1Ov.status !== 'REST' && prev1Ov.status !== 'SICK' && prev1Ov.status !== 'LEAVE' && prev1Ov.status !== 'CR' && prev1Ov.status !== 'ABSENT') {
       const prev1Link = prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined
@@ -7728,19 +7738,13 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
         : (prev1Ov.substitute_staff_id === staffId ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number) : null);
       const prev1Cat = prev1Ov.target_category_id || 2;
       const setInfo1 = getLinkSetDetails(prev1Cat, prev1Link);
-      if (setInfo1 && setInfo1.isFirstDayOfSet && setInfo1.setLinks.length >= 2) {
-        const day2LinkNum = setInfo1.setLinks[1];
-        const link2 = links.find(l => l.category_id === prev1Cat && l.link_number === day2LinkNum)
-                   || links.find(l => l.link_number === day2LinkNum);
-        if (link2 && link2.train_numbers) {
-          return { code: formatTrainString(link2.train_numbers), remarks: `Day 2 of Link #${prev1Link} (${setInfo1.setLength}-day link set)` };
-        }
-      } else if (setInfo1 && setInfo1.dayIndexInSet === 2 && setInfo1.setLinks.length >= 3) {
-        const day3LinkNum = setInfo1.setLinks[2];
-        const link3 = links.find(l => l.category_id === prev1Cat && l.link_number === day3LinkNum)
-                   || links.find(l => l.link_number === day3LinkNum);
-        if (link3 && link3.train_numbers) {
-          return { code: formatTrainString(link3.train_numbers), remarks: `Day 3 of Link set (${setInfo1.setLength}-day link set)` };
+      if (setInfo1 && setInfo1.dayIndexInSet < setInfo1.setLength) {
+        const nextLegIndex = setInfo1.dayIndexInSet;
+        const nextLegLinkNum = setInfo1.setLinks[nextLegIndex];
+        const nextLink = links.find(l => l.category_id === prev1Cat && l.link_number === nextLegLinkNum)
+                      || links.find(l => l.link_number === nextLegLinkNum);
+        if (nextLink && nextLink.train_numbers) {
+          return { code: formatTrainString(nextLink.train_numbers), remarks: `Day ${nextLegIndex + 1} of Link #${setInfo1.setLinks[0]} (${setInfo1.setLength}-day link set)` };
         }
       }
     }
@@ -7748,7 +7752,8 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     const dMinus2 = new Date(dateStr + 'T12:00:00');
     dMinus2.setDate(dMinus2.getDate() - 2);
     const dMinus2Str = dMinus2.toISOString().split('T')[0];
-    const prev2Ov = overrides.find(o => (o.staff_id === staffId || o.substitute_staff_id === staffId) && o.date === dMinus2Str);
+    const prev2Ov = overrides.find(o => o.staff_id === staffId && o.date === dMinus2Str)
+                 || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus2Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
 
     if (prev2Ov && prev2Ov.status !== 'REST' && prev2Ov.status !== 'SICK' && prev2Ov.status !== 'LEAVE' && prev2Ov.status !== 'CR' && prev2Ov.status !== 'ABSENT') {
       const prev2Link = prev2Ov.overridden_link_number !== null && prev2Ov.overridden_link_number !== undefined
@@ -7756,12 +7761,13 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
         : (prev2Ov.substitute_staff_id === staffId ? (prev2Ov.original_link_number || prev2Ov.overridden_link_number) : null);
       const prev2Cat = prev2Ov.target_category_id || 2;
       const setInfo2 = getLinkSetDetails(prev2Cat, prev2Link);
-      if (setInfo2 && setInfo2.isFirstDayOfSet && setInfo2.setLinks.length === 3) {
-        const day3LinkNum = setInfo2.setLinks[2];
-        const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === day3LinkNum)
-                   || links.find(l => l.link_number === day3LinkNum);
+      if (setInfo2 && setInfo2.dayIndexInSet + 1 < setInfo2.setLength) {
+        const leg3Index = setInfo2.dayIndexInSet + 1;
+        const leg3LinkNum = setInfo2.setLinks[leg3Index];
+        const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === leg3LinkNum)
+                   || links.find(l => l.link_number === leg3LinkNum);
         if (link3 && link3.train_numbers) {
-          return { code: formatTrainString(link3.train_numbers), remarks: `Day 3 of Link #${prev2Link} (${setInfo2.setLength}-day link set)` };
+          return { code: formatTrainString(link3.train_numbers), remarks: `Day ${leg3Index + 1} of Link #${setInfo2.setLinks[0]} (${setInfo2.setLength}-day link set)` };
         }
       }
     }
@@ -7887,19 +7893,22 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
         const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const dayOfWeek = dayNames[dObj.getDay()];
 
-        const hasDirectOv = monthOverrides.some(o => o.staff_id === staff.id && o.date === dateStr);
-        const hasSubOv = monthOverrides.some(o => o.substitute_staff_id === staff.id && o.date === dateStr);
-        const hasDutyReg = dutyRegisterEntries.some(r => r.staff_id === staff.id && r.date === dateStr);
-        const hasEarn = earningsList.some(e => e.staff_id === staff.id && e.date === dateStr);
-        const hasMuster = musterList.some(m => m.staff_id === staff.id && m.date === dateStr && ['R', 'CR', 'SICK', 'S', 'CL', 'LAP', 'LHAP', 'CAP', 'L'].includes(m.code.toUpperCase()));
+        const dMinus1 = new Date(targetYear, targetMonth - 1, d);
+        dMinus1.setDate(dMinus1.getDate() - 1);
+        const prev1Str = `${dMinus1.getFullYear()}-${String(dMinus1.getMonth() + 1).padStart(2, '0')}-${String(dMinus1.getDate()).padStart(2, '0')}`;
+        const dMinus2 = new Date(targetYear, targetMonth - 1, d);
+        dMinus2.setDate(dMinus2.getDate() - 2);
+        const prev2Str = `${dMinus2.getFullYear()}-${String(dMinus2.getMonth() + 1).padStart(2, '0')}-${String(dMinus2.getDate()).padStart(2, '0')}`;
 
-        if (hasDirectOv || hasSubOv || hasDutyReg || hasEarn || hasMuster) {
+        const hasPrevOv = monthOverrides.some(o => (o.staff_id === staff.id || (o.substitute_staff_id === staff.id && o.status !== 'LEAVE' && o.status !== 'SICK')) && (o.date === prev1Str || o.date === prev2Str) && o.status !== 'REST' && o.status !== 'SICK' && o.status !== 'LEAVE' && o.status !== 'CR');
+
+        if (hasDirectOv || hasSubOv || hasDutyReg || hasEarn || hasMuster || hasPrevOv) {
           const resolved = await resolveDutyCodeForLRStaff(staff.id, dateStr, dayOfWeek, staff.rest_day, dataPool);
           if (resolved && resolved.code) {
             const existing = await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
             // If cell had generic 'NON DAILY', or was not manually edited by Admin, update to resolved train
             const isNonDailyPlaceholder = existing && String(existing.duty_code).toUpperCase().startsWith('NON DAILY');
-            if (!existing || isNonDailyPlaceholder || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv) {
+            if (!existing || isNonDailyPlaceholder || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv || hasPrevOv) {
               await syncLRSheetRecord(staff.id, dateStr, resolved.code, resolved.remarks, 'Daily Duty Management');
               syncedCount++;
             }
@@ -8117,6 +8126,7 @@ app.get('/api/lr-sheet', async (req, res) => {
                 id: curEntry?.id || null,
                 dutyCode: 'AVL',
                 isAvailable: true,
+                arrivalTime: restInfo.arrivalTime || null,
                 remarks: restInfo.remarksText || 'Min 8h HQ rest completed. Available for Duty booking.',
                 updatedBy: 'System'
               };
@@ -8126,6 +8136,7 @@ app.get('/api/lr-sheet', async (req, res) => {
               id: curEntry?.id || null,
               dutyCode: 'AVL',
               isAvailable: true,
+              arrivalTime: null,
               remarks: 'LR Standby Pool • Full HQ Rest Available • Ready for Booking',
               updatedBy: 'System'
             };

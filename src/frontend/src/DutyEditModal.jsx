@@ -5,7 +5,8 @@ export const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9, 10, 11],
+    [8, 9],
+    [10, 11],
     [12, 13],
     [15, 16, 17],
     [18, 19, 20]
@@ -437,9 +438,10 @@ export default function DutyEditModal({
 
         // 4. Category 4 (LR Relief Pool)
         if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
-          if (activeDuty.isOverridden && activeDuty.status === 'CHANGED_LINK' && activeDuty.target_category_id !== 4) {
+          if (activeDuty.isOverridden && (activeDuty.link_number || activeDuty.train_numbers) && activeDuty.status !== 'REST' && activeDuty.status !== 'AVAILABLE_FOR_BOOKING') {
+            const tr = activeDuty.train_numbers ? ` (Tr ${activeDuty.train_numbers})` : '';
             return {
-              label: `Link #${activeDuty.link_number} (Tr ${activeDuty.train_numbers})`,
+              label: `Link #${activeDuty.link_number || 'Duty'}${tr}`,
               isRest: false,
               isLr: true,
               linkNum: activeDuty.link_number
@@ -626,12 +628,13 @@ export default function DutyEditModal({
 
         // 6. Category 4 (LR Relief Pool)
         if (isCat4 || activeDuty.categoryId === 4) {
-          if (activeDuty.isOverridden && activeDuty.status === 'CHANGED_LINK' && activeDuty.target_category_id !== 4) {
+          if (activeDuty.isOverridden && (activeDuty.link_number || activeDuty.train_numbers) && activeDuty.status !== 'REST' && activeDuty.status !== 'AVAILABLE_FOR_BOOKING') {
+            const tr = activeDuty.train_numbers ? ` (Tr ${activeDuty.train_numbers})` : '';
             return {
               isAssigned: true,
               isUnavailable: false,
               unavailableReason: '',
-              trainDesc: `Link #${activeDuty.link_number} (Tr ${activeDuty.train_numbers})`,
+              trainDesc: `Link #${activeDuty.link_number || 'Duty'}${tr}`,
               linkNum: activeDuty.link_number,
               trainNo: activeDuty.train_numbers
             };
