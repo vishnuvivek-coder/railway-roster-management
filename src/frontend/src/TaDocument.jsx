@@ -6,30 +6,38 @@ const computePresetDates = (preset, y, m) => {
   const yr = parseInt(y, 10) || 2026;
   const mo = parseInt(m, 10) || 9;
   const lastDay = new Date(yr, mo, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = (now.getFullYear() === yr && (now.getMonth() + 1) === mo);
+  const isFutureMonth = (yr > now.getFullYear() || (yr === now.getFullYear() && mo > (now.getMonth() + 1)));
+  const currentDay = now.getDate();
+  const upToDay = isCurrentMonth ? Math.min(lastDay, currentDay) : (isFutureMonth ? 1 : lastDay);
 
   if (preset === 'wage_period') {
     // 11th of prev month to 10th of selected month (IR wage period)
     const prevYr = mo === 1 ? yr - 1 : yr;
     const prevMo = mo === 1 ? 12 : mo - 1;
+    const wageEndDay = isCurrentMonth ? Math.min(10, currentDay) : 10;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-10`
+      end: `${yr}-${String(mo).padStart(2, '0')}-${String(wageEndDay).padStart(2, '0')}`
     };
   } else if (preset === 'fortnight_1') {
+    const fn1End = isCurrentMonth ? Math.min(15, currentDay) : 15;
     return {
       start: `${yr}-${String(mo).padStart(2, '0')}-01`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-15`
+      end: `${yr}-${String(mo).padStart(2, '0')}-${String(fn1End).padStart(2, '0')}`
     };
   } else if (preset === 'fortnight_2') {
+    const fn2End = isCurrentMonth ? Math.min(lastDay, currentDay) : lastDay;
     return {
       start: `${yr}-${String(mo).padStart(2, '0')}-16`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      end: `${yr}-${String(mo).padStart(2, '0')}-${String(Math.max(16, fn2End)).padStart(2, '0')}`
     };
   }
-  // Default 'full_month'
+  // Default 'full_month' / up-to-date (strictly up to today for current month)
   return {
     start: `${yr}-${String(mo).padStart(2, '0')}-01`,
-    end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    end: `${yr}-${String(mo).padStart(2, '0')}-${String(upToDay).padStart(2, '0')}`
   };
 };
 
@@ -1054,7 +1062,11 @@ export default function TaDocument({
                 fontWeight: periodPreset === 'full_month' ? 700 : 500
               }}
             >
-              📅 Full Month
+              📅 {(() => {
+                const now = new Date();
+                const isCur = now.getFullYear() === parseInt(year, 10) && (now.getMonth() + 1) === parseInt(month, 10);
+                return isCur ? `Up-to-Date (1st – ${now.getDate()}th)` : 'Full Month';
+              })()}
             </button>
             <button
               type="button"

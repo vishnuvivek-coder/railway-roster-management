@@ -695,11 +695,27 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
     });
   }
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
   const daysInMonth = new Date(year, month, 0).getDate();
-  const maxDay = daysInMonth;
+  let maxDay = daysInMonth;
+  if (year > currentYear || (year === currentYear && month > currentMonth)) {
+    // Future month -> no duties performed yet
+    maxDay = 0;
+  } else if (year === currentYear && month === currentMonth) {
+    // Current month -> strictly up to current date (today)
+    maxDay = Math.min(daysInMonth, currentDay);
+  } else {
+    // Past month -> all days performed
+    maxDay = daysInMonth;
+  }
 
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
 
   const allNdaEntries = await all(
     staffId
@@ -918,24 +934,52 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) throw new Error(`Category for staff ID ${staffId} not found`);
 
-  const y = parseInt(year, 10) || new Date().getFullYear();
-  const m = parseInt(month, 10) || (new Date().getMonth() + 1);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
+  const y = parseInt(year, 10) || currentYear;
+  const m = parseInt(month, 10) || currentMonth;
   const daysInMonth = new Date(y, m, 0).getDate();
-  const actualStart = startDate || `${y}-${String(m).padStart(2, '0')}-01`;
-  const actualEnd = endDate || `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
   const monthYearStr = `${y}-${String(m).padStart(2, '0')}`;
+
+  const isCurrentMonth = (y === currentYear && m === currentMonth);
+  const isFutureMonth = (y > currentYear || (y === currentYear && m > currentMonth));
+
+  // Determine up-to-date cutoff for current/past/future month
+  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
+  const upToDateIso = `${y}-${String(m).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
+
+  let actualStart = startDate || `${y}-${String(m).padStart(2, '0')}-01`;
+  let actualEnd = endDate || (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
+
+  // Strict rule: TA can only be claimed/calculated for duties already performed up-to-date!
+  // Future dates yet to be performed must never be included in the TA claim calculation.
+  if (isCurrentMonth && actualEnd > todayIso) {
+    actualEnd = todayIso;
+  }
+  if (isFutureMonth) {
+    actualEnd = actualStart;
+  }
 
   // 1. Ensure up-to-date claims exist in ta_approvals for all months covered in the range
   const monthsCovered = getMonthsBetween(actualStart, actualEnd);
   for (const mInfo of monthsCovered) {
-    const minDaysInMonth = new Date(mInfo.year, mInfo.month, 0).getDate();
-    const existingClaims = await all(
-      'SELECT COUNT(DISTINCT duty_date) as cnt FROM ta_approvals WHERE staff_id = ? AND month_year = ?',
-      [staffId, mInfo.monthYearStr]
-    );
-    const hasFullClaims = existingClaims && existingClaims[0] && existingClaims[0].cnt >= Math.min(minDaysInMonth, 28);
-    if (!hasFullClaims) {
-      await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
+    const isThisCurrentMonth = (mInfo.year === currentYear && mInfo.month === currentMonth);
+    const isThisFutureMonth = (mInfo.year > currentYear || (mInfo.year === currentYear && mInfo.month > currentMonth));
+    const targetDays = isThisCurrentMonth ? Math.min(new Date(mInfo.year, mInfo.month, 0).getDate(), currentDay) : (isThisFutureMonth ? 0 : new Date(mInfo.year, mInfo.month, 0).getDate());
+
+    if (targetDays > 0) {
+      const existingClaims = await all(
+        'SELECT COUNT(DISTINCT duty_date) as cnt FROM ta_approvals WHERE staff_id = ? AND month_year = ? AND duty_date <= ?',
+        [staffId, mInfo.monthYearStr, isThisCurrentMonth ? todayIso : `${mInfo.year}-${String(mInfo.month).padStart(2, '0')}-31`]
+      );
+      const hasFullClaims = existingClaims && existingClaims[0] && existingClaims[0].cnt >= targetDays;
+      if (!hasFullClaims) {
+        await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
+      }
     }
   }
 
