@@ -1721,6 +1721,14 @@ export default function App() {
     if (cell.status === 'CR') return 'CR';
     if (cell.status === 'ABSENT') return 'ABSENT';
     if (cell.status === 'AVAILABLE_FOR_BOOKING') return '⚡ AVL';
+    if (cell.status === 'DUTY') {
+      if (cell.actualLinkNumber) {
+        return parseInt(selectedCatId, 10) === 4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
+      }
+      if (cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers)) {
+        return cell.train_numbers.length > 8 ? cell.train_numbers.substring(0, 8) + '…' : cell.train_numbers;
+      }
+    }
     if (cell.isRest) return 'REST';
     return getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
   };
@@ -1738,6 +1746,9 @@ export default function App() {
     if (cell.status === 'SICK' || cell.status === 'ABSENT') return 'roster-cell cell-sick cell-override';
     if (cell.status === 'CR') return 'roster-cell cell-cr cell-override';
     if (cell.status === 'AVAILABLE_FOR_BOOKING') return 'roster-cell cell-available';
+    if (cell.status === 'DUTY' && cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers)) {
+      return cell.isOverridden ? 'roster-cell cell-duty cell-override' : 'roster-cell cell-body cell-duty';
+    }
     if (cell.isOverridden) {
       return cell.isRest ? 'roster-cell cell-rest cell-override' : 'roster-cell cell-override';
     }
@@ -2856,6 +2867,9 @@ export default function App() {
                             const isMusterRest = cell.muster_code === 'R';
                             const isMusterAbsent = cell.muster_code === 'O';
 
+                            const isWorkingTrain = (cell.status === 'DUTY' || cell.status === 'SUBSTITUTE' || cell.status === 'CHANGED_LINK' || cell.status === 'EXTRA_CREW') &&
+                              cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers);
+
                             const isSick = cell.status === 'SICK' || isMusterSick;
                             const isLeave = (cell.status === 'LEAVE' || cell.isLeave || isMusterLeave) && !isMusterOd;
                             const isCr = cell.status === 'CR' || isMusterCr;
@@ -2863,10 +2877,12 @@ export default function App() {
                             const isAvailableForBooking = cell.status === 'AVAILABLE_FOR_BOOKING';
                             const isCat4 = parseInt(selectedCatId, 10) === 4;
                             const lrInfo = cell.lr_rest_info;
-                            const isRest = isMusterRest || (!isAvailableForBooking && !isMusterOd && (cell.isRest || cell.actualLinkNumber === null || cell.status === 'REST'));
+                            const isRest = !isWorkingTrain && (isMusterRest || (!isAvailableForBooking && !isMusterOd && (cell.isRest || (cell.actualLinkNumber === null && !cell.train_numbers) || cell.status === 'REST')));
                             const isOverridden = cell.isOverridden;
                             
-                            let linkLabel = getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
+                            let linkLabel = cell.actualLinkNumber 
+                              ? (isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber))
+                              : (cell.set_type && cell.set_type !== 'Other / REST' ? cell.set_type : (isWorkingTrain ? 'Non-Daily' : ''));
                             let cellBg = 'transparent';
                             let badgeStyle = { fontWeight: 700, borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' };
                             let trainNoDisplay = cell.train_numbers || '-';
@@ -2945,7 +2961,7 @@ export default function App() {
                                     </span>
                                   )}
                                   <span style={{ color: '#a78bfa', fontWeight: 600, fontSize: '0.85rem' }}>
-                                    Compensatory Rest (CR) {cell.muster_remarks ? `(${cell.muster_remarks})` : ''}
+                                    {cell.overrideReason ? cell.overrideReason : `Compensatory Rest (CR)${cell.muster_remarks ? ` (${cell.muster_remarks})` : ''}`}
                                   </span>
                                 </div>
                               );
@@ -2978,7 +2994,7 @@ export default function App() {
                               remarksElement = (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
-                                    {cell.reason ? `⚡ ${cell.reason}` : '⚡ Available for Booking Duty at HQ'}
+                                    {cell.overrideReason || cell.reason || '⚡ Available for Booking Duty at HQ (Standby)'}
                                   </span>
                                   {lrInfo && lrInfo.hasLastDuty && (
                                     <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
@@ -3002,7 +3018,35 @@ export default function App() {
                                     </span>
                                   )}
                                   <span style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                                    Weekly Rest Day {cell.muster_remarks ? `(${cell.muster_remarks})` : ''}
+                                    {cell.overrideReason || 'Weekly Rest Day'} {cell.muster_remarks ? `(${cell.muster_remarks})` : ''}
+                                  </span>
+                                </div>
+                              );
+                            } else if (isWorkingTrain) {
+                              if (cell.actualLinkNumber) {
+                                linkLabel = isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
+                                badgeStyle.background = 'rgba(59, 130, 246, 0.15)';
+                                badgeStyle.color = '#60a5fa';
+                                badgeStyle.border = '1px solid rgba(59, 130, 246, 0.4)';
+                              } else {
+                                linkLabel = cell.set_type || 'Train Duty';
+                                badgeStyle.background = 'rgba(16, 185, 129, 0.15)';
+                                badgeStyle.color = '#10b981';
+                                badgeStyle.border = '1px solid rgba(16, 185, 129, 0.4)';
+                              }
+                              trainNoDisplay = cell.train_numbers || '-';
+                              routeDisplay = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
+                              coachDisplay = cell.coaches || '-';
+                              cellBg = isOverridden ? 'rgba(59, 130, 246, 0.02)' : 'transparent';
+                              remarksElement = (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {cell.muster_code && (
+                                    <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                      📋 Muster: {cell.muster_code}
+                                    </span>
+                                  )}
+                                  <span style={{ color: isOverridden ? '#60a5fa' : 'var(--color-text-primary)', fontSize: '0.85rem' }}>
+                                    {cell.overrideReason || (cell.actualLinkNumber ? `Assigned to Link #${cell.actualLinkNumber}` : `Working Train ${cell.train_numbers}`)}
                                   </span>
                                 </div>
                               );
