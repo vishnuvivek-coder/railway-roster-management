@@ -7892,6 +7892,11 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
         const dObj = new Date(targetYear, targetMonth - 1, d);
         const dateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const dayOfWeek = dayNames[dObj.getDay()];
+        const hasDirectOv = monthOverrides.some(o => o.staff_id === staff.id && o.date === dateStr);
+        const hasSubOv = monthOverrides.some(o => o.substitute_staff_id === staff.id && o.date === dateStr);
+        const hasDutyReg = dutyRegisterEntries.some(r => r.staff_id === staff.id && r.date === dateStr);
+        const hasEarn = earningsList.some(e => e.staff_id === staff.id && e.date === dateStr);
+        const hasMuster = musterList.some(m => m.staff_id === staff.id && m.date === dateStr && ['R', 'CR', 'SICK', 'S', 'CL', 'LAP', 'LHAP', 'CAP', 'L'].includes(m.code.toUpperCase()));
 
         const dMinus1 = new Date(targetYear, targetMonth - 1, d);
         dMinus1.setDate(dMinus1.getDate() - 1);
@@ -7987,7 +7992,7 @@ app.get('/api/lr-sheet', async (req, res) => {
       { id: 99, name: 'D RAKESH', desg: 'Sr.CCTC', rest: 'FRI' },
       { id: 100, name: 'G SHIVAN', desg: 'Sr.CCTC', rest: 'MON' },
       { id: 101, name: 'MVS NAGI REDDY', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 102, name: 'D VENKAT REDDY', desg: 'Sr.CCTC', rest: 'TUE' },
+      { id: 102, name: 'B VENKAT REDDY', desg: 'Sr.CCTC', rest: 'TUE' },
       { id: 103, name: 'MSA RAJU', desg: 'Sr.CCTC', rest: 'MON' },
       { id: 104, name: 'KB RAO', desg: 'Sr.CCTC', rest: 'FRI' },
       { id: 105, name: 'SANJAY KUMAR', desg: 'Sr.CCTC', rest: 'MON' },
@@ -8011,9 +8016,9 @@ app.get('/api/lr-sheet', async (req, res) => {
       return {
         slNo: idx + 1,
         staffId: t.id,
-        name: t.name || found?.name,
-        designation: t.desg || found?.designation,
-        restDay: t.rest || found?.rest_day,
+        name: found?.name || t.name,
+        designation: found?.designation || t.desg,
+        restDay: found?.rest_day || t.rest,
         isRelieved: !!t.isRelieved,
         relievedNote: t.relievedNote || ''
       };
