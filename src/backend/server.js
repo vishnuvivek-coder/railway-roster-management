@@ -1350,10 +1350,13 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
       }
     }
 
+    const targetDesg = designation !== undefined ? designation : currentStaff.designation;
+    const targetHrms = hrms_id !== undefined ? hrms_id : currentStaff.hrms_id;
+
     await run(
       `UPDATE staff 
        SET name = COALESCE(?, name), 
-           designation = COALESCE(?, designation), 
+           designation = ?, 
            row_position = COALESCE(?, row_position), 
            active = COALESCE(?, active),
            pf_no = COALESCE(?, pf_no),
@@ -1362,14 +1365,21 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
            doa = COALESCE(?, doa),
            hq_station = COALESCE(?, hq_station),
            rest_day = COALESCE(?, rest_day),
-           hrms_id = COALESCE(?, hrms_id),
+           hrms_id = ?,
            seniority_no = COALESCE(?, seniority_no)
        WHERE id = ?`,
-      [name, designation || null, row_position || null, active !== undefined ? active : null, pf_no || null, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, hrms_id || null, seniority_no || null, id]
+      [name || null, targetDesg, row_position || null, active !== undefined ? active : null, pf_no || null, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
     );
 
+    // Sync seniority_list if matching pf_no or seniority_no exists
+    try {
+      if (designation && (currentStaff.seniority_no || currentStaff.pf_no)) {
+        await run('UPDATE seniority_list SET designation = ? WHERE sl_no = ? OR pf_number = ?', [designation, currentStaff.seniority_no, currentStaff.pf_no]);
+      }
+    } catch (e) {}
+
     const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
-    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${name || currentStaff.name})`);
+    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${name || currentStaff.name}, Desg: ${targetDesg}, HRMS: ${targetHrms})`);
     res.json({ message: 'Staff updated successfully', staff: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });

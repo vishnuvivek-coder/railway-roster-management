@@ -34,6 +34,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [cellRemarks, setCellRemarks] = useState('');
   const [savingCell, setSavingCell] = useState(false);
 
+  // Designation & HRMS ID editing state
+  const [editDesgModal, setEditDesgModal] = useState(null);
+  const [customDesgInput, setCustomDesgInput] = useState('');
+  const [editingHrmsId, setEditingHrmsId] = useState(null);
+  const [hrmsInputVal, setHrmsInputVal] = useState('');
+  const [savingStaffField, setSavingStaffField] = useState(false);
+
   // Generate available cycles for quick jump (last 6 months to next 3 months)
   const availableCycles = useMemo(() => {
     const list = [];
@@ -165,6 +172,45 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       alert('Error resetting cell: ' + err.message);
     } finally {
       setSavingCell(false);
+    }
+  };
+
+  const handleSaveStaffField = async (staffId, updates) => {
+    try {
+      setSavingStaffField(true);
+      const token = authToken || localStorage.getItem('token');
+      const res = await fetch(`/api/staff/${staffId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(updates)
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update employee details');
+
+      // Optimistically update cycleData.staff
+      setCycleData(prev => {
+        if (!prev || !prev.staff) return prev;
+        const newStaff = prev.staff.map(s => {
+          if (s.id !== staffId) return s;
+          return {
+            ...s,
+            ...(updates.designation !== undefined ? { designation: updates.designation } : {}),
+            ...(updates.hrms_id !== undefined ? { hrms_id: updates.hrms_id } : {})
+          };
+        });
+        return { ...prev, staff: newStaff };
+      });
+
+      setEditDesgModal(null);
+      setEditingHrmsId(null);
+    } catch (err) {
+      alert('Error updating employee details: ' + err.message);
+    } finally {
+      setSavingStaffField(false);
     }
   };
 
@@ -578,11 +624,11 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   <th className="muster-col-name">
                     Name of Employee
                   </th>
-                  <th className="muster-col-desg">
-                    Designation
+                  <th className="muster-col-desg" title={isAdmin ? "Click on any employee's designation to edit" : undefined}>
+                    Designation {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>✏️</span>}
                   </th>
-                  <th className="muster-col-hrms">
-                    HRMS ID
+                  <th className="muster-col-hrms" title={isAdmin ? "Click on any employee's HRMS ID to edit" : undefined}>
+                    HRMS ID {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>✏️</span>}
                   </th>
 
                   {/* Day Date Headers */}
@@ -638,30 +684,137 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                       </div>
                     </td>
 
-                    {/* Fixed Left Designation */}
-                    <td className="muster-col-desg">
-                      <span className="badge" style={{
-                        background: 'rgba(59, 130, 246, 0.12)',
-                        color: '#93c5fd',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '2px 8px'
-                      }}>
-                        {staff.designation || '-'}
-                      </span>
+                    {/* Fixed Left Designation - Editable */}
+                    <td
+                      className="muster-col-desg"
+                      onClick={() => {
+                        if (isAdmin) {
+                          setEditDesgModal({
+                            staffId: staff.id,
+                            staffName: staff.name,
+                            currentDesg: staff.designation || 'TTI',
+                            pfNo: staff.pf_no
+                          });
+                          setCustomDesgInput('');
+                        }
+                      }}
+                      style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                      title={isAdmin ? `Click to edit designation for ${staff.name} (Current: ${staff.designation || '-'})` : undefined}
+                    >
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', position: 'relative' }}>
+                        <span className="badge" style={{
+                          background: 'rgba(59, 130, 246, 0.12)',
+                          color: '#93c5fd',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          cursor: isAdmin ? 'pointer' : 'default'
+                        }}>
+                          {staff.designation || '-'}
+                        </span>
+                        {isAdmin && (
+                          <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
+                            ✏️
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Fixed Left HRMS ID */}
-                    <td className="muster-col-hrms">
-                      <span style={{
-                        fontSize: '0.76rem',
-                        fontWeight: 600,
-                        color: staff.hrms_id ? '#f1f5f9' : 'var(--color-text-muted)',
-                        letterSpacing: '0.5px'
-                      }}>
-                        {staff.hrms_id || '-'}
-                      </span>
+                    {/* Fixed Left HRMS ID - Editable */}
+                    <td
+                      className="muster-col-hrms"
+                      onClick={() => {
+                        if (isAdmin && editingHrmsId !== staff.id) {
+                          setEditingHrmsId(staff.id);
+                          setHrmsInputVal(staff.hrms_id || '');
+                        }
+                      }}
+                      style={{ cursor: isAdmin && editingHrmsId !== staff.id ? 'pointer' : 'default' }}
+                      title={isAdmin && editingHrmsId !== staff.id ? `Click to edit HRMS ID for ${staff.name}` : undefined}
+                    >
+                      {editingHrmsId === staff.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            autoFocus
+                            className="form-input"
+                            style={{
+                              width: '70px',
+                              fontSize: '0.74rem',
+                              padding: '2px 4px',
+                              textTransform: 'uppercase',
+                              textAlign: 'center',
+                              fontWeight: 700,
+                              background: '#27272a',
+                              border: '1px solid var(--border-gold)',
+                              borderRadius: '4px',
+                              color: '#fff'
+                            }}
+                            value={hrmsInputVal}
+                            onChange={e => setHrmsInputVal(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() });
+                              } else if (e.key === 'Escape') {
+                                setEditingHrmsId(null);
+                              }
+                            }}
+                            placeholder="HRMS"
+                          />
+                          <button
+                            type="button"
+                            disabled={savingStaffField}
+                            onClick={() => handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() })}
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.25)',
+                              color: '#34d399',
+                              border: '1px solid rgba(16, 185, 129, 0.5)',
+                              borderRadius: '4px',
+                              padding: '2px 4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                            title="Save HRMS ID"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingHrmsId(null)}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              color: '#f87171',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              borderRadius: '4px',
+                              padding: '2px 4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <span style={{
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            color: staff.hrms_id ? '#f1f5f9' : 'var(--color-text-muted)',
+                            letterSpacing: '0.5px'
+                          }}>
+                            {staff.hrms_id || '-'}
+                          </span>
+                          {isAdmin && (
+                            <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit HRMS ID">
+                              ✏️
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Daily Muster Cells */}
@@ -917,6 +1070,120 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Designation Edit Modal */}
+      {editDesgModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '420px',
+            maxWidth: '100%',
+            background: 'var(--bg-secondary)',
+            borderRadius: '14px',
+            padding: '24px',
+            border: '1.5px solid var(--border-gold)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
+                👔 Edit Employee Designation
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditDesgModal(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '0.84rem' }}>
+              <div>Employee: <strong style={{ color: '#f3f4f6' }}>{editDesgModal.staffName}</strong></div>
+              <div style={{ marginTop: '3px', color: 'var(--color-text-muted)' }}>
+                PF NO: <span style={{ color: '#cbd5e1' }}>{editDesgModal.pfNo || '-'}</span> | Current: <strong style={{ color: '#93c5fd' }}>{editDesgModal.currentDesg}</strong>
+              </div>
+            </div>
+
+            <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '10px' }}>
+              Select Official Designation:
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+              {['CTI', 'TTI', 'SRTE', 'Sr.CCTC', 'CCTC', 'DY.CTI'].map(desg => {
+                const isSelected = editDesgModal.currentDesg === desg;
+                return (
+                  <button
+                    key={desg}
+                    type="button"
+                    disabled={savingStaffField}
+                    onClick={() => handleSaveStaffField(editDesgModal.staffId, { designation: desg })}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: '8px',
+                      border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-glass)',
+                      background: isSelected ? 'rgba(212, 161, 92, 0.2)' : 'rgba(255,255,255,0.03)',
+                      color: isSelected ? 'var(--primary)' : '#e2e8f0',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {desg}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '18px' }}>
+              <label className="form-label" style={{ fontSize: '0.8rem' }}>Or Enter Custom Designation:</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. DY.SMR, CH.OS"
+                  value={customDesgInput}
+                  onChange={e => setCustomDesgInput(e.target.value)}
+                  style={{ fontSize: '0.84rem', padding: '7px 10px', textTransform: 'uppercase' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingStaffField || !customDesgInput.trim()}
+                  onClick={() => handleSaveStaffField(editDesgModal.staffId, { designation: customDesgInput.trim().toUpperCase() })}
+                  style={{ padding: '7px 14px', fontSize: '0.82rem', fontWeight: 800 }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditDesgModal(null)}
+                style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
