@@ -64,7 +64,8 @@ function checkMultiDayLeaveReturnSync(staffId, categoryId, rowPosition, cycleLen
   function checkStaffLeave(dateStr) {
     const muster = musterMap ? musterMap[dateStr] : null;
     if (muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(muster.code.toUpperCase())) {
-      return { isLeave: true, status: muster.code.toUpperCase() };
+      const isSick = muster.code.toUpperCase() === 'SICK' || muster.code.toUpperCase() === 'LHAP';
+      return { isLeave: true, status: isSick ? 'SICK' : muster.code.toUpperCase(), isSick };
     }
     const ov = overrideMap ? overrideMap[dateStr] : null;
     if (ov) {
@@ -72,10 +73,12 @@ function checkMultiDayLeaveReturnSync(staffId, categoryId, rowPosition, cycleLen
         return null;
       }
       if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(ov.status) || ov.leave_type) {
-        return { isLeave: true, status: ov.leave_type || ov.status };
+        const isSick = ov.status === 'SICK' || ov.leave_type === 'SICK' || ov.leave_type === 'LHAP' || (ov.reason && ov.reason.toLowerCase().includes('sick'));
+        return { isLeave: true, status: isSick ? 'SICK' : (ov.leave_type || ov.status), isSick };
       }
       if (ov.overridden_link_number === null && ov.reason && (ov.reason.toLowerCase().includes('leave') || ov.reason.toLowerCase().includes('sick'))) {
-        return { isLeave: true, status: ov.reason.toLowerCase().includes('sick') ? 'SICK' : 'LEAVE' };
+        const isSick = ov.reason.toLowerCase().includes('sick');
+        return { isLeave: true, status: isSick ? 'SICK' : 'LEAVE', isSick };
       }
     }
     return null;
@@ -90,43 +93,30 @@ function checkMultiDayLeaveReturnSync(staffId, categoryId, rowPosition, cycleLen
   const todayLinkNum = getBaseLinkNumber(rowPosition, todayDayOffset, cycleLength);
   if (todayLinkNum === null) return null;
 
-  // 3. Check Day T - 1 (Yesterday)
-  const d1 = new Date(targetDateStr + 'T12:00:00');
-  d1.setDate(d1.getDate() - 1);
-  const prevDateStr = d1.toISOString().split('T')[0];
+  // 3. Check multi-day link set details
+  const todayLinkSet = getLinkSetDetails(categoryId, todayLinkNum);
 
-  const prevLeave = checkStaffLeave(prevDateStr);
-  if (prevLeave) {
-    const prevDayOffset = getDayOffset(anchorDate, prevDateStr);
-    const prevLinkNum = getBaseLinkNumber(rowPosition, prevDayOffset, cycleLength);
-    const prevLinkSet = getLinkSetDetails(categoryId, prevLinkNum);
+  if (todayLinkSet && todayLinkSet.dayIndexInSet > 1) {
+    const daysSinceStart = todayLinkSet.dayIndexInSet - 1;
+    for (let k = daysSinceStart; k >= 1; k--) {
+      const prevD = new Date(targetDateStr + 'T12:00:00');
+      prevD.setDate(prevD.getDate() - k);
+      const prevDateStr = prevD.toISOString().split('T')[0];
+      const prevLeave = checkStaffLeave(prevDateStr);
 
-    if (prevLinkSet && prevLinkSet.isFirstDayOfSet && prevLinkSet.remainingLinks.length >= 1) {
-      return {
-        isAvailable: true,
-        status: 'AVAILABLE_FOR_BOOKING',
-        reason: `Available for Booking Duty at HQ (Took 1-day ${prevLeave.status} on Link #${prevLinkNum})`
-      };
-    }
-  }
-
-  // 4. Check Day T - 2 (For Day 3 of 3-day links)
-  const d2 = new Date(targetDateStr + 'T12:00:00');
-  d2.setDate(d2.getDate() - 2);
-  const prev2DateStr = d2.toISOString().split('T')[0];
-
-  const prev2Leave = checkStaffLeave(prev2DateStr);
-  if (prev2Leave && !prevLeave) {
-    const prev2DayOffset = getDayOffset(anchorDate, prev2DateStr);
-    const prev2LinkNum = getBaseLinkNumber(rowPosition, prev2DayOffset, cycleLength);
-    const prev2LinkSet = getLinkSetDetails(categoryId, prev2LinkNum);
-
-    if (prev2LinkSet && prev2LinkSet.isFirstDayOfSet && prev2LinkSet.remainingLinks.length >= 2) {
-      return {
-        isAvailable: true,
-        status: 'AVAILABLE_FOR_BOOKING',
-        reason: `Available for Booking Duty at HQ (Took 1-day ${prev2Leave.status} on Link #${prev2LinkNum})`
-      };
+      if (prevLeave) {
+        const startDayOffset = getDayOffset(anchorDate, prevDateStr);
+        const startLinkNum = getBaseLinkNumber(rowPosition, startDayOffset, cycleLength);
+        const isSick = prevLeave.isSick || prevLeave.status === 'SICK';
+        return {
+          isAvailable: true,
+          status: 'AVAILABLE_FOR_BOOKING',
+          isSickReturn: isSick,
+          reason: isSick
+            ? `Available for Booking Duty at HQ (Came out of SICK leave on Link #${startLinkNum})`
+            : `Available for Booking Duty at HQ (Took leave on Link #${startLinkNum})`
+        };
+      }
     }
   }
 

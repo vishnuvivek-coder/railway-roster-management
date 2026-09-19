@@ -517,6 +517,8 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
             <span>•</span>
             <span>Min 8h: <strong>{activeMetrics.breakdown?.available_8h_rest || 0}</strong></span>
             <span>•</span>
+            <span>Sick Return: <strong style={{ color: '#10b981' }}>{activeMetrics.breakdown?.available_sick_return || 0}</strong></span>
+            <span>•</span>
             <span>Leave Return: <strong>{activeMetrics.breakdown?.available_leave_return || 0}</strong></span>
             <span>•</span>
             <span>Weekly Rest: <strong>{activeMetrics.breakdown?.available_weekly_rest || 0}</strong></span>

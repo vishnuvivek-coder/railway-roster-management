@@ -877,6 +877,32 @@ export default function DutyEditModal({
     }
   };
 
+  const handleReportFit = async () => {
+    const staffName = dutyModal.name || 'Employee';
+    if (!window.confirm(`Mark ${staffName} as Reported Fit (Came out of Sick Leave) on ${selectedDate}?\n\nThey will be shown as Available for Booking at HQ GNT.`)) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/duty/change-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          staff_id: dutyModal.staffId || dutyModal.originalStaffId,
+          date: selectedDate,
+          action: 'AVAILABLE_FOR_BOOKING',
+          reason: `Reported fit / came out of sick leave; spare at HQ GNT available for duty booking`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to report fit');
+      onSuccess(`Reported Fit! ${staffName} is now marked Available for Booking at HQ GNT.`);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleUndoAdvance = async () => {
     const staffId = dutyModal.staffId || dutyModal.originalStaffId;
     const staffName = dutyModal.name || 'Employee';
@@ -1356,10 +1382,10 @@ export default function DutyEditModal({
                 flexWrap: 'wrap'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🏖️</span>
+                  <span style={{ fontSize: '1.5rem' }}>{dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason)) ? '🤒' : '🏖️'}</span>
                   <div>
                     <strong style={{ color: '#f87171', fontSize: '0.94rem' }}>
-                      Currently On {dutyModal.status === 'SICK' ? 'Sick Leave' : 'Leave'} ({dutyModal.leave_type || dutyModal.overrideReason || 'Leave'})
+                      Currently On {dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason)) ? 'Sick Leave' : 'Leave'} ({dutyModal.leave_type || dutyModal.overrideReason || (dutyModal.status === 'SICK' ? 'Sick' : 'Leave')})
                     </strong>
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
                       Original Scheduled Duty: <strong>Link #{targetLink || 'Duty'}</strong>.
@@ -1367,24 +1393,50 @@ export default function DutyEditModal({
                   </div>
                 </div>
                 {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={handleCancelLeave}
-                    disabled={submitting}
-                    className="btn"
-                    style={{
-                      background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
-                      color: '#ffffff',
-                      border: 'none',
-                      fontWeight: 800,
-                      fontSize: '0.8rem',
-                      padding: '6px 14px',
-                      borderRadius: '8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ❌ Cancel Leave
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {(dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason))) && (
+                      <button
+                        type="button"
+                        onClick={handleReportFit}
+                        disabled={submitting}
+                        className="btn"
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981, #059669)',
+                          color: '#ffffff',
+                          border: 'none',
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title="Mark employee as reported fit and available at HQ"
+                      >
+                        🟢 Reported Fit (Available at HQ)
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCancelLeave}
+                      disabled={submitting}
+                      className="btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 800,
+                        fontSize: '0.8rem',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ❌ Cancel Leave
+                    </button>
+                  </div>
                 )}
               </div>
             )}

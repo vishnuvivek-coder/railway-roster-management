@@ -170,7 +170,7 @@ function getLinkSetDetails(categoryId, linkNumber) {
   return null;
 }
 
-// Helper: Check if staff took 1-day leave on a 2 or 3 day link duty on previous day(s), making them available at HQ today
+// Helper: Check if staff took leave / sick on a 2 or 3 day link duty on previous day(s), making them available at HQ today
 async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleLength, anchorDate, targetDateStr) {
   // Helper: Check if staff was on leave / sick on a given date (across overrides, leave requests, and muster records)
   async function checkStaffLeaveOnDate(dateStr) {
@@ -180,27 +180,31 @@ async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleL
       if (override.status === 'AVAILABLE_FOR_BOOKING' || (override.reason && override.reason.toLowerCase().includes('available for booking'))) {
         return null;
       }
-      if (override.status === 'LEAVE' || override.status === 'SICK' || override.status === 'CR') {
-        return { isLeave: true, status: override.status, reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
+      if (['LEAVE', 'SICK', 'CR', 'ABSENT'].includes(override.status) || override.leave_type) {
+        const isSick = override.status === 'SICK' || override.leave_type === 'SICK' || override.leave_type === 'LHAP' || (override.reason && override.reason.toLowerCase().includes('sick'));
+        return { isLeave: true, status: isSick ? 'SICK' : (override.leave_type || override.status), isSick, reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
       }
       if (override.overridden_link_number === null && override.reason && (override.reason.toLowerCase().includes('leave') || override.reason.toLowerCase().includes('sick'))) {
-        return { isLeave: true, status: override.reason.toLowerCase().includes('sick') ? 'SICK' : 'LEAVE', reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
+        const isSick = override.reason.toLowerCase().includes('sick');
+        return { isLeave: true, status: isSick ? 'SICK' : 'LEAVE', isSick, reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
       }
     }
 
     // 2. Check approved leave requests
     const leaveReq = await get(
-      "SELECT * FROM leave_requests WHERE staff_id = ? AND status = 'APPROVED' AND type = 'LEAVE' AND (date = ? OR (from_date <= ? AND to_date >= ?))",
+      "SELECT * FROM leave_requests WHERE staff_id = ? AND status = 'APPROVED' AND (date = ? OR (from_date <= ? AND to_date >= ?))",
       [staffId, dateStr, dateStr, dateStr]
     );
     if (leaveReq) {
-      return { isLeave: true, status: 'LEAVE', reason: `Approved Leave: ${leaveReq.reason || 'Casual Leave'}`, substituteStaffId: null, substituteName: null };
+      const isSick = leaveReq.type === 'SICK' || (leaveReq.reason && leaveReq.reason.toLowerCase().includes('sick'));
+      return { isLeave: true, status: isSick ? 'SICK' : 'LEAVE', isSick, reason: `Approved ${isSick ? 'Sick' : 'Leave'}: ${leaveReq.reason || 'Leave'}`, substituteStaffId: null, substituteName: null };
     }
 
     // 3. Check muster records
-    const muster = await get("SELECT * FROM muster_records WHERE staff_id = ? AND date = ? AND code IN ('CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH')", [staffId, dateStr]);
+    const muster = await get("SELECT * FROM muster_records WHERE staff_id = ? AND date = ? AND code IN ('CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH', 'SICK', 'CR', 'O')", [staffId, dateStr]);
     if (muster) {
-      return { isLeave: true, status: 'LEAVE', reason: `Muster Leave (${muster.code})`, substituteStaffId: null, substituteName: null };
+      const isSick = muster.code === 'SICK' || muster.code === 'LHAP';
+      return { isLeave: true, status: isSick ? 'SICK' : muster.code, isSick, reason: `Muster ${isSick ? 'Sick' : 'Leave'} (${muster.code})`, substituteStaffId: null, substituteName: null };
     }
 
     return null;
@@ -210,70 +214,70 @@ async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleL
   const todayLeave = await checkStaffLeaveOnDate(targetDateStr);
   if (todayLeave) return null;
 
-  // 2. Check today's scheduled link
+  // 2. Check today's scheduled cyclic link
   const todayDayOffset = getDayOffset(anchorDate, targetDateStr);
   const todayLinkNum = getBaseLinkNumber(rowPosition, todayDayOffset, cycleLength);
   if (todayLinkNum === null) return null;
   const todayLinkDef = await getActiveLinkDef(categoryId, todayLinkNum, targetDateStr);
   if (!todayLinkDef || todayLinkDef.is_rest === 1) return null;
 
-  // 3. Check Day T - 1 (Yesterday)
-  const d1 = new Date(targetDateStr);
-  d1.setDate(d1.getDate() - 1);
-  const prevDateStr = d1.toISOString().split('T')[0];
+  // 3. Check multi-day link set details
+  const todayLinkSet = getLinkSetDetails(categoryId, todayLinkNum);
 
-  const prevLeave = await checkStaffLeaveOnDate(prevDateStr);
-  if (prevLeave) {
-    const prevDayOffset = getDayOffset(anchorDate, prevDateStr);
-    const prevLinkNum = getBaseLinkNumber(rowPosition, prevDayOffset, cycleLength);
-    const prevLinkDef = await getActiveLinkDef(categoryId, prevLinkNum, prevDateStr);
-    const prevLinkSet = getLinkSetDetails(categoryId, prevLinkNum);
+  // If today's link is part of a multi-day link set and today is NOT the first day (i.e. dayIndexInSet > 1):
+  if (todayLinkSet && todayLinkSet.dayIndexInSet > 1) {
+    const daysSinceStart = todayLinkSet.dayIndexInSet - 1; // 1 for Day 2, 2 for Day 3
+    // Check all previous days of this link set (starting from Day 1)
+    for (let k = daysSinceStart; k >= 1; k--) {
+      const prevD = new Date(targetDateStr + 'T12:00:00');
+      prevD.setDate(prevD.getDate() - k);
+      const prevDateStr = prevD.toISOString().split('T')[0];
+      const prevLeave = await checkStaffLeaveOnDate(prevDateStr);
 
-    // Is yesterday's link a 2-Day or 3-Day link duty where Day 1 was leave?
-    const isMultiDayLink = prevLinkSet
-      ? (prevLinkSet.isFirstDayOfSet && prevLinkSet.remainingLinks.length >= 1)
-      : ((prevLinkDef && (prevLinkDef.set_type === '2-Day Set' || prevLinkDef.set_type === '3-Day Set')) ||
-         (todayLinkDef && todayLinkDef.from_station && !todayLinkDef.from_station.startsWith('GNT') && todayLinkDef.from_station !== '---'));
-
-    if (isMultiDayLink) {
-      return {
-        isAvailable: true,
-        status: 'AVAILABLE_FOR_BOOKING',
-        reason: `Available for Booking Duty at HQ (Took 1-day ${prevLeave.status} on Link #${prevLinkNum})`,
-        substituteStaffId: prevLeave.substituteStaffId,
-        substituteName: prevLeave.substituteName,
-        originalPrevLink: prevLinkNum
-      };
+      if (prevLeave) {
+        const startDayOffset = getDayOffset(anchorDate, prevDateStr);
+        const startLinkNum = getBaseLinkNumber(rowPosition, startDayOffset, cycleLength);
+        const isSick = prevLeave.isSick || prevLeave.status === 'SICK';
+        return {
+          isAvailable: true,
+          status: 'AVAILABLE_FOR_BOOKING',
+          isSickReturn: isSick,
+          reason: isSick
+            ? `Available for Booking Duty at HQ (Came out of SICK leave on Link #${startLinkNum})`
+            : `Available for Booking Duty at HQ (Took leave on Link #${startLinkNum})`,
+          substituteStaffId: prevLeave.substituteStaffId,
+          substituteName: prevLeave.substituteName,
+          originalPrevLink: startLinkNum
+        };
+      }
     }
   }
 
-  // 4. Check Day T - 2 (For Day 3 of 3-Day links where 1-day leave was on Day 1)
-  const d2 = new Date(targetDateStr);
-  d2.setDate(d2.getDate() - 2);
-  const prev2DateStr = d2.toISOString().split('T')[0];
+  // Fallback check for any link where departure is from an outstation (where from_station !== 'GNT' and !== '---')
+  const isOutstationDept = todayLinkDef && todayLinkDef.from_station && !todayLinkDef.from_station.startsWith('GNT') && todayLinkDef.from_station !== '---';
+  if (isOutstationDept) {
+    for (let k = 1; k <= 2; k++) {
+      const prevD = new Date(targetDateStr + 'T12:00:00');
+      prevD.setDate(prevD.getDate() - k);
+      const prevDateStr = prevD.toISOString().split('T')[0];
+      const prevLeave = await checkStaffLeaveOnDate(prevDateStr);
 
-  const prev2Leave = await checkStaffLeaveOnDate(prev2DateStr);
-  // Only applies if Day T-1 was NOT leave (strictly 1-day leave on Day 1)
-  if (prev2Leave && !prevLeave) {
-    const prev2DayOffset = getDayOffset(anchorDate, prev2DateStr);
-    const prev2LinkNum = getBaseLinkNumber(rowPosition, prev2DayOffset, cycleLength);
-    const prev2LinkDef = await getActiveLinkDef(categoryId, prev2LinkNum, prev2DateStr);
-    const prev2LinkSet = getLinkSetDetails(categoryId, prev2LinkNum);
-
-    const is3DaySet = prev2LinkSet
-      ? (prev2LinkSet.isFirstDayOfSet && prev2LinkSet.remainingLinks.length >= 2)
-      : ((prev2LinkDef && prev2LinkDef.set_type === '3-Day Set') ||
-         (todayLinkDef && todayLinkDef.from_station && !todayLinkDef.from_station.startsWith('GNT') && todayLinkDef.from_station !== '---'));
-
-    if (is3DaySet) {
-      return {
-        isAvailable: true,
-        status: 'AVAILABLE_FOR_BOOKING',
-        reason: `Available for Booking Duty at HQ (Took 1-day ${prev2Leave.status} on Link #${prev2LinkNum})`,
-        substituteStaffId: prev2Leave.substituteStaffId,
-        substituteName: prev2Leave.substituteName,
-        originalPrevLink: prev2LinkNum
-      };
+      if (prevLeave) {
+        const prevDayOffset = getDayOffset(anchorDate, prevDateStr);
+        const prevLinkNum = getBaseLinkNumber(rowPosition, prevDayOffset, cycleLength);
+        const isSick = prevLeave.isSick || prevLeave.status === 'SICK';
+        return {
+          isAvailable: true,
+          status: 'AVAILABLE_FOR_BOOKING',
+          isSickReturn: isSick,
+          reason: isSick
+            ? `Available for Booking Duty at HQ (Came out of SICK leave on Link #${prevLinkNum})`
+            : `Available for Booking Duty at HQ (Took leave on Link #${prevLinkNum})`,
+          substituteStaffId: prevLeave.substituteStaffId,
+          substituteName: prevLeave.substituteName,
+          originalPrevLink: prevLinkNum
+        };
+      }
     }
   }
 
@@ -2450,127 +2454,134 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         }
       }
 
-      // Multi-Day Link 1-Day Leave Automation:
-      // If employee takes a 1-day leave (CL, LAP, LHAP, SICK, OD, etc.) on Day 1 of a multi-day link set (2-day or 3-day set),
+      // Multi-Day Link Leave/Sick Automation:
+      // If employee takes leave or sick on Day 1 (or Days 1..M) of an N-day link set (where M < N),
       // they did not travel outstation on Day 1, so they remain physically present at HQ (GNT).
-      // For the remaining days of the link set (Day 2 for 2-day set, or Days 2 & 3 for 3-day set):
+      // For any remaining days of the link set:
       // - Main staff is automatically marked AVAILABLE_FOR_BOOKING at HQ (Muster: 'P').
       // - The scheduled link slot on that day is vacated for relief allotment ([UNMANNED / VACANT] with Assign Staff button).
-      // - If a substitute was assigned on Day 1, the substitute works the train for the return leg as well.
+      // - If a substitute was assigned, the substitute works the train for the return legs as well.
       let multiDaySetNotice = '';
-      if (datesToProcess.length === 1 && (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST')) {
-        const singleDate = datesToProcess[0];
-        const dayOffset = getDayOffset(category.anchor_date, singleDate);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-        const linkSet = getLinkSetDetails(staff.category_id, originalLink);
+      if (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST') {
+        const firstDate = datesToProcess[0];
+        const lastDate = datesToProcess[datesToProcess.length - 1];
+        const firstDayOffset = getDayOffset(category.anchor_date, firstDate);
+        const firstOriginalLink = getBaseLinkNumber(staff.row_position, firstDayOffset, category.cycle_length);
+        const linkSet = getLinkSetDetails(staff.category_id, firstOriginalLink);
 
-        if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
-          multiDaySetNotice = ` Multi-Day Link detected (${linkSet.setLength}-day link #${originalLink}): On the remaining ${linkSet.remainingLinks.length} day(s), staff is marked Available for Booking at HQ [Muster: P], and Link #${linkSet.remainingLinks.join(', #')} vacated for relief allotment.`;
+        if (linkSet && linkSet.setLinks) {
+          const startIndex = linkSet.setLinks.indexOf(firstOriginalLink);
+          const daysCovered = datesToProcess.length;
+          const remainingSetLinks = linkSet.setLinks.slice(startIndex + daysCovered);
 
-          for (let k = 0; k < linkSet.remainingLinks.length; k++) {
-            const remLink = linkSet.remainingLinks[k];
-            const nextDate = new Date(singleDate + 'T12:00:00');
-            nextDate.setDate(nextDate.getDate() + k + 1);
-            const y = nextDate.getFullYear();
-            const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-            const d = String(nextDate.getDate()).padStart(2, '0');
-            const remDateStr = `${y}-${m}-${d}`;
+          if (remainingSetLinks.length > 0) {
+            multiDaySetNotice = ` Multi-Day Link detected (${linkSet.setLength}-day link #${firstOriginalLink}): On the remaining ${remainingSetLinks.length} day(s), staff is marked Available for Booking at HQ [Muster: P], and Link #${remainingSetLinks.join(', #')} vacated for relief allotment.`;
 
-            // Record snapshot for undo
-            const existingSubDayOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-            const existingSubDayMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-            let existingSubDaySubOv = null;
-            let existingSubDaySubMuster = null;
-            if (replacement_staff_id) {
-              existingSubDaySubOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-              existingSubDaySubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-            }
-            undoSnapshots.push({
-              date: remDateStr,
-              override: existingSubDayOv || null,
-              muster: existingSubDayMuster || null,
-              subOverride: existingSubDaySubOv || null,
-              subMuster: existingSubDaySubMuster || null
-            });
+            for (let k = 0; k < remainingSetLinks.length; k++) {
+              const remLink = remainingSetLinks[k];
+              const nextDate = new Date(lastDate + 'T12:00:00');
+              nextDate.setDate(nextDate.getDate() + k + 1);
+              const y = nextDate.getFullYear();
+              const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+              const d = String(nextDate.getDate()).padStart(2, '0');
+              const remDateStr = `${y}-${m}-${d}`;
 
-            // 1. Mark main staff as AVAILABLE_FOR_BOOKING at HQ
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?, ?, ?)
-               ON CONFLICT(staff_id, date) DO UPDATE SET
-                 overridden_link_number = NULL,
-                 status = 'AVAILABLE_FOR_BOOKING',
-                 substitute_staff_id = excluded.substitute_staff_id,
-                 substitute_name = excluded.substitute_name,
-                 reason = excluded.reason,
-                 target_category_id = excluded.target_category_id`,
-              [
-                staff_id,
-                remDateStr,
-                remLink,
-                replacement_staff_id || null,
-                finalSubstituteName || null,
-                `Available for Booking Duty at HQ (Took 1-day ${action} on Link #${originalLink})`,
-                staff.category_id
-              ]
-            );
+              // Record snapshot for undo
+              const existingSubDayOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
+              const existingSubDayMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
+              let existingSubDaySubOv = null;
+              let existingSubDaySubMuster = null;
+              if (replacement_staff_id) {
+                existingSubDaySubOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
+                existingSubDaySubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
+              }
+              undoSnapshots.push({
+                date: remDateStr,
+                override: existingSubDayOv || null,
+                muster: existingSubDayMuster || null,
+                subOverride: existingSubDaySubOv || null,
+                subMuster: existingSubDaySubMuster || null
+              });
 
-            // 2. Mark main staff muster as 'P' (Present at HQ)
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-               VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
-               ON CONFLICT(staff_id, date) DO UPDATE SET
-                 code = 'P',
-                 remarks = excluded.remarks,
-                 updated_by = excluded.updated_by,
-                 updated_at = CURRENT_TIMESTAMP`,
-              [
-                staff_id,
-                remDateStr,
-                `Present at HQ (Available for booking - 1-day leave on Link #${originalLink})`
-              ]
-            );
+              // 1. Mark main staff as AVAILABLE_FOR_BOOKING at HQ
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+                 VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?, ?, ?)
+                 ON CONFLICT(staff_id, date) DO UPDATE SET
+                   overridden_link_number = NULL,
+                   status = 'AVAILABLE_FOR_BOOKING',
+                   substitute_staff_id = excluded.substitute_staff_id,
+                   substitute_name = excluded.substitute_name,
+                   reason = excluded.reason,
+                   target_category_id = excluded.target_category_id`,
+                [
+                  staff_id,
+                  remDateStr,
+                  remLink,
+                  replacement_staff_id || null,
+                  finalSubstituteName || null,
+                  `Available for Booking Duty at HQ (Came out of ${action} on Link #${firstOriginalLink})`,
+                  staff.category_id
+                ]
+              );
 
-            // 3. If substitute assigned on Day 1, they work return leg as well
-            if (replacement_staff_id) {
-              const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-              if (subStaff) {
-                const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-                const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, remDateStr), subCat.cycle_length);
-                const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
+              // 2. Mark main staff muster as 'P' (Present at HQ)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                 VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+                 ON CONFLICT(staff_id, date) DO UPDATE SET
+                   code = 'P',
+                   remarks = excluded.remarks,
+                   updated_by = excluded.updated_by,
+                   updated_at = CURRENT_TIMESTAMP`,
+                [
+                  staff_id,
+                  remDateStr,
+                  `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
+                ]
+              );
 
-                await run(
-                  `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-                   VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
-                   ON CONFLICT(staff_id, date) DO UPDATE SET
-                     overridden_link_number = excluded.overridden_link_number,
-                     status = excluded.status,
-                     substitute_staff_id = excluded.substitute_staff_id,
-                     substitute_name = excluded.substitute_name,
-                     reason = excluded.reason,
-                     target_category_id = excluded.target_category_id`,
-                  [
-                    subStaff.id,
-                    remDateStr,
-                    subOrigLink,
-                    remLink,
-                    staff.id,
-                    staff.name,
-                    subReason,
-                    staff.category_id
-                  ]
-                );
+              // 3. If substitute assigned on Day 1, they work return leg as well
+              if (replacement_staff_id) {
+                const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+                if (subStaff) {
+                  const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+                  const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, remDateStr), subCat.cycle_length);
+                  const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
 
-                await run(
-                  `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-                   VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
-                   ON CONFLICT(staff_id, date) DO UPDATE SET
-                     code = 'P',
-                     remarks = excluded.remarks,
-                     updated_by = excluded.updated_by,
-                     updated_at = CURRENT_TIMESTAMP`,
-                  [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
-                );
+                  await run(
+                    `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+                     VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
+                     ON CONFLICT(staff_id, date) DO UPDATE SET
+                       overridden_link_number = excluded.overridden_link_number,
+                       status = excluded.status,
+                       substitute_staff_id = excluded.substitute_staff_id,
+                       substitute_name = excluded.substitute_name,
+                       reason = excluded.reason,
+                       target_category_id = excluded.target_category_id`,
+                    [
+                      subStaff.id,
+                      remDateStr,
+                      subOrigLink,
+                      remLink,
+                      staff.id,
+                      staff.name,
+                      subReason,
+                      staff.category_id
+                    ]
+                  );
+
+                  await run(
+                    `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                     VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+                     ON CONFLICT(staff_id, date) DO UPDATE SET
+                       code = 'P',
+                       remarks = excluded.remarks,
+                       updated_by = excluded.updated_by,
+                       updated_at = CURRENT_TIMESTAMP`,
+                    [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
+                  );
+                }
               }
             }
           }
@@ -2787,9 +2798,13 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       return res.json({ success: true, message: `Changed link for ${staff.name} to ${targetLink === null ? 'REST' : `Link ${targetLink}`} and updated Muster Sheet` });
     }
 
-    if (action === 'REMOVE_FROM_LINK' || action === 'REMOVE') {
+    if (action === 'AVAILABLE_FOR_BOOKING' || action === 'REPORTED_FIT' || action === 'MARK_AVAILABLE' || action === 'REMOVE_FROM_LINK' || action === 'REMOVE') {
       const dayOffset = getDayOffset(category.anchor_date, date);
       const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+      const isReportedFit = action === 'REPORTED_FIT' || (reason && /sick|fit/i.test(reason));
+      const finalReason = reason || (isReportedFit
+        ? 'Reported fit / came out of sick leave; spare at HQ GNT available for duty booking'
+        : (action === 'AVAILABLE_FOR_BOOKING' ? 'Available for Booking Duty at HQ GNT' : `Removed from Link #${originalLink} - Available for other duty / booking`));
 
       const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
       const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
@@ -2804,7 +2819,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            substitute_name = NULL,
            reason = excluded.reason,
            target_category_id = excluded.target_category_id`,
-        [staff_id, date, originalLink, reason || `Removed from Link #${originalLink} - Available for other duty / booking`, staff.category_id]
+        [staff_id, date, originalLink, finalReason, staff.category_id]
       );
 
       // In muster records, they are on duty at HQ available for booking
@@ -2816,7 +2831,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staff_id, date, `Available for Booking at HQ (Removed from Link #${originalLink})`]
+        [staff_id, date, finalReason]
       );
 
       // If Category 4 (LR), update LR sheet
@@ -5692,6 +5707,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
       available_standby: 0,
       available_12h_rest: 0,
       available_8h_rest: 0,
+      available_sick_return: 0,
       available_leave_return: 0,
       available_weekly_rest: 0,
       booked_to_duty: 0,
@@ -5716,6 +5732,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
         available_standby: 0,
         available_12h_rest: 0,
         available_8h_rest: 0,
+        available_sick_return: 0,
         available_leave_return: 0,
         available_weekly_rest: 0,
         booked_to_duty: 0,
@@ -5739,6 +5756,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
         let substituteStaffId = null;
         let substituteName = null;
         let overrideReason = '';
+        let isSickReturn = false;
 
         if (override) {
           activeLink = override.overridden_link_number;
@@ -5747,6 +5765,9 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           substituteStaffId = override.substitute_staff_id;
           substituteName = override.substitute_name;
           overrideReason = override.reason;
+          if (override.status === 'AVAILABLE_FOR_BOOKING' && (/sick/i.test(override.reason || '') || override.leave_type === 'SICK')) {
+            isSickReturn = true;
+          }
         } else {
           activeLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
           const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, cat.id, staff.row_position, cat.cycle_length, cat.anchor_date, targetDate);
@@ -5756,6 +5777,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
             overrideReason = multiDayLeaveReturn.reason;
             substituteStaffId = multiDayLeaveReturn.substituteStaffId;
             substituteName = multiDayLeaveReturn.substituteName;
+            isSickReturn = !!multiDayLeaveReturn.isSickReturn;
             activeLink = null;
           }
         }
@@ -5905,11 +5927,19 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
         } else if (status === 'AVAILABLE_FOR_BOOKING') {
           isAvailable = true;
           dotStatus = 'GREEN';
-          statusCategory = 'AVAILABLE_LEAVE_RETURN';
-          statusLabel = 'Available (1-Day Leave Return)';
-          statusReason = 'Completed 1-day leave on multi-day link; spare at HQ GNT available for duty booking';
-          currentLocation = '🏠 GNT (Headquarters)';
-          catBreakdown.available_leave_return++;
+          if (isSickReturn || (overrideReason && /sick/i.test(overrideReason))) {
+            statusCategory = 'AVAILABLE_SICK_RETURN';
+            statusLabel = 'Available (Sick Return)';
+            statusReason = overrideReason || 'Reported fit / came out of sick leave; spare at HQ GNT available for duty booking';
+            currentLocation = '🏠 GNT (Headquarters)';
+            catBreakdown.available_sick_return++;
+          } else {
+            statusCategory = 'AVAILABLE_LEAVE_RETURN';
+            statusLabel = 'Available (1-Day Leave Return)';
+            statusReason = overrideReason || 'Completed 1-day leave on multi-day link; spare at HQ GNT available for duty booking';
+            currentLocation = '🏠 GNT (Headquarters)';
+            catBreakdown.available_leave_return++;
+          }
         } else if (cat.id === 4 && !override && !isCat4RestDay) {
           // LR Staff on regular standby day
           const arrTimeStr = (lrRestInfo && lrRestInfo.arrivalTime) ? ` (Arr GNT ${lrRestInfo.arrivalTime})` : '';
