@@ -1845,3 +1845,32 @@ html, body {
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   EDITABLE TRAIN NO & COACHES CELL STYLING
+   ========================================================================== */
+.train-coach-editable-cell {
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+}
+
+.train-coach-editable-cell:hover {
+  background-color: rgba(212, 161, 92, 0.14) !important;
+  outline: 1.5px dashed var(--primary);
+  outline-offset: -1px;
+}
+
+.train-coach-editable-cell:hover .train-coach-edit-icon {
+  opacity: 1 !important;
+}
+
+.train-coach-edit-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 0.72rem;
+  margin-left: 5px;
+  display: inline-block;
+}
+

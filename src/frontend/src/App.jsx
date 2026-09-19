@@ -96,6 +96,256 @@ const getLinkDisplayLabel = (catId, linkNum) => {
   return `#${linkNum}`;
 };
 
+
+
+// ====================================================
+// EDIT TRAIN & COACH NUMBERS MODAL DIALOG
+// ====================================================
+function EditTrainCoachModalDialog({ data, onClose, onSave, onReset }) {
+  const [firstTrain, setFirstTrain] = useState(data.firstTrain || '');
+  const [firstCoaches, setFirstCoaches] = useState(data.firstCoaches || '');
+  const [lastTrain, setLastTrain] = useState(data.lastTrain || '');
+  const [lastCoaches, setLastCoaches] = useState(data.lastCoaches || '');
+
+  const coachPresets = [
+    'AC+SL', 'SL', 'AC+2S', '2S', 'AC', '3AC',
+    'H1,H2,A1,A2,A3', 'B1,B2,B3,B4',
+    'COR-1', 'COR-2', 'S1-S4', 'S5-S8', 'CC+2S', '-'
+  ];
+
+  return (
+    <div 
+      className="modal-overlay" 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        backgroundColor: 'rgba(0,0,0,0.82)', 
+        backdropFilter: 'blur(6px)',
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        zIndex: 99999,
+        padding: '16px'
+      }}
+      onClick={onClose}
+    >
+      <div 
+        className="card" 
+        style={{ 
+          maxWidth: '560px', 
+          width: '100%', 
+          background: 'var(--bg-secondary)', 
+          border: '1px solid var(--border-gold)', 
+          borderRadius: '16px',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.85)',
+          padding: '24px',
+          color: 'var(--color-text-primary)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🚆 Edit Train & Coach Numbers
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary)' }}>
+              {data.staffName ? `Editing for: ${data.staffName} (${data.slotTitle || `Slot ${data.slotId}`})` : (data.slotTitle || `Slot ${data.slotId}`)}
+            </p>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px 8px' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          onSave({
+            slotId: data.slotId,
+            dutyKey: data.dutyKey,
+            categoryId: data.categoryId,
+            linkNum: data.linkNum,
+            firstTrain,
+            firstCoaches,
+            lastTrain,
+            lastCoaches
+          });
+        }}>
+          {/* Day 1 Section */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>☀️</span> Day 1 Details (Outward Journey)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Train No (1st day)
+                </label>
+                <input 
+                  type="text"
+                  className="form-input"
+                  value={firstTrain}
+                  onChange={(e) => setFirstTrain(e.target.value)}
+                  placeholder="e.g. 17253"
+                  style={{ width: '100%', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Coach (1st day)
+                </label>
+                <input 
+                  type="text"
+                  className="form-input"
+                  value={firstCoaches}
+                  onChange={(e) => setFirstCoaches(e.target.value)}
+                  placeholder="e.g. AC+SL, SL, H1,H2"
+                  style={{ width: '100%', fontWeight: 600 }}
+                />
+              </div>
+            </div>
+            {/* Quick coach presets for Day 1 */}
+            <div>
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginRight: '6px' }}>Quick Coach Presets:</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                {coachPresets.map((preset) => (
+                  <button
+                    key={`p1-${preset}`}
+                    type="button"
+                    onClick={() => setFirstCoaches(preset)}
+                    style={{
+                      padding: '2px 7px',
+                      fontSize: '0.72rem',
+                      borderRadius: '4px',
+                      background: firstCoaches === preset ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                      color: firstCoaches === preset ? '#000' : 'var(--color-text-primary)',
+                      border: '1px solid var(--border-glass)',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Last Day Section */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '14px', marginBottom: '20px' }}>
+            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#60a5fa', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🌙</span> Last Day Details (Return Journey)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Train No (last day)
+                </label>
+                <input 
+                  type="text"
+                  className="form-input"
+                  value={lastTrain}
+                  onChange={(e) => setLastTrain(e.target.value)}
+                  placeholder="e.g. 17252"
+                  style={{ width: '100%', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Coach (last day)
+                </label>
+                <input 
+                  type="text"
+                  className="form-input"
+                  value={lastCoaches}
+                  onChange={(e) => setLastCoaches(e.target.value)}
+                  placeholder="e.g. AC+SL, SL, -"
+                  style={{ width: '100%', fontWeight: 600 }}
+                />
+              </div>
+            </div>
+            {/* Quick coach presets for Last Day */}
+            <div>
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginRight: '6px' }}>Quick Coach Presets:</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                {coachPresets.map((preset) => (
+                  <button
+                    key={`p2-${preset}`}
+                    type="button"
+                    onClick={() => setLastCoaches(preset)}
+                    style={{
+                      padding: '2px 7px',
+                      fontSize: '0.72rem',
+                      borderRadius: '4px',
+                      background: lastCoaches === preset ? '#60a5fa' : 'rgba(255,255,255,0.08)',
+                      color: lastCoaches === preset ? '#000' : 'var(--color-text-primary)',
+                      border: '1px solid var(--border-glass)',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-glass)', paddingTop: '16px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => onReset(data.slotId, data.dutyKey, data.categoryId, data.linkNum)}
+              style={{
+                fontSize: '0.82rem',
+                color: '#f87171',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                background: 'rgba(239, 68, 68, 0.08)'
+              }}
+              title="Reset train & coaches to default baseline schedule"
+            >
+              🔄 Reset to Default
+            </button>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onClose}
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))',
+                  border: 'none',
+                  color: '#000'
+                }}
+              >
+                💾 Save Changes
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App() {
   // Authentication & Session State
   const [currentUser, setCurrentUser] = useState(() => {
@@ -803,6 +1053,67 @@ export default function App() {
   // OVERRIDES & DUTY STATUS HANDLERS
   // ----------------------------------------------------
   const [dutyEditModal, setDutyEditModal] = useState(null);
+
+  // Train & Coach Customization State (persisted across sessions)
+  const [slotCustomizations, setSlotCustomizations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('railway_slot_customizations');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [editTrainCoachModal, setEditTrainCoachModal] = useState(null);
+
+  const handleSaveTrainCoachCustomization = (customData) => {
+    setSlotCustomizations(prev => {
+      const updated = { ...prev };
+      
+      if (customData.slotId) {
+        if (!updated[`slot_${customData.slotId}`]) updated[`slot_${customData.slotId}`] = {};
+        if (customData.firstTrain !== undefined) updated[`slot_${customData.slotId}`].firstTrain = customData.firstTrain.trim();
+        if (customData.lastTrain !== undefined) updated[`slot_${customData.slotId}`].lastTrain = customData.lastTrain.trim();
+      }
+
+      const specificKey = customData.dutyKey || (customData.slotId && customData.linkNum ? `slot_${customData.slotId}_link_${customData.categoryId || 0}_${customData.linkNum}` : null);
+      if (specificKey) {
+        if (!updated[specificKey]) updated[specificKey] = {};
+        if (customData.firstTrain !== undefined) updated[specificKey].firstTrain = customData.firstTrain.trim();
+        if (customData.firstCoaches !== undefined) updated[specificKey].firstCoach = customData.firstCoaches.trim();
+        if (customData.lastTrain !== undefined) updated[specificKey].lastTrain = customData.lastTrain.trim();
+        if (customData.lastCoaches !== undefined) updated[specificKey].lastCoach = customData.lastCoaches.trim();
+      }
+
+      try {
+        localStorage.setItem('railway_slot_customizations', JSON.stringify(updated));
+      } catch (e) {}
+
+      return updated;
+    });
+
+    setEditTrainCoachModal(null);
+    setDragNotice('✓ Train No & Coach numbers updated successfully!');
+    setTimeout(() => setDragNotice(null), 3500);
+  };
+
+  const handleResetTrainCoachCustomization = (slotId, dutyKey, categoryId, linkNum) => {
+    setSlotCustomizations(prev => {
+      const updated = { ...prev };
+      if (slotId) delete updated[`slot_${slotId}`];
+      if (dutyKey) delete updated[dutyKey];
+      if (slotId && linkNum) delete updated[`slot_${slotId}_link_${categoryId || 0}_${linkNum}`];
+
+      try {
+        localStorage.setItem('railway_slot_customizations', JSON.stringify(updated));
+      } catch (e) {}
+
+      return updated;
+    });
+
+    setEditTrainCoachModal(null);
+    setDragNotice('🔄 Reset Train & Coach numbers to baseline defaults.');
+    setTimeout(() => setDragNotice(null), 3500);
+  };
 
   const openDutyEditModal = (staffDuty, dateStr) => {
     if (!isAdmin) {
@@ -3438,8 +3749,20 @@ export default function App() {
                 const resolveSlotDuties = (slotsList) => {
                   const resolvedRows = [];
                   slotsList.forEach(slot => {
+                    const customSlot = slotCustomizations[`slot_${slot.slotId}`] || {};
+                    const effectiveSlotFirstTrain = (customSlot.firstTrain !== undefined && customSlot.firstTrain !== '') ? customSlot.firstTrain : slot.firstTrain;
+                    const effectiveSlotLastTrain = (customSlot.lastTrain !== undefined && customSlot.lastTrain !== '') ? customSlot.lastTrain : slot.lastTrain;
+
                     const dutiesInSlot = [];
                     slot.links.forEach(lDef => {
+                      const dutyKey = `slot_${slot.slotId}_link_${lDef.categoryId || 0}_${lDef.linkNum}`;
+                      const customDuty = slotCustomizations[dutyKey] || {};
+
+                      const effectiveFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : effectiveSlotFirstTrain;
+                      const effectiveFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : lDef.firstCoach;
+                      const effectiveLastTrain = (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '') ? customDuty.lastTrain : (lDef.lastTrain || effectiveSlotLastTrain);
+                      const effectiveLastCoach = (customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : (lDef.lastCoach || slot.lastCoach || '-');
+
                       // Helper to match overridden duty to this slot link (direct linkNum or altLinkNums)
                       const matchesOverrideLink = (duty) => {
                         if (!duty || !duty.isOverridden) return false;
@@ -3541,13 +3864,15 @@ export default function App() {
 
                         dutiesInSlot.push({
                           ...staffDuty,
+                          dutyKey,
+                          slotId: slot.slotId,
                           categoryId: lDef.categoryId,
                           target_category_id: lDef.categoryId,
                           link_number: lDef.linkNum,
-                          firstTrain: slot.firstTrain,
-                          firstCoaches: lDef.firstCoach,
-                          lastTrain: lDef.lastTrain || slot.lastTrain,
-                          lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                          firstTrain: effectiveFirstTrain,
+                          firstCoaches: effectiveFirstCoach,
+                          lastTrain: effectiveLastTrain,
+                          lastCoaches: effectiveLastCoach,
                           isLeave: isApprovedLeave,
                           isUpgraded: isUpgradedStaff,
                           originalStaffName: originalSickOrLeaveDuty ? originalSickOrLeaveDuty.name : null,
@@ -3560,16 +3885,18 @@ export default function App() {
                         if (isUtilisedAdvance) {
                           dutiesInSlot.push({
                             ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
                             staffId: `vacant-advance-${originalSickOrLeaveDuty.staffId}`,
                             name: `[UNMANNED / VACANT]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
                             categoryId: lDef.categoryId,
                             target_category_id: lDef.categoryId,
-                            firstTrain: slot.firstTrain,
-                            firstCoaches: lDef.firstCoach,
-                            lastTrain: lDef.lastTrain || slot.lastTrain,
-                            lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
                             isVacantAdvance: true,
                             isVacant: true,
                             advanceTrainNo: advanceTrainNo || '---',
@@ -3583,16 +3910,18 @@ export default function App() {
                         } else if (isSleeperUpgradedAway) {
                           dutiesInSlot.push({
                             ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
                             staffId: `vacant-upgrade-${originalSickOrLeaveDuty.staffId}`,
                             name: `[VACANT - ${originalSickOrLeaveDuty.name} UPGRADED TO COR]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
                             categoryId: lDef.categoryId,
                             target_category_id: lDef.categoryId,
-                            firstTrain: slot.firstTrain,
-                            firstCoaches: lDef.firstCoach,
-                            lastTrain: lDef.lastTrain || slot.lastTrain,
-                            lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
                             isVacantUpgrade: true,
                             isVacant: true,
                             isLeave: false,
@@ -3610,16 +3939,18 @@ export default function App() {
                               : (originalSickOrLeaveDuty.overrideReason ? originalSickOrLeaveDuty.overrideReason.replace(/^Shifted to\s*/i, '').toUpperCase() : 'ANOTHER TRAIN'));
                           dutiesInSlot.push({
                             ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
                             staffId: `vacant-shifted-${originalSickOrLeaveDuty.staffId}`,
                             name: `[VACANT - ${originalSickOrLeaveDuty.name} SHIFTED TO ${shiftTargetDesc}]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
                             categoryId: lDef.categoryId,
                             target_category_id: lDef.categoryId,
-                            firstTrain: slot.firstTrain,
-                            firstCoaches: lDef.firstCoach,
-                            lastTrain: lDef.lastTrain || slot.lastTrain,
-                            lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
                             isVacantShifted: true,
                             isVacant: true,
                             isLeave: false,
@@ -3632,16 +3963,18 @@ export default function App() {
                         } else if (originalSickOrLeaveDuty.status === 'AVAILABLE_FOR_BOOKING') {
                           dutiesInSlot.push({
                             ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
                             staffId: `vacant-avl-${originalSickOrLeaveDuty.staffId}`,
                             name: `[UNMANNED / VACANT]`,
                             designation: 'VACANT',
                             link_number: lDef.linkNum,
                             categoryId: lDef.categoryId,
                             target_category_id: lDef.categoryId,
-                            firstTrain: slot.firstTrain,
-                            firstCoaches: lDef.firstCoach,
-                            lastTrain: lDef.lastTrain || slot.lastTrain,
-                            lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
                             isVacantAvailableReturn: true,
                             isVacant: true,
                             isLeave: false,
@@ -3655,16 +3988,18 @@ export default function App() {
                           // Duty has no internal substitute staff (e.g. Custom name or Unmanned)
                           dutiesInSlot.push({
                             ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
                             staffId: originalSickOrLeaveDuty.staffId,
                             name: originalSickOrLeaveDuty.substituteName || `[UNMANNED / VACANT]`,
                             designation: originalSickOrLeaveDuty.substituteName ? 'Relief TTE' : '-',
                             link_number: lDef.linkNum,
                             categoryId: lDef.categoryId,
                             target_category_id: lDef.categoryId,
-                            firstTrain: slot.firstTrain,
-                            firstCoaches: lDef.firstCoach,
-                            lastTrain: lDef.lastTrain || slot.lastTrain,
-                            lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
                             isVacant: !originalSickOrLeaveDuty.substituteName,
                             isLeave: originalSickOrLeaveDuty.status === 'LEAVE',
                             isSick: originalSickOrLeaveDuty.status === 'SICK',
@@ -3677,16 +4012,18 @@ export default function App() {
                       } else {
                         // Completely unmanned link slot definition
                         dutiesInSlot.push({
+                          dutyKey,
+                          slotId: slot.slotId,
                           staffId: `vacant-slot-${slot.slotId}-link-${lDef.linkNum}`,
                           name: '[UNMANNED / VACANT]',
                           designation: 'VACANT',
                           link_number: lDef.linkNum,
                           categoryId: lDef.categoryId,
                           target_category_id: lDef.categoryId,
-                          firstTrain: slot.firstTrain,
-                          firstCoaches: lDef.firstCoach,
-                          lastTrain: lDef.lastTrain || slot.lastTrain,
-                          lastCoaches: lDef.lastCoach || slot.lastCoach || '-',
+                          firstTrain: effectiveFirstTrain,
+                          firstCoaches: effectiveFirstCoach,
+                          lastTrain: effectiveLastTrain,
+                          lastCoaches: effectiveLastCoach,
                           isVacant: true,
                           isRestLink: slot.isRestLink || lDef.isRest
                         });
@@ -3697,22 +4034,28 @@ export default function App() {
                     const extraStaffDuties = staffDuties.filter(d => 
                       !activeWorkedStaffIds.has(d.staffId) &&
                       (
-                        (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || String(d.extra_train_no) === String(slot.lastTrain))) ||
+                        (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || String(d.extra_train_no) === String(slot.lastTrain) || String(d.extra_train_no) === String(effectiveSlotFirstTrain) || String(d.extra_train_no) === String(effectiveSlotLastTrain))) ||
                         (!d.extra_train_no && d.overrideReason && (
                           new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${slot.firstTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${slot.lastTrain}\\b`, 'i').test(d.overrideReason)
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${slot.lastTrain}\\b`, 'i').test(d.overrideReason) ||
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${effectiveSlotFirstTrain}\\b`, 'i').test(d.overrideReason) ||
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${effectiveSlotLastTrain}\\b`, 'i').test(d.overrideReason)
                         ))
                       )
                     );
 
                     extraStaffDuties.forEach(extraStaff => {
                       activeWorkedStaffIds.add(extraStaff.staffId);
+                      const extraDutyKey = `slot_${slot.slotId}_extra_${extraStaff.staffId}`;
+                      const customExtra = slotCustomizations[extraDutyKey] || {};
                       dutiesInSlot.push({
                         ...extraStaff,
-                        firstTrain: slot.firstTrain,
-                        firstCoaches: 'Extra Crew',
-                        lastTrain: slot.lastTrain,
-                        lastCoaches: '-',
+                        dutyKey: extraDutyKey,
+                        slotId: slot.slotId,
+                        firstTrain: (customExtra.firstTrain !== undefined && customExtra.firstTrain !== '') ? customExtra.firstTrain : effectiveSlotFirstTrain,
+                        firstCoaches: (customExtra.firstCoach !== undefined && customExtra.firstCoach !== '') ? customExtra.firstCoach : 'Extra Crew',
+                        lastTrain: (customExtra.lastTrain !== undefined && customExtra.lastTrain !== '') ? customExtra.lastTrain : effectiveSlotLastTrain,
+                        lastCoaches: (customExtra.lastCoach !== undefined && customExtra.lastCoach !== '') ? customExtra.lastCoach : '-',
                         isExtraCrew: true,
                         isExtraStaff: true,
                         isRestLink: false
@@ -3722,12 +4065,23 @@ export default function App() {
                     // Apply Seniority Coach Allocation for trains with multiple COR or TTE working
                     applySeniorityCoachAllocation(dutiesInSlot);
 
+                    // Re-apply explicit duty-level customizations so admin overrides take full priority
+                    dutiesInSlot.forEach(d => {
+                      if (d.dutyKey && slotCustomizations[d.dutyKey]) {
+                        const c = slotCustomizations[d.dutyKey];
+                        if (c.firstTrain !== undefined && c.firstTrain !== '') d.firstTrain = c.firstTrain;
+                        if (c.firstCoach !== undefined && c.firstCoach !== '') d.firstCoaches = c.firstCoach;
+                        if (c.lastTrain !== undefined && c.lastTrain !== '') d.lastTrain = c.lastTrain;
+                        if (c.lastCoach !== undefined && c.lastCoach !== '') d.lastCoaches = c.lastCoach;
+                      }
+                    });
+
                     if (dutiesInSlot.length > 0) {
                       resolvedRows.push({
                         slotId: slot.slotId,
                         page: slot.page,
-                        firstTrain: slot.firstTrain,
-                        lastTrain: slot.lastTrain,
+                        firstTrain: effectiveSlotFirstTrain,
+                        lastTrain: effectiveSlotLastTrain,
                         isRestLink: slot.isRestLink,
                         title: slot.title,
                         duties: dutiesInSlot
@@ -3917,10 +4271,18 @@ export default function App() {
                             <th style={{ width: '50px', textAlign: 'center' }}>S.No</th>
                             <th style={{ width: '280px' }}>Name of Employee</th>
                             <th style={{ width: '100px', textAlign: 'center' }}>Link No</th>
-                            <th style={{ width: '140px', textAlign: 'center' }}>Train No (1st day)</th>
-                            <th style={{ width: '140px', textAlign: 'center' }}>Coach (1st day)</th>
-                            <th style={{ width: '160px', textAlign: 'center' }}>Train No (last day)</th>
-                            <th style={{ textAlign: 'center' }}>Coach (last day)</th>
+                            <th style={{ width: '140px', textAlign: 'center' }}>
+                              Train No (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                            </th>
+                            <th style={{ width: '140px', textAlign: 'center' }}>
+                              Coach (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                            </th>
+                            <th style={{ width: '160px', textAlign: 'center' }}>
+                              Train No (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                            </th>
+                            <th style={{ textAlign: 'center' }}>
+                              Coach (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                            </th>
                             {isAdmin && <th style={{ width: '90px', textAlign: 'center' }}>Action</th>}
                           </tr>
                         </thead>
@@ -4293,49 +4655,145 @@ export default function App() {
                                       );
                                     })}
                                   </td>
-                                  <td style={{ textAlign: 'center', verticalAlign: 'middle', fontWeight: 800, fontSize: '1.05rem', color: 'var(--primary)' }}>
-                                    {group.firstTrain}
+                                  <td 
+                                    onClick={() => {
+                                      if (isAdmin) {
+                                        setEditTrainCoachModal({
+                                          slotId: group.slotId,
+                                          slotTitle: group.title || `Slot ${group.slotId}`,
+                                          firstTrain: group.firstTrain || '',
+                                          lastTrain: group.lastTrain || '',
+                                          firstCoaches: (group.duties && group.duties[0] && group.duties[0].firstCoaches) || '',
+                                          lastCoaches: (group.duties && group.duties[0] && group.duties[0].lastCoaches) || '',
+                                          dutyKey: (group.duties && group.duties[0] && group.duties[0].dutyKey) || null,
+                                          categoryId: (group.duties && group.duties[0] && group.duties[0].categoryId) || null,
+                                          linkNum: (group.duties && group.duties[0] && group.duties[0].link_number) || null
+                                        });
+                                      }
+                                    }}
+                                    className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                    title={isAdmin ? "Click to edit Train No & Coaches for this slot" : undefined}
+                                    style={{ 
+                                      textAlign: 'center', 
+                                      verticalAlign: 'middle', 
+                                      fontWeight: 800, 
+                                      fontSize: '1.05rem', 
+                                      color: 'var(--primary)',
+                                      cursor: isAdmin ? 'pointer' : 'default'
+                                    }}
+                                  >
+                                    <span>{group.firstTrain}</span>
+                                    {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
                                   </td>
                                   <td style={{ padding: '0px', textAlign: 'center' }}>
                                     {group.duties.map((d, dIdx) => (
-                                      <div key={`${d.staffId || 'd'}-${dIdx}`} style={{ 
-                                        padding: '10px 8px', 
-                                        borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                        minHeight: '46px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                      }}>
-                                        {d.firstCoaches}
+                                      <div 
+                                        key={`${d.staffId || 'd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit coaches/train for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.firstCoaches}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
                                       </div>
                                     ))}
                                   </td>
                                   <td style={{ padding: '0px', textAlign: 'center' }}>
                                     {group.duties.map((d, dIdx) => (
-                                      <div key={`${d.staffId || 'd'}-${dIdx}`} style={{ 
-                                        padding: '10px 8px', 
-                                        borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                        minHeight: '46px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontWeight: 'bold'
-                                      }}>
-                                        {d.lastTrain}
+                                      <div 
+                                        key={`${d.staffId || 'd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit last day train & coaches for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: 'bold',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.lastTrain}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
                                       </div>
                                     ))}
                                   </td>
                                   <td style={{ padding: '0px', textAlign: 'center' }}>
                                     {group.duties.map((d, dIdx) => (
-                                      <div key={`${d.staffId || 'd'}-${dIdx}`} style={{ 
-                                        padding: '10px 8px', 
-                                        borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                        minHeight: '46px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                      }}>
-                                        {d.lastCoaches}
+                                      <div 
+                                        key={`${d.staffId || 'd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit last day coaches for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.lastCoaches}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
                                       </div>
                                     ))}
                                   </td>
@@ -4536,7 +4994,6 @@ export default function App() {
                             return trainMatch || staffMatch;
                           });
 
-                      return null;
                       return (
                         <div className="card" style={{ 
                           marginBottom: '24px', 
@@ -4912,54 +5369,150 @@ export default function App() {
                                           );
                                         })}
                                       </td>
-                                      <td style={{ textAlign: 'center', verticalAlign: 'middle', fontWeight: 800, fontSize: '1.05rem', color: group.isRestLink ? '#9ca3af' : 'var(--primary)' }}>
-                                        {group.firstTrain}
-                                      </td>
-                                      <td style={{ padding: '0px', textAlign: 'center' }}>
-                                        {group.duties.map((d, dIdx) => (
-                                          <div key={`${d.staffId || 'nd'}-${dIdx}`} style={{ 
-                                            padding: '10px 8px', 
-                                            borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                            minHeight: '46px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                          }}>
-                                            {d.firstCoaches}
-                                          </div>
-                                        ))}
-                                      </td>
-                                      <td style={{ padding: '0px', textAlign: 'center' }}>
-                                        {group.duties.map((d, dIdx) => (
-                                          <div key={`${d.staffId || 'nd'}-${dIdx}`} style={{ 
-                                            padding: '10px 8px', 
-                                            borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                            minHeight: '46px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontWeight: 'bold',
-                                            color: group.isRestLink ? '#9ca3af' : 'inherit'
-                                          }}>
-                                            {d.lastTrain}
-                                          </div>
-                                        ))}
-                                      </td>
-                                      <td style={{ padding: '0px', textAlign: 'center' }}>
-                                        {group.duties.map((d, dIdx) => (
-                                          <div key={`${d.staffId || 'nd'}-${dIdx}`} style={{ 
-                                            padding: '10px 8px', 
-                                            borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                            minHeight: '46px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                          }}>
-                                            {d.lastCoaches}
-                                          </div>
-                                        ))}
-                                      </td>
-                                      {isAdmin && (
+                                  <td 
+                                    onClick={() => {
+                                      if (isAdmin) {
+                                        setEditTrainCoachModal({
+                                          slotId: group.slotId,
+                                          slotTitle: group.title || `Slot ${group.slotId}`,
+                                          firstTrain: group.firstTrain || '',
+                                          lastTrain: group.lastTrain || '',
+                                          firstCoaches: (group.duties && group.duties[0] && group.duties[0].firstCoaches) || '',
+                                          lastCoaches: (group.duties && group.duties[0] && group.duties[0].lastCoaches) || '',
+                                          dutyKey: (group.duties && group.duties[0] && group.duties[0].dutyKey) || null,
+                                          categoryId: (group.duties && group.duties[0] && group.duties[0].categoryId) || null,
+                                          linkNum: (group.duties && group.duties[0] && group.duties[0].link_number) || null
+                                        });
+                                      }
+                                    }}
+                                    className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                    title={isAdmin ? "Click to edit Train No & Coaches for this slot" : undefined}
+                                    style={{ 
+                                      textAlign: 'center', 
+                                      verticalAlign: 'middle', 
+                                      fontWeight: 800, 
+                                      fontSize: '1.05rem', 
+                                      color: group.isRestLink ? '#9ca3af' : 'var(--primary)',
+                                      cursor: isAdmin ? 'pointer' : 'default'
+                                    }}
+                                  >
+                                    <span>{group.firstTrain}</span>
+                                    {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                  </td>
+                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                    {group.duties.map((d, dIdx) => (
+                                      <div 
+                                        key={`${d.staffId || 'nd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit coaches/train for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.firstCoaches}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                      </div>
+                                    ))}
+                                  </td>
+                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                    {group.duties.map((d, dIdx) => (
+                                      <div 
+                                        key={`${d.staffId || 'nd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit last day train & coaches for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: 'bold',
+                                          color: group.isRestLink ? '#9ca3af' : 'inherit',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.lastTrain}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                      </div>
+                                    ))}
+                                  </td>
+                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                    {group.duties.map((d, dIdx) => (
+                                      <div 
+                                        key={`${d.staffId || 'nd'}-${dIdx}`} 
+                                        onClick={() => {
+                                          if (isAdmin) {
+                                            setEditTrainCoachModal({
+                                              slotId: group.slotId,
+                                              slotTitle: group.title || `Slot ${group.slotId}`,
+                                              dutyKey: d.dutyKey,
+                                              categoryId: d.categoryId,
+                                              linkNum: d.link_number,
+                                              staffName: d.name,
+                                              firstTrain: d.firstTrain || group.firstTrain || '',
+                                              firstCoaches: d.firstCoaches || '',
+                                              lastTrain: d.lastTrain || group.lastTrain || '',
+                                              lastCoaches: d.lastCoaches || ''
+                                            });
+                                          }
+                                        }}
+                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                        title={isAdmin ? `Click to edit last day coaches for ${d.name || 'this duty'}` : undefined}
+                                        style={{ 
+                                          padding: '10px 8px', 
+                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
+                                          minHeight: '46px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: isAdmin ? 'pointer' : 'default'
+                                        }}
+                                      >
+                                        <span>{d.lastCoaches}</span>
+                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                      </div>
+                                    ))}
+                                  </td>
+                                  {isAdmin && (
                                         <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                           {group.duties.map((d, dIdx) => {
                                             const isSlotVacant = d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacant || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
@@ -9152,6 +9705,17 @@ export default function App() {
       })()}
 
       </div>
+      
+      {/* Train & Coach Customization Modal */}
+      {editTrainCoachModal && (
+        <EditTrainCoachModalDialog
+          data={editTrainCoachModal}
+          onClose={() => setEditTrainCoachModal(null)}
+          onSave={handleSaveTrainCoachCustomization}
+          onReset={handleResetTrainCoachCustomization}
+        />
+      )}
+  
       {/* Mobile Bottom Thumb Dock */}
       <div className="mobile-bottom-nav no-print">
         <button 
