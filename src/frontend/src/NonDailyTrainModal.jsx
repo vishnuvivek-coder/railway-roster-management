@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { StaffRecentDutiesView } from './DutyEditModal';
 
 const DAYS_OF_WEEK = [
   'SUNDAY',
@@ -24,11 +25,13 @@ export default function NonDailyTrainModal({
   const [formData, setFormData] = useState({
     day_of_week: 'SUNDAY',
     train_number: '',
+    last_day_train_number: '',
     departure_station: '',
     departure_time: '',
     arrival_station: '',
     arrival_time: '',
     coaches: 'SL / AC',
+    last_day_coaches: 'SL / AC',
     remarks: '',
     assigned_staff_id: '',
     assigned_staff_name: ''
@@ -38,21 +41,19 @@ export default function NonDailyTrainModal({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 1. LR Staff (Category 4 only, excluding VACANT posts and staff on designated weekly rest for formData.day_of_week)
+  // 1. LR Staff (Category 4 only, excluding VACANT posts and Depot Incharges)
   const lrStaffList = (allStaffList || []).filter(s => {
     if (s.category_id !== 4) return false;
     if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
-    const targetDay = (formData.day_of_week || initialDay || '').toUpperCase();
-    const shortDay = targetDay.substring(0, 3);
-    const restUpper = (s.rest_day || '').toUpperCase();
-    if (restUpper === targetDay || restUpper === shortDay) return false;
-    if (s.name && s.name.toUpperCase().includes(shortDay + ' REST')) return false;
+    if (['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase()) || !s.category_id || s.row_position === 0) return false;
     return true;
   });
   
-  // 2. Other master staff (all staff not in Category 4, excluding VACANT)
+  // 2. Other master staff (all staff not in Category 4, excluding VACANT and Depot Incharges)
   const otherStaffList = (allStaffList || []).filter(s => 
     s.category_id !== 4 && 
+    s.category_id && s.row_position > 0 &&
+    !['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase()) &&
     (!s.name || !s.name.toUpperCase().includes('VACANT'))
   );
 
@@ -65,11 +66,13 @@ export default function NonDailyTrainModal({
       setFormData({
         day_of_week: trainData.day_of_week || initialDay || 'SUNDAY',
         train_number: trainData.train_number || '',
+        last_day_train_number: trainData.last_day_train_number || '',
         departure_station: trainData.departure_station || '',
         departure_time: trainData.departure_time || '',
         arrival_station: trainData.arrival_station || '',
         arrival_time: trainData.arrival_time || '',
         coaches: trainData.coaches || 'SL / AC',
+        last_day_coaches: trainData.last_day_coaches || trainData.coaches || 'SL / AC',
         remarks: trainData.remarks || '',
         assigned_staff_id: staffIdStr,
         assigned_staff_name: trainData.assigned_staff_name || ''
@@ -90,11 +93,13 @@ export default function NonDailyTrainModal({
       setFormData({
         day_of_week: initialDay ? initialDay.toUpperCase() : 'SUNDAY',
         train_number: '',
+        last_day_train_number: '',
         departure_station: '',
         departure_time: '',
         arrival_station: '',
         arrival_time: '',
         coaches: 'SL / AC',
+        last_day_coaches: 'SL / AC',
         remarks: '',
         assigned_staff_id: '',
         assigned_staff_name: ''
@@ -284,32 +289,87 @@ export default function NonDailyTrainModal({
               </div>
             )}
 
-            {/* Day of Week & Train Number */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Day of Week:</label>
-                <select
-                  className="form-input"
-                  required
-                  value={formData.day_of_week}
-                  onChange={(e) => setFormData({ ...formData, day_of_week: e.target.value })}
-                >
-                  {DAYS_OF_WEEK.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Day of Week */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontWeight: 600 }}>Day of Week:</label>
+              <select
+                className="form-input"
+                required
+                value={formData.day_of_week}
+                onChange={(e) => setFormData({ ...formData, day_of_week: e.target.value })}
+              >
+                {DAYS_OF_WEEK.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Train Number:</label>
-                <input
-                  type="text"
-                  required
-                  className="form-input"
-                  placeholder="e.g. 07029, 17231, 02811"
-                  value={formData.train_number}
-                  onChange={(e) => setFormData({ ...formData, train_number: e.target.value })}
-                />
+            {/* 1st Day: Train No & Coaches */}
+            <div style={{
+              background: 'rgba(59, 130, 246, 0.08)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#60a5fa', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🚆 1st Day Train Details</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Train No (1st day):</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input"
+                    placeholder="e.g. 07029, 17231, 02811"
+                    value={formData.train_number}
+                    onChange={(e) => setFormData({ ...formData, train_number: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Coach (1st day):</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. SL / AC, AC, 2S"
+                    value={formData.coaches}
+                    onChange={(e) => setFormData({ ...formData, coaches: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Last Day: Train No & Coaches */}
+            <div style={{
+              background: 'rgba(168, 85, 247, 0.08)',
+              border: '1px solid rgba(168, 85, 247, 0.25)',
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#c084fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🔄 Last Day / Return Train Details</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Train No (last day):</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 17232, 02812, 17222"
+                    value={formData.last_day_train_number}
+                    onChange={(e) => setFormData({ ...formData, last_day_train_number: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Coach (last day):</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. SL / AC, AC, 2S"
+                    value={formData.last_day_coaches}
+                    onChange={(e) => setFormData({ ...formData, last_day_coaches: e.target.value })}
+                  />
+                </div>
               </div>
             </div>
 
@@ -363,29 +423,16 @@ export default function NonDailyTrainModal({
               </div>
             </div>
 
-            {/* Coaches & Remarks */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Coaches / Composition:</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. SL / AC, AC, 2S"
-                  value={formData.coaches}
-                  onChange={(e) => setFormData({ ...formData, coaches: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Remarks / Notes:</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Returns MON, Runs TUE, Special"
-                  value={formData.remarks}
-                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                />
-              </div>
+            {/* Remarks / Notes */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Remarks / Notes:</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Returns MON, Runs TUE, Special"
+                value={formData.remarks}
+                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+              />
             </div>
 
             {/* CREW / EMPLOYEE ASSIGNMENT SECTION */}
@@ -552,6 +599,16 @@ export default function NonDailyTrainModal({
                 <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', fontStyle: 'italic', padding: '6px 0' }}>
                   This non-daily train will remain unassigned (unmanned / ad-hoc).
                 </div>
+              )}
+
+              {/* Selected Assignee Last Duties History */}
+              {formData.assigned_staff_id && (
+                <StaffRecentDutiesView
+                  staffId={formData.assigned_staff_id}
+                  staffName={formData.assigned_staff_name}
+                  targetDate={new Date().toISOString().split('T')[0]}
+                  authToken={authToken}
+                />
               )}
             </div>
           </div>

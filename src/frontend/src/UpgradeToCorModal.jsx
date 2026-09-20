@@ -107,6 +107,8 @@ export default function UpgradeToCorModal({
     return allStaffList.filter(s => {
       // Must not be in COR (Cat 1) and must not be a vacant slot
       if (s.category_id === 1) return false;
+      // Exclude Depot Incharges (MV PRASAD, P PRATHAP)
+      if (!s.category_id || s.row_position === 0 || ['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase())) return false;
       const n = (s.name || '').toUpperCase();
       if (n.includes('VACANT') || n === 'V' || n === '(V)') return false;
       if (searchStaffText.trim()) {

@@ -62,6 +62,33 @@ export function getLinkSetDetails(categoryId, linkNumber) {
   return null;
 }
 
+export function isHqArrivalDuty(linkNum, trainNumbers, toStation, fromStation) {
+  if (!trainNumbers && !linkNum) return false;
+  const to = (toStation || '').toUpperCase();
+  const tr = (trainNumbers || '').toUpperCase();
+  
+  // Specific return/arrival trains arriving at GNT in morning/night
+  const hqArrivalTrains = ['20630', '12703', '17252', '12603', '17240', '17226', '12806', '17262', '17254', '17646', '17244', '17282', '18048', '17216', '17070', '07002', '07194', '07128', '17232', '17608', '22881'];
+  
+  // Link numbers in Cat 2 and Cat 1 that are return legs to GNT
+  const cat2ReturnLinks = [2, 4, 10, 13, 16, 18, 20, 24, 27, 30, 32, 34, 38, 41, 46, 48, 52, 55, 59];
+  const cat1ReturnLinks = [3, 6, 10, 13, 17, 20];
+
+  if (linkNum && (cat2ReturnLinks.includes(Number(linkNum)) || cat1ReturnLinks.includes(Number(linkNum)))) {
+    return true;
+  }
+
+  if (to === 'GNT' || to.endsWith('/GNT') || to.endsWith(', GNT')) {
+    return true;
+  }
+
+  for (const t of hqArrivalTrains) {
+    if (tr.includes(t)) return true;
+  }
+
+  return false;
+}
+
 function getDayOffset(anchorDateStr, targetDateStr) {
   if (!anchorDateStr || !targetDateStr) return 1;
   const d1 = new Date(anchorDateStr + 'T00:00:00');
@@ -76,6 +103,144 @@ function getBaseLinkNumber(rowPosition, dayOffset, cycleLength) {
   const result = ((rowPosition - 1) + (dayOffset - 1)) % cycleLength;
   const wrapped = result < 0 ? (result + cycleLength) : result;
   return wrapped + 1;
+}
+
+export function StaffRecentDutiesView({ staffId, staffName, targetDate, authToken, compact = false }) {
+  const [duties, setDuties] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!staffId) {
+      setDuties([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    fetch(`/api/staff/${staffId}/recent-duties?date=${targetDate}&limit=5`, {
+      headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load recent duties');
+        return res.json();
+      })
+      .then(data => {
+        setDuties(data.recent_duties || []);
+      })
+      .catch(err => {
+        setError(err.message);
+      })
+      .finally(() => setLoading(false));
+  }, [staffId, targetDate, authToken]);
+
+  if (!staffId) return null;
+
+  return (
+    <div style={{
+      background: 'rgba(15, 23, 42, 0.65)',
+      border: '1px solid rgba(212, 161, 92, 0.3)',
+      borderRadius: '8px',
+      padding: compact ? '8px 12px' : '10px 14px',
+      marginTop: '6px'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '6px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        paddingBottom: '4px'
+      }}>
+        <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span>🕒 Last Duties Performed by <strong>{staffName || 'Employee'}</strong> (Past 5 Days):</span>
+        </div>
+        {loading && <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>Loading...</span>}
+      </div>
+
+      {loading && duties.length === 0 && (
+        <div style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)', padding: '4px 0' }}>
+          ⏳ Fetching recent duty history...
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontSize: '0.74rem', color: '#f87171', padding: '4px 0' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {!loading && duties.length === 0 && (
+        <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
+          No previous recorded duties found in the last 14 days.
+        </div>
+      )}
+
+      {duties.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {duties.map((d, idx) => {
+            let badgeBg = 'rgba(59, 130, 246, 0.15)';
+            let badgeColor = '#60a5fa';
+            let badgeBorder = '1px solid rgba(59, 130, 246, 0.35)';
+
+            if (d.duty_type === 'REST') {
+              badgeBg = 'rgba(16, 185, 129, 0.15)';
+              badgeColor = '#34d399';
+              badgeBorder = '1px solid rgba(16, 185, 129, 0.35)';
+            } else if (d.duty_type === 'LEAVE' || d.duty_type === 'SICK' || d.duty_type === 'ABSENT') {
+              badgeBg = 'rgba(239, 68, 68, 0.15)';
+              badgeColor = '#f87171';
+              badgeBorder = '1px solid rgba(239, 68, 68, 0.35)';
+            } else if (d.duty_type === 'STANDBY') {
+              badgeBg = 'rgba(168, 85, 247, 0.15)';
+              badgeColor = '#c084fc';
+              badgeBorder = '1px solid rgba(168, 85, 247, 0.35)';
+            }
+
+            const dateParts = d.date.split('-');
+            const dFormatted = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}` : d.date;
+
+            return (
+              <div key={d.date} style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '3px 6px',
+                borderRadius: '4px',
+                background: idx === 0 ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                fontSize: '0.75rem',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '110px' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{dFormatted}</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>({d.day_of_week.substring(0, 3)})</span>
+                  {idx === 0 && <span style={{ fontSize: '0.66rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.2)', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>Yesterday</span>}
+                </div>
+
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                  <span className="badge" style={{
+                    background: badgeBg,
+                    color: badgeColor,
+                    border: badgeBorder,
+                    fontSize: '0.72rem',
+                    padding: '2px 6px',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {d.duty_text}
+                  </span>
+                  {d.route && (
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.route}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function DutyEditModal({
@@ -111,6 +276,7 @@ export default function DutyEditModal({
 
   // Toggle to show busy / already-assigned staff to shift them to this duty
   const [showAlreadyAssigned, setShowAlreadyAssigned] = useState(false);
+  const [showSlotStaffDuties, setShowSlotStaffDuties] = useState(false);
   // Shift confirmation modal state: { staffName, currentTrainDesc, targetDesc, onConfirm }
   const [shiftConfirmDialog, setShiftConfirmDialog] = useState(null);
 
@@ -404,6 +570,17 @@ export default function DutyEditModal({
         // 2. Substitute assignment
         const subDuty = allDailyStaffDuties.find(s => s.substituteStaffId === staffMember.id);
         if (subDuty) {
+          const lNum = subDuty.link_number ? parseInt(subDuty.link_number, 10) : null;
+          const isHqArr = isHqArrivalDuty(lNum, subDuty.train_numbers, subDuty.to_station || subDuty.to, subDuty.from_station || subDuty.from);
+          if (isHqArr && (staffMember.category_id === 4 || activeDuty.categoryId === 4)) {
+            const tr = subDuty.train_numbers ? ` (Arr Tr ${subDuty.train_numbers})` : '';
+            return {
+              label: `🟢 LR Standby Pool (Available)${tr}`,
+              isRest: false,
+              isLr: true,
+              linkNum: subDuty.link_number
+            };
+          }
           const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
           return {
             label: `Substitute on Link #${subDuty.link_number}${tr}`,
@@ -414,11 +591,28 @@ export default function DutyEditModal({
         }
 
         // 3. Rest & Leaves
+        if (['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) || activeDuty.leave_type) {
+          const code = activeDuty.leave_type || activeDuty.status;
+          return {
+            label: `${activeDuty.status} [${code}]`,
+            isRest: true,
+            isLr: false,
+            linkNum: null
+          };
+        }
         if (activeDuty.isRest || activeDuty.status === 'REST' || activeDuty.train_numbers === 'REST') {
+          if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
+            return {
+              label: '🟢 LR Standby Pool (Available)',
+              isRest: false,
+              isLr: true,
+              linkNum: activeDuty.link_number || null
+            };
+          }
           return {
             label: '🏖️ Weekly REST',
             isRest: true,
-            isLr: staffMember.category_id === 4,
+            isLr: false,
             linkNum: activeDuty.link_number
           };
         }
@@ -430,19 +624,21 @@ export default function DutyEditModal({
             linkNum: null
           };
         }
-        if (['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) || activeDuty.leave_type) {
-          const code = activeDuty.leave_type || activeDuty.status;
-          return {
-            label: `${activeDuty.status} [${code}]`,
-            isRest: true,
-            isLr: false,
-            linkNum: null
-          };
-        }
 
         // 4. Category 4 (LR Relief Pool)
         if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
           if (activeDuty.isOverridden && (activeDuty.link_number || activeDuty.train_numbers) && activeDuty.status !== 'REST' && activeDuty.status !== 'AVAILABLE_FOR_BOOKING') {
+            const lNum = activeDuty.link_number ? parseInt(activeDuty.link_number, 10) : null;
+            const isHqArr = isHqArrivalDuty(lNum, activeDuty.train_numbers, activeDuty.to_station || activeDuty.to);
+            if (isHqArr) {
+              const tr = activeDuty.train_numbers ? ` (Arr Tr ${activeDuty.train_numbers})` : '';
+              return {
+                label: `🟢 LR Standby Pool (Available)${tr}`,
+                isRest: false,
+                isLr: true,
+                linkNum: activeDuty.link_number
+              };
+            }
             const tr = activeDuty.train_numbers ? ` (Tr ${activeDuty.train_numbers})` : '';
             return {
               label: `Link #${activeDuty.link_number || 'Duty'}${tr}`,
@@ -485,19 +681,6 @@ export default function DutyEditModal({
     }
 
     if (staffMember.category_id === 4) {
-      const dObj = new Date(targetDateStr);
-      const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-      const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-      const shortDay = shortDays[dObj.getDay()];
-      const fullDay = fullDays[dObj.getDay()];
-      const isRest = (staffMember.rest_day && (
-        staffMember.rest_day.toUpperCase() === shortDay ||
-        staffMember.rest_day.toUpperCase() === fullDay
-      )) || (staffMember.name && staffMember.name.toUpperCase().includes(shortDay + ' REST'));
-
-      if (isRest) {
-        return { label: '🏖️ Weekly REST', isRest: true, isLr: true, linkNum: null };
-      }
       return {
         label: '🟢 LR Standby Pool (Available)',
         isRest: false,
@@ -540,19 +723,7 @@ export default function DutyEditModal({
       return { isAssigned: false, isUnavailable: true, unavailableReason: 'Unknown', trainDesc: '', linkNum: null, trainNo: null };
     }
 
-    const dObj = new Date(targetDateStr);
-    const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-    const shortDay = shortDays[dObj.getDay()];
-    const fullDay = fullDays[dObj.getDay()];
     const isCat4 = staffMember.category_id === 4;
-    const isRestDayForLr = isCat4 && (
-      (staffMember.rest_day && (
-        staffMember.rest_day.toUpperCase() === shortDay ||
-        staffMember.rest_day.toUpperCase() === fullDay
-      )) ||
-      (staffMember.name && staffMember.name.toUpperCase().includes(shortDay + ' REST'))
-    );
 
     const matchesSelectedDate = !dailyDuties?.date || dailyDuties.date === targetDateStr;
     if (matchesSelectedDate && allDailyStaffDuties.length > 0) {
@@ -573,6 +744,18 @@ export default function DutyEditModal({
         // 2. Substitute assignment on another staff's duty
         const subDuty = allDailyStaffDuties.find(s => s.substituteStaffId === staffMember.id);
         if (subDuty) {
+          const lNum = subDuty.link_number ? parseInt(subDuty.link_number, 10) : null;
+          const isHqArr = isHqArrivalDuty(lNum, subDuty.train_numbers, subDuty.to_station || subDuty.to, subDuty.from_station || subDuty.from);
+          if (isHqArr && (isCat4 || staffMember.category_id === 4)) {
+            return {
+              isAssigned: false,
+              isUnavailable: false,
+              unavailableReason: '',
+              trainDesc: 'LR Standby Pool (Available)',
+              linkNum: subDuty.link_number,
+              trainNo: subDuty.train_numbers
+            };
+          }
           const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
           return {
             isAssigned: true,
@@ -584,24 +767,7 @@ export default function DutyEditModal({
           };
         }
 
-        // 3. Weekly REST checks (cyclic rest link and LR weekly rest)
-        if (
-          activeDuty.status === 'REST' ||
-          activeDuty.train_numbers === 'REST' ||
-          (isCat4 && (isRestDayForLr || activeDuty.isRest)) ||
-          (!isCat4 && activeDuty.isRest && activeDuty.status !== 'AVAILABLE_FOR_BOOKING')
-        ) {
-          return {
-            isAssigned: false,
-            isUnavailable: true,
-            unavailableReason: 'Weekly REST',
-            trainDesc: 'Weekly REST',
-            linkNum: activeDuty.link_number || null,
-            trainNo: null
-          };
-        }
-
-        // 4. Leave, Sick, CR, Absent
+        // 3. Leave, Sick, CR, Absent (applies to all staff including LR)
         if (
           ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) ||
           activeDuty.leave_type ||
@@ -618,6 +784,23 @@ export default function DutyEditModal({
           };
         }
 
+        // 4. Weekly REST checks (cyclic rest link for Categories 1, 2, 3; for LR staff, nominated rest is for reference only)
+        if (
+          !isCat4 &&
+          (activeDuty.status === 'REST' ||
+           activeDuty.train_numbers === 'REST' ||
+           (activeDuty.isRest && activeDuty.status !== 'AVAILABLE_FOR_BOOKING'))
+        ) {
+          return {
+            isAssigned: false,
+            isUnavailable: true,
+            unavailableReason: 'Weekly REST',
+            trainDesc: 'Weekly REST',
+            linkNum: activeDuty.link_number || null,
+            trainNo: null
+          };
+        }
+
         // 5. Released / Available for booking at HQ
         if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
           return {
@@ -630,9 +813,21 @@ export default function DutyEditModal({
           };
         }
 
-        // 6. Category 4 (LR Relief Pool)
+        // 6. Category 4 (LR Relief Pool) - Nominated rest is reference only, always available in standby pool unless on Leave/Sick/CR/Absent or working active outbound train
         if (isCat4 || activeDuty.categoryId === 4) {
           if (activeDuty.isOverridden && (activeDuty.link_number || activeDuty.train_numbers) && activeDuty.status !== 'REST' && activeDuty.status !== 'AVAILABLE_FOR_BOOKING') {
+            const lNum = activeDuty.link_number ? parseInt(activeDuty.link_number, 10) : null;
+            const isHqArr = isHqArrivalDuty(lNum, activeDuty.train_numbers, activeDuty.to_station || activeDuty.to);
+            if (isHqArr) {
+              return {
+                isAssigned: false, // Arrived at HQ in morning -> Available for booking!
+                isUnavailable: false,
+                unavailableReason: '',
+                trainDesc: 'LR Standby Pool (Available)',
+                linkNum: activeDuty.link_number,
+                trainNo: activeDuty.train_numbers
+              };
+            }
             const tr = activeDuty.train_numbers ? ` (Tr ${activeDuty.train_numbers})` : '';
             return {
               isAssigned: true,
@@ -684,21 +879,11 @@ export default function DutyEditModal({
 
     // Fallback when activeDuty not found in allDailyStaffDuties
     if (isCat4) {
-      if (isRestDayForLr) {
-        return {
-          isAssigned: false,
-          isUnavailable: true,
-          unavailableReason: 'Weekly REST',
-          trainDesc: 'Weekly REST',
-          linkNum: null,
-          trainNo: null
-        };
-      }
       return {
         isAssigned: false,
         isUnavailable: false,
         unavailableReason: '',
-        trainDesc: 'LR Relief Pool (Available)',
+        trainDesc: 'LR Standby Pool (Available)',
         linkNum: null,
         trainNo: null
       };
@@ -752,7 +937,12 @@ export default function DutyEditModal({
         if (s.id === dutyModal.staffId) return false;
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
 
-        // When Entire Roster is selected, show every employee without filtering
+        // Exclude Depot Incharges (MV PRASAD, P PRATHAP) from running duty bookings
+        if (['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase()) || !s.category_id || s.row_position === 0) {
+          return false;
+        }
+
+        // When Entire Roster is selected, show every running employee without filtering
         if (replacementCatId === 'ENTIRE_ROSTER') {
           return true;
         }
@@ -794,7 +984,12 @@ export default function DutyEditModal({
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
         if (dutyModal.staffId && s.id === dutyModal.staffId && !isSlotVacant) return false;
 
-        // When Entire Roster is selected, show every employee without filtering
+        // Exclude Depot Incharges (MV PRASAD, P PRATHAP) from running duty bookings
+        if (['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase()) || !s.category_id || s.row_position === 0) {
+          return false;
+        }
+
+        // When Entire Roster is selected, show every running employee without filtering
         if (assignCatId === 'ENTIRE_ROSTER') {
           return true;
         }
@@ -1273,8 +1468,43 @@ export default function DutyEditModal({
                 Duty Assignment & Status Control
               </h2>
             </div>
-            <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.82rem' }}>
-              Slot Staff: <strong style={{ color: 'var(--primary)' }}>{dutyModal.name || 'Unassigned / Vacant'}</strong> ({dutyModal.designation || 'Staff'}) • <span style={{ opacity: 0.85 }}>{dutyModal.categoryName || 'Staff Roster'}</span>
+            <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.82rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <span>
+                Slot Staff: <strong 
+                  style={{ 
+                    color: 'var(--primary)', 
+                    cursor: currentStaffId ? 'pointer' : 'default', 
+                    textDecoration: currentStaffId ? 'underline dotted' : 'none' 
+                  }}
+                  onClick={() => currentStaffId && setShowSlotStaffDuties(prev => !prev)}
+                  title={currentStaffId ? "Click to view last duties performed" : undefined}
+                >
+                  {dutyModal.name || 'Unassigned / Vacant'}
+                </strong> ({dutyModal.designation || 'Staff'}) • <span style={{ opacity: 0.85 }}>{dutyModal.categoryName || 'Staff Roster'}</span>
+              </span>
+              {currentStaffId && (
+                <button
+                  type="button"
+                  onClick={() => setShowSlotStaffDuties(prev => !prev)}
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    background: showSlotStaffDuties ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.1)',
+                    color: '#fbbf24',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Toggle last duties performed"
+                >
+                  <span>🕒 Last Duties</span>
+                  <span>{showSlotStaffDuties ? '▲' : '▼'}</span>
+                </button>
+              )}
             </p>
           </div>
           <button 
@@ -1367,6 +1597,16 @@ export default function DutyEditModal({
                 🔒 Link Locked
               </span>
             </div>
+
+            {/* Slot Staff Last Duties History Accordion */}
+            {showSlotStaffDuties && currentStaffId && (
+              <StaffRecentDutiesView 
+                staffId={currentStaffId} 
+                staffName={dutyModal.name} 
+                targetDate={selectedDate} 
+                authToken={authToken} 
+              />
+            )}
 
             {/* Administrative Alerts (Leave, Sick, Vacant Advance) */}
             {(dutyModal.status === 'LEAVE' || dutyModal.status === 'SICK' || dutyModal.leave_type || (dutyModal.overrideReason && /leave|sick|cl|lap|lhap|nh/i.test(dutyModal.overrideReason))) && (
@@ -2725,6 +2965,12 @@ export default function DutyEditModal({
                             <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.74rem' }}>
                               {subText}
                             </div>
+                            <StaffRecentDutiesView 
+                              staffId={selectedReplacementStaffObj.id} 
+                              staffName={selectedReplacementStaffObj.name} 
+                              targetDate={selectedDate} 
+                              authToken={authToken} 
+                            />
                           </div>
                         );
                       })()}
@@ -2924,6 +3170,12 @@ export default function DutyEditModal({
                       <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.76rem' }}>
                         {subText}
                       </div>
+                      <StaffRecentDutiesView 
+                        staffId={selectedAssignStaffObj.id} 
+                        staffName={selectedAssignStaffObj.name} 
+                        targetDate={selectedDate} 
+                        authToken={authToken} 
+                      />
                     </div>
                   );
                 })()}

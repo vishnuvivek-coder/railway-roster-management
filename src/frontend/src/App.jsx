@@ -4,7 +4,7 @@ import TaDocument from './TaDocument';
 import NdaDocument from './NdaDocument';
 import DiaryDocument from './DiaryDocument';
 import DailyEarningsDocument from './DailyEarningsDocument';
-import DutyEditModal from './DutyEditModal';
+import DutyEditModal, { isHqArrivalDuty } from './DutyEditModal';
 import NonDailyTrainModal from './NonDailyTrainModal';
 import MusterRoll from './MusterRoll';
 import LRList from './LRList';
@@ -514,7 +514,7 @@ export default function App() {
   const [linksList, setLinksList] = useState([]);
   const [editingLink, setEditingLink] = useState(null);
   const [linkForm, setLinkForm] = useState({
-    link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
+    category_id: '1', link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
   });
   const [linkSubTab, setLinkSubTab] = useState('train-centric'); // 'train-centric' or 'list'
   const [trainCategoryFilter, setTrainCategoryFilter] = useState('ALL'); // 'ALL' or cat.id
@@ -523,6 +523,7 @@ export default function App() {
   const [newSetType, setNewSetType] = useState('2-Day Set');
   const [isCreatingSet, setIsCreatingSet] = useState(false);
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState('');
 
   // State for Non-Daily Trains
   const [trainRosterCategory, setTrainRosterCategory] = useState('daily'); // 'daily' or 'non-daily'
@@ -538,6 +539,11 @@ export default function App() {
   const [quickAssignNonDailyTrain, setQuickAssignNonDailyTrain] = useState(null);
   const [quickAssignSearch, setQuickAssignSearch] = useState('');
   const [quickAssignShowBusy, setQuickAssignShowBusy] = useState(false);
+  const [quickAssignCatId, setQuickAssignCatId] = useState('ALL');
+  const [inlineEditNonDailyTrainId, setInlineEditNonDailyTrainId] = useState(null);
+  const [inlineEditField, setInlineEditField] = useState('train_number');
+  const [inlineEditValue, setInlineEditValue] = useState('');
+  const [savingInlineNonDaily, setSavingInlineNonDaily] = useState(false);
 
   const [selectedStaffId, setSelectedStaffId] = useState('');
 
@@ -849,9 +855,11 @@ export default function App() {
       .catch(() => setLoadingRoster(false));
   };
 
-  const fetchLinks = (catFilter = trainCategoryFilter) => {
-    const targetCat = (catFilter && catFilter !== 'ALL' && catFilter !== '4') ? catFilter : '';
-    const url = targetCat ? `${API_BASE}/links?category_id=${targetCat}` : `${API_BASE}/links`;
+  const fetchLinks = (catFilter = selectedCatId) => {
+    let url = `${API_BASE}/links`;
+    if (catFilter && catFilter !== 'ALL') {
+      url += `?category_id=${catFilter}`;
+    }
     fetch(url)
       .then(res => res.json())
       .then(data => {
@@ -1319,9 +1327,14 @@ export default function App() {
         return null;
       }
 
-      // 4. Category 4 (LR Pool): Available unless explicitly assigned to a real link in Cat 1, 2, 3
+      // 4. Category 4 (LR Pool): Available unless explicitly assigned to an outward journey link
       if (d.categoryId === 4) {
-        if (d.isOverridden && d.status === 'CHANGED_LINK' && d.target_category_id !== 4) {
+        if (d.isOverridden && d.status !== 'REST' && d.status !== 'AVAILABLE_FOR_BOOKING') {
+          const lNum = d.link_number ? parseInt(d.link_number, 10) : null;
+          const isHqArr = isHqArrivalDuty(lNum, d.train_numbers, d.to_station || d.to);
+          if (isHqArr) {
+            return null; // Arrived at HQ in morning -> Available for booking!
+          }
           const tr = d.train_numbers ? ` (Tr ${d.train_numbers})` : '';
           return `Link #${d.link_number}${tr}`;
         }
@@ -1339,6 +1352,11 @@ export default function App() {
 
     const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
     if (subDuty) {
+      const lNum = subDuty.link_number ? parseInt(subDuty.link_number, 10) : null;
+      const isHqArr = isHqArrivalDuty(lNum, subDuty.train_numbers, subDuty.to_station || subDuty.to);
+      if (isHqArr) {
+        return null; // Arrived at HQ in morning -> Available for booking!
+      }
       const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
       return `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`;
     }
@@ -1525,6 +1543,117 @@ export default function App() {
     }
   };
 
+  const handleSaveInlineNonDailyField = async (trainId, field, value) => {
+    try {
+      setSavingInlineNonDaily(true);
+      const cleanVal = (value !== undefined && value !== null) ? String(value).trim() : '';
+      const res = await fetch(`${API_BASE}/non-daily-trains/${trainId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({ [field]: cleanVal })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to update ${field}`);
+      setInlineEditNonDailyTrainId(null);
+      fetchNonDailyTrains(nonDailySelectedDay);
+      fetchDailyDuties();
+      if (activeTab === 'audit') fetchAuditLogs();
+    } catch (err) {
+      alert('Error updating non-daily train: ' + err.message);
+    } finally {
+      setSavingInlineNonDaily(false);
+    }
+  };
+
+  const renderInlineNonDailyCell = (item, field, currentVal, placeholder = '-', width = '85px', color = 'var(--primary)') => {
+    const isEditing = inlineEditNonDailyTrainId === item.id && inlineEditField === field;
+    if (isEditing) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
+          <input
+            type="text"
+            className="form-input"
+            value={inlineEditValue}
+            onChange={(e) => setInlineEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveInlineNonDailyField(item.id, field, inlineEditValue);
+              if (e.key === 'Escape') setInlineEditNonDailyTrainId(null);
+            }}
+            disabled={savingInlineNonDaily}
+            style={{
+              width,
+              padding: '3px 6px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textAlign: 'center',
+              borderRadius: '5px',
+              background: 'rgba(0,0,0,0.65)',
+              border: `1.5px solid ${color}`,
+              color: color
+            }}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => handleSaveInlineNonDailyField(item.id, field, inlineEditValue)}
+            disabled={savingInlineNonDaily}
+            style={{ padding: '3px 6px', fontSize: '0.72rem', borderRadius: '4px', cursor: 'pointer' }}
+            title="Save (Enter)"
+          >
+            {savingInlineNonDaily ? '...' : '✓'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setInlineEditNonDailyTrainId(null)}
+            disabled={savingInlineNonDaily}
+            style={{ padding: '3px 5px', fontSize: '0.72rem', borderRadius: '4px', cursor: 'pointer' }}
+            title="Cancel (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        onClick={() => {
+          if (isAdmin) {
+            setInlineEditNonDailyTrainId(item.id);
+            setInlineEditField(field);
+            setInlineEditValue(currentVal || '');
+          }
+        }}
+        title={isAdmin ? `Click to edit (${currentVal || 'empty'})` : undefined}
+        style={{
+          cursor: isAdmin ? 'pointer' : 'default',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '3px 6px',
+          borderRadius: '5px',
+          transition: 'all 0.15s ease',
+          background: isAdmin ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+          border: isAdmin ? '1px dashed rgba(255, 255, 255, 0.22)' : '1px solid transparent'
+        }}
+      >
+        <strong style={{ color: currentVal ? color : 'var(--color-text-muted)', fontSize: '0.92rem', letterSpacing: '0.3px' }}>
+          {currentVal || placeholder}
+        </strong>
+        {isAdmin && (
+          <span style={{ fontSize: '0.72rem', opacity: 0.7 }} title="Click to edit">
+            ✏️
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const handleUndoAdvanceDaily = async (d) => {
     if (!isAdmin) return;
     const rawStaffId = d.staffId || d.id;
@@ -1702,6 +1831,7 @@ export default function App() {
   const saveLink = (e) => {
     e.preventDefault();
     if (!isAdmin) return;
+    const catId = linkForm.category_id || (selectedCatId === 'ALL' ? '1' : selectedCatId) || '1';
     const url = editingLink ? `${API_BASE}/links/${editingLink.id}` : `${API_BASE}/links`;
     const method = editingLink ? 'PUT' : 'POST';
     fetch(url, {
@@ -1711,26 +1841,37 @@ export default function App() {
         'Authorization': `Bearer ${authToken}`
       },
       body: JSON.stringify({
-        category_id: parseInt(selectedCatId, 10),
+        category_id: parseInt(catId, 10),
         ...linkForm,
         link_number: parseInt(linkForm.link_number, 10)
       })
     }).then(() => {
       setEditingLink(null);
       setLinkForm({
+        category_id: catId,
         link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
       });
-      fetchLinks();
+      fetchLinks(selectedCatId || catId);
+      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+    }).catch(err => {
+      alert(`Failed to save link: ${err.message}`);
     });
   };
 
   const deleteLink = (id) => {
     if (!isAdmin) return;
-    if (confirm('Are you sure you want to delete this link definition?')) {
+    const target = linksList.find(l => l.id === id);
+    const linkDesc = target ? `Link #${target.link_number}${target.train_numbers ? ` (${target.train_numbers})` : ''}` : 'this link';
+    if (confirm(`Are you sure you want to delete ${linkDesc}? This action cannot be undone.`)) {
       fetch(`${API_BASE}/links/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
-      }).then(fetchLinks);
+      }).then(() => {
+        fetchLinks(selectedCatId);
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      }).catch(err => {
+        alert(`Failed to delete link: ${err.message}`);
+      });
     }
   };
 
@@ -1852,11 +1993,19 @@ export default function App() {
 
   const deleteStaff = (id) => {
     if (!isAdmin) return;
-    if (confirm('Are you sure you want to delete this staff member?')) {
+    const target = staffList.find(s => s.id === id);
+    const staffName = target ? target.name : 'this staff member';
+    if (confirm(`Are you sure you want to delete ${staffName}? This action cannot be undone.`)) {
       fetch(`${API_BASE}/staff/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
-      }).then(fetchStaff);
+      }).then(() => {
+        fetchStaff();
+        fetchAllStaff();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      }).catch(err => {
+        alert(`Failed to delete staff: ${err.message}`);
+      });
     }
   };
 
@@ -6123,16 +6272,18 @@ export default function App() {
                               <table className="data-table">
                                 <thead>
                                   <tr>
-                                    <th style={{ width: '50px' }}>S.No</th>
-                                    <th style={{ width: '110px' }}>Train No</th>
-                                    {nonDailySubTab === 'all' && <th style={{ width: '110px' }}>Day</th>}
+                                    <th style={{ width: '45px' }}>S.No</th>
+                                    <th style={{ width: '130px' }}>Train No (1st day) ✏️</th>
+                                    <th style={{ width: '100px' }}>Coach (1st day) ✏️</th>
+                                    <th style={{ width: '130px' }}>Train No (last day) ✏️</th>
+                                    <th style={{ width: '100px' }}>Coach (last day) ✏️</th>
+                                    {nonDailySubTab === 'all' && <th style={{ width: '100px' }}>Day</th>}
                                     <th>Section / Route</th>
-                                    <th style={{ width: '100px' }}>Departure</th>
-                                    <th style={{ width: '100px' }}>Arrival</th>
-                                    <th style={{ width: '90px' }}>Coaches</th>
-                                    <th style={{ minWidth: '320px' }}>Assigned Crew (Drag & Drop Zone)</th>
+                                    <th style={{ width: '95px' }}>Departure</th>
+                                    <th style={{ width: '95px' }}>Arrival</th>
+                                    <th style={{ minWidth: '280px' }}>Assigned Crew (Drag & Drop Zone)</th>
                                     <th>Remarks</th>
-                                    {isAdmin && <th style={{ width: '100px' }}>Actions</th>}
+                                    {isAdmin && <th style={{ width: '90px' }}>Actions</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -6180,11 +6331,10 @@ export default function App() {
                                         }}
                                       >
                                         <td><strong>#{idx + 1}</strong></td>
-                                        <td>
-                                          <strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>
-                                            {item.train_number}
-                                          </strong>
-                                        </td>
+                                        <td>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', 'var(--primary)')}</td>
+                                        <td>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#93c5fd')}</td>
+                                        <td>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
+                                        <td>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#d8b4fe')}</td>
                                         {nonDailySubTab === 'all' && (
                                           <td>
                                             <span className="badge" style={{ 
@@ -6210,7 +6360,6 @@ export default function App() {
                                             {item.arrival_time || '-'}
                                           </span>
                                         </td>
-                                        <td>{item.coaches || 'SL / AC'}</td>
 
                                         {/* ASSIGNED CREW / INTERACTIVE DRAG & DROP ZONE */}
                                         <td style={{ padding: '8px' }}>
@@ -6261,6 +6410,7 @@ export default function App() {
                                                       setQuickAssignNonDailyTrain(item);
                                                       setQuickAssignSearch('');
                                                       setQuickAssignShowBusy(false);
+                                                      setQuickAssignCatId('ALL');
                                                     }}
                                                     style={{
                                                       padding: '4px 10px',
@@ -6337,7 +6487,7 @@ export default function App() {
                                                 setNonDailyModalOpen(true);
                                               }}
                                             >
-                                              ✏️ Assign
+                                              ✏️ Edit / Assign
                                             </button>
                                           </td>
                                         )}
@@ -7032,271 +7182,462 @@ export default function App() {
               </button>
             </div>
 
-            {linkSubTab === 'list' && (
-              <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', width: '100%' }}>
-                {isAdmin && (
-                  isLeftPanelCollapsed ? (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setIsLeftPanelCollapsed(false)}
-                      style={{
-                        padding: '12px 6px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        width: '42px',
-                        minHeight: '260px',
-                        borderRadius: '12px',
-                        border: '1px solid var(--border-glass)',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        color: 'var(--color-text)',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        alignSelf: 'stretch'
-                      }}
-                      title="Expand Add/Edit Link Panel"
-                    >
-                      <span style={{ fontSize: '0.85rem' }}>▶️</span>
-                      <span style={{ writingMode: 'vertical-rl', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)' }}>Add / Edit Link</span>
-                    </button>
-                  ) : (
-                    <form className="card" style={{ flex: '1', maxWidth: '320px', minWidth: '280px', transition: 'all 0.3s ease' }} onSubmit={saveLink}>
-                      <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>{editingLink ? `Edit Link #${editingLink.link_number}` : 'Add New Link'}</span>
+            {linkSubTab === 'list' && (() => {
+              const currentActiveCatId = selectedCatId || '1';
+              const filteredLinks = linksList.filter(l => {
+                if (!linkSearchQuery.trim()) return true;
+                const q = linkSearchQuery.toLowerCase().trim();
+                const linkNum = String(l.link_number || '');
+                const trains = String(l.train_numbers || '').toLowerCase();
+                const fromStn = String(l.from_station || '').toLowerCase();
+                const toStn = String(l.to_station || '').toLowerCase();
+                const setT = String(l.set_type || '').toLowerCase();
+                return linkNum.includes(q) || trains.includes(q) || fromStn.includes(q) || toStn.includes(q) || setT.includes(q);
+              });
+
+              const handleOpenAddLink = (catId = currentActiveCatId) => {
+                const targetCat = catId === 'ALL' ? '1' : (catId || '1');
+                const catLinks = linksList.filter(l => String(l.category_id) === String(targetCat));
+                const maxNum = catLinks.length > 0 ? Math.max(...catLinks.map(l => parseInt(l.link_number, 10) || 0)) : 0;
+                const nextNum = maxNum + 1;
+                setEditingLink(null);
+                setIsLeftPanelCollapsed(false);
+                setLinkForm({
+                  category_id: targetCat,
+                  link_number: nextNum.toString(),
+                  train_numbers: '',
+                  from_station: '',
+                  to_station: '',
+                  coaches: '',
+                  is_rest: false,
+                  effective_from: '2026-07-01',
+                  set_type: '2-Day Set'
+                });
+              };
+
+              const currentCatName = currentActiveCatId === 'ALL'
+                ? 'All Categories'
+                : (categories.find(c => String(c.id) === String(currentActiveCatId))?.name || (
+                    currentActiveCatId === '1' ? 'Conductors (COR)' :
+                    currentActiveCatId === '2' ? 'TTI / Sleeper Staff' :
+                    currentActiveCatId === '3' ? 'Ladies Staff / TTE' :
+                    currentActiveCatId === '4' ? 'Leave Reserve (LR) Staff' : 'Duty Links'
+                  ));
+
+              return (
+                <div>
+                  {/* Category Selector Pills & Actions Bar for Link Definitions */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginRight: '4px', fontWeight: 600 }}>Category:</span>
+                      {[
+                        { id: '1', label: '🚆 Conductors (COR)' },
+                        { id: '2', label: '🛌 TTI / Sleeper Staff' },
+                        { id: '3', label: '👩 Ladies Staff / TTE' },
+                        { id: '4', label: '📋 Leave Reserve (LR) Staff' },
+                        { id: 'ALL', label: '🌐 All Categories' }
+                      ].map(cat => {
+                        const isSelected = String(currentActiveCatId) === String(cat.id);
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCatId(cat.id);
+                              fetchLinks(cat.id);
+                              if (cat.id !== 'ALL') {
+                                setLinkForm(prev => ({ ...prev, category_id: cat.id }));
+                              }
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.82rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              background: isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                              color: isSelected ? '#000' : 'var(--color-text-secondary)',
+                              border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span>{cat.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {isAdmin && (
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => setIsLeftPanelCollapsed(true)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--color-text-secondary)',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '2px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            background: 'rgba(255,255,255,0.05)'
-                          }}
-                          title="Collapse Panel"
+                          className="btn btn-primary"
+                          onClick={() => handleOpenAddLink(currentActiveCatId)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', padding: '6px 14px', borderRadius: '8px' }}
+                          title={`Add a new link to ${currentCatName}`}
                         >
-                          ◀️ Hide
+                          <span>➕</span> Add New Link
                         </button>
                       </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Link Number:</label>
-                      <input 
-                        type="number" required className="form-input"
-                        value={linkForm.link_number}
-                        onChange={(e) => setLinkForm({ ...linkForm, link_number: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input 
-                          type="checkbox"
-                          checked={linkForm.is_rest}
-                          onChange={(e) => {
-                            const val = e.target.checked;
-                            setLinkForm({ 
-                              ...linkForm, 
-                              is_rest: val,
-                              set_type: val ? 'Other / REST' : linkForm.set_type === 'Other / REST' ? '2-Day Set' : linkForm.set_type
-                            });
-                          }}
-                        />
-                        Is REST Link (no duty)
-                      </label>
-                    </div>
-
-                    {!linkForm.is_rest && (
-                      <>
-                        <div className="form-group">
-                          <label className="form-label">Train Number(s):</label>
-                          <input 
-                            type="text" required className="form-input"
-                            placeholder="e.g. 17225, 17226"
-                            value={linkForm.train_numbers}
-                            onChange={(e) => setLinkForm({ ...linkForm, train_numbers: e.target.value })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">From Station:</label>
-                          <input 
-                            type="text" required className="form-input"
-                            value={linkForm.from_station}
-                            onChange={(e) => setLinkForm({ ...linkForm, from_station: e.target.value })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">To Station:</label>
-                          <input 
-                            type="text" required className="form-input"
-                            value={linkForm.to_station}
-                            onChange={(e) => setLinkForm({ ...linkForm, to_station: e.target.value })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Coach Type(s):</label>
-                          <input 
-                            type="text" required className="form-input"
-                            placeholder="e.g. AC, S1-S6"
-                            value={linkForm.coaches}
-                            onChange={(e) => setLinkForm({ ...linkForm, coaches: e.target.value })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Set Type:</label>
-                          <select 
-                            className="form-input"
-                            value={linkForm.set_type || '2-Day Set'}
-                            onChange={(e) => setLinkForm({ ...linkForm, set_type: e.target.value })}
-                          >
-                            <option value="2-Day Set">2-Day Set</option>
-                            <option value="3-Day Set">3-Day Set</option>
-                            <option value="Other / REST">Other / REST</option>
-                          </select>
-                        </div>
-                      </>
                     )}
+                  </div>
 
-                    <div className="form-group">
-                      <label className="form-label">Effective From:</label>
-                      <input 
-                        type="date" required className="form-input"
-                        value={linkForm.effective_from}
-                        onChange={(e) => setLinkForm({ ...linkForm, effective_from: e.target.value })}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                      <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                        {editingLink ? 'Update Link' : 'Create Link'}
-                      </button>
-                      {editingLink && (
-                        <button 
-                          type="button" className="btn btn-secondary" 
-                          onClick={() => {
-                            setEditingLink(null);
-                            setLinkForm({
-                              link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
-                            });
+                  <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', width: '100%' }}>
+                    {isAdmin && (
+                      isLeftPanelCollapsed ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setIsLeftPanelCollapsed(false)}
+                          style={{
+                            padding: '12px 6px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            width: '42px',
+                            minHeight: '260px',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border-glass)',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            color: 'var(--color-text)',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            alignSelf: 'stretch'
                           }}
+                          title="Expand Add/Edit Link Panel"
                         >
-                          Cancel
+                          <span style={{ fontSize: '0.85rem' }}>▶️</span>
+                          <span style={{ writingMode: 'vertical-rl', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)' }}>Add / Edit Link</span>
                         </button>
-                      )}
-                    </div>
-                  </form>
-                )
-              )}
+                      ) : (
+                        <form className="card" style={{ flex: '1', maxWidth: '340px', minWidth: '290px', transition: 'all 0.3s ease' }} onSubmit={saveLink}>
+                          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{editingLink ? `Edit Link #${editingLink.link_number}` : `Add New Link (${linkForm.category_id === '1' ? 'COR' : linkForm.category_id === '2' ? 'Sleeper' : linkForm.category_id === '3' ? 'Ladies' : linkForm.category_id === '4' ? 'LR' : 'Link'})`}</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsLeftPanelCollapsed(true)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--color-text-secondary)',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: 'rgba(255,255,255,0.05)'
+                              }}
+                              title="Collapse Panel"
+                            >
+                              ◀️ Hide
+                            </button>
+                          </div>
 
-              {/* Link Definitions Table */}
-              <div className="data-table-container" style={{ flex: '2', width: '100%' }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Link #</th>
-                      <th>Train(s)</th>
-                      <th>Route</th>
-                      <th>Coaches</th>
-                      <th>Set Type</th>
-                      <th>Status</th>
-                      {isAdmin && <th>Reorder</th>}
-                      {isAdmin && <th>Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {linksList.map((link, idx) => (
-                      <tr key={link.id}>
-                        <td>
-                          <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
-                            #{link.link_number}
-                          </span>
-                        </td>
-                        <td><strong>{link.is_rest ? '-' : link.train_numbers || '-'}</strong></td>
-                        <td>{link.is_rest ? '-' : `${link.from_station || '-'} ➔ ${link.to_station || '-'}`}</td>
-                        <td>{link.is_rest ? '-' : link.coaches || '-'}</td>
-                        <td>
-                          <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--color-text)' }}>
-                            {link.set_type || (link.is_rest ? 'REST' : '2-Day Set')}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge ${link.is_rest ? 'badge-rejected' : 'badge-approved'}`}>
-                            {link.is_rest ? 'REST Day' : 'Duty'}
-                          </span>
-                        </td>
-                        {isAdmin && (
-                          <td>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '2px 8px', fontSize: '0.7rem', marginRight: '4px' }}
-                              disabled={idx === 0}
-                              onClick={() => moveLinkRow(link.id, 'up')}
-                            >
-                              ▲
-                            </button>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '2px 8px', fontSize: '0.7rem' }}
-                              disabled={idx === linksList.length - 1}
-                              onClick={() => moveLinkRow(link.id, 'down')}
-                            >
-                              ▼
-                            </button>
-                          </td>
-                        )}
-                        {isAdmin && (
-                          <td>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', fontSize: '0.75rem', marginRight: '6px' }}
-                              onClick={() => {
-                                setEditingLink(link);
-                                setLinkForm({
-                                  link_number: link.link_number.toString(),
-                                  train_numbers: link.train_numbers || '',
-                                  from_station: link.from_station || '',
-                                  to_station: link.to_station || '',
-                                  coaches: link.coaches || '',
-                                  is_rest: !!link.is_rest,
-                                  effective_from: link.effective_from || '2026-07-01',
-                                  set_type: link.set_type || '2-Day Set'
-                                });
+                          <div className="form-group">
+                            <label className="form-label">Category:</label>
+                            <select
+                              className="form-input"
+                              value={linkForm.category_id || (currentActiveCatId === 'ALL' ? '1' : currentActiveCatId) || '1'}
+                              onChange={(e) => {
+                                const newCat = e.target.value;
+                                const catLinks = linksList.filter(l => String(l.category_id) === String(newCat));
+                                const maxNum = catLinks.length > 0 ? Math.max(...catLinks.map(l => parseInt(l.link_number, 10) || 0)) : 0;
+                                setLinkForm(prev => ({
+                                  ...prev,
+                                  category_id: newCat,
+                                  link_number: editingLink ? prev.link_number : (maxNum + 1).toString()
+                                }));
+                                if (currentActiveCatId !== 'ALL' && currentActiveCatId !== newCat) {
+                                  setSelectedCatId(newCat);
+                                  fetchLinks(newCat);
+                                }
                               }}
                             >
-                              Edit
+                              <option value="1">🚆 Conductors (COR)</option>
+                              <option value="2">🛌 TTI / Sleeper Staff</option>
+                              <option value="3">👩 Ladies Staff / TTE</option>
+                              <option value="4">📋 Leave Reserve (LR) Staff</option>
+                            </select>
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Link Number:</label>
+                            <input 
+                              type="number" required className="form-input"
+                              placeholder="e.g. 1"
+                              value={linkForm.link_number}
+                              onChange={(e) => setLinkForm({ ...linkForm, link_number: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                              <input 
+                                type="checkbox"
+                                checked={linkForm.is_rest}
+                                onChange={(e) => {
+                                  const val = e.target.checked;
+                                  setLinkForm({ 
+                                    ...linkForm, 
+                                    is_rest: val,
+                                    set_type: val ? 'Other / REST' : linkForm.set_type === 'Other / REST' ? '2-Day Set' : linkForm.set_type
+                                  });
+                                }}
+                              />
+                              Is REST Link (no duty)
+                            </label>
+                          </div>
+
+                          {!linkForm.is_rest && (
+                            <>
+                              <div className="form-group">
+                                <label className="form-label">Train Number(s):</label>
+                                <input 
+                                  type="text" required className="form-input"
+                                  placeholder="e.g. 17225, 17226"
+                                  value={linkForm.train_numbers}
+                                  onChange={(e) => setLinkForm({ ...linkForm, train_numbers: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">From Station:</label>
+                                <input 
+                                  type="text" required className="form-input"
+                                  placeholder="e.g. GNT, BZA"
+                                  value={linkForm.from_station}
+                                  onChange={(e) => setLinkForm({ ...linkForm, from_station: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">To Station:</label>
+                                <input 
+                                  type="text" required className="form-input"
+                                  placeholder="e.g. SC, MAS, GNT"
+                                  value={linkForm.to_station}
+                                  onChange={(e) => setLinkForm({ ...linkForm, to_station: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Coach Type(s):</label>
+                                <input 
+                                  type="text" required className="form-input"
+                                  placeholder="e.g. AC, S1-S6, SL"
+                                  value={linkForm.coaches}
+                                  onChange={(e) => setLinkForm({ ...linkForm, coaches: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Set Type:</label>
+                                <select 
+                                  className="form-input"
+                                  value={linkForm.set_type || '2-Day Set'}
+                                  onChange={(e) => setLinkForm({ ...linkForm, set_type: e.target.value })}
+                                >
+                                  <option value="2-Day Set">2-Day Set</option>
+                                  <option value="3-Day Set">3-Day Set</option>
+                                  <option value="Other / REST">Other / REST</option>
+                                </select>
+                              </div>
+                            </>
+                          )}
+
+                          <div className="form-group">
+                            <label className="form-label">Effective From:</label>
+                            <input 
+                              type="date" required className="form-input"
+                              value={linkForm.effective_from}
+                              onChange={(e) => setLinkForm({ ...linkForm, effective_from: e.target.value })}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                            <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                              {editingLink ? 'Update Link' : 'Create Link'}
                             </button>
-                            <button 
-                              className="btn btn-danger" 
-                              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                              onClick={() => deleteLink(link.id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                    {linksList.length === 0 && (
-                      <tr>
-                        <td colSpan={isAdmin ? "8" : "6"} style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                          No link definitions found for this category.
-                        </td>
-                      </tr>
+                            {editingLink && (
+                              <button 
+                                type="button" className="btn btn-secondary" 
+                                onClick={() => {
+                                  setEditingLink(null);
+                                  setLinkForm({
+                                    category_id: currentActiveCatId === 'ALL' ? '1' : currentActiveCatId,
+                                    link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
+                                  });
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </form>
+                      )
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+
+                    {/* Link Definitions Table Container */}
+                    <div className="data-table-container" style={{ flex: '2', width: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                            {currentCatName} ({filteredLinks.length} {filteredLinks.length === 1 ? 'Link' : 'Links'})
+                          </h3>
+                        </div>
+
+                        <div style={{ position: 'relative', minWidth: '240px' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="🔍 Filter links, trains, routes..."
+                            value={linkSearchQuery}
+                            onChange={(e) => setLinkSearchQuery(e.target.value)}
+                            style={{ padding: '6px 12px', fontSize: '0.82rem', width: '100%' }}
+                          />
+                          {linkSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setLinkSearchQuery('')}
+                              style={{
+                                position: 'absolute',
+                                right: '8px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--color-text-secondary)',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem'
+                              }}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Link #</th>
+                            {currentActiveCatId === 'ALL' && <th>Category</th>}
+                            <th>Train(s)</th>
+                            <th>Route</th>
+                            <th>Coaches</th>
+                            <th>Set Type</th>
+                            <th>Status</th>
+                            {isAdmin && <th>Reorder</th>}
+                            {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredLinks.map((link, idx) => {
+                            const catObj = categories.find(c => String(c.id) === String(link.category_id));
+                            const catLabel = catObj ? catObj.name : (link.category_id === 1 ? 'COR' : link.category_id === 2 ? 'TTI / Sleeper' : link.category_id === 3 ? 'Ladies' : 'LR Staff');
+                            return (
+                              <tr key={link.id}>
+                                <td>
+                                  <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
+                                    #{link.link_number}
+                                  </span>
+                                </td>
+                                {currentActiveCatId === 'ALL' && (
+                                  <td>
+                                    <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
+                                      {catLabel}
+                                    </span>
+                                  </td>
+                                )}
+                                <td><strong>{link.is_rest ? '-' : link.train_numbers || '-'}</strong></td>
+                                <td>{link.is_rest ? '-' : `${link.from_station || '-'} ➔ ${link.to_station || '-'}`}</td>
+                                <td>{link.is_rest ? '-' : link.coaches || '-'}</td>
+                                <td>
+                                  <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--color-text)' }}>
+                                    {link.set_type || (link.is_rest ? 'REST' : '2-Day Set')}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`badge ${link.is_rest ? 'badge-rejected' : 'badge-approved'}`}>
+                                    {link.is_rest ? 'REST Day' : 'Duty'}
+                                  </span>
+                                </td>
+                                {isAdmin && (
+                                  <td>
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '2px 8px', fontSize: '0.7rem', marginRight: '4px' }}
+                                      disabled={idx === 0}
+                                      onClick={() => moveLinkRow(link.id, 'up')}
+                                    >
+                                      ▲
+                                    </button>
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                                      disabled={idx === filteredLinks.length - 1}
+                                      onClick={() => moveLinkRow(link.id, 'down')}
+                                    >
+                                      ▼
+                                    </button>
+                                  </td>
+                                )}
+                                {isAdmin && (
+                                  <td style={{ textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                      <button 
+                                        className="btn btn-secondary" 
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                        onClick={() => {
+                                          setEditingLink(link);
+                                          setIsLeftPanelCollapsed(false);
+                                          setLinkForm({
+                                            category_id: String(link.category_id),
+                                            link_number: link.link_number.toString(),
+                                            train_numbers: link.train_numbers || '',
+                                            from_station: link.from_station || '',
+                                            to_station: link.to_station || '',
+                                            coaches: link.coaches || '',
+                                            is_rest: !!link.is_rest,
+                                            effective_from: link.effective_from || '2026-07-01',
+                                            set_type: link.set_type || '2-Day Set'
+                                          });
+                                        }}
+                                        title={`Edit Link #${link.link_number}`}
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button 
+                                        className="btn btn-danger" 
+                                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                        onClick={() => deleteLink(link.id)}
+                                        title={`Delete Link #${link.link_number}`}
+                                      >
+                                        🗑️ Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                          {filteredLinks.length === 0 && (
+                            <tr>
+                              <td colSpan={isAdmin ? (currentActiveCatId === 'ALL' ? "9" : "8") : (currentActiveCatId === 'ALL' ? "7" : "6")} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '30px' }}>
+                                {linkSearchQuery ? `No links matching "${linkSearchQuery}".` : `No link definitions found for this category.`}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           {linkSubTab === 'train-centric' && (() => {
             const trainRosterItems = [];
@@ -7406,15 +7747,22 @@ export default function App() {
                         <button 
                           className="btn btn-primary"
                           onClick={() => {
+                            const targetCat = (trainCategoryFilter && trainCategoryFilter !== 'ALL') ? trainCategoryFilter : (selectedCatId && selectedCatId !== 'ALL' ? selectedCatId : '1');
+                            const catLinks = linksList.filter(l => String(l.category_id) === String(targetCat));
+                            const maxNum = catLinks.length > 0 ? Math.max(...catLinks.map(l => parseInt(l.link_number, 10) || 0)) : 0;
                             setEditingLink(null);
+                            setIsLeftPanelCollapsed(false);
+                            setSelectedCatId(targetCat);
                             setLinkForm({
-                              link_number: (linksList.length + 1).toString(),
+                              category_id: targetCat,
+                              link_number: (maxNum + 1).toString(),
                               train_numbers: '',
                               from_station: '',
                               to_station: '',
                               coaches: '',
                               is_rest: false,
-                              effective_from: '2026-07-01'
+                              effective_from: '2026-07-01',
+                              set_type: '2-Day Set'
                             });
                             setLinkSubTab('list');
                           }}
@@ -7455,7 +7803,8 @@ export default function App() {
                           { id: 'ALL', label: 'All Daily Trains' },
                           { id: '1', label: 'Conductors (COR)' },
                           { id: '2', label: 'TTI / Sleeper Staff' },
-                          { id: '3', label: 'Ladies Staff / TTE' }
+                          { id: '3', label: 'Ladies Staff / TTE' },
+                          { id: '4', label: 'Leave Reserve (LR) Staff' }
                         ].map(cat => (
                           <button
                             key={cat.id}
@@ -7720,14 +8069,16 @@ export default function App() {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Day of Week</th>
-                            <th>Train Number</th>
-                            <th>Departure</th>
-                            <th>Arrival</th>
-                            <th>Coaches</th>
+                            <th style={{ width: '100px' }}>Day of Week</th>
+                            <th style={{ width: '130px' }}>Train No (1st day) ✏️</th>
+                            <th style={{ width: '100px' }}>Coach (1st day) ✏️</th>
+                            <th style={{ width: '130px' }}>Train No (last day) ✏️</th>
+                            <th style={{ width: '100px' }}>Coach (last day) ✏️</th>
+                            <th style={{ width: '100px' }}>Departure</th>
+                            <th style={{ width: '100px' }}>Arrival</th>
                             <th>Assigned Staff / Relief Crew</th>
                             <th>Remarks</th>
-                            {isAdmin && <th>Actions</th>}
+                            {isAdmin && <th style={{ width: '120px' }}>Actions</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -7737,7 +8088,8 @@ export default function App() {
                               const q = nonDailyTrainSearch.toLowerCase().trim();
                               const staffObj = (allStaffList || []).find(s => s.id === item.assigned_staff_id);
                               const staffName = staffObj ? staffObj.name : (item.assigned_staff_name || '');
-                              const trainMatch = item.train_number && item.train_number.toLowerCase().includes(q);
+                              const trainMatch = (item.train_number && item.train_number.toLowerCase().includes(q)) ||
+                                                 (item.last_day_train_number && item.last_day_train_number.toLowerCase().includes(q));
                               const dayMatch = item.day_of_week && item.day_of_week.toLowerCase().includes(q);
                               const stnMatch = (item.departure_station && item.departure_station.toLowerCase().includes(q)) || (item.arrival_station && item.arrival_station.toLowerCase().includes(q));
                               const staffMatch = staffName.toLowerCase().includes(q);
@@ -7774,11 +8126,10 @@ export default function App() {
                                     {item.day_of_week}
                                   </span>
                                 </td>
-                                <td>
-                                  <strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>
-                                    {item.train_number}
-                                  </strong>
-                                </td>
+                                <td>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', 'var(--primary)')}</td>
+                                <td>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#93c5fd')}</td>
+                                <td>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
+                                <td>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#d8b4fe')}</td>
                                 <td>
                                   <strong>{item.departure_station || '-'}</strong>
                                   {item.departure_time && <span style={{ color: 'var(--color-text-secondary)', marginLeft: '6px' }}>({item.departure_time})</span>}
@@ -7787,7 +8138,6 @@ export default function App() {
                                   <strong>{item.arrival_station || '-'}</strong>
                                   {item.arrival_time && <span style={{ color: 'var(--color-text-secondary)', marginLeft: '6px' }}>({item.arrival_time})</span>}
                                 </td>
-                                <td>{item.coaches || 'SL / AC'}</td>
                                 <td>
                                   {staffDisplay ? (
                                     <span className="badge badge-approved" style={{ fontSize: '0.8rem', padding: '4px 8px' }}>
@@ -9431,55 +9781,126 @@ export default function App() {
       {quickAssignNonDailyTrain && (() => {
         const q = quickAssignSearch.toLowerCase().trim();
 
-        // 1. Gather all non-vacant staff
+        // 1. Gather all non-vacant running staff (exclude Depot Incharges MV PRASAD & P PRATHAP who supervise depot and do not work train duties)
         const validStaff = (allStaffList || []).filter(s => 
-          s.name && !s.name.toUpperCase().includes('VACANT')
+          s.name && !s.name.toUpperCase().includes('VACANT') &&
+          s.category_id !== null && s.category_id !== undefined && s.row_position > 0 &&
+          !['MV PRASAD', 'P PRATHAP'].includes(s.name.trim().toUpperCase())
         );
 
-        // 2. Filter with unavailable check and busy check
-        const filteredStaff = validStaff.filter(s => {
-          // Exclude unavailable staff (Weekly REST, Sick, Leave, CR, Absent)
-          if (dailyDuties && dailyDuties.categories) {
-            const flatDuties = dailyDuties.categories.reduce((acc, cat) => {
-              return acc.concat((cat.staff || []).map(st => ({ ...st, categoryId: cat.categoryId })));
-            }, []);
-            const d = flatDuties.find(st => String(st.staffId) === String(s.id));
-            if (d) {
-              if (
-                d.isRest ||
-                ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) ||
-                d.train_numbers === 'REST' ||
-                d.leave_type
-              ) {
-                return false;
-              }
-            }
-          }
-          if (s.category_id === 4) {
-            const dObj = new Date(selectedDate);
-            const shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-            const fullDays = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-            const shortDay = shortDays[dObj.getDay()];
-            const fullDay = fullDays[dObj.getDay()];
-            if (
-              (s.rest_day && (s.rest_day.toUpperCase() === shortDay || s.rest_day.toUpperCase() === fullDay)) ||
-              (s.name && s.name.toUpperCase().includes(shortDay + ' REST'))
-            ) {
-              return false;
-            }
-          }
+        const flatDuties = (dailyDuties && dailyDuties.categories) 
+          ? dailyDuties.categories.reduce((acc, cat) => acc.concat((cat.staff || []).map(st => ({ ...st, categoryId: cat.categoryId }))), [])
+          : [];
 
+        // 2. Compute status & details for each staff
+        const staffWithStatus = validStaff.map(s => {
+          const d = flatDuties.find(st => String(st.staffId) === String(s.id));
           const currentWorking = getStaffCurrentWorkingTrain(s.id);
           const isBusy = Boolean(currentWorking);
-          if (isBusy && !quickAssignShowBusy) return false;
+
+          // Leave / Sick check
+          const isLeaveOrSick = d && (
+            ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) ||
+            d.leave_type ||
+            (d.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(String(d.muster_code).toUpperCase()))
+          );
+          const leaveReason = d ? (d.leave_type || d.muster_code || d.status) : '';
+
+          const isLR = s.category_id === 4;
+          const linkNum = d ? parseInt(d.link_number, 10) : null;
+          const isNonDailyLink = (linkNum && [60, 61, 62].includes(linkNum)) || (s.category_id === 2 && [60, 61, 62].includes(s.row_position));
+          const isWeeklyRest = d && (d.isRest || d.status === 'REST' || d.train_numbers === 'REST') && !isLR;
+          const isReleasedHq = d && d.status === 'AVAILABLE_FOR_BOOKING';
+
+          let statusLabel = '🟢 Available';
+          let statusBadgeColor = '#34d399';
+          let statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
+
+          if (isLeaveOrSick) {
+            statusLabel = `🏖️ ${leaveReason || 'On Leave / Sick'}`;
+            statusBadgeColor = '#f87171';
+            statusBadgeBg = 'rgba(239, 68, 68, 0.15)';
+          } else if (isBusy) {
+            statusLabel = `⚠️ Working: ${currentWorking}`;
+            statusBadgeColor = '#facc15';
+            statusBadgeBg = 'rgba(234, 179, 8, 0.2)';
+          } else if (isLR) {
+            statusLabel = '🟢 Available (LR Standby Pool)';
+            statusBadgeColor = '#60a5fa';
+            statusBadgeBg = 'rgba(59, 130, 246, 0.2)';
+          } else if (isNonDailyLink) {
+            statusLabel = `🟢 Available (Non-Daily Link #${linkNum || s.row_position})`;
+            statusBadgeColor = '#a78bfa';
+            statusBadgeBg = 'rgba(167, 139, 250, 0.2)';
+          } else if (isWeeklyRest) {
+            statusLabel = '🟢 Available (Weekly Rest at HQ)';
+            statusBadgeColor = '#34d399';
+            statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
+          } else if (isReleasedHq) {
+            statusLabel = '🟢 Available (Released at HQ)';
+            statusBadgeColor = '#34d399';
+            statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
+          }
+
+          const catName = (categories || []).find(c => c.id === s.category_id)?.name || (
+            s.category_id === 1 ? 'Conductors (COR)' :
+            s.category_id === 2 ? 'Sleeper / TTI' :
+            s.category_id === 3 ? 'Ladies / TTE' :
+            s.category_id === 4 ? 'Leave Reserve (LR)' : 'Staff'
+          );
+
+          return {
+            ...s,
+            duty: d,
+            currentWorking,
+            isBusy,
+            isLeaveOrSick,
+            isLR,
+            isNonDailyLink,
+            isWeeklyRest,
+            isReleasedHq,
+            statusLabel,
+            statusBadgeColor,
+            statusBadgeBg,
+            catName
+          };
+        });
+
+        // 3. Filter by Category & Search
+        const filteredStaff = staffWithStatus.filter(s => {
+          // Category filter
+          if (quickAssignCatId === 'ENTIRE_ROSTER') {
+            // Show all
+          } else if (quickAssignCatId === 'ALL') {
+            // All available candidates
+            if (s.isLeaveOrSick) return false;
+            if (s.isBusy && !quickAssignShowBusy) return false;
+          } else if (quickAssignCatId === 'NON_DAILY') {
+            if (!s.isNonDailyLink) return false;
+            if (s.isLeaveOrSick) return false;
+            if (s.isBusy && !quickAssignShowBusy) return false;
+          } else if (quickAssignCatId) {
+            if (String(s.category_id) !== String(quickAssignCatId)) return false;
+            if (s.isLeaveOrSick) return false;
+            if (s.isBusy && !quickAssignShowBusy) return false;
+          }
 
           if (q) {
             const nameMatch = s.name && s.name.toLowerCase().includes(q);
             const desgMatch = s.designation && s.designation.toLowerCase().includes(q);
             const pfMatch = s.pf_number && s.pf_number.toLowerCase().includes(q);
-            return nameMatch || desgMatch || pfMatch;
+            const restMatch = s.rest_day && s.rest_day.toLowerCase().includes(q);
+            const catMatch = s.catName && s.catName.toLowerCase().includes(q);
+            return nameMatch || desgMatch || pfMatch || restMatch || catMatch;
           }
           return true;
+        }).sort((a, b) => {
+          // In ALL Available view: prioritize LR pool, then Non-Daily, then Weekly Rest, then alphabetical
+          if (quickAssignCatId === 'ALL') {
+            const priority = (st) => (st.isLR ? 1 : st.isNonDailyLink ? 2 : st.isReleasedHq ? 3 : st.isWeeklyRest ? 4 : 5);
+            if (priority(a) !== priority(b)) return priority(a) - priority(b);
+          }
+          return (a.name || '').trim().localeCompare((b.name || '').trim());
         });
 
         const handleSelectStaffForNonDaily = (s) => {
@@ -9521,9 +9942,9 @@ export default function App() {
             <div 
               className="card" 
               style={{ 
-                maxWidth: '680px', 
+                maxWidth: '720px', 
                 width: '100%', 
-                maxHeight: '85vh',
+                maxHeight: '88vh',
                 display: 'flex',
                 flexDirection: 'column',
                 background: 'var(--bg-card, #1e293b)', 
@@ -9536,13 +9957,13 @@ export default function App() {
               onClick={e => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>
                     ➕ Assign Staff to Train {quickAssignNonDailyTrain.train_number}
                   </h3>
                   <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary)' }}>
-                    {quickAssignNonDailyTrain.departure_station} ({quickAssignNonDailyTrain.departure_time || '-'}) ➔ {quickAssignNonDailyTrain.arrival_station} ({quickAssignNonDailyTrain.arrival_time || '-'}) • Date: {selectedDate}
+                    {quickAssignNonDailyTrain.departure_station} ({quickAssignNonDailyTrain.departure_time || '-'}) ➔ {quickAssignNonDailyTrain.arrival_station} ({quickAssignNonDailyTrain.arrival_time || '-'}) • Date: <strong>{selectedDate}</strong>
                   </p>
                 </div>
                 <button
@@ -9561,47 +9982,87 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Category Filter Pills */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {[
+                  { id: 'ALL', label: '🟢 All Available' },
+                  { id: '4', label: '📋 LR Relief Pool' },
+                  { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' },
+                  { id: '1', label: '🚆 Conductors (COR)' },
+                  { id: '2', label: '🛌 Sleeper / TTI' },
+                  { id: '3', label: '👩 Ladies / TTE' },
+                  { id: 'ENTIRE_ROSTER', label: '👥 All Employees' }
+                ].map(cat => {
+                  const isSelected = quickAssignCatId === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setQuickAssignCatId(cat.id)}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontSize: '0.78rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        background: isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                        color: isSelected ? '#000' : 'var(--color-text-secondary)',
+                        border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Search & Busy Filter Controls */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                 <input
                   type="text"
-                  placeholder="🔍 Search employee by name, designation, or PF..."
+                  placeholder="🔍 Search employee by name, designation, rest day, or PF..."
                   value={quickAssignSearch}
                   onChange={e => setQuickAssignSearch(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '10px 14px',
+                    padding: '9px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--border-glass)',
                     background: 'var(--bg-secondary)',
                     color: 'var(--color-text-primary)',
-                    fontSize: '0.9rem'
+                    fontSize: '0.88rem'
                   }}
                   autoFocus
                 />
 
-                <label style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  cursor: 'pointer', 
-                  fontSize: '0.84rem',
-                  fontWeight: 600,
-                  color: quickAssignShowBusy ? '#facc15' : 'var(--color-text-secondary)',
-                  background: quickAssignShowBusy ? 'rgba(234, 179, 8, 0.12)' : 'rgba(255,255,255,0.04)',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: quickAssignShowBusy ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-glass)',
-                  alignSelf: 'flex-start'
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={quickAssignShowBusy}
-                    onChange={e => setQuickAssignShowBusy(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  ⚠️ Show busy / assigned staff (to shift duty)
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    cursor: 'pointer', 
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: quickAssignShowBusy ? '#facc15' : 'var(--color-text-secondary)',
+                    background: quickAssignShowBusy ? 'rgba(234, 179, 8, 0.12)' : 'rgba(255,255,255,0.04)',
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    border: quickAssignShowBusy ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-glass)'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={quickAssignShowBusy}
+                      onChange={e => setQuickAssignShowBusy(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                  </label>
+
+                  <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                    Showing {filteredStaff.length} {filteredStaff.length === 1 ? 'employee' : 'employees'}
+                  </span>
+                </div>
               </div>
 
               {/* Staff List */}
@@ -9617,9 +10078,7 @@ export default function App() {
                   </div>
                 ) : (
                   filteredStaff.map(s => {
-                    const currentWorking = getStaffCurrentWorkingTrain(s.id);
-                    const isBusy = Boolean(currentWorking);
-                    const isLR = s.category_id === 4;
+                    const isBusy = s.isBusy;
 
                     return (
                       <div
@@ -9628,7 +10087,7 @@ export default function App() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          padding: '10px 14px',
+                          padding: '9px 12px',
                           background: isBusy ? 'rgba(234, 179, 8, 0.06)' : 'var(--bg-secondary)',
                           border: isBusy ? '1px solid rgba(234, 179, 8, 0.25)' : '1px solid var(--border-glass)',
                           borderRadius: '8px',
@@ -9636,29 +10095,42 @@ export default function App() {
                           transition: 'background 0.15s'
                         }}
                       >
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <strong style={{ fontSize: '0.92rem' }}>{s.name}</strong>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>{s.name}</strong>
                             <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.08)' }}>
                               {s.designation || 'TTI'}
                             </span>
-                            {isLR && (
-                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}>
-                                LR Pool
+                            <span className="badge" style={{ 
+                              fontSize: '0.7rem', 
+                              background: s.category_id === 1 ? 'rgba(212, 161, 92, 0.15)' :
+                                          s.category_id === 2 ? 'rgba(59, 130, 246, 0.15)' :
+                                          s.category_id === 3 ? 'rgba(236, 72, 153, 0.15)' :
+                                          'rgba(168, 85, 247, 0.15)',
+                              color: s.category_id === 1 ? '#d4a15c' :
+                                     s.category_id === 2 ? '#60a5fa' :
+                                     s.category_id === 3 ? '#f472b6' :
+                                     '#c084fc',
+                              fontWeight: 600
+                            }}>
+                              {s.catName}
+                            </span>
+                            {s.rest_day && s.rest_day !== '-' && (
+                              <span className="badge" style={{ fontSize: '0.68rem', background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-secondary)' }}>
+                                Rest: {s.rest_day}
                               </span>
                             )}
-                            {isBusy ? (
-                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(234, 179, 8, 0.2)', color: '#facc15', fontWeight: 700 }}>
-                                ⚠️ Working: {currentWorking}
-                              </span>
-                            ) : (
-                              <span className="badge" style={{ fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 700 }}>
-                                🟢 Available
-                              </span>
-                            )}
+                            <span className="badge" style={{ 
+                              fontSize: '0.72rem', 
+                              background: s.statusBadgeBg, 
+                              color: s.statusBadgeColor, 
+                              fontWeight: 700 
+                            }}>
+                              {s.statusLabel}
+                            </span>
                           </div>
                           {s.pf_number && (
-                            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                               PF: {s.pf_number}
                             </div>
                           )}
@@ -9667,10 +10139,10 @@ export default function App() {
                         <button
                           type="button"
                           className={isBusy ? 'btn btn-secondary' : 'btn btn-primary'}
-                          onClick={() => handleSelectStaffForNonDaily({ ...s, currentWorking })}
+                          onClick={() => handleSelectStaffForNonDaily(s)}
                           style={{
                             padding: '6px 14px',
-                            fontSize: '0.8rem',
+                            fontSize: '0.78rem',
                             fontWeight: 700,
                             borderRadius: '6px',
                             cursor: 'pointer',
@@ -9689,12 +10161,12 @@ export default function App() {
               </div>
 
               {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-glass)' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--border-glass)' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => setQuickAssignNonDailyTrain(null)}
-                  style={{ padding: '8px 18px', fontWeight: 600 }}
+                  style={{ padding: '7px 18px', fontWeight: 600, fontSize: '0.84rem' }}
                 >
                   Close
                 </button>

@@ -977,11 +977,17 @@ async function initDb() {
   if (!lrCat) {
     await run(
       `INSERT INTO categories (id, name, code, cycle_length, anchor_date)
-       VALUES (4, 'Leave Reserve (LR) Staff', 'LR_STAFF', 23, '2026-08-01')`
+       VALUES (4, 'Leave Reserve (LR) Staff', 'LR_STAFF', 22, '2026-08-01')`
     );
+  } else {
+    await run(`UPDATE categories SET cycle_length = 22 WHERE id = 4 OR code = 'LR_STAFF'`);
   }
 
-  // Seed / Sync LR Staff list (23 staff members with accurate Rest Days)
+  // Purge duplicate VA CHAKRAVARTHY from Category 4 (he is in Category 2 TTI Sleeper, row 35)
+  await run("DELETE FROM staff WHERE id = 119 OR (category_id = 4 AND (name LIKE '%CHAKRAVARTHY%' OR name LIKE '%CHAKRAVARTHI%'))");
+  await run("DELETE FROM links WHERE category_id = 4 AND link_number = 23");
+
+  // Seed / Sync LR Staff list (22 staff members with accurate Rest Days)
   const lrStaffSeed = [
     { pos: 1, name: 'CH SRINIVASA RAO', desg: 'CTI', rest: 'SUN' },
     { pos: 2, name: 'AG KRISHNA', desg: 'Sr.CCTC', rest: 'TUE' },
@@ -1004,8 +1010,7 @@ async function initDb() {
     { pos: 19, name: 'K NAGA NAIK', desg: 'CCTC', rest: 'TUE' },
     { pos: 20, name: 'B P SINGH', desg: 'CCTC', rest: 'WED' },
     { pos: 21, name: 'R SAIDA NAIK', desg: 'CCTC', rest: 'SAT' },
-    { pos: 22, name: 'S HYMA TULASI', desg: 'Sr.CCTC', rest: 'THU' },
-    { pos: 23, name: 'V.A. CHAKRAVARTHY', desg: 'CCTC', rest: '-' }
+    { pos: 22, name: 'S HYMA TULASI', desg: 'Sr.CCTC', rest: 'THU' }
   ];
 
   for (const s of lrStaffSeed) {
@@ -1039,17 +1044,63 @@ async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       day_of_week TEXT NOT NULL, -- 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'
       train_number TEXT NOT NULL,
+      last_day_train_number TEXT,
       departure_station TEXT,
       departure_time TEXT,
       arrival_station TEXT,
       arrival_time TEXT,
       coaches TEXT DEFAULT 'SL / AC',
+      last_day_coaches TEXT DEFAULT 'SL / AC',
       remarks TEXT,
       assigned_staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
       assigned_staff_name TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    await run(`ALTER TABLE non_daily_trains ADD COLUMN last_day_train_number TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    await run(`ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches TEXT DEFAULT 'SL / AC'`);
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Auto-populate well-known return train pairs for non-daily services if not already populated
+  try {
+    const knownReturnPairs = [
+      { first: '02811', last: '02812' },
+      { first: '22882', last: '22881' },
+      { first: '17221', last: '17222' },
+      { first: '17069', last: '17262' },
+      { first: '07609', last: '07610' },
+      { first: '07615', last: '07616' },
+      { first: '17041', last: '17042' },
+      { first: '17425', last: '17426' },
+      { first: '07029', last: '17232' },
+      { first: '17231', last: '17232' },
+      { first: '12604', last: '12603' },
+      { first: '17261', last: '17262' },
+      { first: '07032', last: '07194' },
+      { first: '17646', last: '17625' },
+      { day: 'SUNDAY', first: '02811', last: '02812' },
+      { day: 'WEDNESDAY', first: '22882', last: '22881' },
+      { day: 'WEDNESDAY', first: '17221', last: '17222' }
+    ];
+    for (const p of knownReturnPairs) {
+      if (p.day) {
+        await run(`UPDATE non_daily_trains SET last_day_train_number = ? WHERE train_number = ? AND day_of_week = ? AND (last_day_train_number IS NULL OR last_day_train_number = '')`, [p.last, p.first, p.day]);
+      } else {
+        await run(`UPDATE non_daily_trains SET last_day_train_number = ? WHERE train_number = ? AND (last_day_train_number IS NULL OR last_day_train_number = '')`, [p.last, p.first]);
+      }
+    }
+  } catch (e) {
+    // Ignore migration errors
+  }
 
   // Seed Non-Daily Trains if empty
   const nonDailyCount = await get('SELECT COUNT(*) as count FROM non_daily_trains');

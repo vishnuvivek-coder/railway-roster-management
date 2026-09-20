@@ -310,6 +310,16 @@ const STANDARD_GNT_ARRIVALS = {
 };
 
 function findGntArrivalForLink(catId, linkNum, lDef) {
+  if (lDef) {
+    const toStn = (lDef.to_station || '').toUpperCase();
+    if (toStn === 'GNT' || toStn.endsWith('/GNT') || toStn.endsWith(', GNT')) {
+      const trains = (lDef.train_numbers || '').split(',').map(t => t.trim().replace(/[^0-9]/g, '')).filter(Boolean);
+      const lastTrain = trains[trains.length - 1] || '20630';
+      const stdArr = STANDARD_GNT_ARRIVALS[lastTrain] || (lastTrain === '20630' ? '05:50' : '23:10');
+      return { trainNo: lastTrain, fromStation: lDef.from_station || '---', arrivalTime: stdArr };
+    }
+  }
+
   try {
     const linkObj = { train_numbers: 'TRAIN', ...(lDef || {}) };
     const rows = getDutyRowsForLinkNumber(catId, linkNum, linkObj);
@@ -1211,6 +1221,167 @@ app.get('/api/staff/:id/cr-details', async (req, res) => {
   }
 });
 
+// GET /api/staff/:id/recent-duties - Returns recent duties performed by a staff member before a target date
+app.get('/api/staff/:id/recent-duties', async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const beforeDateStr = req.query.date || new Date().toISOString().split('T')[0];
+    const limit = Math.min(parseInt(req.query.limit, 10) || 7, 30);
+
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+    const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
+    const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
+    
+    const results = [];
+    const curr = new Date(beforeDateStr + 'T12:00:00');
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    
+    // Look back up to 21 days to find up to `limit` records
+    for (let i = 1; i <= 21 && results.length < limit; i++) {
+      const d = new Date(curr);
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split('T')[0];
+      const dow = dayNames[d.getDay()];
+      
+      // 1. Check override directly for this staff
+      const ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dStr]);
+      // 2. Check substitute override where this staff worked as substitute
+      const subOv = await get('SELECT * FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staffId, dStr]);
+      // 3. Check non-daily assignment
+      const nd = await get('SELECT * FROM non_daily_trains WHERE assigned_staff_id = ? AND UPPER(day_of_week) = ?', [staffId, dow]);
+      // 4. Check manual duty completion
+      const manual = await get('SELECT * FROM lr_duty_completions WHERE staff_id = ? AND arrival_date = ?', [staffId, dStr]);
+      
+      let dutyText = '';
+      let dutyType = 'WORK'; // 'WORK', 'REST', 'LEAVE', 'SICK', 'ABSENT', 'STANDBY'
+      let trainNo = '';
+      let route = '';
+      let linkNum = null;
+      let coaches = '';
+      let notes = '';
+      
+      if (ov) {
+        if (ov.status === 'LEAVE') {
+          dutyText = `Leave (${ov.leave_type || 'CL'})`;
+          dutyType = 'LEAVE';
+          notes = ov.reason || '';
+        } else if (ov.status === 'SICK') {
+          dutyText = `Sick (${ov.leave_type || 'MC'})`;
+          dutyType = 'SICK';
+          notes = ov.reason || '';
+        } else if (ov.status === 'ABSENT') {
+          dutyText = 'Absent [O]';
+          dutyType = 'ABSENT';
+          notes = ov.reason || '';
+        } else if (ov.status === 'REST') {
+          dutyText = 'Weekly Rest';
+          dutyType = 'REST';
+        } else if (ov.extra_train_no) {
+          dutyText = `Train ${ov.extra_train_no} (Special/Non-Daily)`;
+          trainNo = ov.extra_train_no;
+          dutyType = 'WORK';
+          notes = ov.reason || '';
+        } else if (ov.shifted_place) {
+          dutyText = `Shifted: ${ov.shifted_place}`;
+          dutyType = 'WORK';
+          notes = ov.reason || '';
+        } else if (ov.overridden_link_number !== null && ov.overridden_link_number !== undefined) {
+          linkNum = ov.overridden_link_number;
+          const lDef = allLinks.find(l => l.link_number === linkNum && l.category_id === (ov.target_category_id || staff.category_id))
+                     || allLinks.find(l => l.link_number === linkNum);
+          if (lDef && lDef.is_rest) {
+            dutyText = 'Weekly Rest';
+            dutyType = 'REST';
+          } else {
+            trainNo = lDef ? lDef.train_numbers : '';
+            route = lDef ? `${lDef.from_station} ➔ ${lDef.to_station}` : '';
+            coaches = lDef ? lDef.coaches : '';
+            dutyText = `Link #${linkNum}${trainNo ? ` (${trainNo})` : ''}`;
+            dutyType = 'WORK';
+          }
+          notes = ov.reason || '';
+        }
+      } else if (subOv) {
+        linkNum = subOv.overridden_link_number;
+        const lDef = allLinks.find(l => l.link_number === linkNum);
+        trainNo = lDef ? lDef.train_numbers : '';
+        route = lDef ? `${lDef.from_station} ➔ ${lDef.to_station}` : '';
+        coaches = lDef ? lDef.coaches : '';
+        dutyText = `Relief on Link #${linkNum}${trainNo ? ` (${trainNo})` : ''}`;
+        dutyType = 'WORK';
+        notes = subOv.reason || 'Relief duty';
+      } else if (nd) {
+        dutyText = `Non-Daily Train ${nd.train_number}${nd.last_day_train_number ? '/' + nd.last_day_train_number : ''}`;
+        trainNo = nd.train_number;
+        route = `${nd.departure_station || ''} ➔ ${nd.arrival_station || ''}`;
+        coaches = nd.coaches || '';
+        dutyType = 'WORK';
+        notes = nd.remarks || '';
+      } else if (manual) {
+        dutyText = `Train ${manual.last_train_no}`;
+        trainNo = manual.last_train_no;
+        route = `${manual.from_station || '---'} ➔ ${manual.to_station || 'GNT'}`;
+        dutyType = 'WORK';
+        notes = manual.notes || '';
+      } else if (staff.category_id && staff.category_id !== 4 && category) {
+        const offset = getDayOffset(category.anchor_date, dStr);
+        linkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+        const lDef = allLinks.find(l => l.link_number === linkNum && l.category_id === category.id);
+        if (lDef && lDef.is_rest) {
+          dutyText = 'Weekly Rest';
+          dutyType = 'REST';
+        } else if (lDef) {
+          trainNo = lDef.train_numbers || '';
+          route = `${lDef.from_station || ''} ➔ ${lDef.to_station || ''}`;
+          coaches = lDef.coaches || '';
+          dutyText = `Link #${linkNum}${trainNo ? ` (${trainNo})` : ''}`;
+          dutyType = 'WORK';
+        } else {
+          dutyText = `Link #${linkNum}`;
+          dutyType = 'WORK';
+        }
+      } else if (staff.category_id === 4) {
+        // LR staff
+        const restDay = (staff.rest_day || '').toUpperCase().trim();
+        if (restDay && (restDay === dow || restDay === dow.substring(0, 3))) {
+          dutyText = 'Designated Weekly Rest';
+          dutyType = 'REST';
+        } else {
+          dutyText = 'LR Standby / Available at HQ';
+          dutyType = 'STANDBY';
+        }
+      }
+      
+      results.push({
+        date: dStr,
+        day_of_week: dow,
+        duty_text: dutyText,
+        duty_type: dutyType,
+        train_number: trainNo,
+        route,
+        link_number: linkNum,
+        coaches,
+        notes
+      });
+    }
+
+    res.json({
+      staff: {
+        id: staff.id,
+        name: staff.name,
+        designation: staff.designation,
+        category_id: staff.category_id,
+        category_name: category ? category.name : 'Staff'
+      },
+      target_date: beforeDateStr,
+      recent_duties: results
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Record or adjust LR staff duty completion (arrival at GNT & HQ rest)
 app.post('/api/staff/lr-duty-completion', requireAdmin, async (req, res) => {
   const { staff_id, last_train_no, arrival_date, arrival_time, rest_hours_required, notes } = req.body;
@@ -1784,18 +1955,31 @@ app.get('/api/non-daily-trains', async (req, res) => {
 });
 
 app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
-  const { day_of_week, train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
+  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
   if (!day_of_week || !train_number) {
     return res.status(400).json({ error: 'Day of week and Train number are required' });
   }
   try {
     const result = await run(
       `INSERT INTO non_daily_trains 
-       (day_of_week, train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, remarks, assigned_staff_id, assigned_staff_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [day_of_week.toUpperCase(), train_number, departure_station || '', departure_time || '', arrival_station || '', arrival_time || '', coaches || 'SL / AC', remarks || null, assigned_staff_id || null, assigned_staff_name || null]
+       (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        day_of_week.toUpperCase(), 
+        train_number, 
+        last_day_train_number || null, 
+        departure_station || '', 
+        departure_time || '', 
+        arrival_station || '', 
+        arrival_time || '', 
+        coaches || 'SL / AC', 
+        last_day_coaches || coaches || 'SL / AC', 
+        remarks || null, 
+        assigned_staff_id || null, 
+        assigned_staff_name || null
+      ]
     );
-    await logAudit('Admin', 'ADD_NON_DAILY_TRAIN', `Added non-daily train ${train_number} for ${day_of_week}`);
+    await logAudit('Admin', 'ADD_NON_DAILY_TRAIN', `Added non-daily train ${train_number}${last_day_train_number ? '/' + last_day_train_number : ''} for ${day_of_week}`);
     res.json({ id: result.lastID, message: 'Non-daily train added successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1804,36 +1988,49 @@ app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
 
 app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { day_of_week, train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
+  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
   try {
+    const existingTrain = await get('SELECT * FROM non_daily_trains WHERE id = ?', [id]);
+    if (!existingTrain) return res.status(404).json({ error: 'Non-daily train not found' });
+    const oldTrainNo = existingTrain.train_number;
+
     await run(
       `UPDATE non_daily_trains
        SET day_of_week = COALESCE(?, day_of_week),
            train_number = COALESCE(?, train_number),
+           last_day_train_number = ?,
            departure_station = COALESCE(?, departure_station),
            departure_time = COALESCE(?, departure_time),
            arrival_station = COALESCE(?, arrival_station),
            arrival_time = COALESCE(?, arrival_time),
            coaches = COALESCE(?, coaches),
+           last_day_coaches = ?,
            remarks = ?,
            assigned_staff_id = ?,
            assigned_staff_name = ?
        WHERE id = ?`,
       [
-        day_of_week ? day_of_week.toUpperCase() : null,
-        train_number || null,
-        departure_station || null,
-        departure_time || null,
-        arrival_station || null,
-        arrival_time || null,
-        coaches || null,
-        remarks !== undefined ? remarks : null,
-        assigned_staff_id !== undefined ? assigned_staff_id : null,
-        assigned_staff_name !== undefined ? assigned_staff_name : null,
+        day_of_week ? day_of_week.toUpperCase() : (day_of_week === null ? null : existingTrain.day_of_week),
+        train_number !== undefined ? train_number : existingTrain.train_number,
+        last_day_train_number !== undefined ? last_day_train_number : existingTrain.last_day_train_number,
+        departure_station !== undefined ? departure_station : existingTrain.departure_station,
+        departure_time !== undefined ? departure_time : existingTrain.departure_time,
+        arrival_station !== undefined ? arrival_station : existingTrain.arrival_station,
+        arrival_time !== undefined ? arrival_time : existingTrain.arrival_time,
+        coaches !== undefined ? coaches : existingTrain.coaches,
+        last_day_coaches !== undefined ? last_day_coaches : existingTrain.last_day_coaches,
+        remarks !== undefined ? remarks : existingTrain.remarks,
+        assigned_staff_id !== undefined ? assigned_staff_id : existingTrain.assigned_staff_id,
+        assigned_staff_name !== undefined ? assigned_staff_name : existingTrain.assigned_staff_name,
         id
       ]
     );
-    await logAudit('Admin', 'UPDATE_NON_DAILY_TRAIN', `Updated non-daily train ID ${id} (${train_number || ''})`);
+
+    if (train_number && oldTrainNo && oldTrainNo !== train_number) {
+      await run('UPDATE overrides SET extra_train_no = ? WHERE extra_train_no = ?', [train_number, oldTrainNo]);
+    }
+
+    await logAudit('Admin', 'UPDATE_NON_DAILY_TRAIN', `Updated non-daily train ID ${id} (${oldTrainNo} ➔ ${train_number || oldTrainNo})`);
 
     // Sync with LR sheet if assigned staff is Category 4
     if (assigned_staff_id) {
@@ -1853,6 +2050,41 @@ app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
         }
       }
     }
+    res.json({ message: 'Non-daily train updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  try {
+    const existingTrain = await get('SELECT * FROM non_daily_trains WHERE id = ?', [id]);
+    if (!existingTrain) return res.status(404).json({ error: 'Non-daily train not found' });
+
+    const new1stTrain = updates.train_number !== undefined ? updates.train_number : existingTrain.train_number;
+    const newLastTrain = updates.last_day_train_number !== undefined ? updates.last_day_train_number : existingTrain.last_day_train_number;
+    const new1stCoach = updates.coaches !== undefined ? updates.coaches : existingTrain.coaches;
+    const newLastCoach = updates.last_day_coaches !== undefined ? updates.last_day_coaches : existingTrain.last_day_coaches;
+    const newRemarks = updates.remarks !== undefined ? updates.remarks : existingTrain.remarks;
+
+    await run(
+      `UPDATE non_daily_trains
+       SET train_number = ?,
+           last_day_train_number = ?,
+           coaches = ?,
+           last_day_coaches = ?,
+           remarks = ?
+       WHERE id = ?`,
+      [new1stTrain, newLastTrain, new1stCoach, newLastCoach, newRemarks, id]
+    );
+
+    if (updates.train_number && existingTrain.train_number && existingTrain.train_number !== updates.train_number) {
+      await run('UPDATE overrides SET extra_train_no = ? WHERE extra_train_no = ?', [updates.train_number, existingTrain.train_number]);
+    }
+
+    await logAudit('Admin', 'PATCH_NON_DAILY_TRAIN', `Quick-edited non-daily train ID ${id}`);
     res.json({ message: 'Non-daily train updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
