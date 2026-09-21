@@ -411,89 +411,14 @@ async function fetchTrainRunningFromNtes(trainNo, dateIso, dbHelper, forceRefres
   return stationTimings;
 }
 
+const { syncJourneyLegsMultiSource } = require('./multi_source_tracker');
+
 /**
  * Batch resolve actual arrival and departure timings for a list of journey legs
- * Strictly and exclusively relies on official NTES website data (enquiry.indianrail.gov.in).
+ * Queries live actual running data across multi-source trackers (WhereIsMyTrain, RailYatri, NTES).
  */
 async function syncJourneyLegsWithNtes(journeyLegs, dbHelper, forceRefresh = true) {
-  if (!Array.isArray(journeyLegs) || journeyLegs.length === 0) {
-    return [];
-  }
-
-  // 1. Collect distinct (train_no, date_iso) runs
-  const uniqueRuns = new Map();
-  journeyLegs.forEach(leg => {
-    if (leg.train_no && leg.train_no !== 'REST' && leg.train_no !== 'OFF' && leg.date_iso) {
-      const train = String(leg.train_no).trim();
-      const key = `${train}_${leg.date_iso}`;
-      if (!uniqueRuns.has(key)) {
-        uniqueRuns.set(key, { train_no: train, date_iso: leg.date_iso });
-      }
-    }
-  });
-
-  // 2. Fetch official NTES timings for each unique run
-  const timingCache = new Map();
-  await Promise.all(
-    Array.from(uniqueRuns.values()).map(async ({ train_no, date_iso }) => {
-      try {
-        const stnTimings = await fetchTrainRunningFromNtes(train_no, date_iso, dbHelper, forceRefresh);
-        timingCache.set(`${train_no}_${date_iso}`, stnTimings);
-      } catch (err) {
-        console.error(`[NTES Batch] Error fetching ${train_no} on ${date_iso}:`, err.message);
-        timingCache.set(`${train_no}_${date_iso}`, {});
-      }
-    })
-  );
-
-  // 3. Map official NTES timings back to each journey leg
-  const updatedLegs = journeyLegs.map(leg => {
-    const { train_no, date_iso, from_station, to_station } = leg;
-
-    if (!train_no || train_no === 'REST' || train_no === 'OFF' || !date_iso) {
-      return leg;
-    }
-
-    const train = String(train_no).trim();
-    const stnTimings = timingCache.get(`${train}_${date_iso}`) || {};
-    const fromData = stnTimings[from_station] || {};
-    const toData = stnTimings[to_station] || {};
-
-    let schedDep = fromData.sched_dep && fromData.sched_dep !== '---' 
-      ? fromData.sched_dep 
-      : (leg.sched_dep || leg.dep_time || '---');
-      
-    let schedArr = toData.sched_arr && toData.sched_arr !== '---' 
-      ? toData.sched_arr 
-      : (leg.sched_arr || leg.arr_time || '---');
-
-    let actualDep = fromData.act_dep && fromData.act_dep !== '---' 
-      ? fromData.act_dep 
-      : (leg.act_dep || schedDep);
-
-    let actualArr = toData.act_arr && toData.act_arr !== '---' 
-      ? toData.act_arr 
-      : (leg.act_arr || schedArr);
-
-    let delayMins = Math.max(fromData.delay_dep_mins || 0, toData.delay_arr_mins || 0);
-
-    const hasNtesMatch = (fromData && Object.keys(fromData).length > 0) || (toData && Object.keys(toData).length > 0);
-
-    return {
-      ...leg,
-      sched_dep: schedDep,
-      sched_arr: schedArr,
-      act_dep: actualDep,
-      act_arr: actualArr,
-      dep_time: actualDep,
-      arr_time: actualArr,
-      delay_mins: delayMins,
-      is_ntes_synced: hasNtesMatch,
-      ntes_source: 'NTES (Official)'
-    };
-  });
-
-  return updatedLegs;
+  return syncJourneyLegsMultiSource(journeyLegs, dbHelper, forceRefresh);
 }
 
 module.exports = {

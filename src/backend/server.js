@@ -7768,12 +7768,13 @@ app.delete('/api/documents/daily-earnings', authenticateToken, async (req, res) 
 });
 
 // ==============================================================
-// OFFICIAL NTES LIVE TRAIN RUNNING TRACKER (enquiry.indianrail.gov.in)
-// Strictly queries and syncs arrival & departure timings from official NTES
+// OFFICIAL NTES & MULTI-SOURCE LIVE TRAIN RUNNING TRACKER
+// Queries live arrival & departure timings from WhereIsMyTrain, RailYatri, and NTES
 // ==============================================================
+const { syncJourneyLegsMultiSource, fetchMultiSourceTrainTimings } = require('./services/multi_source_tracker');
 const { syncJourneyLegsWithNtes, fetchTrainRunningFromNtes } = require('./services/ntes_service');
 
-// Official NTES Live Sync Endpoint
+// Multi-Source Live Sync Endpoint
 app.post('/api/train-timings/sync-multi', authenticateToken, async (req, res) => {
   try {
     const { legs, forceRefresh } = req.body;
@@ -7781,11 +7782,11 @@ app.post('/api/train-timings/sync-multi', authenticateToken, async (req, res) =>
       return res.status(400).json({ error: 'Array of journey legs required.' });
     }
 
-    const shouldForce = forceRefresh !== false; // Default true when explicitly requested by user
-    const updatedLegs = await syncJourneyLegsWithNtes(legs, { get, all, run }, shouldForce);
-    res.json({ success: true, legs: updatedLegs, engine: 'Official NTES (enquiry.indianrail.gov.in)' });
+    const shouldForce = forceRefresh !== false;
+    const updatedLegs = await syncJourneyLegsMultiSource(legs, { get, all, run }, shouldForce);
+    res.json({ success: true, legs: updatedLegs, engine: 'Official NTES & Live Railway Tracker' });
   } catch (err) {
-    console.error('Error syncing NTES timings:', err);
+    console.error('Error syncing multi timings:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -7799,23 +7800,23 @@ app.post('/api/train-timings/sync-ntes', authenticateToken, async (req, res) => 
     }
 
     const shouldForce = forceRefresh !== false;
-    const updatedLegs = await syncJourneyLegsWithNtes(legs, { get, all, run }, shouldForce);
-    res.json({ success: true, legs: updatedLegs, engine: 'Official NTES (enquiry.indianrail.gov.in)' });
+    const updatedLegs = await syncJourneyLegsMultiSource(legs, { get, all, run }, shouldForce);
+    res.json({ success: true, legs: updatedLegs, engine: 'Official NTES & Live Railway Tracker' });
   } catch (err) {
     console.error('Error syncing NTES timings:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Query single train running status on Official NTES
+// Query single train running status
 app.get('/api/train-timings/multi/:trainNo', authenticateToken, async (req, res) => {
   try {
     const { trainNo } = req.params;
     const dateIso = req.query.date || new Date().toISOString().split('T')[0];
-    const timings = await fetchTrainRunningFromNtes(trainNo, dateIso, { get, all, run });
-    res.json({ success: true, train_no: trainNo, date: dateIso, stations: timings, engine: 'Official NTES' });
+    const timings = await fetchMultiSourceTrainTimings(trainNo, dateIso, { get, all, run }, true);
+    res.json({ success: true, train_no: trainNo, date: dateIso, stations: timings, engine: 'Multi-Source Live Tracker' });
   } catch (err) {
-    console.error('Error fetching NTES train status:', err);
+    console.error('Error fetching train status:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -7825,8 +7826,8 @@ app.get('/api/train-timings/ntes/:trainNo', authenticateToken, async (req, res) 
   try {
     const { trainNo } = req.params;
     const dateIso = req.query.date || new Date().toISOString().split('T')[0];
-    const timings = await fetchTrainRunningFromNtes(trainNo, dateIso, { get, all, run });
-    res.json({ success: true, train_no: trainNo, date: dateIso, stations: timings, engine: 'Official NTES' });
+    const timings = await fetchMultiSourceTrainTimings(trainNo, dateIso, { get, all, run }, true);
+    res.json({ success: true, train_no: trainNo, date: dateIso, stations: timings, engine: 'Official NTES & Live Tracker' });
   } catch (err) {
     console.error('Error fetching single train NTES status:', err);
     res.status(500).json({ error: err.message });
