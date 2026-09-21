@@ -239,6 +239,17 @@ export default function DiaryDocument({
     }
   }, [selectedStaffId, startDate, endDate]);
 
+  // Real-time synchronization across all tabs and documents
+  useEffect(() => {
+    const handleRosterUpdate = () => {
+      if (selectedStaffId && startDate && endDate) {
+        fetchDiary();
+      }
+    };
+    window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
+    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+  }, [selectedStaffId, startDate, endDate]);
+
   // Global Ctrl+S Shortcut to Save
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {

@@ -70,17 +70,24 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
     fetchSheet(year, month);
   }, [year, month]);
 
-  // Real-time reactive listener: when duties are assigned in Daily Duty Management, auto-refresh LR sheet
+  // Real-time reactive listener: when duties are assigned anywhere in the system, auto-refresh LR sheet
   useEffect(() => {
-    const handleDutyUpdate = () => {
+    const handleDutyUpdate = (e) => {
+      if (e && e.detail && e.detail.source === 'lr_sheet') return;
       fetchSheet(year, month);
     };
     window.addEventListener('railway_duty_allotment_updated', handleDutyUpdate);
-    return () => window.removeEventListener('railway_duty_allotment_updated', handleDutyUpdate);
+    window.addEventListener('railway_roster_data_updated', handleDutyUpdate);
+    return () => {
+      window.removeEventListener('railway_duty_allotment_updated', handleDutyUpdate);
+      window.removeEventListener('railway_roster_data_updated', handleDutyUpdate);
+    };
   }, [year, month]);
 
   const handleSaveCell = async (newCode, newRemarks = '') => {
     if (!editModal) return;
+    const targetStaffId = editModal.staff.staffId;
+    const targetDateStr = editModal.day.dateStr;
     try {
       setSaving(true);
       const token = authToken || localStorage.getItem('token');
@@ -91,8 +98,8 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
           ...(token ? { 'Authorization': 'Bearer ' + token } : {})
         },
         body: JSON.stringify({
-          staff_id: editModal.staff.staffId,
-          date: editModal.day.dateStr,
+          staff_id: targetStaffId,
+          date: targetDateStr,
           duty_code: newCode,
           remarks: newRemarks
         })
@@ -106,7 +113,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
       setSheetData(prev => {
         if (!prev) return prev;
         const newRecords = { ...prev.records };
-        const key = `${editModal.staff.staffId}_${editModal.day.dateStr}`;
+        const key = `${targetStaffId}_${targetDateStr}`;
         if (!newCode || newCode.trim() === '') {
           delete newRecords[key];
         } else {
@@ -116,6 +123,9 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
       });
 
       setEditModal(null);
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId: targetStaffId, date: targetDateStr, source: 'lr_sheet', timestamp: Date.now() }
+      }));
     } catch (err) {
       alert('Error updating cell: ' + err.message);
     } finally {

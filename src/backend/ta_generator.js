@@ -1627,6 +1627,7 @@ module.exports = {
   recalculateJournalRowsTa,
   generatePendingTaClaimsForMonth,
   generateStaffTaJournal,
-  getDutyRowsForLinkNumber
+  getDutyRowsForLinkNumber,
+  resolveDutyCodeToRows
 };
 

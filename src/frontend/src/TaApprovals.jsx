@@ -57,6 +57,16 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
     fetchApprovals();
   }, [year, month, selectedCatId, statusFilter, useDateRange, startDate, endDate, authToken]);
 
+  // Real-time synchronization across all tabs and documents
+  useEffect(() => {
+    const handleRosterUpdate = (e) => {
+      if (e.detail && e.detail.source === 'ta_approvals') return;
+      fetchApprovals();
+    };
+    window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
+    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+  }, [year, month, selectedCatId, statusFilter, useDateRange, startDate, endDate, authToken]);
+
   // Handle single claim acceptance
   const handleAcceptSingle = async (id, staffName) => {
     if (!isAdmin) return;
@@ -74,6 +84,9 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       if (data.success) {
         showToast(`✅ TA accepted for ${staffName}! Added to TA Document.`);
         fetchApprovals();
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+          detail: { source: 'ta_approvals', timestamp: Date.now() }
+        }));
       } else {
         alert(data.error || 'Failed to accept TA');
       }

@@ -46,6 +46,15 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
     fetchAvailability(selectedDate);
   }, [selectedDate]);
 
+  // Real-time synchronization across all tabs and sheets
+  useEffect(() => {
+    const handleRosterUpdate = () => {
+      fetchAvailability(selectedDate);
+    };
+    window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
+    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+  }, [selectedDate]);
+
   // Quick date navigation
   const shiftDate = (days) => {
     const d = new Date(selectedDate);

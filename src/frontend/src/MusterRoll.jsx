@@ -187,6 +187,16 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     fetchMuster(selectedCycleStart);
   }, [selectedCycleStart, selectedCategory]);
 
+  // Real-time synchronization across all tabs and sheets
+  useEffect(() => {
+    const handleRosterUpdate = (e) => {
+      if (e.detail && e.detail.source === 'muster_roll') return;
+      fetchMuster(selectedCycleStart);
+    };
+    window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
+    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+  }, [selectedCycleStart, selectedCategory]);
+
   const handleUpdateCode = async (staffId, dateStr, newCode, remarks = '') => {
     try {
       setSavingCell(true);
@@ -237,6 +247,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       });
 
       setActiveCellModal(null);
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
+      }));
     } catch (err) {
       alert('Error updating muster code: ' + err.message);
     } finally {
@@ -262,6 +275,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setActiveCellModal(null);
       await fetchMuster(selectedCycleStart);
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
+      }));
     } catch (err) {
       alert('Error resetting cell: ' + err.message);
     } finally {

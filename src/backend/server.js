@@ -2134,6 +2134,14 @@ app.post('/api/overrides', requireAdmin, async (req, res) => {
       [staff_id, date, originalLink, overridden_link_number, reason, target_category_id || null]
     );
 
+    // Multi-module synchronization
+    await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, date, {
+      targetLink: overridden_link_number,
+      isLeave: false,
+      isRest: overridden_link_number === null,
+      remarks: reason
+    });
+
     const undoData = {
       action: 'MANUAL_OVERRIDE',
       staff_id,
@@ -2241,6 +2249,14 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         // If staff is an LR employee, clear their LR sheet record
         if (staff.category_id === 4) {
           await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+        }
+
+        // Restore TA approvals and entries for both main staff and substitute
+        const dateParts = dStr.split('-');
+        const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
+        await restoreMusterTaApprovalsAndEntries(staff_id, dStr, altDateStr);
+        if (existing && existing.substitute_staff_id) {
+          await restoreMusterTaApprovalsAndEntries(existing.substitute_staff_id, dStr, altDateStr);
         }
 
         // Automatically cancel any approved leave_requests for this staff on this date
@@ -2577,6 +2593,28 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           await syncLRSheetRecord(staff.id, dStr, lrMusterCode, dayReason || `${dayAction} - ${dayLeaveType}`);
         }
 
+        // Synchronize TA approvals for main staff on leave/sick/rest
+        const dateParts = dStr.split('-');
+        const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
+        const disallowRemark = `Disallowed: On Leave/Absent as per Daily Duty (${dayMusterCode})`;
+        await run(
+          `UPDATE ta_approvals 
+           SET status = 'REJECTED', 
+               claim_amount = 0, 
+               ta_percentage = NULL, 
+               remarks = ?
+           WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+          [disallowRemark, staff.id, dStr, dStr, altDateStr]
+        );
+        await run(
+          `UPDATE ta_entries 
+           SET ta_b1 = '', 
+               days_claiming_ta = NULL, 
+               remarks = ?
+           WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+          [disallowRemark, staff.id, dStr, dStr, altDateStr]
+        );
+
         // If replacement is an existing staff member in another column or LR pool
         if (replacement_staff_id) {
           const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
@@ -2622,6 +2660,18 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  updated_at = CURRENT_TIMESTAMP`,
               [subStaff.id, dStr, `Working as substitute for ${staff.name}`]
             );
+
+            // Regenerate TA claims for substitute
+            await run(
+              `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+              [subStaff.id, dStr, dStr, altDateStr]
+            );
+            const subY = parseInt(dateParts[0], 10);
+            const subM = parseInt(dateParts[1], 10);
+            try {
+              const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+              await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
+            } catch (err) {}
 
             // Sync substitute with LR sheet if substitute is in Category 4
             if (subStaff.category_id === 4) {
@@ -3640,6 +3690,20 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       }
     }
 
+    // Synchronize across TA approvals and documents for both staff
+    await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, date, {
+      targetLink: newDutyA,
+      isLeave: false,
+      isRest: newDutyA === null,
+      remarks: reasonA
+    });
+    await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, date, {
+      targetLink: newDutyB,
+      isLeave: false,
+      isRest: newDutyB === null,
+      remarks: reasonB
+    });
+
     const undoData = {
       action: 'EXCHANGE_STAFF',
       date,
@@ -3676,17 +3740,17 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
   }
 });
 
-// Helper to synchronize any duty change / deviation across TA, NDA, Diary, Muster, and LR Sheet
+// Helper to synchronize any duty change / deviation across TA, NDA, Diary, Muster, Overrides, and LR Sheet
 async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
-  const { run, get } = db;
+  const { run, get, all } = db;
   const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   if (!staff) return;
 
-  const { targetTrain, targetLink, isLeave, leaveCode } = details;
+  const { targetTrain, targetLink, isLeave, leaveCode, remarks, substituteStaffId, isRest, isAvailable } = details;
 
   // 1. Sync Muster Records
   if (isLeave) {
-    const code = leaveCode || 'LEAVE';
+    const code = (leaveCode || 'LEAVE').toUpperCase() === 'SICK' ? 'SICK' : (leaveCode || 'CL').toUpperCase();
     await run(
       `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
        VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
@@ -3695,11 +3759,22 @@ async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
          remarks = excluded.remarks,
          updated_by = 'Admin',
          updated_at = CURRENT_TIMESTAMP`,
-      [staffId, date, code, code]
+      [staffId, date, code, remarks || code]
+    );
+  } else if (isRest) {
+    await run(
+      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+       VALUES (?, ?, 'R', ?, 'Admin', CURRENT_TIMESTAMP)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         code = 'R',
+         remarks = excluded.remarks,
+         updated_by = 'Admin',
+         updated_at = CURRENT_TIMESTAMP`,
+      [staffId, date, remarks || 'Assigned Rest Day']
     );
   } else {
-    // If working duty
-    const remark = targetTrain ? `Train ${targetTrain}` : (targetLink ? `Link #${targetLink}` : 'Present');
+    // If working duty or available at HQ
+    const remark = targetTrain ? `Train ${targetTrain}` : (targetLink ? `Link #${targetLink}` : (isAvailable ? 'Available at HQ' : (remarks || 'Present')));
     await run(
       `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
        VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
@@ -3712,29 +3787,56 @@ async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
     );
   }
 
-  // 2. Sync TA Approvals
-  // Delete pending claims for this staff on this date so they can be regenerated cleanly
-  await run(
-    `DELETE FROM ta_approvals WHERE staff_id = ? AND duty_date = ? AND status = 'PENDING'`,
-    [staffId, date]
-  );
-  const parts = date.split('-');
-  const y = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  try {
-    const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-    await generatePendingTaClaimsForMonth(db, y, m, staffId);
-  } catch (err) {
-    console.warn('Error regenerating TA claims in sync:', err.message);
-  }
-
-  // 3. Sync LR Sheet Records if staff is LR (category_id = 4)
+  // 2. Sync LR Sheet Records if staff is LR (category_id = 4)
   if (staff.category_id === 4) {
     if (isLeave) {
-      await run(`DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?`, [staffId, date]);
+      const lrCode = (leaveCode || 'L').toUpperCase() === 'SICK' ? 'S' : (leaveCode || 'L').toUpperCase();
+      await syncLRSheetRecord(staffId, date, lrCode, remarks || lrCode, 'Universal Sync');
+    } else if (isRest) {
+      await syncLRSheetRecord(staffId, date, 'R', remarks || 'Rest Day', 'Universal Sync');
+    } else if (isAvailable) {
+      await syncLRSheetRecord(staffId, date, 'AVL', remarks || 'Available at HQ', 'Universal Sync');
     } else {
       const train = targetTrain || (targetLink ? `Link ${targetLink}` : 'Duty');
-      await syncLRSheetRecord(staffId, date, train, 'UTILISED', 'Roster System');
+      await syncLRSheetRecord(staffId, date, train, remarks || 'UTILISED', 'Universal Sync');
+    }
+  }
+
+  // 3. Sync TA Approvals & TA Entries
+  const dateParts = date.split('-');
+  const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : date;
+  if (isLeave || isRest) {
+    const disallowRemark = `Disallowed: On Leave/Absent as per Muster/Daily Duty (${leaveCode || (isRest ? 'REST' : 'LEAVE')})`;
+    await run(
+      `UPDATE ta_approvals 
+       SET status = 'REJECTED', 
+           claim_amount = 0, 
+           ta_percentage = NULL, 
+           remarks = ?
+       WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+      [disallowRemark, staffId, date, date, altDateStr]
+    );
+    await run(
+      `UPDATE ta_entries 
+       SET ta_b1 = '', 
+           days_claiming_ta = NULL, 
+           remarks = ?
+       WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+      [disallowRemark, staffId, date, date, altDateStr]
+    );
+  } else {
+    // Delete pending/disallowed claims for this staff on this date so they can be regenerated cleanly
+    await run(
+      `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+      [staffId, date, date, altDateStr]
+    );
+    const y = parseInt(dateParts[0], 10);
+    const m = parseInt(dateParts[1], 10);
+    try {
+      const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+      await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+    } catch (err) {
+      console.warn('Error regenerating TA claims in sync:', err.message);
     }
   }
 }
@@ -8059,9 +8161,10 @@ app.get('/api/muster', async (req, res) => {
 });
 
 /**
- * Synchronize Muster Record status across Overrides, TA Approvals, and TA Entries
+ * Synchronize Muster Record status across Overrides, TA Approvals, LR Sheet, and TA Entries
  */
 async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, remarks = '') {
+  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   const isLeave = ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(cleanCode);
   const isSick = cleanCode === 'SICK';
   const isCr = cleanCode === 'CR';
@@ -8109,6 +8212,12 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
       [disallowRemark, staffId, dateStr, dateStr, altDateStr]
     );
+
+    // 4. If staff is Category 4 (LR), synchronize to lr_sheet_records
+    if (staff && staff.category_id === 4) {
+      const lrCode = cleanCode === 'SICK' ? 'S' : cleanCode;
+      await syncLRSheetRecord(staffId, dateStr, lrCode, reason, 'Muster Roll Sync');
+    }
   } else if (cleanCode === 'P' || cleanCode === 'E') {
     // If an automated muster override existed, clean it up so regular duty resumes
     await run(
@@ -8118,6 +8227,19 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
     );
 
     await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+
+    // If staff is Category 4 (LR), resolve duty or set available
+    if (staff && staff.category_id === 4) {
+      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dObj = new Date(dateStr + 'T12:00:00');
+      const dayOfWeek = dayNames[dObj.getDay()];
+      const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
+      if (resolved && resolved.code) {
+        await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Muster: Present', 'Muster Roll Sync');
+      } else {
+        await syncLRSheetRecord(staffId, dateStr, 'AVL', 'Present at HQ', 'Muster Roll Sync');
+      }
+    }
   }
 }
 
@@ -8128,7 +8250,7 @@ async function restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr) 
   const disallowedClaims = await all(
     `SELECT * FROM ta_approvals 
      WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) 
-       AND (remarks LIKE 'Disallowed: On Leave/Absent as per Muster Chart%' OR status = 'REJECTED')`,
+       AND (remarks LIKE 'Disallowed: On Leave/Absent as per Muster Chart%' OR remarks LIKE 'Disallowed: On Leave/Absent as per LR Sheet%' OR status = 'REJECTED')`,
     [staffId, dateStr, dateStr, altDateStr]
   );
 
@@ -8162,6 +8284,7 @@ async function restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr) 
 }
 
 async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
+  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   const dateParts = dateStr.split('-');
   const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
 
@@ -8171,6 +8294,19 @@ async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
     [staffId, dateStr]
   );
   await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+
+  // If staff is Category 4 (LR), resolve baseline or delete override record
+  if (staff && staff.category_id === 4) {
+    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const dObj = new Date(dateStr + 'T12:00:00');
+    const dayOfWeek = dayNames[dObj.getDay()];
+    const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
+    if (resolved && resolved.code) {
+      await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Baseline', 'Muster Roll Sync');
+    } else {
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+    }
+  }
 }
 
 // POST /api/muster/update-cell - Update or assign code for a single employee cell
@@ -8884,7 +9020,163 @@ app.get('/api/lr-sheet', async (req, res) => {
   }
 });
 
-// POST /api/lr-sheet/cell - Update or clear duty cell for an LR staff
+// Centralized helper for bidirectional synchronization when an LR Sheet cell is modified or cleared
+async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
+  if (!staffId || !dateStr) return;
+  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  if (!staff) return;
+
+  const dateParts = dateStr.split('-');
+  const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
+
+  if (!dutyCode || dutyCode.trim() === '') {
+    // 1. Cleared / Reset cell
+    await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+    await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+    await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+    return;
+  }
+
+  const clean = dutyCode.trim();
+  const upper = clean.toUpperCase();
+
+  // 1. Upsert LR Sheet Record
+  await run(`
+    INSERT INTO lr_sheet_records (staff_id, date, duty_code, remarks, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+    ON CONFLICT(staff_id, date) DO UPDATE SET
+      duty_code = excluded.duty_code,
+      remarks = excluded.remarks,
+      updated_by = excluded.updated_by,
+      updated_at = CURRENT_TIMESTAMP
+  `, [staffId, dateStr, clean, remarks || null]);
+
+  // 2. Classify duty code
+  const isSick = upper === 'S' || upper === 'SICK';
+  const isLeave = ['CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'OD', 'NH', 'L', 'CAP'].includes(upper);
+  const isRest = upper === 'R' || upper === 'REST';
+  const isCr = upper === 'CR';
+  const isAbsent = upper === 'O' || upper === 'ABSENT';
+  const isAvailable = ['AVL', 'SPARE', 'REST_HQ', 'STANDBY', 'AVAILABLE'].includes(upper);
+
+  if (isSick || isLeave || isRest || isCr || isAbsent) {
+    const musterCode = isSick ? 'SICK' : (isLeave ? (upper === 'L' || upper === 'CAP' ? 'LAP' : upper) : (isRest ? 'R' : (isCr ? 'CR' : 'O')));
+    const status = isLeave ? 'LEAVE' : (isSick ? 'SICK' : (isCr ? 'CR' : (isRest ? 'REST' : 'ABSENT')));
+    const reason = `LR Sheet: ${clean}${remarks ? ` (${remarks})` : ''}`;
+    const leaveType = isLeave ? musterCode : null;
+
+    await run(
+      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id, leave_type)
+       VALUES (?, ?, NULL, NULL, ?, ?, 4, ?)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         overridden_link_number = NULL,
+         status = excluded.status,
+         reason = excluded.reason,
+         target_category_id = 4,
+         leave_type = excluded.leave_type`,
+      [staffId, dateStr, status, reason, leaveType]
+    );
+
+    await run(
+      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+       VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         code = excluded.code,
+         remarks = excluded.remarks,
+         updated_by = excluded.updated_by,
+         updated_at = CURRENT_TIMESTAMP`,
+      [staffId, dateStr, musterCode, reason]
+    );
+
+    const disallowRemark = `Disallowed: On Leave/Absent as per LR Sheet (${clean})`;
+    await run(
+      `UPDATE ta_approvals 
+       SET status = 'REJECTED', 
+           claim_amount = 0, 
+           ta_percentage = NULL, 
+           remarks = ?
+       WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+    );
+    await run(
+      `UPDATE ta_entries 
+       SET ta_b1 = '', 
+           days_claiming_ta = NULL, 
+           remarks = ?
+       WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+    );
+  } else if (isAvailable) {
+    const reason = `LR Standby at HQ: ${clean}${remarks ? ` (${remarks})` : ''}`;
+    await run(
+      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+       VALUES (?, ?, NULL, NULL, 'AVAILABLE_FOR_BOOKING', ?, 4)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         overridden_link_number = NULL,
+         status = 'AVAILABLE_FOR_BOOKING',
+         reason = excluded.reason,
+         target_category_id = 4`,
+      [staffId, dateStr, reason]
+    );
+    await run(
+      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+       VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         code = 'P',
+         remarks = excluded.remarks,
+         updated_by = excluded.updated_by,
+         updated_at = CURRENT_TIMESTAMP`,
+      [staffId, dateStr, reason]
+    );
+    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+  } else {
+    // Train duty (e.g. 12747, 17281, 12734, GTL, etc.)
+    const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
+    await run(
+      `INSERT INTO overrides (
+        staff_id, date, overridden_link_number, status, target_category_id,
+        reason, original_link_number, extra_train_no, is_extra,
+        shifted_from_link, shifted_from_train, shifted_place,
+        advance_train_no, is_advance_duty
+      ) VALUES (?, ?, NULL, 'EXTRA_CREW', 4, ?, NULL, ?, 1, NULL, NULL, 'LR_SHEET', NULL, 0)
+      ON CONFLICT(staff_id, date) DO UPDATE SET
+        overridden_link_number = NULL,
+        status = 'EXTRA_CREW',
+        target_category_id = 4,
+        reason = excluded.reason,
+        extra_train_no = excluded.extra_train_no,
+        is_extra = 1,
+        shifted_place = 'LR_SHEET'`,
+      [staffId, dateStr, reason, clean]
+    );
+    await run(
+      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+       VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+       ON CONFLICT(staff_id, date) DO UPDATE SET
+         code = 'P',
+         remarks = excluded.remarks,
+         updated_by = excluded.updated_by,
+         updated_at = CURRENT_TIMESTAMP`,
+      [staffId, dateStr, reason]
+    );
+
+    await run(
+      `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+      [staffId, dateStr, dateStr, altDateStr]
+    );
+    const y = parseInt(dateParts[0], 10);
+    const m = parseInt(dateParts[1], 10);
+    try {
+      const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+      await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+    } catch (err) {
+      console.warn('Error regenerating TA claims in LR sync:', err.message);
+    }
+  }
+}
+
+// POST /api/lr-sheet/cell - Update or clear duty cell for an LR staff (Universally synchronized)
 app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
   try {
     const { staff_id, date, duty_code, remarks } = req.body;
@@ -8892,32 +9184,17 @@ app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
 
-    if (!duty_code || duty_code.trim() === '') {
-      await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
-      await logAudit('Admin', 'LR_CELL_RESET', `Cleared LR duty cell for staff ID ${staff_id} on ${date}`);
-      return res.json({ success: true, message: 'Cell cleared' });
-    }
+    await syncLRSheetCellChange(staff_id, date, duty_code, remarks);
 
-    const cleanCode = duty_code.trim();
-    await run(`
-      INSERT INTO lr_sheet_records (staff_id, date, duty_code, remarks, updated_by, updated_at)
-      VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-      ON CONFLICT(staff_id, date) DO UPDATE SET
-        duty_code = excluded.duty_code,
-        remarks = excluded.remarks,
-        updated_by = excluded.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `, [staff_id, date, cleanCode, remarks || null]);
-
-    await logAudit('Admin', 'LR_CELL_UPDATE', `Updated LR duty cell for staff ID ${staff_id} on ${date} to '${cleanCode}'`);
-    res.json({ success: true, message: `Updated cell to ${cleanCode}` });
+    await logAudit('Admin', 'LR_CELL_UPDATE', `Updated LR duty cell for staff ID ${staff_id} on ${date} to '${duty_code || 'CLEARED'}'`);
+    res.json({ success: true, message: `Updated and synchronized LR cell for ${date}` });
   } catch (err) {
     console.error('Error updating LR cell:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/lr-sheet/batch-update - Batch update multiple LR cells
+// POST /api/lr-sheet/batch-update - Batch update multiple LR cells (Universally synchronized)
 app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
   try {
     const { updates } = req.body;
@@ -8928,24 +9205,12 @@ app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
     await run('BEGIN TRANSACTION');
     for (const item of updates) {
       if (!item.staff_id || !item.date) continue;
-      if (!item.duty_code || item.duty_code.trim() === '') {
-        await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [item.staff_id, item.date]);
-      } else {
-        await run(`
-          INSERT INTO lr_sheet_records (staff_id, date, duty_code, remarks, updated_by, updated_at)
-          VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-          ON CONFLICT(staff_id, date) DO UPDATE SET
-            duty_code = excluded.duty_code,
-            remarks = excluded.remarks,
-            updated_by = excluded.updated_by,
-            updated_at = CURRENT_TIMESTAMP
-        `, [item.staff_id, item.date, item.duty_code.trim(), item.remarks || null]);
-      }
+      await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks);
     }
     await run('COMMIT');
 
-    await logAudit('Admin', 'LR_BATCH_UPDATE', `Batch updated ${updates.length} LR records`);
-    res.json({ success: true, message: `Successfully updated ${updates.length} records` });
+    await logAudit('Admin', 'LR_BATCH_UPDATE', `Batch updated ${updates.length} LR records with universal sync`);
+    res.json({ success: true, message: `Successfully updated and synchronized ${updates.length} records` });
   } catch (err) {
     await run('ROLLBACK');
     console.error('Error batch updating LR records:', err);

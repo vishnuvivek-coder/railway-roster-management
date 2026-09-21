@@ -928,6 +928,18 @@ export default function App() {
     fetchNonDailyTrains();
   }, []);
 
+  // Real-time universal synchronization across all tabs and components
+  useEffect(() => {
+    const handleUniversalRosterUpdate = () => {
+      fetchDailyDuties();
+      fetchRoster();
+      fetchNonDailyTrains();
+      fetchAllStaff();
+    };
+    window.addEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
+    return () => window.removeEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
+  }, [selectedDate, movementStartDate, movementEndDate, year, month]);
+
   // ----------------------------------------------------
   // DAILY DUTY REGISTER HANDLERS
   // ----------------------------------------------------
@@ -1222,6 +1234,9 @@ export default function App() {
     if (activeTab === 'audit') fetchAuditLogs();
     try {
       window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated'));
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { timestamp: Date.now() }
+      }));
     } catch (e) {}
   };
 
@@ -1251,6 +1266,9 @@ export default function App() {
       if (activeTab === 'audit') fetchAuditLogs();
       try {
         window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated'));
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+          detail: { timestamp: Date.now() }
+        }));
       } catch (e) {}
     } catch (err) {
       alert(err.message);
