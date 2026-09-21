@@ -12,10 +12,14 @@ const computePresetDates = (preset, y, m) => {
   const currentDay = now.getDate();
   const upToDay = isCurrentMonth ? Math.min(lastDay, currentDay) : (isFutureMonth ? 1 : lastDay);
 
+  const prevYr = mo === 1 ? yr - 1 : yr;
+  const prevMo = mo === 1 ? 12 : mo - 1;
+  const maxDaysPrev = new Date(prevYr, prevMo, 0).getDate();
+  const prev30thDay = Math.min(30, maxDaysPrev);
+  const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
+
   if (preset === 'wage_period') {
     // 11th of prev month to 10th of selected month (IR wage period)
-    const prevYr = mo === 1 ? yr - 1 : yr;
-    const prevMo = mo === 1 ? 12 : mo - 1;
     const wageEndDay = isCurrentMonth ? Math.min(10, currentDay) : 10;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
@@ -24,7 +28,7 @@ const computePresetDates = (preset, y, m) => {
   } else if (preset === 'fortnight_1') {
     const fn1End = isCurrentMonth ? Math.min(15, currentDay) : 15;
     return {
-      start: `${yr}-${String(mo).padStart(2, '0')}-01`,
+      start: prevMonth30thIso,
       end: `${yr}-${String(mo).padStart(2, '0')}-${String(fn1End).padStart(2, '0')}`
     };
   } else if (preset === 'fortnight_2') {
@@ -34,9 +38,9 @@ const computePresetDates = (preset, y, m) => {
       end: `${yr}-${String(mo).padStart(2, '0')}-${String(Math.max(16, fn2End)).padStart(2, '0')}`
     };
   }
-  // Default 'full_month' / up-to-date (strictly up to today for current month)
+  // Default 'full_month' / up-to-date (strictly up to today for current month, starting from previous month 30th)
   return {
-    start: `${yr}-${String(mo).padStart(2, '0')}-01`,
+    start: prevMonth30thIso,
     end: `${yr}-${String(mo).padStart(2, '0')}-${String(upToDay).padStart(2, '0')}`
   };
 };
@@ -66,9 +70,24 @@ export default function TaDocument({
   const setMonth = propSetMonth || setInternalMonth;
 
   // Period / Date Range state
-  const [periodPreset, setPeriodPreset] = useState('full_month'); // full_month, wage_period, fortnight_1, fortnight_2, custom
+  const [periodPreset, setPeriodPreset] = useState(() => {
+    try {
+      return localStorage.getItem('railway_ta_period_preset') || 'full_month';
+    } catch (e) {
+      return 'full_month';
+    }
+  });
   const [startDate, setStartDate] = useState(() => computePresetDates('full_month', year, month).start);
   const [endDate, setEndDate] = useState(() => computePresetDates('full_month', year, month).end);
+
+  // Sync date range when year or month changes
+  useEffect(() => {
+    if (periodPreset !== 'custom') {
+      const dates = computePresetDates(periodPreset, year, month);
+      setStartDate(dates.start);
+      setEndDate(dates.end);
+    }
+  }, [year, month, periodPreset]);
 
   const handleMonthChange = (newMonth) => {
     setMonth(newMonth);
@@ -90,6 +109,7 @@ export default function TaDocument({
 
   const handlePresetSelect = (preset) => {
     setPeriodPreset(preset);
+    try { localStorage.setItem('railway_ta_period_preset', preset); } catch (e) {}
     if (preset !== 'custom') {
       const dates = computePresetDates(preset, year, month);
       setStartDate(dates.start);
@@ -1065,7 +1085,7 @@ export default function TaDocument({
               📅 {(() => {
                 const now = new Date();
                 const isCur = now.getFullYear() === parseInt(year, 10) && (now.getMonth() + 1) === parseInt(month, 10);
-                return isCur ? `Up-to-Date (1st – ${now.getDate()}th)` : 'Full Month';
+                return isCur ? `Up-to-Date (Prev 30th – ${now.getDate()}th)` : 'Prev 30th to Month-End';
               })()}
             </button>
             <button

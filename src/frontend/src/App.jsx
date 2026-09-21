@@ -9337,7 +9337,7 @@ export default function App() {
         })()}
 
         {/* DOCUMENTS HUB: TA JOURNAL, NDA PARTICULARS, AND DIARY STATEMENT */}
-        {activeTab === 'documents' && (
+        <div style={{ display: activeTab === 'documents' ? 'block' : 'none' }}>
           <div>
             {/* Unified Document Switcher Header */}
             <div className="no-print" style={{
@@ -9447,7 +9447,7 @@ export default function App() {
               </button>
             </div>
 
-            {docSubTab === 'ta' && (
+            <div style={{ display: docSubTab === 'ta' ? 'block' : 'none' }}>
               <TaDocument
                 authToken={authToken}
                 categories={categories}
@@ -9469,9 +9469,9 @@ export default function App() {
                   try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
                 }}
               />
-            )}
+            </div>
 
-            {docSubTab === 'nda' && (
+            <div style={{ display: docSubTab === 'nda' ? 'block' : 'none' }}>
               <NdaDocument
                 authToken={authToken}
                 categories={categories}
@@ -9493,9 +9493,9 @@ export default function App() {
                   try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
                 }}
               />
-            )}
+            </div>
 
-            {docSubTab === 'diary' && (
+            <div style={{ display: docSubTab === 'diary' ? 'block' : 'none' }}>
               <DiaryDocument
                 authToken={authToken}
                 categories={categories}
@@ -9517,9 +9517,9 @@ export default function App() {
                   try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
                 }}
               />
-            )}
+            </div>
 
-            {docSubTab === 'earnings' && (
+            <div style={{ display: docSubTab === 'earnings' ? 'block' : 'none' }}>
               <DailyEarningsDocument
                 authToken={authToken}
                 categories={categories}
@@ -9541,9 +9541,9 @@ export default function App() {
                   try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
                 }}
               />
-            )}
+            </div>
           </div>
-        )}
+        </div>
 
         {/* MUSTER DETAILS / ATTENDANCE ROLL (11th to 10th Wage Period) */}
         {activeTab === 'muster' && (

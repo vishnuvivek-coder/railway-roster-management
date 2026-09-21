@@ -1202,7 +1202,13 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
   const upToDateIso = `${y}-${String(m).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
 
-  let actualStart = startDate || `${y}-${String(m).padStart(2, '0')}-01`;
+  const prevYr = m === 1 ? y - 1 : y;
+  const prevMo = m === 1 ? 12 : m - 1;
+  const maxDaysPrev = new Date(prevYr, prevMo, 0).getDate();
+  const prev30thDay = Math.min(30, maxDaysPrev);
+  const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
+
+  let actualStart = startDate || prevMonth30thIso;
   let actualEnd = endDate || (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
 
   // Strict rule: TA can only be claimed/calculated for duties already performed up-to-date!
