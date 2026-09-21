@@ -6283,7 +6283,6 @@ export default function App() {
                                     <th style={{ width: '95px' }}>Arrival</th>
                                     <th style={{ minWidth: '280px' }}>Assigned Crew (Drag & Drop Zone)</th>
                                     <th>Remarks</th>
-                                    {isAdmin && <th style={{ width: '90px' }}>Actions</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -6466,38 +6465,13 @@ export default function App() {
                                             <span style={{ color: 'var(--color-text-secondary)' }}>-</span>
                                           )}
                                         </td>
-
-                                        {isAdmin && (
-                                          <td>
-                                            <button
-                                              type="button"
-                                              className="btn btn-secondary"
-                                              style={{
-                                                padding: '4px 10px',
-                                                fontSize: '0.76rem',
-                                                borderRadius: '6px',
-                                                background: 'rgba(212, 161, 92, 0.12)',
-                                                color: 'var(--primary)',
-                                                border: '1px solid var(--border-gold)',
-                                                cursor: 'pointer'
-                                              }}
-                                              onClick={() => {
-                                                setEditingNonDailyTrain(item);
-                                                setNonDailyInitialDay(item.day_of_week);
-                                                setNonDailyModalOpen(true);
-                                              }}
-                                            >
-                                              ✏️ Edit / Assign
-                                            </button>
-                                          </td>
-                                        )}
                                       </tr>
                                     );
                                   })}
 
                                   {searchedTrains.length === 0 && (
                                     <tr>
-                                      <td colSpan={isAdmin ? 10 : 9} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '20px' }}>
+                                      <td colSpan={nonDailySubTab === 'all' ? 11 : 10} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '20px' }}>
                                         No non-daily trains found matching filter {dailyNonDailySearch ? `"${dailyNonDailySearch}"` : `for ${nonDailySubTab === 'today' ? currentSelectedDay : 'all services'}`}.
                                       </td>
                                     </tr>
