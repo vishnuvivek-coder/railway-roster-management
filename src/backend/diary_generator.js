@@ -13,11 +13,39 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) throw new Error(`Category for staff ID ${staffId} not found`);
 
-  const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
 
-  const actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : `${year}-${String(month).padStart(2, '0')}-01`;
-  const actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+  const y = parseInt(year, 10) || currentYear;
+  const m = parseInt(month, 10) || currentMonth;
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const monthYearStr = `${y}-${String(m).padStart(2, '0')}`;
+
+  const isCurrentMonth = (y === currentYear && m === currentMonth);
+  const isFutureMonth = (y > currentYear || (y === currentYear && m > currentMonth));
+
+  // Determine up-to-date cutoff for current/past/future month
+  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
+  const upToDateIso = `${y}-${String(m).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
+
+  const prevYr = m === 1 ? y - 1 : y;
+  const prevMo = m === 1 ? 12 : m - 1;
+  const maxDaysPrev = new Date(prevYr, prevMo, 0).getDate();
+  const prev30thDay = Math.min(30, maxDaysPrev);
+  const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
+
+  let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
+
+  if (isCurrentMonth && actualEnd > todayIso) {
+    actualEnd = todayIso;
+  }
+  if (isFutureMonth) {
+    actualEnd = actualStart;
+  }
 
   const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
   const linkMap = {};
@@ -33,15 +61,30 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
     return getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
   };
 
+  function resolveDutyDateIso(r) {
+    if (r.duty_date && /^\d{4}-\d{2}-\d{2}$/.test(r.duty_date)) return r.duty_date;
+    if (r.date_iso && /^\d{4}-\d{2}-\d{2}$/.test(r.date_iso)) return r.date_iso;
+    if (r.date_str) {
+      const parts = r.date_str.trim().split('/');
+      if (parts.length === 3) {
+        let [d, mStr, yr] = parts;
+        if (yr.length === 2) yr = '20' + yr;
+        return `${yr}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+    }
+    return null;
+  }
+
   // 1. Fetch saved custom entries from diary_entries if present (for full-month view)
-  const savedEntries = await all(
+  const allSavedEntries = await all(
     `SELECT * FROM diary_entries 
-     WHERE staff_id = ? AND (
-       (date_str != '' AND date_str IS NOT NULL) OR 
-       month_year = ?
-     ) ORDER BY row_order ASC`,
-    [staffId, monthYearStr]
+     WHERE staff_id = ? ORDER BY id ASC`,
+    [staffId]
   );
+  const savedEntries = (allSavedEntries || []).filter(r => {
+    const dIso = resolveDutyDateIso(r);
+    return dIso && dIso >= actualStart && dIso <= actualEnd;
+  });
 
   // 2. Fetch TA entries for this staff in date range to copy synced timings
   const taEntries = await all(
@@ -88,12 +131,12 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
         category_code: category.code
       },
       month_year: monthYearStr,
-      month_name: new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
+      month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
       period_label: `${actualStart.split('-').reverse().join('/')} to ${actualEnd.split('-').reverse().join('/')}`,
       start_date: actualStart,
       end_date: actualEnd,
-      year,
-      month,
+      year: y,
+      month: m,
       rows: savedEntries.map((r, idx) => ({
         ...r,
         is_same_date_as_prev: idx > 0 && r.date_str === savedEntries[idx - 1].date_str
@@ -152,10 +195,10 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   const endD = new Date(actualEnd + 'T12:00:00');
 
   while (curD <= endD) {
-    const y = curD.getFullYear();
-    const m = String(curD.getMonth() + 1).padStart(2, '0');
-    const d = String(curD.getDate()).padStart(2, '0');
-    dateList.push(`${y}-${m}-${d}`);
+    const cy = curD.getFullYear();
+    const cm = String(curD.getMonth() + 1).padStart(2, '0');
+    const cd = String(curD.getDate()).padStart(2, '0');
+    dateList.push(`${cy}-${cm}-${cd}`);
     curD.setDate(curD.getDate() + 1);
   }
 
@@ -340,12 +383,12 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       category_code: category.code
     },
     month_year: monthYearStr,
-    month_name: new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
+    month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
     period_label: `${actualStart.split('-').reverse().join('/')} to ${actualEnd.split('-').reverse().join('/')}`,
     start_date: actualStart,
     end_date: actualEnd,
-    year,
-    month,
+    year: y,
+    month: m,
     rows,
     totals: {
       total_issued: 0,
