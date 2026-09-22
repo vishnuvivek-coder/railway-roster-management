@@ -118,9 +118,8 @@ const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9],
-    [10, 11],
-    [12, 13],
+    [8, 9, 10],
+    [11, 12, 13],
     [15, 16, 17],
     [18, 19, 20]
   ],
@@ -6446,7 +6445,9 @@ app.get('/api/roster', async (req, res) => {
             } else {
               lastAssignedLink = null;
             }
-          } else {
+          }
+
+          if (linkNum === null && status === 'DUTY' && !isOverridden) {
             linkNum = getBaseLinkNumber(staff.row_position, d.dayOffset, category.cycle_length);
             const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, category_id, staff.row_position, category.cycle_length, category.anchor_date, d.dateString);
             if (multiDayLeaveReturn) {

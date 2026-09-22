@@ -4,9 +4,8 @@ const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9],
-    [10, 11],
-    [12, 13],
+    [8, 9, 10],
+    [11, 12, 13],
     [15, 16, 17],
     [18, 19, 20]
   ],
@@ -523,23 +522,20 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
         ];
       case 10:
         return [
-          { train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 },
-          { train_no: '12734', from: 'GNT', to: '---', dep: '23:10', arr: '---', ta: 0.3 }
+          { train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 }
         ];
       case 11:
+        return [
+          { train_no: '12734', from: 'GNT', to: '---', dep: '23:10', arr: '---', ta: 0.3 }
+        ];
+      case 12:
         return [
           { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:00', ta: null },
           { train_no: '20630', from: 'TPTY', to: '---', dep: '23:15', arr: '---', ta: 1.0 }
         ];
-      case 12:
-        return [
-          { train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 },
-          { train_no: '12604', from: 'GNT', to: '---', dep: '22:10', arr: '---', ta: 0.3 }
-        ];
       case 13:
         return [
-          { train_no: '12604', from: '---', to: 'MAS', dep: '---', arr: '05:45', ta: null },
-          { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '00:00', ta: 1.0 }
+          { train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 }
         ];
       case 14:
         return []; // REST
