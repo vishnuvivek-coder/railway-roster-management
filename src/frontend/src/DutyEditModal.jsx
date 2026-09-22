@@ -347,7 +347,7 @@ export default function DutyEditModal({
   const [advanceVacateNext, setAdvanceVacateNext] = useState(true);
 
   // Shifted Place inputs
-  const [shiftedMode, setShiftedMode] = useState('CUSTOM'); // 'CUSTOM', 'LINK', or 'NON_DAILY'
+  const [shiftedMode, setShiftedMode] = useState('CUSTOM'); // 'CUSTOM', 'LINK', 'NON_DAILY', or 'MUTUAL'
   const [shiftedPlace, setShiftedPlace] = useState(() => {
     if (dutyModal.shifted_place) return dutyModal.shifted_place;
     if (dutyModal.overrideReason && /Shifted to/i.test(dutyModal.overrideReason)) {
@@ -362,6 +362,12 @@ export default function DutyEditModal({
   const [shiftedNonDailyId, setShiftedNonDailyId] = useState('');
   const [shiftedNonDailyTrainNo, setShiftedNonDailyTrainNo] = useState('');
   const [shiftedNonDailyDayFilter, setShiftedNonDailyDayFilter] = useState('AUTO'); // 'AUTO' | 'ALL' | 'SUNDAY' ... 'SATURDAY'
+
+  // Mutual Shift of Places inputs
+  const [mutualStaffId, setMutualStaffId] = useState('');
+  const [mutualCatFilter, setMutualCatFilter] = useState('ENTIRE_ROSTER');
+  const [mutualReason, setMutualReason] = useState('');
+  const [mutualSearchQuery, setMutualSearchQuery] = useState('');
 
   const selectedDateDayOfWeek = useMemo(() => {
     if (!selectedDate) return 'SUNDAY';
@@ -1050,6 +1056,71 @@ export default function DutyEditModal({
     return allStaffList.find(s => String(s.id) === String(assignStaffId)) || null;
   }, [assignStaffId, allStaffList]);
 
+  // Eligible staff for Mutual Shift of Places mode (Strictly in Alphabetical Order A to Z)
+  const eligibleMutualStaff = useMemo(() => {
+    if (!allStaffList) return [];
+    return allStaffList
+      .filter(s => {
+        if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
+        if (dutyModal.staffId && String(s.id) === String(dutyModal.staffId)) return false;
+
+        // Exclude Depot Incharges (MV PRASAD, P PRATHAP) from running duty bookings
+        if (['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase()) || !s.category_id || s.row_position === 0) {
+          return false;
+        }
+
+        if (mutualCatFilter === 'ENTIRE_ROSTER' || mutualCatFilter === 'ALL') {
+          if (mutualSearchQuery.trim()) {
+            const q = mutualSearchQuery.trim().toLowerCase();
+            return s.name.toLowerCase().includes(q) ||
+                   (s.hrms_id && s.hrms_id.toLowerCase().includes(q)) ||
+                   (s.pf_number && s.pf_number.toLowerCase().includes(q));
+          }
+          return true;
+        }
+
+        if (mutualCatFilter === 'NON_DAILY') {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          const dutyInfo = getStaffDutyInfo(s, selectedDate);
+          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+                       (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
+                       (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
+          if (!isND) return false;
+        } else if (mutualCatFilter) {
+          if (String(s.category_id) !== String(mutualCatFilter)) return false;
+        }
+
+        if (mutualSearchQuery.trim()) {
+          const q = mutualSearchQuery.trim().toLowerCase();
+          return s.name.toLowerCase().includes(q) ||
+                 (s.hrms_id && s.hrms_id.toLowerCase().includes(q)) ||
+                 (s.pf_number && s.pf_number.toLowerCase().includes(q));
+        }
+        return true;
+      })
+      .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
+  }, [allStaffList, dutyModal.staffId, mutualCatFilter, mutualSearchQuery, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
+
+  // Selected mutual staff object (Staff B)
+  const selectedMutualStaffObj = useMemo(() => {
+    if (!mutualStaffId || !allStaffList) return null;
+    return allStaffList.find(s => String(s.id) === String(mutualStaffId)) || null;
+  }, [mutualStaffId, allStaffList]);
+
+  // Real-time duty information for Staff A and Staff B
+  const staffADutyInfo = useMemo(() => {
+    const staffAObj = (allStaffList || []).find(s => String(s.id) === String(dutyModal.staffId || currentStaffId));
+    if (staffAObj) return getStaffDutyInfo(staffAObj, selectedDate);
+    if (targetLink) return { label: `Link #${targetLink} (${dutyModal.trainNumbers || 'Duty'})`, isRest: false, isLr: false, linkNum: parseInt(targetLink, 10) };
+    return { label: 'Current Duty / Place', isRest: false, isLr: false, linkNum: null };
+  }, [allStaffList, dutyModal, currentStaffId, selectedDate, getStaffDutyInfo, targetLink]);
+
+  const staffBDutyInfo = useMemo(() => {
+    if (!selectedMutualStaffObj) return null;
+    return getStaffDutyInfo(selectedMutualStaffObj, selectedDate);
+  }, [selectedMutualStaffObj, selectedDate, getStaffDutyInfo]);
+
   // Quick reset / undo handlers for administrative actions
   const handleReset = async () => {
     if (!window.confirm(`Reset duty override for ${dutyModal.name || 'this slot'} on ${selectedDate} back to regular cyclic roster?`)) return;
@@ -1350,8 +1421,18 @@ export default function DutyEditModal({
           actionCode = 'ABSENT';
           if (!finalReason) finalReason = 'Unauthorized Absence [O]';
         } else if (deleteReason === 'SHIFTED') {
-          actionCode = 'SHIFTED';
-          if (shiftedMode === 'CUSTOM') {
+          actionCode = shiftedMode === 'MUTUAL' ? 'MUTUAL_SHIFT' : 'SHIFTED';
+          if (shiftedMode === 'MUTUAL') {
+            if (!mutualStaffId) {
+              throw new Error('Please select an employee (Staff B) to perform the mutual shift of places with.');
+            }
+            const bName = selectedMutualStaffObj?.name || 'Staff B';
+            const aName = dutyModal.name || initialStaffObj?.name || 'Staff A';
+            placeDesc = `Mutual Shift with ${bName} (${staffBDutyInfo?.label || 'Duty'})`;
+            if (!finalReason) {
+              finalReason = mutualReason.trim() || `Mutual shift between ${aName} and ${bName}`;
+            }
+          } else if (shiftedMode === 'CUSTOM') {
             placeDesc = shiftedPlace.trim();
           } else if (shiftedMode === 'LINK') {
             placeDesc = shiftedLinkNum ? `Link #${shiftedLinkNum}` : '';
@@ -1383,6 +1464,7 @@ export default function DutyEditModal({
 
         const payload = {
           staff_id: staffId,
+          staff_b_id: shiftedMode === 'MUTUAL' && mutualStaffId ? parseInt(mutualStaffId, 10) : null,
           date: selectedDate,
           to_date: effectiveToDate,
           action: actionCode,
@@ -1391,7 +1473,7 @@ export default function DutyEditModal({
           advance_train_no: advanceTrainNo,
           vacate_next_link: advanceVacateNext,
           shifted_mode: shiftedMode,
-          shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : null),
+          shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : (shiftedMode === 'MUTUAL' ? placeDesc : null)),
           shifted_link_number: shiftedMode === 'LINK' && shiftedLinkNum ? parseInt(shiftedLinkNum, 10) : null,
           shifted_category_id: shiftedMode === 'LINK' && shiftedCatId ? parseInt(shiftedCatId, 10) : null,
           shifted_non_daily_id: shiftedMode === 'NON_DAILY' && shiftedNonDailyId ? parseInt(shiftedNonDailyId, 10) : null,
@@ -2641,10 +2723,174 @@ export default function DutyEditModal({
                         >
                           🗓️ Non-Daily Train Link
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setShiftedMode('MUTUAL')}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: shiftedMode === 'MUTUAL' ? '1px solid #38bdf8' : '1px solid var(--border-glass)',
+                            background: shiftedMode === 'MUTUAL' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                            color: shiftedMode === 'MUTUAL' ? '#38bdf8' : 'var(--color-text-secondary)',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🤝 Mutual Shift of Places
+                        </button>
                       </div>
                     </div>
 
-                    {shiftedMode === 'CUSTOM' ? (
+                    {shiftedMode === 'MUTUAL' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Category & Search filter */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.78rem' }}>Filter Category:</label>
+                            <select
+                              className="form-input"
+                              value={mutualCatFilter}
+                              onChange={(e) => {
+                                setMutualCatFilter(e.target.value);
+                                setMutualStaffId('');
+                              }}
+                              style={{ fontSize: '0.84rem' }}
+                            >
+                              <option value="ENTIRE_ROSTER">🌐 All Employees (Entire Roster)</option>
+                              {(categories || []).map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                              <option value="NON_DAILY">🗓️ Non-Daily Link Crew (60, 61, 62)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.78rem' }}>Search Employee:</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Type name or HRMS ID..."
+                              value={mutualSearchQuery}
+                              onChange={(e) => setMutualSearchQuery(e.target.value)}
+                              style={{ fontSize: '0.84rem' }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Staff B Select dropdown */}
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.78rem' }}>
+                            Select Staff B to Mutually Shift Places With ({eligibleMutualStaff.length}):
+                          </label>
+                          <select
+                            className="form-input"
+                            value={mutualStaffId}
+                            onChange={(e) => setMutualStaffId(e.target.value)}
+                            style={{ fontSize: '0.84rem', fontWeight: 600, color: mutualStaffId ? '#38bdf8' : 'inherit' }}
+                          >
+                            <option value="">-- Choose Employee to Exchange Places ({eligibleMutualStaff.length}) --</option>
+                            {eligibleMutualStaff.map(s => {
+                              const dInfo = getStaffDutyInfo(s, selectedDate);
+                              const catName = categories?.find(c => c.id === s.category_id)?.name?.split(' ')[0] || `Cat ${s.category_id}`;
+                              return (
+                                <option key={s.id} value={s.id}>
+                                  {s.name} ({catName}) ➔ {dInfo.label || 'Duty'}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* Live Mutual Shift Preview Card */}
+                        {selectedMutualStaffObj ? (
+                          <div style={{
+                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(99, 102, 241, 0.08))',
+                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}>
+                            <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span>🤝 Live Mutual Shift Preview (Place ↔ Place):</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}>📅 {selectedDate}</span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '8px', alignItems: 'center' }}>
+                              {/* Staff A */}
+                              <div style={{
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px',
+                                padding: '8px 10px',
+                                fontSize: '0.75rem'
+                              }}>
+                                <div style={{ fontWeight: 700, color: '#fbbf24' }}>
+                                  👤 {dutyModal.name || initialStaffObj?.name || 'Staff A'}
+                                </div>
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                                  Current: <strong style={{ color: 'var(--color-text-primary)' }}>{staffADutyInfo.label}</strong>
+                                </div>
+                                <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.1)', color: '#38bdf8', fontWeight: 600 }}>
+                                  ➔ Will take: <strong>{staffBDutyInfo?.label || 'Duty'}</strong>
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: '1.2rem', color: '#38bdf8', fontWeight: 700, textAlign: 'center' }}>
+                                ⇄
+                              </div>
+
+                              {/* Staff B */}
+                              <div style={{
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                borderRadius: '6px',
+                                padding: '8px 10px',
+                                fontSize: '0.75rem'
+                              }}>
+                                <div style={{ fontWeight: 700, color: '#38bdf8' }}>
+                                  👤 {selectedMutualStaffObj.name}
+                                </div>
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                                  Current: <strong style={{ color: 'var(--color-text-primary)' }}>{staffBDutyInfo?.label || 'Duty'}</strong>
+                                </div>
+                                <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.1)', color: '#fbbf24', fontWeight: 600 }}>
+                                  ➔ Will take: <strong>{staffADutyInfo.label}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px dashed rgba(255,255,255,0.15)',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            fontSize: '0.74rem',
+                            color: 'var(--color-text-muted)',
+                            textAlign: 'center'
+                          }}>
+                            💡 Select an employee above to see live mutual duty swap preview.
+                          </div>
+                        )}
+
+                        {/* Optional Reason */}
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                            Mutual Shift Reason / Remarks (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder={selectedMutualStaffObj ? `Mutual shift between ${dutyModal.name || 'Staff A'} and ${selectedMutualStaffObj.name}` : "e.g. Mutual consent / Admin duty shift"}
+                            value={mutualReason}
+                            onChange={(e) => setMutualReason(e.target.value)}
+                            style={{ fontSize: '0.84rem' }}
+                          />
+                        </div>
+                      </div>
+                    ) : shiftedMode === 'CUSTOM' ? (
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" style={{ fontSize: '0.78rem' }}>
                           Shifted Location / Station / Duty Name:

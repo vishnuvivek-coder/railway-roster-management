@@ -3362,6 +3362,286 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       });
     }
 
+    // MUTUAL_SHIFT: Mutual exchange/shift of duties/places between Staff A and Staff B across date range
+    if (action === 'MUTUAL_SHIFT' || (action === 'SHIFTED' && req.body.shifted_mode === 'MUTUAL')) {
+      const staffBId = req.body.staff_b_id || req.body.replacement_staff_id;
+      if (!staffBId) {
+        return res.status(400).json({ error: 'staff_b_id is required for mutual shift' });
+      }
+      if (parseInt(staff_id, 10) === parseInt(staffBId, 10)) {
+        return res.status(400).json({ error: 'Cannot mutually shift duties with the same employee' });
+      }
+
+      const staffA = staff;
+      const staffB = await get('SELECT * FROM staff WHERE id = ?', [staffBId]);
+      if (!staffB) {
+        return res.status(404).json({ error: 'Staff B not found' });
+      }
+
+      const catA = category;
+      const catB = await get('SELECT * FROM categories WHERE id = ?', [staffB.category_id]);
+
+      const datesToProcess = [];
+      const fromD = new Date(date + 'T12:00:00');
+      const toD = to_date ? new Date(to_date + 'T12:00:00') : new Date(date + 'T12:00:00');
+      if (toD < fromD) toD.setTime(fromD.getTime());
+      for (let cur = new Date(fromD); cur <= toD; cur.setDate(cur.getDate() + 1)) {
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const d = String(cur.getDate()).padStart(2, '0');
+        datesToProcess.push(`${y}-${m}-${d}`);
+      }
+
+      for (const dStr of datesToProcess) {
+        const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, dStr]);
+        const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, dStr]);
+
+        // Determine baseline cyclic links
+        const dayOffsetA = getDayOffset(catA.anchor_date, dStr);
+        const dayOffsetB = catB ? getDayOffset(catB.anchor_date, dStr) : 1;
+        const origLinkA = getBaseLinkNumber(staffA.row_position, dayOffsetA, catA.cycle_length);
+        const origLinkB = catB ? getBaseLinkNumber(staffB.row_position, dayOffsetB, catB.cycle_length) : 1;
+
+        // Extract Staff A's current duty profile on dStr
+        let dutyProfileA = {
+          linkNum: null,
+          catId: staffA.category_id,
+          shiftedPlace: null,
+          extraTrainNo: null,
+          isExtra: 0,
+          status: 'CHANGED_LINK',
+          isRest: false,
+          desc: ''
+        };
+
+        if (existingOverrideA) {
+          dutyProfileA.linkNum = existingOverrideA.overridden_link_number;
+          dutyProfileA.catId = existingOverrideA.target_category_id || staffA.category_id;
+          dutyProfileA.shiftedPlace = existingOverrideA.shifted_place;
+          dutyProfileA.extraTrainNo = existingOverrideA.extra_train_no;
+          dutyProfileA.isExtra = existingOverrideA.is_extra || 0;
+          dutyProfileA.status = existingOverrideA.status;
+          if (existingOverrideA.status === 'REST' || existingOverrideA.leave_type === 'REST') {
+            dutyProfileA.isRest = true;
+          }
+          dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : 'Duty')));
+        } else {
+          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffA.category_id, origLinkA]);
+          if (staffA.category_id === 4) {
+            dutyProfileA.desc = 'LR Standby Pool';
+            dutyProfileA.status = 'AVAILABLE_FOR_BOOKING';
+          } else if (!linkDefA || linkDefA.is_rest) {
+            dutyProfileA.isRest = true;
+            dutyProfileA.status = 'REST';
+            dutyProfileA.desc = 'Weekly REST';
+          } else {
+            dutyProfileA.linkNum = origLinkA;
+            dutyProfileA.catId = staffA.category_id;
+            dutyProfileA.status = 'CHANGED_LINK';
+            dutyProfileA.desc = `Link #${origLinkA}${linkDefA.train_numbers ? ` (Tr ${linkDefA.train_numbers})` : ''}`;
+          }
+        }
+
+        // Extract Staff B's current duty profile on dStr
+        let dutyProfileB = {
+          linkNum: null,
+          catId: staffB.category_id,
+          shiftedPlace: null,
+          extraTrainNo: null,
+          isExtra: 0,
+          status: 'CHANGED_LINK',
+          isRest: false,
+          desc: ''
+        };
+
+        if (existingOverrideB) {
+          dutyProfileB.linkNum = existingOverrideB.overridden_link_number;
+          dutyProfileB.catId = existingOverrideB.target_category_id || staffB.category_id;
+          dutyProfileB.shiftedPlace = existingOverrideB.shifted_place;
+          dutyProfileB.extraTrainNo = existingOverrideB.extra_train_no;
+          dutyProfileB.isExtra = existingOverrideB.is_extra || 0;
+          dutyProfileB.status = existingOverrideB.status;
+          if (existingOverrideB.status === 'REST' || existingOverrideB.leave_type === 'REST') {
+            dutyProfileB.isRest = true;
+          }
+          dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : 'Duty')));
+        } else {
+          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffB.category_id, origLinkB]) : null;
+          if (staffB.category_id === 4) {
+            dutyProfileB.desc = 'LR Standby Pool';
+            dutyProfileB.status = 'AVAILABLE_FOR_BOOKING';
+          } else if (!linkDefB || linkDefB.is_rest) {
+            dutyProfileB.isRest = true;
+            dutyProfileB.status = 'REST';
+            dutyProfileB.desc = 'Weekly REST';
+          } else {
+            dutyProfileB.linkNum = origLinkB;
+            dutyProfileB.catId = staffB.category_id;
+            dutyProfileB.status = 'CHANGED_LINK';
+            dutyProfileB.desc = `Link #${origLinkB}${linkDefB.train_numbers ? ` (Tr ${linkDefB.train_numbers})` : ''}`;
+          }
+        }
+
+        // SWAP:
+        // Staff A gets Duty Profile B
+        const statusForA = dutyProfileB.isRest ? 'REST' : (dutyProfileB.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileB.shiftedPlace ? 'SHIFTED' : (dutyProfileB.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
+        const reasonForA = reason ? `Mutual shift with ${staffB.name}: ${reason}` : `Mutual shift with ${staffB.name} (${dutyProfileB.desc})`;
+        const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
+
+        await run(
+          `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = excluded.overridden_link_number,
+             status = excluded.status,
+             substitute_staff_id = NULL,
+             substitute_name = NULL,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place,
+             extra_train_no = excluded.extra_train_no,
+             is_extra = excluded.is_extra,
+             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
+             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
+          [
+            staffA.id,
+            dStr,
+            effectiveOrigA,
+            dutyProfileB.linkNum,
+            statusForA,
+            reasonForA,
+            dutyProfileB.catId,
+            dutyProfileB.shiftedPlace,
+            dutyProfileB.extraTrainNo,
+            dutyProfileB.isExtra,
+            origLinkA || null,
+            null
+          ]
+        );
+
+        // Staff B gets Duty Profile A
+        const statusForB = dutyProfileA.isRest ? 'REST' : (dutyProfileA.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileA.shiftedPlace ? 'SHIFTED' : (dutyProfileA.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
+        const reasonForB = reason ? `Mutual shift with ${staffA.name}: ${reason}` : `Mutual shift with ${staffA.name} (${dutyProfileA.desc})`;
+        const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
+
+        await run(
+          `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = excluded.overridden_link_number,
+             status = excluded.status,
+             substitute_staff_id = NULL,
+             substitute_name = NULL,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place,
+             extra_train_no = excluded.extra_train_no,
+             is_extra = excluded.is_extra,
+             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
+             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
+          [
+            staffB.id,
+            dStr,
+            effectiveOrigB,
+            dutyProfileA.linkNum,
+            statusForB,
+            reasonForB,
+            dutyProfileA.catId,
+            dutyProfileA.shiftedPlace,
+            dutyProfileA.extraTrainNo,
+            dutyProfileA.isExtra,
+            origLinkB || null,
+            null
+          ]
+        );
+
+        // Muster updates: 'R' if REST, otherwise 'P'
+        const musterCodeA = dutyProfileB.isRest ? 'R' : 'P';
+        const musterCodeB = dutyProfileA.isRest ? 'R' : 'P';
+
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [staffA.id, dStr, musterCodeA, reasonForA]
+        );
+
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [staffB.id, dStr, musterCodeB, reasonForB]
+        );
+
+        // Sync LR sheet if staffA or staffB is in Category 4
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const dObj = new Date(dStr + 'T12:00:00');
+        const dayOfWeek = dayNames[dObj.getDay()];
+
+        if (staffA.category_id === 4) {
+          const resA = await resolveDutyCodeForLRStaff(staffA.id, dStr, dayOfWeek, staffA.rest_day);
+          if (resA && resA.code) {
+            await syncLRSheetRecord(staffA.id, dStr, resA.code, reasonForA);
+          } else if (dutyProfileB.isRest) {
+            await syncLRSheetRecord(staffA.id, dStr, 'R', reasonForA);
+          }
+        }
+
+        if (staffB.category_id === 4) {
+          const resB = await resolveDutyCodeForLRStaff(staffB.id, dStr, dayOfWeek, staffB.rest_day);
+          if (resB && resB.code) {
+            await syncLRSheetRecord(staffB.id, dStr, resB.code, reasonForB);
+          } else if (dutyProfileA.isRest) {
+            await syncLRSheetRecord(staffB.id, dStr, 'R', reasonForB);
+          }
+        }
+
+        // Synchronize across TA approvals and documents for both staff
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, dStr, {
+          targetLink: dutyProfileB.linkNum,
+          isLeave: false,
+          isRest: dutyProfileB.isRest,
+          remarks: reasonForA
+        });
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, dStr, {
+          targetLink: dutyProfileA.linkNum,
+          isLeave: false,
+          isRest: dutyProfileA.isRest,
+          remarks: reasonForB
+        });
+      }
+
+      await logAudit(
+        staff_id,
+        date,
+        'MUTUAL_SHIFT',
+        `Mutual shift between ${staffA.name} and ${staffB.name} from ${date} to ${to_date || date}`,
+        req.user?.username || 'Admin'
+      );
+
+      return res.json({
+        success: true,
+        message: `Successfully executed mutual shift of places between ${staffA.name} and ${staffB.name}`,
+        staff_a: staffA.name,
+        staff_b: staffB.name,
+        dates: datesToProcess
+      });
+    }
+
     // SHIFTED / SHIFTED_PLACE: Shift employee away from this link slot to another place / duty / link
     if (action === 'SHIFTED' || action === 'SHIFTED_PLACE') {
       const isNonDaily = req.body.is_extra === 1 || req.body.shifted_mode === 'NON_DAILY' || Boolean(req.body.extra_train_no);
