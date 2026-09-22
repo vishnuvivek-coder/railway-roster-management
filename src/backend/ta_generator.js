@@ -147,9 +147,8 @@ function calculateAbsenceAndTa(depTime, arrTime, fromStn, toStn, trainNo, baseTa
   if (depM === null && arrM !== null && (toStn === 'GNT' || toStn === '---')) {
     const hours = Math.round((arrM / 60) * 10) / 10;
     if (arrM <= 5) return { absence_hours: hours, ta_percentage: null };
-    if (trainNo === '17262') return { absence_hours: hours, ta_percentage: 0.3 };
-    if (hours < 6.0) return { absence_hours: hours, ta_percentage: 0.3 };
-    if (hours <= 12.0) return { absence_hours: hours, ta_percentage: 0.7 };
+    if (arrM <= 6 * 60) return { absence_hours: hours, ta_percentage: 0.3 };
+    if (arrM <= 12 * 60) return { absence_hours: hours, ta_percentage: 0.7 };
     return { absence_hours: hours, ta_percentage: 1.0 };
   }
 
@@ -316,9 +315,7 @@ function calculateDayDutiesTa(duties) {
       let hours = Math.round((arrM / 60) * 10) / 10;
       if (arrM <= 5) {
         dayTa = null;
-      } else if (gntArrLeg.train_no === '17262') {
-        dayTa = 0.3;
-      } else if (arrM < 6 * 60) {
+      } else if (arrM <= 6 * 60) {
         dayTa = 0.3;
       } else if (arrM <= 12 * 60) {
         dayTa = 0.7;
@@ -350,8 +347,7 @@ function calculateDayDutiesTa(duties) {
     let arrTa = 0.3;
     if (arrM !== null) {
       if (arrM <= 5) arrTa = null;
-      else if (gntArrLeg.train_no === '17262') arrTa = 0.3;
-      else if (arrM < 6 * 60) arrTa = 0.3;
+      else if (arrM <= 6 * 60) arrTa = 0.3;
       else if (arrM <= 12 * 60) arrTa = 0.7;
       else arrTa = 1.0;
     }
@@ -534,7 +530,7 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
         ];
       case 20:
         return [
-          { train_no: '17262', from: '---', to: 'GNT', dep: '---', arr: '06:55', ta: 0.3 }
+          { train_no: '17262', from: '---', to: 'GNT', dep: '---', arr: '06:55', ta: 0.7 }
         ];
       case 21:
         return []; // REST
