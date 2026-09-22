@@ -4,8 +4,9 @@ const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9, 10],
-    [11, 12, 13],
+    [8, 9],
+    [10, 11],
+    [12, 13],
     [15, 16, 17],
     [18, 19, 20]
   ],
@@ -513,29 +514,27 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
         return []; // REST
       case 8:
         return [
-          { train_no: '20629', from: 'GNT', to: '---', dep: '19:10', arr: '---', ta: 0.3 }
+          { train_no: '20629', from: 'GNT', to: 'TPTY', dep: '19:10', arr: '01:50', ta: 0.7 }
         ];
       case 9:
         return [
-          { train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null },
-          { train_no: '12733', from: 'TPTY', to: '---', dep: '18:20', arr: '---', ta: 1.0 }
+          { train_no: '12733', from: 'TPTY', to: 'GNT', dep: '18:20', arr: '00:50', ta: 0.7 }
         ];
       case 10:
         return [
-          { train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 }
+          { train_no: '12734', from: 'GNT', to: 'TPTY', dep: '23:10', arr: '06:00', ta: 0.7 }
         ];
       case 11:
         return [
-          { train_no: '12734', from: 'GNT', to: '---', dep: '23:10', arr: '---', ta: 0.3 }
+          { train_no: '20630', from: 'TPTY', to: 'GNT', dep: '23:15', arr: '05:55', ta: 0.7 }
         ];
       case 12:
         return [
-          { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:00', ta: null },
-          { train_no: '20630', from: 'TPTY', to: '---', dep: '23:15', arr: '---', ta: 1.0 }
+          { train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:40', ta: 0.7 }
         ];
       case 13:
         return [
-          { train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 }
+          { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:35', arr: '23:55', ta: 0.7 }
         ];
       case 14:
         return []; // REST
@@ -678,37 +677,23 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
     }
   }
 
-  // Category 3: Ladies Staff / TTE - 7-day cycle
+  // Category 3: Ladies Staff / TTE - 7-day cycle (3-Day Link 17261/17262)
   if (categoryId === 3) {
     switch (linkNumber) {
       case 1:
-        return [
-          { train_no: '17281', from: 'GNT', to: 'BZA', dep: '17:45', arr: '18:50', ta: null },
-          { train_no: '12703', from: 'BZA', to: 'GNT', dep: '20:30', arr: '21:15', ta: 0.3 }
-        ];
-      case 2:
-        return [
-          { train_no: '12747', from: 'GNT', to: 'SC', dep: '05:45', arr: '10:45', ta: null },
-          { train_no: '12748', from: 'SC', to: 'GNT', dep: '15:30', arr: '21:10', ta: 0.7 }
-        ];
-      case 3:
-        return [
-          { train_no: '17201', from: 'GNT', to: 'BZA', dep: '06:00', arr: '07:00', ta: null },
-          { train_no: '17202', from: 'BZA', to: 'GNT', dep: '20:30', arr: '21:30', ta: 0.3 }
-        ];
       case 4:
         return [
-          { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:05', ta: null },
-          { train_no: '57201', from: 'BZA', to: 'GNT', dep: '19:30', arr: '20:45', ta: 0.3 }
+          { train_no: '17261', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '04:00', ta: 0.7 }
         ];
+      case 2:
       case 5:
         return [
-          { train_no: '17253', from: 'GNT', to: 'DKD', dep: '06:15', arr: '09:30', ta: null },
-          { train_no: '17254', from: 'DKD', to: 'GNT', dep: '16:30', arr: '20:00', ta: 0.7 }
+          { train_no: '17262', from: 'TPTY', to: '---', dep: '19:30', arr: '---', ta: 1.0 }
         ];
+      case 3:
       case 6:
         return [
-          { train_no: '12604', from: 'GNT', to: 'TEL', dep: '22:40', arr: '23:15', ta: 0.3 }
+          { train_no: '17262', from: '---', to: 'GNT', dep: '---', arr: '06:55', ta: 0.7 }
         ];
       case 7:
         return []; // REST
