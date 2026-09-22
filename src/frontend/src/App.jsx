@@ -1646,6 +1646,46 @@ export default function App() {
       );
     }
 
+    const isCoachField = field === 'coaches' || field === 'last_day_coaches';
+    const coachVal = String(currentVal || placeholder || 'SL / AC').trim();
+
+    if (isCoachField && coachVal.includes('/')) {
+      const parts = coachVal.split('/').map(s => s.trim());
+      return (
+        <div
+          onClick={() => {
+            if (isAdmin) {
+              setInlineEditNonDailyTrainId(item.id);
+              setInlineEditField(field);
+              setInlineEditValue(currentVal || '');
+            }
+          }}
+          title={isAdmin ? `Click to edit Coach (${currentVal || 'SL / AC'})` : undefined}
+          style={{
+            cursor: isAdmin ? 'pointer' : 'default',
+            display: 'inline-flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '3px 8px',
+            borderRadius: '6px',
+            transition: 'all 0.15s ease',
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: isAdmin ? '1px dashed rgba(255, 255, 255, 0.25)' : '1px solid rgba(255, 255, 255, 0.08)',
+            minWidth: '52px',
+            lineHeight: 1.15
+          }}
+        >
+          <span style={{ color: color, fontWeight: 800, fontSize: '0.82rem' }}>{parts[0] || 'SL'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', lineHeight: 1 }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.72rem', fontWeight: 600 }}>/</span>
+            {isAdmin && <span style={{ fontSize: '0.62rem', color: '#f87171' }}>✏️</span>}
+          </div>
+          <span style={{ color: color, fontWeight: 800, fontSize: '0.82rem' }}>{parts[1] || 'AC'}</span>
+        </div>
+      );
+    }
+
     return (
       <div
         onClick={() => {
@@ -1660,19 +1700,19 @@ export default function App() {
           cursor: isAdmin ? 'pointer' : 'default',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '4px',
-          padding: '3px 6px',
-          borderRadius: '5px',
+          gap: '5px',
+          padding: '4px 9px',
+          borderRadius: '6px',
           transition: 'all 0.15s ease',
           background: isAdmin ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
           border: isAdmin ? '1px dashed rgba(255, 255, 255, 0.22)' : '1px solid transparent'
         }}
       >
-        <strong style={{ color: currentVal ? color : 'var(--color-text-muted)', fontSize: '0.92rem', letterSpacing: '0.3px' }}>
+        <strong style={{ color: currentVal ? color : 'var(--color-text-muted)', fontSize: '0.92rem', fontWeight: 800, letterSpacing: '0.3px' }}>
           {currentVal || placeholder}
         </strong>
         {isAdmin && (
-          <span style={{ fontSize: '0.72rem', opacity: 0.7 }} title="Click to edit">
+          <span style={{ fontSize: '0.72rem', color: color, opacity: 0.9 }} title="Click to edit">
             ✏️
           </span>
         )}
@@ -3983,8 +4023,36 @@ export default function App() {
                   }
                 ];
 
-                // Non-daily cyclic staff (Links 60, 61, 62) are resolved directly from cyclic roster grid
-                const NON_DAILY_LINK_SLOTS = [];
+                // Dedicated Non-Daily Cyclic Links (Links #60, #61, #62)
+                const NON_DAILY_LINK_SLOTS = [
+                  {
+                    slotId: 60,
+                    page: 174,
+                    firstTrain: '22882',
+                    lastTrain: '22881',
+                    links: [
+                      { categoryId: 2, linkNum: 60, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+                    ]
+                  },
+                  {
+                    slotId: 61,
+                    page: 174,
+                    firstTrain: '17221',
+                    lastTrain: '17222',
+                    links: [
+                      { categoryId: 2, linkNum: 61, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+                    ]
+                  },
+                  {
+                    slotId: 62,
+                    page: 174,
+                    firstTrain: '17069',
+                    lastTrain: '17262',
+                    links: [
+                      { categoryId: 2, linkNum: 62, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+                    ]
+                  }
+                ];
 
                 // Helper to resolve duty assignments for a given slot list
                 const activeWorkedStaffIds = new Set();
@@ -6366,17 +6434,16 @@ export default function App() {
                               <table className="data-table">
                                 <thead>
                                   <tr>
-                                    <th style={{ width: '45px' }}>S.No</th>
-                                    <th style={{ width: '130px' }}>Train No (1st day) ✏️</th>
-                                    <th style={{ width: '100px' }}>Coach (1st day) ✏️</th>
-                                    <th style={{ width: '130px' }}>Train No (last day) ✏️</th>
-                                    <th style={{ width: '100px' }}>Coach (last day) ✏️</th>
-                                    {nonDailySubTab === 'all' && <th style={{ width: '100px' }}>Day</th>}
-                                    <th>Section / Route</th>
-                                    <th style={{ width: '95px' }}>Departure</th>
-                                    <th style={{ width: '95px' }}>Arrival</th>
-                                    <th style={{ minWidth: '280px' }}>Assigned Crew (Drag & Drop Zone)</th>
+                                    <th style={{ width: '105px' }}>Day of Week</th>
+                                    <th style={{ width: '130px', textAlign: 'center' }}>Train No (1st day) ✏️</th>
+                                    <th style={{ width: '100px', textAlign: 'center' }}>Coach (1st day) ✏️</th>
+                                    <th style={{ width: '130px', textAlign: 'center' }}>Train No (last day) ✏️</th>
+                                    <th style={{ width: '100px', textAlign: 'center' }}>Coach (last day) ✏️</th>
+                                    <th style={{ width: '120px' }}>Departure</th>
+                                    <th style={{ width: '120px' }}>Arrival</th>
+                                    <th>Assigned Staff / Relief Crew</th>
                                     <th>Remarks</th>
+                                    {isAdmin && <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -6423,35 +6490,51 @@ export default function App() {
                                           transition: 'all 0.15s ease'
                                         }}
                                       >
-                                        <td><strong>#{idx + 1}</strong></td>
-                                        <td>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', 'var(--primary)')}</td>
-                                        <td>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#93c5fd')}</td>
-                                        <td>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
-                                        <td>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#d8b4fe')}</td>
-                                        {nonDailySubTab === 'all' && (
-                                          <td>
-                                            <span className="badge" style={{ 
-                                              background: item.day_of_week === currentSelectedDay ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255,255,255,0.06)',
-                                              color: item.day_of_week === currentSelectedDay ? '#34d399' : 'var(--color-text-secondary)',
-                                              border: item.day_of_week === currentSelectedDay ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-glass)',
-                                              fontWeight: 700
-                                            }}>
-                                              {item.day_of_week}
+                                        <td style={{ verticalAlign: 'middle' }}>
+                                          <span className="badge" style={{ 
+                                            background: item.day_of_week === 'SUNDAY' ? 'rgba(239, 68, 68, 0.18)' :
+                                                        item.day_of_week === 'MONDAY' ? 'rgba(59, 130, 246, 0.18)' :
+                                                        item.day_of_week === 'TUESDAY' ? 'rgba(168, 85, 247, 0.18)' :
+                                                        item.day_of_week === 'WEDNESDAY' ? 'rgba(16, 185, 129, 0.18)' :
+                                                        item.day_of_week === 'THURSDAY' ? 'rgba(245, 158, 11, 0.18)' :
+                                                        item.day_of_week === 'FRIDAY' ? 'rgba(6, 182, 212, 0.18)' :
+                                                        'rgba(236, 72, 153, 0.18)',
+                                            color: item.day_of_week === 'SUNDAY' ? '#ef4444' :
+                                                   item.day_of_week === 'MONDAY' ? '#60a5fa' :
+                                                   item.day_of_week === 'TUESDAY' ? '#c084fc' :
+                                                   item.day_of_week === 'WEDNESDAY' ? '#34d399' :
+                                                   item.day_of_week === 'THURSDAY' ? '#fbbf24' :
+                                                   item.day_of_week === 'FRIDAY' ? '#22d3ee' :
+                                                   '#f472b6',
+                                            fontWeight: 800,
+                                            fontSize: '0.8rem',
+                                            padding: '4px 10px',
+                                            borderRadius: '20px',
+                                            letterSpacing: '0.3px',
+                                            border: item.day_of_week === 'SUNDAY' ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(255,255,255,0.1)'
+                                          }}>
+                                            {item.day_of_week}
+                                          </span>
+                                        </td>
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', '#f59e0b')}</td>
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#60a5fa')}</td>
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#60a5fa')}</td>
+                                        <td style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                          <strong style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)' }}>{item.departure_station || '-'}</strong>
+                                          {item.departure_time && (
+                                            <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', marginLeft: '5px', fontWeight: 600 }}>
+                                              ({item.departure_time})
                                             </span>
-                                          </td>
-                                        )}
-                                        <td>
-                                          <strong>{item.departure_station || '-'} ➔ {item.arrival_station || '-'}</strong>
+                                          )}
                                         </td>
-                                        <td>
-                                          <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa', fontWeight: 600 }}>
-                                            {item.departure_time || '-'}
-                                          </span>
-                                        </td>
-                                        <td>
-                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', fontWeight: 600 }}>
-                                            {item.arrival_time || '-'}
-                                          </span>
+                                        <td style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                          <strong style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)' }}>{item.arrival_station || '-'}</strong>
+                                          {item.arrival_time && (
+                                            <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', marginLeft: '5px', fontWeight: 600 }}>
+                                              ({item.arrival_time})
+                                            </span>
+                                          )}
                                         </td>
 
                                         {/* ASSIGNED CREW / INTERACTIVE DRAG & DROP ZONE */}
@@ -6559,13 +6642,55 @@ export default function App() {
                                             <span style={{ color: 'var(--color-text-secondary)' }}>-</span>
                                           )}
                                         </td>
+                                        {isAdmin && (
+                                          <td style={{ textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                            <button 
+                                              type="button"
+                                              className="btn btn-secondary" 
+                                              style={{ padding: '3px 8px', fontSize: '0.74rem', marginRight: '6px' }}
+                                              onClick={() => {
+                                                setEditingNonDailyTrain(item);
+                                                setNonDailyInitialDay(item.day_of_week);
+                                                setNonDailyModalOpen(true);
+                                              }}
+                                              title="Edit Non-Daily train details"
+                                            >
+                                              ✏️
+                                            </button>
+                                            <button 
+                                              type="button"
+                                              className="btn btn-danger" 
+                                              style={{ padding: '3px 8px', fontSize: '0.74rem' }}
+                                              onClick={async () => {
+                                                if (window.confirm(`Delete train ${item.train_number} for ${item.day_of_week}?`)) {
+                                                  try {
+                                                    const res = await fetch(`${API_BASE}/non-daily-trains/${item.id}`, {
+                                                      method: 'DELETE',
+                                                      headers: { 'Authorization': `Bearer ${authToken}` }
+                                                    });
+                                                    if (res.ok) {
+                                                      fetch(`${API_BASE}/non-daily-trains`)
+                                                        .then(r => r.json())
+                                                        .then(data => setNonDailyList(data.nonDailyTrains || []));
+                                                    }
+                                                  } catch (err) {
+                                                    alert('Error deleting non-daily train: ' + err.message);
+                                                  }
+                                                }
+                                              }}
+                                              title="Delete Non-Daily train"
+                                            >
+                                              🗑️
+                                            </button>
+                                          </td>
+                                        )}
                                       </tr>
                                     );
                                   })}
 
                                   {searchedTrains.length === 0 && (
                                     <tr>
-                                      <td colSpan={nonDailySubTab === 'all' ? 11 : 10} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '20px' }}>
+                                      <td colSpan={isAdmin ? 10 : 9} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '24px' }}>
                                         No non-daily trains found matching filter {dailyNonDailySearch ? `"${dailyNonDailySearch}"` : `for ${nonDailySubTab === 'today' ? currentSelectedDay : 'all services'}`}.
                                       </td>
                                     </tr>
@@ -8173,50 +8298,55 @@ export default function App() {
 
                             return (
                               <tr key={item.id}>
-                                <td>
-                                  <span className="badge" style={{
-                                    background: item.day_of_week === 'SUNDAY' ? 'rgba(239, 68, 68, 0.15)' :
-                                                item.day_of_week === 'MONDAY' ? 'rgba(59, 130, 246, 0.15)' :
-                                                item.day_of_week === 'TUESDAY' ? 'rgba(168, 85, 247, 0.15)' :
-                                                item.day_of_week === 'WEDNESDAY' ? 'rgba(16, 185, 129, 0.15)' :
-                                                item.day_of_week === 'THURSDAY' ? 'rgba(245, 158, 11, 0.15)' :
-                                                item.day_of_week === 'FRIDAY' ? 'rgba(6, 182, 212, 0.15)' :
-                                                'rgba(236, 72, 153, 0.15)',
-                                    color: item.day_of_week === 'SUNDAY' ? '#ef4444' :
-                                           item.day_of_week === 'MONDAY' ? '#60a5fa' :
-                                           item.day_of_week === 'TUESDAY' ? '#c084fc' :
-                                           item.day_of_week === 'WEDNESDAY' ? '#34d399' :
-                                           item.day_of_week === 'THURSDAY' ? '#fbbf24' :
-                                           item.day_of_week === 'FRIDAY' ? '#22d3ee' :
-                                           '#f472b6',
-                                    fontWeight: 700
-                                  }}>
-                                    {item.day_of_week}
-                                  </span>
-                                </td>
-                                <td>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', 'var(--primary)')}</td>
-                                <td>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#93c5fd')}</td>
-                                <td>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
-                                <td>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#d8b4fe')}</td>
-                                <td>
-                                  <strong>{item.departure_station || '-'}</strong>
-                                  {item.departure_time && <span style={{ color: 'var(--color-text-secondary)', marginLeft: '6px' }}>({item.departure_time})</span>}
-                                </td>
-                                <td>
-                                  <strong>{item.arrival_station || '-'}</strong>
-                                  {item.arrival_time && <span style={{ color: 'var(--color-text-secondary)', marginLeft: '6px' }}>({item.arrival_time})</span>}
-                                </td>
-                                <td>
-                                  {staffDisplay ? (
-                                    <span className="badge badge-approved" style={{ fontSize: '0.8rem', padding: '4px 8px' }}>
-                                      👤 {staffDisplay}
+                                  <td>
+                                    <span className="badge" style={{
+                                      background: item.day_of_week === 'SUNDAY' ? 'rgba(239, 68, 68, 0.18)' :
+                                                  item.day_of_week === 'MONDAY' ? 'rgba(59, 130, 246, 0.18)' :
+                                                  item.day_of_week === 'TUESDAY' ? 'rgba(168, 85, 247, 0.18)' :
+                                                  item.day_of_week === 'WEDNESDAY' ? 'rgba(16, 185, 129, 0.18)' :
+                                                  item.day_of_week === 'THURSDAY' ? 'rgba(245, 158, 11, 0.18)' :
+                                                  item.day_of_week === 'FRIDAY' ? 'rgba(6, 182, 212, 0.18)' :
+                                                  'rgba(236, 72, 153, 0.18)',
+                                      color: item.day_of_week === 'SUNDAY' ? '#ef4444' :
+                                             item.day_of_week === 'MONDAY' ? '#60a5fa' :
+                                             item.day_of_week === 'TUESDAY' ? '#c084fc' :
+                                             item.day_of_week === 'WEDNESDAY' ? '#34d399' :
+                                             item.day_of_week === 'THURSDAY' ? '#fbbf24' :
+                                             item.day_of_week === 'FRIDAY' ? '#22d3ee' :
+                                             '#f472b6',
+                                      fontWeight: 800,
+                                      fontSize: '0.8rem',
+                                      padding: '4px 10px',
+                                      borderRadius: '20px',
+                                      letterSpacing: '0.3px',
+                                      border: item.day_of_week === 'SUNDAY' ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(255,255,255,0.1)'
+                                    }}>
+                                      {item.day_of_week}
                                     </span>
-                                  ) : (
-                                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', fontStyle: 'italic' }}>
-                                      — Unassigned (Ad-hoc) —
-                                    </span>
-                                  )}
-                                </td>
+                                  </td>
+                                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'train_number', item.train_number, '-', '85px', '#f59e0b')}</td>
+                                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'coaches', item.coaches || 'SL / AC', 'SL / AC', '75px', '#60a5fa')}</td>
+                                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'last_day_train_number', item.last_day_train_number, '-', '85px', '#c084fc')}</td>
+                                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>{renderInlineNonDailyCell(item, 'last_day_coaches', item.last_day_coaches || item.coaches || 'SL / AC', 'SL / AC', '75px', '#60a5fa')}</td>
+                                  <td style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    <strong style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)' }}>{item.departure_station || '-'}</strong>
+                                    {item.departure_time && <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', marginLeft: '5px', fontWeight: 600 }}>({item.departure_time})</span>}
+                                  </td>
+                                  <td style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    <strong style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)' }}>{item.arrival_station || '-'}</strong>
+                                    {item.arrival_time && <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', marginLeft: '5px', fontWeight: 600 }}>({item.arrival_time})</span>}
+                                  </td>
+                                  <td style={{ verticalAlign: 'middle' }}>
+                                    {staffDisplay ? (
+                                      <span className="badge badge-approved" style={{ fontSize: '0.82rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        👤 <strong>{staffDisplay}</strong>
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', fontStyle: 'italic' }}>
+                                        — Unassigned (Ad-hoc / Relief Crew Required)
+                                      </span>
+                                    )}
+                                  </td>
                                 <td>
                                   {item.remarks ? (
                                     <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
