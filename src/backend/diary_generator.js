@@ -325,19 +325,22 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       // 1. Inherit from synced TA entry if available!
       const taMatch = taMap[`${dateStrDisplay}_${duty.train_no}`] || taMap[`${dateStrIso}_${duty.train_no}`] || taMap[`row_${rowOrder}`];
       if (taMatch) {
-        if (taMatch.dep_time && taMatch.dep_time !== '---') actualDep = taMatch.dep_time;
-        if (taMatch.arr_time && taMatch.arr_time !== '---') actualArr = taMatch.arr_time;
+        if (duty.dep && duty.dep !== '---' && taMatch.dep_time && taMatch.dep_time !== '---') actualDep = taMatch.dep_time;
+        if (duty.arr && duty.arr !== '---' && taMatch.arr_time && taMatch.arr_time !== '---') actualArr = taMatch.arr_time;
       } else {
         // 2. Or from actual_train_runs cache
-        if (duty.from && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`]) {
+        if (duty.dep && duty.dep !== '---' && duty.from && duty.from !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`]) {
           const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`];
           if (cached.act_dep && cached.act_dep !== '---') actualDep = cached.act_dep;
         }
-        if (duty.to && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`]) {
+        if (duty.arr && duty.arr !== '---' && duty.to && duty.to !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`]) {
           const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`];
           if (cached.act_arr && cached.act_arr !== '---') actualArr = cached.act_arr;
         }
       }
+
+      if (!duty.dep || duty.dep === '---') actualDep = '---';
+      if (!duty.arr || duty.arr === '---') actualArr = '---';
 
       rows.push({
         id: null,

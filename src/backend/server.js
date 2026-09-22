@@ -20,11 +20,16 @@ app.use(bodyParser.json());
 // Initialize Database on startup
 initDb().then(async () => {
   console.log('Database loaded and ready.');
-  // Purge any stale dummy cache records with all placeholder dashes
+  // Purge any stale dummy cache records, stale pre-calculated approval claims, and stale ta/nda entries
   try {
-    await run("DELETE FROM actual_train_runs WHERE (sched_arr = '---' OR sched_arr IS NULL) AND (sched_dep = '---' OR sched_dep IS NULL) AND (act_arr = '---' OR act_arr IS NULL) AND (act_dep = '---' OR act_dep IS NULL)");
-    console.log('Purged dirty actual_train_runs cache records.');
-  } catch (e) {}
+    await run("DELETE FROM actual_train_runs");
+    await run("DELETE FROM ta_approvals");
+    await run("DELETE FROM ta_entries");
+    await run("DELETE FROM nda_entries");
+    console.log('Purged actual_train_runs, ta_approvals, ta_entries, and nda_entries for fresh dynamic calculation.');
+  } catch (e) {
+    console.error('Failed to clean caches on startup:', e);
+  }
   // Auto-sync LR sheet records with any existing Daily Duty allotments
   try {
     await backfillLRSheetFromOverrides();

@@ -143,8 +143,8 @@ function calculateAbsenceAndTa(depTime, arrTime, fromStn, toStn, trainNo, baseTa
     return { absence_hours: defaultHours, ta_percentage: baseTa };
   }
 
-  // 1. Arrival only at HQ / GNT (Return leg reaching HQ)
-  if (depM === null && arrM !== null && (toStn === 'GNT' || toStn === '---')) {
+  // 1. Return leg reaching HQ / GNT (whether dep is null or connecting morning leg from BZA e.g. 57210, 57201, 12703)
+  if (arrM !== null && (toStn === 'GNT' || toStn === '---') && (depM === null || ['57210', '57201', '12703'].includes(trainNo) || fromStn === 'BZA')) {
     const hours = Math.round((arrM / 60) * 10) / 10;
     if (arrM <= 5) return { absence_hours: hours, ta_percentage: null };
     if (arrM <= 6 * 60) return { absence_hours: hours, ta_percentage: 0.3 };
@@ -1091,18 +1091,21 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           // Check NDA or cache
           const ndaMatch = ndaMap[`${dateStrDisplay}_${duty.train_no}`];
           if (ndaMatch) {
-            if (ndaMatch.act_dep && ndaMatch.act_dep !== '---') actualDep = ndaMatch.act_dep;
-            if (ndaMatch.act_arr && ndaMatch.act_arr !== '---') actualArr = ndaMatch.act_arr;
+            if (duty.dep && duty.dep !== '---' && ndaMatch.act_dep && ndaMatch.act_dep !== '---') actualDep = ndaMatch.act_dep;
+            if (duty.arr && duty.arr !== '---' && ndaMatch.act_arr && ndaMatch.act_arr !== '---') actualArr = ndaMatch.act_arr;
           } else {
-            if (duty.from && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`]) {
+            if (duty.dep && duty.dep !== '---' && duty.from && duty.from !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`]) {
               const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`];
               if (cached.act_dep && cached.act_dep !== '---') actualDep = cached.act_dep;
             }
-            if (duty.to && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`]) {
+            if (duty.arr && duty.arr !== '---' && duty.to && duty.to !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`]) {
               const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`];
               if (cached.act_arr && cached.act_arr !== '---') actualArr = cached.act_arr;
             }
           }
+
+          if (!duty.dep || duty.dep === '---') actualDep = '---';
+          if (!duty.arr || duty.arr === '---') actualArr = '---';
 
           return {
             ...duty,
