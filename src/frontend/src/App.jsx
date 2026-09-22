@@ -14,6 +14,7 @@ import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
 import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData';
 import { useDevice } from './useDevice';
+import useDragAutoScroll from './useDragAutoScroll';
 
 const API_BASE = '/api';
 
@@ -361,8 +362,11 @@ export default function App() {
   // Derived Admin Role status
   const isAdmin = currentUser?.role === 'Admin';
   const { device, isIOS, isAndroid, isMobile, isDesktop, deviceMode, setDeviceMode, detectedPlatform } = useDevice();
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Smooth Edge Auto-Scroll Engine for Drag & Drop across the entire sheet
+  useDragAutoScroll({ edgeThreshold: 130, maxSpeed: 32, minSpeed: 5, active: true });
 
   // User Verification & Role Administration State
   const [registeredUsers, setRegisteredUsers] = useState([]);
