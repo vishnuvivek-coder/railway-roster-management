@@ -4,6 +4,7 @@ import TaDocument from './TaDocument';
 import NdaDocument from './NdaDocument';
 import DiaryDocument from './DiaryDocument';
 import DailyEarningsDocument from './DailyEarningsDocument';
+import IndividualMusterDocument from './IndividualMusterDocument';
 import DutyEditModal, { isHqArrivalDuty } from './DutyEditModal';
 import NonDailyTrainModal from './NonDailyTrainModal';
 import MusterRoll from './MusterRoll';
@@ -409,6 +410,7 @@ export default function App() {
       return '8';
     }
   });
+  const [individualMusterModalOpen, setIndividualMusterModalOpen] = useState(false);
 
   // Date states - default to today's date dynamically
   const [selectedDate, setSelectedDate] = useState(getLocalDateString());
@@ -3102,6 +3104,82 @@ export default function App() {
                       <option value="12">December</option>
                     </select>
                   </div>
+
+                  {/* Quick Document & Muster Options for Selected Employee & Month */}
+                  <div className="filter-group" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocStaffId(selectedStaffId);
+                        setDocYear(year);
+                        setDocMonth(month);
+                        setDocSubTab('ta');
+                        setActiveTab('documents');
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        borderRadius: '8px',
+                        background: 'rgba(212, 161, 92, 0.15)',
+                        border: '1px solid var(--border-gold)',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="View Monthly TA Journal & Bill for this employee"
+                    >
+                      📄 TA Journal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocStaffId(selectedStaffId);
+                        setDocYear(year);
+                        setDocMonth(month);
+                        setDocSubTab('nda');
+                        setActiveTab('documents');
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        borderRadius: '8px',
+                        background: 'rgba(168, 85, 247, 0.15)',
+                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        color: '#c084fc',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="View Monthly Night Duty Allowance (NDA) for this employee"
+                    >
+                      🌙 NDA Statement
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIndividualMusterModalOpen(true)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        borderRadius: '8px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                        color: '#10b981',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="View Individual Monthly Muster Roll & Duty Statement"
+                    >
+                      📋 Individual Muster
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -3577,14 +3655,16 @@ export default function App() {
                                 </div>
                               );
                             } else if (isAvailableForBooking) {
-                              linkLabel = cell.reason && cell.reason.includes('Removed from Link') ? '⚡ Available (Removed from Link)' : '⚡ Available for Booking';
+                              linkLabel = (cell.set_type && cell.set_type.includes('3-Day')) 
+                                ? `⚡ Available (${cell.set_type})` 
+                                : (cell.reason && cell.reason.includes('Removed from Link') ? '⚡ Available (Removed from Link)' : '⚡ Available for Booking');
                               badgeStyle.background = 'rgba(16, 185, 129, 0.18)';
                               badgeStyle.color = '#10b981';
                               badgeStyle.border = '1px solid #10b981';
                               cellBg = 'rgba(16, 185, 129, 0.03)';
-                              trainNoDisplay = 'SPARE (HQ)';
-                              routeDisplay = 'GNT ➔ GNT';
-                              coachDisplay = '-';
+                              trainNoDisplay = (cell.train_numbers && cell.train_numbers !== 'SPARE (HQ)' && cell.train_numbers !== '-') ? cell.train_numbers : 'SPARE (HQ)';
+                              routeDisplay = (cell.from_station && cell.to_station && cell.from_station !== '-') ? (cell.from_station + ' ➔ ' + cell.to_station) : 'GNT ➔ GNT';
+                              coachDisplay = (cell.coaches && cell.coaches !== '-') ? cell.coaches : '-';
                               remarksElement = (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
@@ -9837,6 +9917,28 @@ export default function App() {
               >
                 💰 Daily Earnings
               </button>
+
+              <button
+                type="button"
+                onClick={() => setDocSubTab('muster')}
+                className="btn"
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '20px',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  background: docSubTab === 'muster'
+                    ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                    : 'rgba(255,255,255,0.03)',
+                  color: docSubTab === 'muster' ? '#0D0D0F' : 'var(--color-text-secondary)',
+                  border: docSubTab === 'muster' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                  boxShadow: docSubTab === 'muster' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                📋 Individual Muster
+              </button>
             </div>
 
             <div style={{ display: docSubTab === 'ta' ? 'block' : 'none' }}>
@@ -9934,6 +10036,30 @@ export default function App() {
                 }}
               />
             </div>
+
+            <div style={{ display: docSubTab === 'muster' ? 'block' : 'none' }}>
+              <IndividualMusterDocument
+                authToken={authToken}
+                categories={categories}
+                selectedCatId={selectedCatId}
+                setSelectedCatId={setSelectedCatId}
+                selectedStaffId={docStaffId}
+                setSelectedStaffId={(id) => {
+                  setDocStaffId(id);
+                  try { localStorage.setItem('railway_doc_staff_id', id); } catch (e) {}
+                }}
+                year={docYear}
+                setYear={(y) => {
+                  setDocYear(y);
+                  try { localStorage.setItem('railway_doc_year', y); } catch (e) {}
+                }}
+                month={docMonth}
+                setMonth={(m) => {
+                  setDocMonth(m);
+                  try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -9988,6 +10114,37 @@ export default function App() {
           onClose={() => setDutyEditModal(null)}
           onSuccess={onDutyEditSuccess}
         />
+      )}
+
+      {/* Individual Monthly Muster Roll Modal */}
+      {individualMusterModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="modal-content" style={{
+            maxWidth: '1100px',
+            width: '95%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            background: 'var(--bg-primary)',
+            border: '1.5px solid var(--border-gold)',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.6)'
+          }}>
+            <IndividualMusterDocument
+              authToken={authToken}
+              categories={categories}
+              selectedCatId={selectedCatId}
+              setSelectedCatId={setSelectedCatId}
+              selectedStaffId={selectedStaffId}
+              setSelectedStaffId={setSelectedStaffId}
+              year={year}
+              setYear={setYear}
+              month={month}
+              setMonth={setMonth}
+              onClose={() => setIndividualMusterModalOpen(false)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Cadre Upgrade to Conductors (COR) Modal */}
