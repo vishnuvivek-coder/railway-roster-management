@@ -1483,14 +1483,14 @@ export default function DutyEditModal({
           target_category_id: targetCategoryId ? parseInt(targetCategoryId, 10) : null,
           reason: finalReason,
           new_link_number: null,
-          replacement_type: deleteSlotAction === 'REPLACE' ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE'),
-          replacement_staff_id: repStaffIdNum,
-          replacement_name: repStaffName,
+          replacement_type: shiftedMode === 'MUTUAL' ? 'NONE' : (deleteSlotAction === 'REPLACE' ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE')),
+          replacement_staff_id: shiftedMode === 'MUTUAL' ? null : repStaffIdNum,
+          replacement_name: shiftedMode === 'MUTUAL' ? null : repStaffName,
           wrong_allotment_action: deleteSlotAction
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
-        if (deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
+        if (shiftedMode !== 'MUTUAL' && deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
           const repStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
           if (repStatus.isUnavailable && replacementCatId !== 'ENTIRE_ROSTER') {
             throw new Error(`${selectedReplacementStaffObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
@@ -2889,6 +2889,21 @@ export default function DutyEditModal({
                             style={{ fontSize: '0.84rem' }}
                           />
                         </div>
+
+                        <div style={{
+                          fontSize: '0.76rem',
+                          color: '#38bdf8',
+                          background: 'rgba(56, 189, 248, 0.08)',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <span>ℹ️</span>
+                          <span><strong>Allow & Shift:</strong> Mutually swaps employee names in the daily roster against their respective trains/links only on the selected date(s).</span>
+                        </div>
                       </div>
                     ) : shiftedMode === 'CUSTOM' ? (
                       <div className="form-group" style={{ marginBottom: 0 }}>
@@ -3128,280 +3143,284 @@ export default function DutyEditModal({
                 )}
 
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '10px',
-                  padding: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0 }}>
-                      What happens to this slot on Link #{targetLink || 'Duty'}?
-                    </label>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                      (Link is fixed — only employee name changes)
-                    </span>
-                  </div>
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && (
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0 }}>
+                        What happens to this slot on Link #{targetLink || 'Duty'}?
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                        (Link is fixed — only employee name changes)
+                      </span>
+                    </div>
 
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {deleteReason === 'WRONG_ALLOTMENT' && dutyModal.isOverridden && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {deleteReason === 'WRONG_ALLOTMENT' && dutyModal.isOverridden && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteSlotAction('RESET')}
+                          style={{
+                            flex: 1,
+                            minWidth: '160px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: deleteSlotAction === 'RESET' ? '2px solid #3b82f6' : '1px solid var(--border-glass)',
+                            background: deleteSlotAction === 'RESET' ? 'rgba(59, 130, 246, 0.16)' : 'rgba(255,255,255,0.02)',
+                            color: deleteSlotAction === 'RESET' ? '#60a5fa' : 'var(--color-text-secondary)',
+                            fontWeight: deleteSlotAction === 'RESET' ? 700 : 500,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⏮️ Revert to Original Roster
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setDeleteSlotAction('RESET')}
+                        onClick={() => setDeleteSlotAction('REPLACE')}
                         style={{
                           flex: 1,
                           minWidth: '160px',
                           padding: '8px 12px',
                           borderRadius: '6px',
-                          border: deleteSlotAction === 'RESET' ? '2px solid #3b82f6' : '1px solid var(--border-glass)',
-                          background: deleteSlotAction === 'RESET' ? 'rgba(59, 130, 246, 0.16)' : 'rgba(255,255,255,0.02)',
-                          color: deleteSlotAction === 'RESET' ? '#60a5fa' : 'var(--color-text-secondary)',
-                          fontWeight: deleteSlotAction === 'RESET' ? 700 : 500,
+                          border: deleteSlotAction === 'REPLACE' ? '2px solid #10b981' : '1px solid var(--border-glass)',
+                          background: deleteSlotAction === 'REPLACE' ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255,255,255,0.02)',
+                          color: deleteSlotAction === 'REPLACE' ? '#34d399' : 'var(--color-text-secondary)',
+                          fontWeight: deleteSlotAction === 'REPLACE' ? 700 : 500,
                           fontSize: '0.82rem',
                           cursor: 'pointer'
                         }}
                       >
-                        ⏮️ Revert to Original Roster
+                        {deleteReason === 'WRONG_ALLOTMENT' ? '🔄 Replace with Correct Employee' : '🔄 Replace with Another Employee'}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setDeleteSlotAction('REPLACE')}
-                      style={{
-                        flex: 1,
-                        minWidth: '160px',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: deleteSlotAction === 'REPLACE' ? '2px solid #10b981' : '1px solid var(--border-glass)',
-                        background: deleteSlotAction === 'REPLACE' ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255,255,255,0.02)',
-                        color: deleteSlotAction === 'REPLACE' ? '#34d399' : 'var(--color-text-secondary)',
-                        fontWeight: deleteSlotAction === 'REPLACE' ? 700 : 500,
-                        fontSize: '0.82rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {deleteReason === 'WRONG_ALLOTMENT' ? '🔄 Replace with Correct Employee' : '🔄 Replace with Another Employee'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteSlotAction('VACANT')}
-                      style={{
-                        flex: 1,
-                        minWidth: '140px',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: deleteSlotAction === 'VACANT' ? '2px solid #ef4444' : '1px solid var(--border-glass)',
-                        background: deleteSlotAction === 'VACANT' ? 'rgba(239, 68, 68, 0.16)' : 'rgba(255,255,255,0.02)',
-                        color: deleteSlotAction === 'VACANT' ? '#f87171' : 'var(--color-text-secondary)',
-                        fontWeight: deleteSlotAction === 'VACANT' ? 700 : 500,
-                        fontSize: '0.82rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🚫 Leave Slot Vacant
-                    </button>
-                  </div>
-
-                  {deleteSlotAction === 'RESET' && (
-                    <div style={{
-                      padding: '10px 12px',
-                      borderRadius: '6px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      border: '1px solid rgba(59, 130, 246, 0.3)',
-                      fontSize: '0.8rem',
-                      color: '#93c5fd'
-                    }}>
-                      ℹ️ This will undo the mistaken assignment on <strong>Link #{targetLink || 'Duty'}</strong> and restore the original cyclic roster baseline.
-                    </div>
-                  )}
-
-                  {deleteSlotAction === 'VACANT' && deleteReason === 'WRONG_ALLOTMENT' && (
-                    <div style={{
-                      padding: '10px 12px',
-                      borderRadius: '6px',
-                      background: 'rgba(239, 68, 68, 0.08)',
-                      border: '1px solid rgba(239, 68, 68, 0.25)',
-                      fontSize: '0.8rem',
-                      color: '#fca5a5'
-                    }}>
-                      ℹ️ <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
-                    </div>
-                  )}
-
-                  {deleteSlotAction === 'REPLACE' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                      {/* Filter by Category */}
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        {[
-                          { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
-                          { id: 'ALL', label: '🟢 All Available' },
-                          { id: '1', label: 'Conductors' },
-                          { id: '2', label: 'Sleeper' },
-                          { id: '3', label: 'Ladies' },
-                          { id: '4', label: 'LR Pool' },
-                          { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
-                        ].map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              setReplacementCatId(c.id);
-                              setReplacementStaffId('');
-                              setReplacementName('');
-                            }}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              border: replacementCatId === c.id ? '1px solid #10b981' : '1px solid var(--border-glass)',
-                              background: replacementCatId === c.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.02)',
-                              color: replacementCatId === c.id ? '#34d399' : 'var(--color-text-secondary)',
-                              fontSize: '0.74rem',
-                              fontWeight: replacementCatId === c.id ? 700 : 500,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {c.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="form-label" style={{ fontSize: '0.78rem', margin: 0 }}>
-                          Choose Replacement Employee:
-                        </label>
-                        <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
-                          <input
-                            type="checkbox"
-                            checked={showAlreadyAssigned}
-                            onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
-                          />
-                          <span>⚠️ Show busy / assigned staff (to shift duty)</span>
-                        </label>
-                      </div>
-
-                      {/* Dropdown */}
-                      <select
-                        className="form-input"
-                        value={replacementStaffId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setReplacementStaffId(val);
-                          const found = allStaffList.find(s => String(s.id) === String(val));
-                          if (found) setReplacementName(found.name);
+                      <button
+                        type="button"
+                        onClick={() => setDeleteSlotAction('VACANT')}
+                        style={{
+                          flex: 1,
+                          minWidth: '140px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: deleteSlotAction === 'VACANT' ? '2px solid #ef4444' : '1px solid var(--border-glass)',
+                          background: deleteSlotAction === 'VACANT' ? 'rgba(239, 68, 68, 0.16)' : 'rgba(255,255,255,0.02)',
+                          color: deleteSlotAction === 'VACANT' ? '#f87171' : 'var(--color-text-secondary)',
+                          fontWeight: deleteSlotAction === 'VACANT' ? 700 : 500,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer'
                         }}
-                        style={{ fontSize: '0.84rem' }}
                       >
-                        <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} {replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'}) --</option>
-                        {eligibleReplacementStaff.map(s => {
-                          const dutyInfo = getStaffDutyInfo(s, selectedDate);
-                          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
-                          const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                          let statusPrefix = '';
-                          if (assignStatus.isAssigned) {
-                            statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
-                          } else if (assignStatus.isUnavailable) {
-                            statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
-                          } else {
-                            statusPrefix = '🟢 [AVAILABLE] ';
-                          }
-                          return (
-                            <option key={s.id} value={s.id}>
-                              {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {eligibleReplacementStaff.length === 0 && (
-                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
-                          💡 No employees currently available for booking in this pool.
-                          {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
+                        🚫 Leave Slot Vacant
+                      </button>
+                    </div>
+
+                    {deleteSlotAction === 'RESET' && (
+                      <div style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        fontSize: '0.8rem',
+                        color: '#93c5fd'
+                      }}>
+                        ℹ️ This will undo the mistaken assignment on <strong>Link #{targetLink || 'Duty'}</strong> and restore the original cyclic roster baseline.
+                      </div>
+                    )}
+
+                    {deleteSlotAction === 'VACANT' && deleteReason === 'WRONG_ALLOTMENT' && (
+                      <div style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        fontSize: '0.8rem',
+                        color: '#fca5a5'
+                      }}>
+                        ℹ️ <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
+                      </div>
+                    )}
+
+                    {deleteSlotAction === 'REPLACE' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        {/* Filter by Category */}
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {[
+                            { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
+                            { id: 'ALL', label: '🟢 All Available' },
+                            { id: '1', label: 'Conductors' },
+                            { id: '2', label: 'Sleeper' },
+                            { id: '3', label: 'Ladies' },
+                            { id: '4', label: 'LR Pool' },
+                            { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
+                          ].map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setReplacementCatId(c.id);
+                                setReplacementStaffId('');
+                                setReplacementName('');
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: replacementCatId === c.id ? '1px solid #10b981' : '1px solid var(--border-glass)',
+                                background: replacementCatId === c.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.02)',
+                                color: replacementCatId === c.id ? '#34d399' : 'var(--color-text-secondary)',
+                                fontSize: '0.74rem',
+                                fontWeight: replacementCatId === c.id ? 700 : 500,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
                         </div>
-                      )}
 
-                      {selectedReplacementStaffObj && (() => {
-                        const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
-                        const dutyInfo = getStaffDutyInfo(selectedReplacementStaffObj, selectedDate);
-                        const catName = categories.find(c => c.id === selectedReplacementStaffObj.category_id)?.name || 'Staff';
-
-                        let badgeColor = '#34d399';
-                        let badgeBg = 'rgba(16, 185, 129, 0.25)';
-                        let cardBorder = 'rgba(16, 185, 129, 0.3)';
-                        let cardBg = 'rgba(16, 185, 129, 0.1)';
-                        let badgeText = dutyInfo.label;
-                        let subText = <span><strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
-
-                        if (repAssignStatus.isAssigned) {
-                          badgeColor = '#fbbf24';
-                          badgeBg = 'rgba(245, 158, 11, 0.25)';
-                          cardBorder = 'rgba(245, 158, 11, 0.35)';
-                          cardBg = 'rgba(245, 158, 11, 0.12)';
-                          badgeText = `Busy on ${repAssignStatus.trainDesc}`;
-                          subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.</span>;
-                        } else if (repAssignStatus.isUnavailable) {
-                          badgeColor = '#c084fc';
-                          badgeBg = 'rgba(192, 132, 252, 0.25)';
-                          cardBorder = 'rgba(192, 132, 252, 0.4)';
-                          cardBg = 'rgba(192, 132, 252, 0.1)';
-                          badgeText = repAssignStatus.unavailableReason || 'Rest / Leave';
-                          subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
-                        }
-
-                        return (
-                          <div style={{
-                            padding: '10px 14px',
-                            borderRadius: '6px',
-                            background: cardBg,
-                            border: `1px solid ${cardBorder}`,
-                            fontSize: '0.8rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px'
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong style={{ color: badgeColor }}>
-                                👤 {selectedReplacementStaffObj.name} ({selectedReplacementStaffObj.designation || 'Staff'}) • [{catName}]
-                              </strong>
-                              <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
-                                {badgeText}
-                              </span>
-                            </div>
-                            <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.74rem' }}>
-                              {subText}
-                            </div>
-                            <StaffRecentDutiesView 
-                              staffId={selectedReplacementStaffObj.id} 
-                              staffName={selectedReplacementStaffObj.name} 
-                              targetDate={selectedDate} 
-                              authToken={authToken} 
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem', margin: 0 }}>
+                            Choose Replacement Employee:
+                          </label>
+                          <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                            <input
+                              type="checkbox"
+                              checked={showAlreadyAssigned}
+                              onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
                             />
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                            <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                          </label>
+                        </div>
 
-                  {deleteSlotAction === 'VACANT' && (
-                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-                      Slot on Link #{targetLink || 'Duty'} will show as <strong>[VACANT]</strong> on {selectedDate}.
-                    </div>
-                  )}
-                </div>
+                        {/* Dropdown */}
+                        <select
+                          className="form-input"
+                          value={replacementStaffId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setReplacementStaffId(val);
+                            const found = allStaffList.find(s => String(s.id) === String(val));
+                            if (found) setReplacementName(found.name);
+                          }}
+                          style={{ fontSize: '0.84rem' }}
+                        >
+                          <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} {replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'}) --</option>
+                          {eligibleReplacementStaff.map(s => {
+                            const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                            const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+                            const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                            let statusPrefix = '';
+                            if (assignStatus.isAssigned) {
+                              statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
+                            } else if (assignStatus.isUnavailable) {
+                              statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
+                            } else {
+                              statusPrefix = '🟢 [AVAILABLE] ';
+                            }
+                            return (
+                              <option key={s.id} value={s.id}>
+                                {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {eligibleReplacementStaff.length === 0 && (
+                          <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
+                            💡 No employees currently available for booking in this pool.
+                            {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
+                          </div>
+                        )}
+
+                        {selectedReplacementStaffObj && (() => {
+                          const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
+                          const dutyInfo = getStaffDutyInfo(selectedReplacementStaffObj, selectedDate);
+                          const catName = categories.find(c => c.id === selectedReplacementStaffObj.category_id)?.name || 'Staff';
+
+                          let badgeColor = '#34d399';
+                          let badgeBg = 'rgba(16, 185, 129, 0.25)';
+                          let cardBorder = 'rgba(16, 185, 129, 0.3)';
+                          let cardBg = 'rgba(16, 185, 129, 0.1)';
+                          let badgeText = dutyInfo.label;
+                          let subText = <span><strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+
+                          if (repAssignStatus.isAssigned) {
+                            badgeColor = '#fbbf24';
+                            badgeBg = 'rgba(245, 158, 11, 0.25)';
+                            cardBorder = 'rgba(245, 158, 11, 0.35)';
+                            cardBg = 'rgba(245, 158, 11, 0.12)';
+                            badgeText = `Busy on ${repAssignStatus.trainDesc}`;
+                            subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.</span>;
+                          } else if (repAssignStatus.isUnavailable) {
+                            badgeColor = '#c084fc';
+                            badgeBg = 'rgba(192, 132, 252, 0.25)';
+                            cardBorder = 'rgba(192, 132, 252, 0.4)';
+                            cardBg = 'rgba(192, 132, 252, 0.1)';
+                            badgeText = repAssignStatus.unavailableReason || 'Rest / Leave';
+                            subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+                          }
+
+                          return (
+                            <div style={{
+                              padding: '10px 14px',
+                              borderRadius: '6px',
+                              background: cardBg,
+                              border: `1px solid ${cardBorder}`,
+                              fontSize: '0.8rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ color: badgeColor }}>
+                                  👤 {selectedReplacementStaffObj.name} ({selectedReplacementStaffObj.designation || 'Staff'}) • [{catName}]
+                                </strong>
+                                <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
+                                  {badgeText}
+                                </span>
+                              </div>
+                              <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.74rem' }}>
+                                {subText}
+                              </div>
+                              <StaffRecentDutiesView 
+                                staffId={selectedReplacementStaffObj.id} 
+                                staffName={selectedReplacementStaffObj.name} 
+                                targetDate={selectedDate} 
+                                authToken={authToken} 
+                              />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {deleteSlotAction === 'VACANT' && (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                        Slot on Link #{targetLink || 'Duty'} will show as <strong>[VACANT]</strong> on {selectedDate}.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Remarks */}
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Remarks / Reason:</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder={`e.g. Relieved for ${deleteReason} / Operational adjustment`}
-                    style={{ fontSize: '0.84rem' }}
-                  />
-                </div>
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.78rem' }}>Remarks / Reason:</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder={`e.g. Relieved for ${deleteReason} / Operational adjustment`}
+                      style={{ fontSize: '0.84rem' }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -3650,20 +3669,27 @@ export default function DutyEditModal({
                 disabled={submitting}
                 style={{
                   background: activeMode === 'DELETE' 
-                    ? 'linear-gradient(135deg, #ef4444, #dc2626)' 
+                    ? ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
+                        ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                        : 'linear-gradient(135deg, #ef4444, #dc2626)')
                     : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#ffffff',
                   border: 'none',
                   fontWeight: 700,
                   padding: '8px 20px',
-                  minWidth: '160px'
+                  minWidth: '160px',
+                  boxShadow: (activeMode === 'DELETE' && deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
+                    ? '0 0 16px rgba(2, 132, 199, 0.45)'
+                    : 'none'
                 }}
               >
-                {submitting ? 'Saving...' :
+                {submitting ? 'Shifting...' :
                  activeMode === 'DELETE' ? (
                    deleteReason === 'WRONG_ALLOTMENT'
                      ? (deleteSlotAction === 'REPLACE' ? '🔄 Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '⏮️ Revert Wrong Allotment' : '❌ Remove Wrong Allotment'))
-                     : (deleteReason === 'SHIFTED' ? '🔄 Shift & Save Duty' : `🗑️ Delete & Save Status`)
+                     : (deleteReason === 'SHIFTED' 
+                         ? (shiftedMode === 'MUTUAL' ? '🤝 Allow & Shift Employee Names' : '🔄 Shift & Save Duty') 
+                         : `🗑️ Delete & Save Status`)
                  ) :
                  `➕ Assign to Link #${targetLink || 'Duty'}`}
               </button>
