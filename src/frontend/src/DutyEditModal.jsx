@@ -347,7 +347,7 @@ export default function DutyEditModal({
   const [advanceVacateNext, setAdvanceVacateNext] = useState(true);
 
   // Shifted Place inputs
-  const [shiftedMode, setShiftedMode] = useState('CUSTOM'); // 'CUSTOM' or 'LINK'
+  const [shiftedMode, setShiftedMode] = useState('CUSTOM'); // 'CUSTOM', 'LINK', or 'NON_DAILY'
   const [shiftedPlace, setShiftedPlace] = useState(() => {
     if (dutyModal.shifted_place) return dutyModal.shifted_place;
     if (dutyModal.overrideReason && /Shifted to/i.test(dutyModal.overrideReason)) {
@@ -359,6 +359,35 @@ export default function DutyEditModal({
   const [shiftedCatId, setShiftedCatId] = useState(() => {
     return dutyModal.categoryId ? String(dutyModal.categoryId) : '1';
   });
+  const [shiftedNonDailyId, setShiftedNonDailyId] = useState('');
+  const [shiftedNonDailyTrainNo, setShiftedNonDailyTrainNo] = useState('');
+  const [shiftedNonDailyDayFilter, setShiftedNonDailyDayFilter] = useState('AUTO'); // 'AUTO' | 'ALL' | 'SUNDAY' ... 'SATURDAY'
+
+  const selectedDateDayOfWeek = useMemo(() => {
+    if (!selectedDate) return 'SUNDAY';
+    const d = new Date(selectedDate + 'T12:00:00');
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    return isNaN(d.getDay()) ? 'SUNDAY' : dayNames[d.getDay()];
+  }, [selectedDate]);
+
+  const effectiveNonDailyDay = shiftedNonDailyDayFilter === 'AUTO' ? selectedDateDayOfWeek : shiftedNonDailyDayFilter;
+
+  const availableNonDailyTrains = useMemo(() => {
+    if (!Array.isArray(nonDailyList)) return [];
+    if (effectiveNonDailyDay === 'ALL') return nonDailyList;
+    return nonDailyList.filter(t => (t.day_of_week || '').toUpperCase() === effectiveNonDailyDay.toUpperCase());
+  }, [nonDailyList, effectiveNonDailyDay]);
+
+  const selectedNonDailyObj = useMemo(() => {
+    if (!Array.isArray(nonDailyList)) return null;
+    if (shiftedNonDailyId) {
+      return nonDailyList.find(t => String(t.id) === String(shiftedNonDailyId)) || null;
+    }
+    if (shiftedNonDailyTrainNo) {
+      return nonDailyList.find(t => String(t.train_number) === String(shiftedNonDailyTrainNo).trim()) || null;
+    }
+    return null;
+  }, [nonDailyList, shiftedNonDailyId, shiftedNonDailyTrainNo]);
 
   // Multi-day date range for Leave / Sick / Absent / Shifted
   const [leaveToDate, setLeaveToDate] = useState(dutyModal.date || selectedDate);
@@ -1321,9 +1350,20 @@ export default function DutyEditModal({
           if (!finalReason) finalReason = 'Unauthorized Absence [O]';
         } else if (deleteReason === 'SHIFTED') {
           actionCode = 'SHIFTED';
-          const placeDesc = shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedLinkNum ? `Link #${shiftedLinkNum}` : '');
+          let placeDesc = '';
+          if (shiftedMode === 'CUSTOM') {
+            placeDesc = shiftedPlace.trim();
+          } else if (shiftedMode === 'LINK') {
+            placeDesc = shiftedLinkNum ? `Link #${shiftedLinkNum}` : '';
+          } else if (shiftedMode === 'NON_DAILY') {
+            const chosenTrain = (nonDailyList || []).find(t => String(t.id) === String(shiftedNonDailyId) || String(t.train_number) === String(shiftedNonDailyTrainNo).trim());
+            const trNo = chosenTrain ? (chosenTrain.train_number + (chosenTrain.last_day_train_number ? `/${chosenTrain.last_day_train_number}` : '')) : (shiftedNonDailyTrainNo.trim() || 'Non-Daily Train');
+            const route = chosenTrain && chosenTrain.departure_station && chosenTrain.arrival_station ? ` (${chosenTrain.departure_station} ➔ ${chosenTrain.arrival_station})` : '';
+            placeDesc = `Non-Daily Train ${trNo}${route}`;
+          }
+
           if (!placeDesc) {
-            throw new Error('Please enter a shifted place/duty or select a train link.');
+            throw new Error('Please enter a shifted place/duty or select a daily/non-daily train link.');
           }
           if (!finalReason) finalReason = `Shifted to ${placeDesc}`;
         } else if (deleteReason === 'WRONG_ALLOTMENT') {
@@ -1334,6 +1374,13 @@ export default function DutyEditModal({
           }
         }
 
+        const chosenNonDaily = shiftedMode === 'NON_DAILY'
+          ? ((nonDailyList || []).find(t => String(t.id) === String(shiftedNonDailyId) || String(t.train_number) === String(shiftedNonDailyTrainNo).trim()))
+          : null;
+        const finalExtraTrainNo = chosenNonDaily
+          ? chosenNonDaily.train_number
+          : (shiftedMode === 'NON_DAILY' ? (shiftedNonDailyTrainNo.trim() || null) : null);
+
         const payload = {
           staff_id: staffId,
           date: selectedDate,
@@ -1343,9 +1390,13 @@ export default function DutyEditModal({
           day_wise_leaves: dayWisePayload,
           advance_train_no: advanceTrainNo,
           vacate_next_link: advanceVacateNext,
-          shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : null,
+          shifted_mode: shiftedMode,
+          shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : null),
           shifted_link_number: shiftedMode === 'LINK' && shiftedLinkNum ? parseInt(shiftedLinkNum, 10) : null,
           shifted_category_id: shiftedMode === 'LINK' && shiftedCatId ? parseInt(shiftedCatId, 10) : null,
+          shifted_non_daily_id: shiftedMode === 'NON_DAILY' && shiftedNonDailyId ? parseInt(shiftedNonDailyId, 10) : null,
+          extra_train_no: finalExtraTrainNo,
+          is_extra: shiftedMode === 'NON_DAILY' ? 1 : 0,
           link_number: targetLink ? parseInt(targetLink, 10) : null,
           target_category_id: targetCategoryId ? parseInt(targetCategoryId, 10) : null,
           reason: finalReason,
@@ -2541,7 +2592,7 @@ export default function DutyEditModal({
                       <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
                         🔄 Shifted Place / Duty Details:
                       </label>
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           onClick={() => setShiftedMode('CUSTOM')}
@@ -2573,6 +2624,22 @@ export default function DutyEditModal({
                           }}
                         >
                           🚆 Daily Train Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShiftedMode('NON_DAILY')}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: shiftedMode === 'NON_DAILY' ? '1px solid #fbbf24' : '1px solid var(--border-glass)',
+                            background: shiftedMode === 'NON_DAILY' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                            color: shiftedMode === 'NON_DAILY' ? '#fbbf24' : 'var(--color-text-secondary)',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🗓️ Non-Daily Train Link
                         </button>
                       </div>
                     </div>
@@ -2612,7 +2679,7 @@ export default function DutyEditModal({
                           ))}
                         </div>
                       </div>
-                    ) : (
+                    ) : shiftedMode === 'LINK' ? (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div>
                           <label className="form-label" style={{ fontSize: '0.78rem' }}>Category:</label>
@@ -2644,6 +2711,99 @@ export default function DutyEditModal({
                                 </option>
                               ))}
                           </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.78rem' }}>Day of Week:</label>
+                            <select
+                              className="form-input"
+                              value={shiftedNonDailyDayFilter}
+                              onChange={(e) => {
+                                setShiftedNonDailyDayFilter(e.target.value);
+                                setShiftedNonDailyId('');
+                              }}
+                              style={{ fontSize: '0.84rem' }}
+                            >
+                              <option value="AUTO">📅 Auto ({selectedDateDayOfWeek})</option>
+                              <option value="ALL">📋 All Days ({nonDailyList?.length || 0})</option>
+                              {['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'].map(day => (
+                                <option key={day} value={day}>{day}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.78rem' }}>
+                              Select Non-Daily Train ({availableNonDailyTrains.length}):
+                            </label>
+                            <select
+                              className="form-input"
+                              value={shiftedNonDailyId}
+                              onChange={(e) => {
+                                setShiftedNonDailyId(e.target.value);
+                                const found = (nonDailyList || []).find(t => String(t.id) === String(e.target.value));
+                                if (found) {
+                                  setShiftedNonDailyTrainNo(found.train_number);
+                                }
+                              }}
+                              style={{ fontSize: '0.84rem', fontWeight: 600 }}
+                            >
+                              <option value="">-- Choose Non-Daily Service ({availableNonDailyTrains.length}) --</option>
+                              {availableNonDailyTrains.map(t => (
+                                <option key={t.id} value={t.id}>
+                                  Tr {t.train_number}{t.last_day_train_number ? `/${t.last_day_train_number}` : ''} {t.departure_station ? `(${t.departure_station} ➔ ${t.arrival_station})` : ''} {t.departure_time ? `[${t.departure_time} - ${t.arrival_time || '---'}]` : ''} ({t.day_of_week})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Optional Custom Train Number Override / Quick Type */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                              Train Number / Pair (Auto-filled or Custom):
+                            </label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="e.g. 12842 or 07002/07001"
+                              value={shiftedNonDailyTrainNo}
+                              onChange={(e) => {
+                                setShiftedNonDailyTrainNo(e.target.value);
+                                const match = (nonDailyList || []).find(t => String(t.train_number) === e.target.value.trim());
+                                if (match) setShiftedNonDailyId(String(match.id));
+                              }}
+                              style={{ fontSize: '0.84rem' }}
+                            />
+                          </div>
+                          {selectedNonDailyObj && (
+                            <div style={{
+                              background: 'rgba(59, 130, 246, 0.08)',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              fontSize: '0.74rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                              gap: '2px'
+                            }}>
+                              <div style={{ fontWeight: 700, color: '#60a5fa' }}>
+                                🚆 Train {selectedNonDailyObj.train_number}{selectedNonDailyObj.last_day_train_number ? ` / ${selectedNonDailyObj.last_day_train_number}` : ''} ({selectedNonDailyObj.day_of_week})
+                              </div>
+                              <div style={{ color: 'var(--color-text-secondary)' }}>
+                                Route: <strong>{selectedNonDailyObj.departure_station || '---'} ({selectedNonDailyObj.departure_time || '--:--'})</strong> ➔ <strong>{selectedNonDailyObj.arrival_station || '---'} ({selectedNonDailyObj.arrival_time || '--:--'})</strong>
+                              </div>
+                              {selectedNonDailyObj.coaches && (
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                                  Coaches: {selectedNonDailyObj.coaches} {selectedNonDailyObj.last_day_coaches ? `| Return: ${selectedNonDailyObj.last_day_coaches}` : ''}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

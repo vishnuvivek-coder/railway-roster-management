@@ -3364,7 +3364,9 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
     // SHIFTED / SHIFTED_PLACE: Shift employee away from this link slot to another place / duty / link
     if (action === 'SHIFTED' || action === 'SHIFTED_PLACE') {
-      const shiftedPlace = req.body.shifted_place ? String(req.body.shifted_place).trim() : '';
+      const isNonDaily = req.body.is_extra === 1 || req.body.shifted_mode === 'NON_DAILY' || Boolean(req.body.extra_train_no);
+      const extraTrainNo = isNonDaily ? (req.body.extra_train_no || null) : null;
+      const shiftedPlace = req.body.shifted_place ? String(req.body.shifted_place).trim() : (isNonDaily ? 'NON_DAILY_TRAIN' : '');
       const shiftedLinkNum = req.body.shifted_link_number !== undefined && req.body.shifted_link_number !== null && req.body.shifted_link_number !== ''
         ? parseInt(req.body.shifted_link_number, 10)
         : null;
@@ -3381,7 +3383,9 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         datesToProcess.push(`${y}-${m}-${d}`);
       }
 
-      const shiftDesc = shiftedLinkNum ? `Link #${shiftedLinkNum}${shiftedPlace ? ` (${shiftedPlace})` : ''}` : (shiftedPlace || 'Another Place / Duty');
+      const shiftDesc = shiftedLinkNum
+        ? `Link #${shiftedLinkNum}${shiftedPlace ? ` (${shiftedPlace})` : ''}`
+        : (isNonDaily && extraTrainNo ? `Non-Daily Train ${extraTrainNo}` : (shiftedPlace || 'Another Place / Duty'));
       const shiftReason = reason || `Shifted to ${shiftDesc}`;
 
       const undoSnapshots = [];
@@ -3405,19 +3409,40 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const dayOffset = getDayOffset(category.anchor_date, dStr);
         const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
-        const newStatus = shiftedLinkNum !== null ? 'CHANGED_LINK' : 'SHIFTED';
+        const newStatus = shiftedLinkNum !== null ? 'CHANGED_LINK' : (isNonDaily ? 'EXTRA_CREW' : 'SHIFTED');
 
         await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-           VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+          `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = excluded.overridden_link_number,
              status = excluded.status,
              substitute_staff_id = NULL,
              substitute_name = NULL,
              reason = excluded.reason,
-             target_category_id = excluded.target_category_id`,
-          [staff_id, dStr, originalLink, shiftedLinkNum, newStatus, shiftReason, shiftedCatId]
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place,
+             extra_train_no = excluded.extra_train_no,
+             is_extra = excluded.is_extra,
+             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
+             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
+          [
+            staff_id,
+            dStr,
+            originalLink,
+            shiftedLinkNum,
+            newStatus,
+            shiftReason,
+            shiftedCatId,
+            shiftedPlace || (isNonDaily ? 'NON_DAILY_TRAIN' : null),
+            extraTrainNo,
+            isNonDaily ? 1 : 0,
+            originalLink || null,
+            null
+          ]
         );
 
         // Muster record: P (Present on duty at the shifted place)
