@@ -1299,6 +1299,7 @@ export default function DutyEditModal({
         let actionCode = deleteReason;
         let selectedLeaveType = null;
         let finalReason = reason;
+        let placeDesc = '';
 
         let dayWisePayload = null;
         if (deleteReason === 'LEAVE' && leaveDates.length > 1) {
@@ -1350,7 +1351,6 @@ export default function DutyEditModal({
           if (!finalReason) finalReason = 'Unauthorized Absence [O]';
         } else if (deleteReason === 'SHIFTED') {
           actionCode = 'SHIFTED';
-          let placeDesc = '';
           if (shiftedMode === 'CUSTOM') {
             placeDesc = shiftedPlace.trim();
           } else if (shiftedMode === 'LINK') {
