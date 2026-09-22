@@ -324,8 +324,8 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
 
     for (const duty of duties) {
       rowOrder++;
-      const schedDep = '';
-      const schedArr = '';
+      const schedDep = duty.dep || '---';
+      const schedArr = duty.arr || '---';
 
       let actualDep = duty.dep || '---';
       let actualArr = duty.arr || '---';

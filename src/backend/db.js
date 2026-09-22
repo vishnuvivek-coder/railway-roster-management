@@ -476,29 +476,29 @@ async function initDb() {
 
     // Seed COR links (21 links)
     const corLinks = [
-      { num: 1, trains: 'PILOT(67230),17225', from: 'GNT/BZA', to: 'BZA/GTL (Day 1)', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
-      { num: 2, trains: '17225,17226', from: 'BZA/GTL (Day 2)', to: 'GTL/BZA (Day 1)', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
-      { num: 3, trains: '17226,PILOT(12703)', from: 'GTL/BZA (Day 2)', to: 'BZA/GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
-      { num: 4, trains: '17261', from: 'GNT', to: 'GNT/TPTY (Day 1)', coaches: 'AC', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
-      { num: 5, trains: '17261,12733', from: 'GNT/TPTY (Day 2)', to: 'TPTY/GNT (Day 1)', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
-      { num: 6, trains: '12733', from: 'TPTY/GNT (Day 2)', to: 'GNT', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 1, trains: '17281, 17225', from: 'GNT, BZA', to: 'BZA, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 2, trains: '17225, 17226', from: '--, GTL', to: 'GTL, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 3, trains: '17226, 57210', from: '--, BZA', to: 'BZA, GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 4, trains: '17261', from: 'GNT', to: '--', coaches: 'AC', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 5, trains: '17261, 12733', from: '--, TPTY', to: 'TPTY, --', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 6, trains: '12733', from: '--', to: 'GNT', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
       { num: 7, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 1', set_type: 'Other / REST' },
-      { num: 8, trains: '20629', from: 'GNT', to: 'GNT/TPTY (Day 1)', coaches: 'AC', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
-      { num: 9, trains: '20629,12733', from: 'GNT/TPTY (Day 2)', to: 'TPTY/GNT (Day 1)', coaches: 'M1 & B1-B4', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
-      { num: 10, trains: '12733,12734', from: 'TPTY/GNT (Day 2)', to: 'GNT/TPTY (Day 1)', coaches: 'M1 & B1-B4 / H1, A1-A3 & B5', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
-      { num: 11, trains: '12734,20630', from: 'GNT/TPTY (Day 2)', to: 'TPTY/GNT (Day 1)', coaches: 'H1, A1-A3 & B5 / AC', rest: 0, set_name: 'Narayanadri & VB Exp', set_type: '3-Day Set' },
-      { num: 12, trains: '20630,12604', from: 'TPTY/GNT (Day 2)', to: 'GNT/MAS (Day 1)', coaches: 'AC', rest: 0, set_name: 'Narayanadri & VB Exp', set_type: '3-Day Set' },
-      { num: 13, trains: '12604,12603', from: 'GNT/MAS (Day 2)', to: 'MAS/GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri & VB Exp', set_type: '3-Day Set' },
+      { num: 8, trains: '20629', from: 'GNT', to: '--', coaches: 'AC', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 9, trains: '20629, 12733', from: '--, TPTY', to: 'TPTY, --', coaches: 'M1 & B1-B4', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 10, trains: '12733, 12734', from: '--, GNT', to: 'GNT, --', coaches: 'M1 & B1-B4 / H1, A1-A3 & B5', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 11, trains: '12734, 20630', from: '--, TPTY', to: 'TPTY, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
+      { num: 12, trains: '20630, 12604', from: '--, GNT', to: 'GNT, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
+      { num: 13, trains: '12604, 12603', from: '--, MAS', to: 'MAS, GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
       { num: 14, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 2', set_type: 'Other / REST' },
-      { num: 15, trains: 'PILOT(67230),18047', from: 'GNT/BZA', to: 'BZA/GTL (Day 1)', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/48)', set_type: '3-Day Set' },
-      { num: 16, trains: '18047,18048', from: 'BZA/GTL (Day 2)', to: 'GTL/BZA (Day 1)', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/48)', set_type: '3-Day Set' },
-      { num: 17, trains: '18048,PILOT(12703)', from: 'GTL/BZA (Day 2)', to: 'BZA/GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/48)', set_type: '3-Day Set' },
-      { num: 18, trains: '12734', from: 'GNT', to: 'GNT/TPTY (Day 1)', coaches: 'M1 & B1-B4', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
-      { num: 19, trains: '12734,17262', from: 'GNT/TPTY (Day 2)', to: 'TPTY/GNT (Day 1)', coaches: 'M1 & B1-B4 / AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
-      { num: 20, trains: '17262', from: 'TPTY/GNT (Day 2)', to: 'GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 15, trains: '67230, 18047', from: 'GNT, BZA', to: 'BZA, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 16, trains: '18047, 17226', from: '--, GTL', to: 'GTL, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 17, trains: '17226, 57201', from: '--, BZA', to: 'BZA, GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 18, trains: '12734', from: 'GNT', to: '--', coaches: 'M1 & B1-B4', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 19, trains: '12734, 17262', from: '--, TPTY', to: 'TPTY, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 20, trains: '17262', from: '--', to: 'GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
       { num: 21, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 3', set_type: 'Other / REST' }
     ];
- 
+
     for (const link of corLinks) {
       await run(
         `INSERT INTO links (category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_name, set_type) 
@@ -1309,6 +1309,39 @@ async function initDb() {
           [m.name, m.desg, m.pf, m.seniority_no]
         );
       }
+    }
+
+    // Always keep Category 1 (COR Links 1-21) strictly synced to official reference sheets
+    const corLinkSync = [
+      { num: 1, trains: '17281, 17225', from: 'GNT, BZA', to: 'BZA, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 2, trains: '17225, 17226', from: '--, GTL', to: 'GTL, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 3, trains: '17226, 57210', from: '--, BZA', to: 'BZA, GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (17225/26)', set_type: '3-Day Set' },
+      { num: 4, trains: '17261', from: 'GNT', to: '--', coaches: 'AC', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 5, trains: '17261, 12733', from: '--, TPTY', to: 'TPTY, --', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 6, trains: '12733', from: '--', to: 'GNT', coaches: 'H1, A1-A3 & B5', rest: 0, set_name: 'GNT-TPTY Exp (17261/12733)', set_type: '3-Day Set' },
+      { num: 7, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 1', set_type: 'Other / REST' },
+      { num: 8, trains: '20629', from: 'GNT', to: '--', coaches: 'AC', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 9, trains: '20629, 12733', from: '--, TPTY', to: 'TPTY, --', coaches: 'M1 & B1-B4', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 10, trains: '12733, 12734', from: '--, GNT', to: 'GNT, --', coaches: 'M1 & B1-B4 / H1, A1-A3 & B5', rest: 0, set_name: 'VB & Narayanadri Exp', set_type: '3-Day Set' },
+      { num: 11, trains: '12734, 20630', from: '--, TPTY', to: 'TPTY, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
+      { num: 12, trains: '20630, 12604', from: '--, GNT', to: 'GNT, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
+      { num: 13, trains: '12604, 12603', from: '--, MAS', to: 'MAS, GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri, VB & MAS Exp', set_type: '3-Day Set' },
+      { num: 14, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 2', set_type: 'Other / REST' },
+      { num: 15, trains: '67230, 18047', from: 'GNT, BZA', to: 'BZA, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 16, trains: '18047, 17226', from: '--, GTL', to: 'GTL, --', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 17, trains: '17226, 57201', from: '--, BZA', to: 'BZA, GNT', coaches: 'AC', rest: 0, set_name: 'Amaravati Exp (18047/17226)', set_type: '3-Day Set' },
+      { num: 18, trains: '12734', from: 'GNT', to: '--', coaches: 'M1 & B1-B4', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 19, trains: '12734, 17262', from: '--, TPTY', to: 'TPTY, --', coaches: 'AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 20, trains: '17262', from: '--', to: 'GNT', coaches: 'AC', rest: 0, set_name: 'Narayanadri & TPTY Exp', set_type: '3-Day Set' },
+      { num: 21, trains: 'REST', from: '', to: '', coaches: '', rest: 1, set_name: 'Weekly Rest 3', set_type: 'Other / REST' }
+    ];
+
+    for (const link of corLinkSync) {
+      await run(
+        `UPDATE links SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, set_name = ?, set_type = ? 
+         WHERE category_id = 1 AND link_number = ?`,
+        [link.trains, link.from, link.to, link.coaches, link.rest, link.set_name, link.set_type, link.num]
+      );
     }
   } catch (e) {
     console.error('Failed to sync staff seniority/pf details:', e.message);
