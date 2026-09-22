@@ -551,9 +551,13 @@ export default function App() {
 
   const [selectedStaffId, setSelectedStaffId] = useState('');
 
-  // State for Staff CRUD
+  // State for Staff CRUD & Add/Remove Staff
   const [staffList, setStaffList] = useState([]);
   const [editingStaff, setEditingStaff] = useState(null);
+  const [staffManagementMode, setStaffManagementMode] = useState('ADD'); // 'ADD' | 'REMOVE'
+  const [removeStaffId, setRemoveStaffId] = useState('');
+  const [removeStaffAction, setRemoveStaffAction] = useState('DELETE'); // 'DELETE' | 'MARK_VACANT'
+  const [removingStaff, setRemovingStaff] = useState(false);
   const [upgradeCorModalOpen, setUpgradeCorModalOpen] = useState(false);
   const [upgradeCorCandidate, setUpgradeCorCandidate] = useState(null);
   const [staffForm, setStaffForm] = useState({
@@ -2028,6 +2032,74 @@ export default function App() {
       }).catch(err => {
         alert(`Failed to delete staff: ${err.message}`);
       });
+    }
+  };
+
+  const handleRemoveStaffSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    if (!removeStaffId) {
+      alert('Please select a staff member to remove.');
+      return;
+    }
+    const target = allStaffList.find(s => String(s.id) === String(removeStaffId)) || staffList.find(s => String(s.id) === String(removeStaffId));
+    const targetName = target ? target.name : 'this staff member';
+
+    if (removeStaffAction === 'MARK_VACANT') {
+      if (!confirm(`Are you sure you want to mark ${targetName} (Row ${target?.row_position}) as (VACANT)?`)) return;
+      try {
+        setRemovingStaff(true);
+        const res = await fetch(`${API_BASE}/staff/${removeStaffId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            name: '(VACANT)',
+            designation: target?.designation || '',
+            rest_day: target?.rest_day || '',
+            category_id: target?.category_id || parseInt(selectedCatId, 10),
+            row_position: target?.row_position
+          })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to mark staff as vacant');
+        }
+        setRemoveStaffId('');
+        fetchStaff();
+        fetchAllStaff();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        alert(`Slot on Row ${target?.row_position} marked as (VACANT).`);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setRemovingStaff(false);
+      }
+    } else {
+      // DELETE permanently
+      if (!confirm(`Are you sure you want to delete ${targetName} permanently? This action cannot be undone.`)) return;
+      try {
+        setRemovingStaff(true);
+        const res = await fetch(`${API_BASE}/staff/${removeStaffId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to delete staff');
+        }
+        setRemoveStaffId('');
+        fetchStaff();
+        fetchAllStaff();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        alert(`Successfully removed ${targetName} from the roster.`);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setRemovingStaff(false);
+      }
     }
   };
 
@@ -8329,78 +8401,272 @@ export default function App() {
 
             <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
               {isAdmin && (
-                <form className="card" style={{ flex: '1', maxWidth: '380px' }} onSubmit={saveStaff}>
-                  <div className="card-title">
-                    {editingStaff ? `Edit Seniority SL NO ${editingStaff.row_position}` : `Add ${selectedCatId === '4' ? 'LR Staff Member' : 'Staff Member'}`}
+                <div className="card" style={{ flex: '1', maxWidth: '400px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div className="card-title" style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary)' }}>
+                      👥 Add and Remove Staff
+                    </div>
+                    <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.72rem' }}>
+                      {categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Staff Master'}
+                    </span>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Name:</label>
-                    <input 
-                      type="text" required className="form-input"
-                      placeholder="Enter name, or (VACANT)"
-                      value={staffForm.name}
-                      onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Designation:</label>
-                    <input 
-                      type="text" className="form-input"
-                      placeholder="e.g. CTI, Sr.CCTC, CCTC"
-                      value={staffForm.designation}
-                      onChange={(e) => setStaffForm({ ...staffForm, designation: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Weekly Rest Day:</label>
-                    <select
-                      className="form-input"
-                      value={staffForm.rest_day || ''}
-                      onChange={(e) => setStaffForm({ ...staffForm, rest_day: e.target.value })}
-                    >
-                      <option value="">-- No Fixed Rest Day / Cyclic --</option>
-                      <option value="SUN">SUN (Sunday)</option>
-                      <option value="MON">MON (Monday)</option>
-                      <option value="TUE">TUE (Tuesday)</option>
-                      <option value="WED">WED (Wednesday)</option>
-                      <option value="THU">THU (Thursday)</option>
-                      <option value="FRI">FRI (Friday)</option>
-                      <option value="SAT">SAT (Saturday)</option>
-                    </select>
-                  </div>
-
+                  {/* Mode Toggle: Add Staff vs Remove Staff */}
                   {!editingStaff && (
-                    <div className="form-group">
-                      <label className="form-label">Seniority Position (Row Position) - optional:</label>
-                      <input 
-                        type="number" className="form-input"
-                        placeholder="Leave blank to add at the end"
-                        value={staffForm.row_position}
-                        onChange={(e) => setStaffForm({ ...staffForm, row_position: e.target.value })}
-                      />
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                      <button
+                        type="button"
+                        onClick={() => setStaffManagementMode('ADD')}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: staffManagementMode === 'ADD' ? 'var(--primary)' : 'transparent',
+                          color: staffManagementMode === 'ADD' ? '#000' : 'var(--color-text-secondary)',
+                          fontWeight: staffManagementMode === 'ADD' ? 800 : 600,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        ➕ Add Staff
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStaffManagementMode('REMOVE')}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: staffManagementMode === 'REMOVE' ? '#ef4444' : 'transparent',
+                          color: staffManagementMode === 'REMOVE' ? '#fff' : 'var(--color-text-secondary)',
+                          fontWeight: staffManagementMode === 'REMOVE' ? 800 : 600,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        🗑️ Remove Staff
+                      </button>
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                      {editingStaff ? 'Update Staff' : 'Create Staff'}
-                    </button>
-                    {editingStaff && (
-                      <button 
-                        type="button" className="btn btn-secondary" 
-                        onClick={() => {
-                          setEditingStaff(null);
-                          setStaffForm({ name: '', designation: '', row_position: '', rest_day: '' });
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                </form>
+                  {/* MODE 1: ADD / EDIT STAFF */}
+                  {(staffManagementMode === 'ADD' || editingStaff) && (
+                    <form onSubmit={saveStaff} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: editingStaff ? '#60a5fa' : 'var(--color-text-primary)', marginBottom: '2px' }}>
+                        {editingStaff ? `✏️ Edit Seniority SL NO ${editingStaff.row_position}` : `➕ Add New ${selectedCatId === '4' ? 'LR Staff Member' : (categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Staff Member')}:`}
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Name:</label>
+                        <input 
+                          type="text" required className="form-input"
+                          placeholder="Enter name, or (VACANT)"
+                          value={staffForm.name}
+                          onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Designation:</label>
+                        <input 
+                          type="text" className="form-input"
+                          placeholder="e.g. CTI, Sr.CCTC, CCTC"
+                          value={staffForm.designation}
+                          onChange={(e) => setStaffForm({ ...staffForm, designation: e.target.value })}
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Weekly Rest Day:</label>
+                        <select
+                          className="form-input"
+                          value={staffForm.rest_day || ''}
+                          onChange={(e) => setStaffForm({ ...staffForm, rest_day: e.target.value })}
+                          style={{ fontSize: '0.84rem' }}
+                        >
+                          <option value="">-- No Fixed Rest Day / Cyclic --</option>
+                          <option value="SUN">SUN (Sunday)</option>
+                          <option value="MON">MON (Monday)</option>
+                          <option value="TUE">TUE (Tuesday)</option>
+                          <option value="WED">WED (Wednesday)</option>
+                          <option value="THU">THU (Thursday)</option>
+                          <option value="FRI">FRI (Friday)</option>
+                          <option value="SAT">SAT (Saturday)</option>
+                        </select>
+                      </div>
+
+                      {!editingStaff && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.78rem' }}>Seniority Position (Row Position) - optional:</label>
+                          <input 
+                            type="number" className="form-input"
+                            placeholder="Leave blank to add at the end"
+                            value={staffForm.row_position}
+                            onChange={(e) => setStaffForm({ ...staffForm, row_position: e.target.value })}
+                            style={{ fontSize: '0.84rem' }}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                        <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px 16px', fontSize: '0.84rem' }}>
+                          {editingStaff ? '💾 Update Staff' : '➕ Create Staff Member'}
+                        </button>
+                        {editingStaff && (
+                          <button 
+                            type="button" className="btn btn-secondary" 
+                            onClick={() => {
+                              setEditingStaff(null);
+                              setStaffForm({ name: '', designation: '', row_position: '', rest_day: '' });
+                            }}
+                            style={{ padding: '8px 14px', fontSize: '0.84rem' }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  )}
+
+                  {/* MODE 2: REMOVE / VACATE STAFF */}
+                  {staffManagementMode === 'REMOVE' && !editingStaff && (
+                    <form onSubmit={handleRemoveStaffSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f87171', marginBottom: '2px' }}>
+                        🗑️ Remove / Vacate Staff from {categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Category'}:
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Select Employee to Remove:</label>
+                        <select
+                          className="form-input"
+                          required
+                          value={removeStaffId}
+                          onChange={(e) => setRemoveStaffId(e.target.value)}
+                          style={{ fontSize: '0.84rem' }}
+                        >
+                          <option value="">-- Choose Employee ({staffList.length} staff in {categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Category'}) --</option>
+                          {staffList.map(s => (
+                            <option key={s.id} value={s.id}>
+                              SL #{s.row_position} - {s.name} ({s.designation || 'Staff'}) {s.rest_day ? `[Rest: ${s.rest_day}]` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Selected Staff Info Box */}
+                      {(() => {
+                        const targetStaffObj = staffList.find(s => String(s.id) === String(removeStaffId)) || allStaffList.find(s => String(s.id) === String(removeStaffId));
+                        if (!targetStaffObj) return null;
+                        return (
+                          <div style={{
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            fontSize: '0.78rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong style={{ color: '#f87171' }}>
+                                👤 {targetStaffObj.name}
+                              </strong>
+                              <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171' }}>
+                                Row #{targetStaffObj.row_position}
+                              </span>
+                            </div>
+                            <div style={{ color: 'var(--color-text-secondary)' }}>
+                              Designation: <strong>{targetStaffObj.designation || '-'}</strong> | Rest Day: <strong>{targetStaffObj.rest_day || 'None'}</strong>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Removal Action Type:</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setRemoveStaffAction('MARK_VACANT')}
+                            style={{
+                              flex: 1,
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              border: removeStaffAction === 'MARK_VACANT' ? '2px solid #10b981' : '1px solid var(--border-glass)',
+                              background: removeStaffAction === 'MARK_VACANT' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255,255,255,0.02)',
+                              color: removeStaffAction === 'MARK_VACANT' ? '#34d399' : 'var(--color-text-secondary)',
+                              fontWeight: removeStaffAction === 'MARK_VACANT' ? 700 : 500,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                          >
+                            <span>🔄 Mark as (VACANT)</span>
+                            <span style={{ fontSize: '0.64rem', opacity: 0.75 }}>Keep row position intact</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRemoveStaffAction('DELETE')}
+                            style={{
+                              flex: 1,
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              border: removeStaffAction === 'DELETE' ? '2px solid #ef4444' : '1px solid var(--border-glass)',
+                              background: removeStaffAction === 'DELETE' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255,255,255,0.02)',
+                              color: removeStaffAction === 'DELETE' ? '#f87171' : 'var(--color-text-secondary)',
+                              fontWeight: removeStaffAction === 'DELETE' ? 700 : 500,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                          >
+                            <span>🚫 Delete Staff</span>
+                            <span style={{ fontSize: '0.64rem', opacity: 0.75 }}>Remove permanently</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                        {removeStaffAction === 'MARK_VACANT' 
+                          ? 'ℹ️ The employee\'s row position will remain preserved as (VACANT) for later allotment or upgrade.'
+                          : '⚠️ Permanent deletion will completely remove this employee record and shift subsequent row positions.'}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                        <button
+                          type="submit"
+                          className="btn"
+                          disabled={!removeStaffId || removingStaff}
+                          style={{
+                            flex: 1,
+                            padding: '8px 16px',
+                            fontSize: '0.84rem',
+                            fontWeight: 800,
+                            background: removeStaffAction === 'MARK_VACANT' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                            color: '#ffffff',
+                            border: 'none',
+                            cursor: (!removeStaffId || removingStaff) ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {removingStaff ? 'Processing...' : (removeStaffAction === 'MARK_VACANT' ? '🔄 Mark Slot as (VACANT)' : '🗑️ Remove Staff Permanently')}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
               )}
 
               <div className="data-table-container" style={{ flex: '2' }}>
