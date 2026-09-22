@@ -367,7 +367,7 @@ export default function IndividualMusterDocument({
           {/* Official Document Header */}
           <div style={{ textAlign: 'center', borderBottom: '2px solid var(--border-gold)', paddingBottom: '16px', marginBottom: '20px' }}>
             <div style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>
-              SOUTH CENTRAL RAILWAY • GUNTUR DIVISION
+              SOUTH COAST RAILWAY • GUNTUR DIVISION
             </div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: '6px 0', color: 'var(--primary)' }}>
               INDIVIDUAL MONTHLY MUSTER ROLL & DUTY STATEMENT

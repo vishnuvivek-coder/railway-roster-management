@@ -169,7 +169,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             </span>
           </div>
           <p style={{ color: 'var(--color-text-secondary)', margin: '6px 0 0 0', fontSize: '0.88rem' }}>
-            Basic Data of Ticket Checking Staff &mdash; Guntur Division (South Central Railway)
+            Basic Data of Ticket Checking Staff &mdash; Guntur Division (South Coast Railway)
           </p>
         </div>
 
