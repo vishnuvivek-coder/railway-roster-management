@@ -5,6 +5,7 @@ import NdaDocument from './NdaDocument';
 import DiaryDocument from './DiaryDocument';
 import DailyEarningsDocument from './DailyEarningsDocument';
 import IndividualMusterDocument from './IndividualMusterDocument';
+import DailyAmenityBookingDocument from './DailyAmenityBookingDocument';
 import DutyEditModal, { isHqArrivalDuty } from './DutyEditModal';
 import NonDailyTrainModal from './NonDailyTrainModal';
 import MusterRoll from './MusterRoll';
@@ -9939,6 +9940,28 @@ export default function App() {
               >
                 📋 Individual Muster
               </button>
+
+              <button
+                type="button"
+                onClick={() => setDocSubTab('amenity')}
+                className="btn"
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '20px',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  background: docSubTab === 'amenity'
+                    ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                    : 'rgba(255,255,255,0.03)',
+                  color: docSubTab === 'amenity' ? '#0D0D0F' : 'var(--color-text-secondary)',
+                  border: docSubTab === 'amenity' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                  boxShadow: docSubTab === 'amenity' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                📊 Amenity Booking Chart
+              </button>
             </div>
 
             <div style={{ display: docSubTab === 'ta' ? 'block' : 'none' }}>
@@ -10058,6 +10081,15 @@ export default function App() {
                   setDocMonth(m);
                   try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
                 }}
+              />
+            </div>
+
+            <div style={{ display: docSubTab === 'amenity' ? 'block' : 'none' }}>
+              <DailyAmenityBookingDocument
+                authToken={authToken}
+                categories={categories}
+                selectedDate={selectedDate}
+                setSelectedDate={setSelectedDate}
               />
             </div>
           </div>

@@ -8670,6 +8670,23 @@ app.delete('/api/documents/diary/:staffId', authenticateToken, async (req, res) 
 });
 
 // ==========================================
+// DAILY AMENITY STAFF BOOKING / DAILY SUMMARY CHART
+// ==========================================
+const { generateDailyBookingChart } = require('./daily_booking_generator');
+
+// GET /api/documents/daily-booking-chart?date=2026-09-22&category_id=all
+app.get('/api/documents/daily-booking-chart', authenticateToken, async (req, res) => {
+  try {
+    const { date, category_id } = req.query;
+    const chart = await generateDailyBookingChart({ get, all, run }, date, category_id);
+    res.json(chart);
+  } catch (err) {
+    console.error('Error generating Daily Booking Chart:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // DAILY EARNINGS SHEET API ENDPOINTS
 // ==========================================
 const { generateDailyEarnings, generateStaffMonthlyEarnings, generateRangeDailyEarnings } = require('./daily_earnings_generator');

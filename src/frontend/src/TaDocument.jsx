@@ -305,7 +305,7 @@ export default function TaDocument({
   // Calculate TA claim fraction based on official Indian Railways travel rules (24-hr cycle):
   // Outward dep from HQ: > 6 hrs to midnight -> 0.7, <= 6 hrs -> 0.3
   // Outstation stay: > 12 hrs -> 1.0, 6-12 hrs -> 0.7, < 6 hrs -> 0.3
-  // Return to HQ: morning arrival (before 8 AM) -> 0.3
+  // Return to HQ: morning arrival at or before 06:00 AM -> 0.3, morning arrival after 06:00 AM (06:01 to 12:00 PM) -> 0.7, afternoon -> 1.0
   const calculateDayDutiesTa = (duties) => {
     if (!Array.isArray(duties) || duties.length === 0) return duties;
 
@@ -425,7 +425,7 @@ export default function TaDocument({
         let hours = Math.round((arrM / 60) * 10) / 10;
         if (arrM <= 5) {
           dayTa = null;
-        } else if (arrM <= 8 * 60) {
+        } else if (arrM <= 6 * 60) {
           dayTa = 0.3;
         } else if (arrM <= 12 * 60) {
           dayTa = 0.7;
@@ -453,7 +453,7 @@ export default function TaDocument({
       let arrTa = 0.3;
       if (arrM !== null) {
         if (arrM <= 5) arrTa = null;
-        else if (arrM <= 8 * 60) arrTa = 0.3;
+        else if (arrM <= 6 * 60) arrTa = 0.3;
         else if (arrM <= 12 * 60) arrTa = 0.7;
         else arrTa = 1.0;
       }
