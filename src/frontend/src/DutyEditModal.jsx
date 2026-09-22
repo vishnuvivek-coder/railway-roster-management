@@ -428,6 +428,62 @@ export default function DutyEditModal({
     return dates;
   }, [selectedDate, leaveToDate]);
 
+  // UPGRADE TO COR states
+  const [upgradeMode, setUpgradeMode] = useState('TEMPORARY'); // 'TEMPORARY' | 'PERMANENT'
+  const [targetCorLink, setTargetCorLink] = useState(1);
+  const [corLinksData, setCorLinksData] = useState([]);
+  const [loadingCorLinks, setLoadingCorLinks] = useState(false);
+  const [corTargetAction, setCorTargetAction] = useState('FILL_VACANT'); // 'FILL_VACANT' | 'REPLACE_TO_VACANT' | 'SWAP'
+  const [corNewDesignation, setCorNewDesignation] = useState('CTI');
+  const [corNewRestDay, setCorNewRestDay] = useState('MON');
+
+  // COR Rest Days Formula (Links 1-21)
+  const COR_REST_DAYS = useMemo(() => ({
+    1: 'MON', 2: 'SUN', 3: 'SAT', 4: 'FRI', 5: 'THU', 6: 'WED', 7: 'TUE',
+    8: 'MON', 9: 'SUN', 10: 'SAT', 11: 'FRI', 12: 'THU', 13: 'WED', 14: 'TUE',
+    15: 'MON', 16: 'SUN', 17: 'SAT', 18: 'FRI', 19: 'THU', 20: 'WED', 21: 'TUE'
+  }), []);
+
+  const getCorRest = useCallback((row) => {
+    const norm = ((row - 1) % 21) + 1;
+    return COR_REST_DAYS[norm] || 'MON';
+  }, [COR_REST_DAYS]);
+
+  // Fetch COR links whenever UPGRADE_COR is selected
+  useEffect(() => {
+    if (deleteReason === 'UPGRADE_COR') {
+      const fetchCorLinks = async () => {
+        try {
+          setLoadingCorLinks(true);
+          const headers = {};
+          if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+          const res = await fetch('/api/staff/cor-links-summary', { headers });
+          if (res.ok) {
+            const data = await res.json();
+            setCorLinksData(data.links || []);
+            const vacantLink = (data.links || []).find(l => l.is_vacant);
+            if (vacantLink && !targetCorLink) {
+              setTargetCorLink(vacantLink.link_number);
+              setCorNewRestDay(vacantLink.scheduled_rest_day || getCorRest(vacantLink.link_number));
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching COR links:', e);
+        } finally {
+          setLoadingCorLinks(false);
+        }
+      };
+      fetchCorLinks();
+    }
+  }, [deleteReason, authToken, getCorRest]);
+
+  // REASSIGN STAFF states
+  const [reassignOriginalStaffAction, setReassignOriginalStaffAction] = useState('SPARE_HQ'); // 'SPARE_HQ' | 'LEAVE' | 'REST' | 'SHIFTED'
+  const [reassignLeaveType, setReassignLeaveType] = useState('CL');
+  const [reassignStaffId, setReassignStaffId] = useState('');
+  const [reassignCatFilter, setReassignCatFilter] = useState('ENTIRE_ROSTER');
+  const [reassignSearchText, setReassignSearchText] = useState('');
+
   // Day-wise leave assignments: { [dateStr]: { leaveType, reason, crEarnedDate } }
   const [dayWiseLeaves, setDayWiseLeaves] = useState({});
 
@@ -1453,6 +1509,46 @@ export default function DutyEditModal({
           if (deleteSlotAction === 'REPLACE' && !repStaffIdNum) {
             throw new Error('Please choose a replacement employee to assign to this link duty.');
           }
+        } else if (deleteReason === 'UPGRADE_COR') {
+          if (upgradeMode === 'PERMANENT') {
+            if (!staffId || !targetCorLink) {
+              throw new Error('Please specify employee and target COR Link for permanent promotion.');
+            }
+            const permPayload = {
+              staff_id: staffId,
+              target_cor_row: parseInt(targetCorLink, 10),
+              target_action: corTargetAction || 'FILL_VACANT',
+              new_designation: corNewDesignation || 'CTI',
+              new_rest_day: corNewRestDay || getCorRest(targetCorLink)
+            };
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const permRes = await fetch('/api/staff/upgrade-to-cor', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(permPayload)
+            });
+            const permData = await permRes.json();
+            if (!permRes.ok) throw new Error(permData.error || 'Failed to upgrade employee permanently to COR');
+            onSuccess(permData.message || `Successfully upgraded ${dutyModal.name || 'employee'} to Conductors (COR) Link #${targetCorLink}!`);
+            onClose();
+            return;
+          }
+
+          actionCode = 'UPGRADE_TO_COR';
+          if (!finalReason) finalReason = `Upgraded to COR Link #${targetCorLink}`;
+        } else if (deleteReason === 'REASSIGN_STAFF') {
+          actionCode = 'REASSIGN_STAFF';
+          const effectiveRepId = reassignStaffId || replacementStaffId;
+          const effectiveRepObj = allStaffList?.find(s => String(s.id) === String(effectiveRepId));
+          const effectiveRepName = effectiveRepObj?.name || replacementName;
+
+          if (!effectiveRepId) {
+            throw new Error('Please choose a replacement employee to reassign to this link duty.');
+          }
+          if (!finalReason) {
+            finalReason = `Reassigned Link #${targetLink || 'Duty'} to ${effectiveRepName} (${reassignOriginalStaffAction === 'SPARE_HQ' ? 'Original staff Available at HQ / Spare' : reassignOriginalStaffAction})`;
+          }
         }
 
         const chosenNonDaily = shiftedMode === 'NON_DAILY'
@@ -1461,6 +1557,13 @@ export default function DutyEditModal({
         const finalExtraTrainNo = chosenNonDaily
           ? chosenNonDaily.train_number
           : (shiftedMode === 'NON_DAILY' ? (shiftedNonDailyTrainNo.trim() || null) : null);
+
+        const effectiveRepIdVal = deleteReason === 'REASSIGN_STAFF'
+          ? (reassignStaffId || replacementStaffId)
+          : repStaffIdNum;
+        const effectiveRepNameVal = deleteReason === 'REASSIGN_STAFF'
+          ? (allStaffList?.find(s => String(s.id) === String(effectiveRepIdVal))?.name || repStaffName)
+          : repStaffName;
 
         const payload = {
           staff_id: staffId,
@@ -1472,6 +1575,8 @@ export default function DutyEditModal({
           day_wise_leaves: dayWisePayload,
           advance_train_no: advanceTrainNo,
           vacate_next_link: advanceVacateNext,
+          target_cor_link: targetCorLink ? parseInt(targetCorLink, 10) : 1,
+          original_staff_action: reassignOriginalStaffAction,
           shifted_mode: shiftedMode,
           shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : (shiftedMode === 'MUTUAL' ? placeDesc : null)),
           shifted_link_number: shiftedMode === 'LINK' && shiftedLinkNum ? parseInt(shiftedLinkNum, 10) : null,
@@ -1479,25 +1584,30 @@ export default function DutyEditModal({
           shifted_non_daily_id: shiftedMode === 'NON_DAILY' && shiftedNonDailyId ? parseInt(shiftedNonDailyId, 10) : null,
           extra_train_no: finalExtraTrainNo,
           is_extra: shiftedMode === 'NON_DAILY' ? 1 : 0,
+          target_link: targetLink ? parseInt(targetLink, 10) : null,
           link_number: targetLink ? parseInt(targetLink, 10) : null,
           target_category_id: targetCategoryId ? parseInt(targetCategoryId, 10) : null,
           reason: finalReason,
-          new_link_number: null,
-          replacement_type: shiftedMode === 'MUTUAL' ? 'NONE' : (deleteSlotAction === 'REPLACE' ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE')),
-          replacement_staff_id: shiftedMode === 'MUTUAL' ? null : repStaffIdNum,
-          replacement_name: shiftedMode === 'MUTUAL' ? null : repStaffName,
+          new_link_number: deleteReason === 'UPGRADE_COR' ? parseInt(targetCorLink, 10) : null,
+          replacement_type: shiftedMode === 'MUTUAL' ? 'NONE' : ((deleteSlotAction === 'REPLACE' || deleteReason === 'REASSIGN_STAFF') ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE')),
+          replacement_staff_id: shiftedMode === 'MUTUAL' ? null : (effectiveRepIdVal ? parseInt(effectiveRepIdVal, 10) : null),
+          replacement_name: shiftedMode === 'MUTUAL' ? null : effectiveRepNameVal,
           wrong_allotment_action: deleteSlotAction
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
-        if (shiftedMode !== 'MUTUAL' && deleteSlotAction === 'REPLACE' && selectedReplacementStaffObj) {
-          const repStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
-          if (repStatus.isUnavailable && replacementCatId !== 'ENTIRE_ROSTER') {
-            throw new Error(`${selectedReplacementStaffObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
+        const chosenRepObj = deleteReason === 'REASSIGN_STAFF'
+          ? (allStaffList?.find(s => String(s.id) === String(effectiveRepIdVal)) || selectedReplacementStaffObj)
+          : selectedReplacementStaffObj;
+
+        if (shiftedMode !== 'MUTUAL' && (deleteSlotAction === 'REPLACE' || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
+          const repStatus = getStaffAssignmentStatus(chosenRepObj, selectedDate);
+          if (repStatus.isUnavailable && (deleteReason === 'REASSIGN_STAFF' ? reassignCatFilter : replacementCatId) !== 'ENTIRE_ROSTER') {
+            throw new Error(`${chosenRepObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
           }
           if (repStatus.isAssigned) {
             setShiftConfirmDialog({
-              staffName: selectedReplacementStaffObj.name,
+              staffName: chosenRepObj.name,
               currentTrainDesc: repStatus.trainDesc,
               targetDesc: targetLink ? `Link #${targetLink}` : 'Duty',
               onConfirm: () => doExecuteDelete(payload)
@@ -2008,7 +2118,7 @@ export default function DutyEditModal({
                   </span>
                 </div>
 
-                {/* 6 Reasons for Delete Buttons */}
+                {/* 8 Reasons for Delete / Roster Adjustment Buttons */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {[
                     { id: 'LEAVE', label: '1. Leave', icon: '🏖️', desc: 'CL, LAP, LHAP, etc.' },
@@ -2016,7 +2126,9 @@ export default function DutyEditModal({
                     { id: 'ADVANCE_BOOKED', label: '3. Advance Booked', icon: '⚡', desc: 'Utilised on advance train' },
                     { id: 'ABSENT', label: '4. Absent', icon: '🚫', desc: 'Unauthorized [O]' },
                     { id: 'SHIFTED', label: '5. Shifted Place', icon: '🔄', desc: 'Shifted to place / link' },
-                    { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '❌', desc: 'Remove mistaken allotment' }
+                    { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '❌', desc: 'Remove mistaken allotment' },
+                    { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
+                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '👥', desc: 'Reassign link / swap staff' }
                   ].map(r => (
                     <button
                       key={r.id}
@@ -3142,8 +3254,493 @@ export default function DutyEditModal({
                   </div>
                 )}
 
+                {/* SUB-OPTION 7: UPGRADE TO COR (Conductors / Category 1) */}
+                {deleteReason === 'UPGRADE_COR' && (
+                  <div style={{
+                    background: 'rgba(212, 161, 92, 0.06)',
+                    border: '1px solid rgba(212, 161, 92, 0.3)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⭐ Option 7: Upgrade to Conductors (COR / Category 1)</span>
+                      </div>
+                      <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.2)', color: 'var(--primary)', fontSize: '0.72rem', border: '1px solid var(--border-gold)' }}>
+                        COR Promotion & Relief
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+                      Upgrade <strong>{dutyModal.name || 'this employee'}</strong> ({initialStaffObj?.designation || 'Staff'}) on <strong>{selectedDate}</strong> to work on Conductors (COR) link.
+                    </div>
+
+                    {/* Mode Toggle: Daily Duty Upgrade vs Permanent Promotion */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setUpgradeMode('TEMPORARY')}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          border: upgradeMode === 'TEMPORARY' ? '2px solid var(--primary)' : '1px solid var(--border-glass)',
+                          background: upgradeMode === 'TEMPORARY' ? 'rgba(212, 161, 92, 0.18)' : 'rgba(255,255,255,0.02)',
+                          color: upgradeMode === 'TEMPORARY' ? '#ffffff' : 'var(--color-text-secondary)',
+                          fontWeight: upgradeMode === 'TEMPORARY' ? 700 : 500,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📅 Daily Duty Upgrade (For {selectedDate})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUpgradeMode('PERMANENT')}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          border: upgradeMode === 'PERMANENT' ? '2px solid #a855f7' : '1px solid var(--border-glass)',
+                          background: upgradeMode === 'PERMANENT' ? 'rgba(168, 85, 247, 0.18)' : 'rgba(255,255,255,0.02)',
+                          color: upgradeMode === 'PERMANENT' ? '#ffffff' : 'var(--color-text-secondary)',
+                          fontWeight: upgradeMode === 'PERMANENT' ? 700 : 500,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🎖️ Permanent Cadre Upgrade (Database)
+                      </button>
+                    </div>
+
+                    {/* Target COR Link Selector */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)' }}>
+                        Select Target COR Link (Link 1 to 21):
+                      </label>
+                      <select
+                        className="form-input"
+                        value={targetCorLink}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setTargetCorLink(val);
+                          const corDef = corLinksData.find(l => l.link_number === val);
+                          const expRest = corDef?.scheduled_rest_day || getCorRest(val);
+                          setCorNewRestDay(expRest);
+                          if (corDef?.is_vacant) {
+                            setCorTargetAction('FILL_VACANT');
+                          } else if (corTargetAction === 'FILL_VACANT') {
+                            setCorTargetAction('REPLACE_TO_VACANT');
+                          }
+                        }}
+                        style={{ fontSize: '0.84rem' }}
+                      >
+                        {Array.from({ length: 21 }, (_, i) => i + 1).map(num => {
+                          const corDef = corLinksData.find(l => l.link_number === num);
+                          const isVac = corDef ? corDef.is_vacant : false;
+                          const trInfo = corDef ? (corDef.train_numbers ? ` [Tr: ${corDef.train_numbers}]` : (corDef.from_station ? ` [${corDef.from_station} ➔ ${corDef.to_station}]` : '')) : '';
+                          const occName = corDef && corDef.occupant && !corDef.is_vacant ? ` (Occupant: ${corDef.occupant.name})` : (isVac ? ' 🟢 [VACANT]' : '');
+                          const restDay = corDef?.scheduled_rest_day || getCorRest(num);
+                          return (
+                            <option key={num} value={num}>
+                              Link #{num}{trInfo} — Rest: {restDay}{occName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Selected COR Link Train Card */}
+                    {(() => {
+                      const selectedCorDef = corLinksData.find(l => l.link_number === parseInt(targetCorLink, 10)) || (allLinksList || []).find(l => l.category_id === 1 && l.link_number === parseInt(targetCorLink, 10));
+                      if (!selectedCorDef) return null;
+                      return (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(212, 161, 92, 0.1)',
+                          border: '1px solid rgba(212, 161, 92, 0.25)',
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ color: 'var(--primary)' }}>
+                              🚆 Conductor Link #{targetCorLink} {selectedCorDef.train_numbers ? `(Train ${selectedCorDef.train_numbers})` : ''}
+                            </strong>
+                            <span className="badge" style={{ background: selectedCorDef.is_vacant ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: selectedCorDef.is_vacant ? '#10b981' : '#f59e0b' }}>
+                              {selectedCorDef.is_vacant ? '🟢 Vacant Slot' : '🔒 Occupied Link'}
+                            </span>
+                          </div>
+                          <div style={{ color: 'var(--color-text-secondary)' }}>
+                            Route: <strong>{selectedCorDef.from_station || '---'} ➔ {selectedCorDef.to_station || '---'}</strong> | Scheduled Rest: <strong>{selectedCorDef.scheduled_rest_day || getCorRest(targetCorLink)}</strong>
+                          </div>
+                          {selectedCorDef.occupant && !selectedCorDef.is_vacant && (
+                            <div style={{ color: '#f59e0b', fontSize: '0.74rem' }}>
+                              Current Link Occupant: <strong>{selectedCorDef.occupant.name}</strong> ({selectedCorDef.occupant.designation || 'CTI'})
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Permanent Upgrade Options */}
+                    {upgradeMode === 'PERMANENT' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '2px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.76rem' }}>New Designation in COR:</label>
+                            <select
+                              className="form-input"
+                              value={corNewDesignation}
+                              onChange={(e) => setCorNewDesignation(e.target.value)}
+                              style={{ fontSize: '0.82rem' }}
+                            >
+                              <option value="CTI">CTI (Chief Ticket Inspector)</option>
+                              <option value="TTI">TTI (Traveling Ticket Inspector)</option>
+                              <option value="Sr.TE">Sr.TE</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.76rem' }}>Scheduled Rest Day in COR:</label>
+                            <select
+                              className="form-input"
+                              value={corNewRestDay}
+                              onChange={(e) => setCorNewRestDay(e.target.value)}
+                              style={{ fontSize: '0.82rem' }}
+                            >
+                              {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                                <option key={day} value={day}>{day} ({day === getCorRest(targetCorLink) ? 'Standard Formula' : 'Custom'})</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.76rem' }}>Cadre Action for Link #{targetCorLink}:</label>
+                          <select
+                            className="form-input"
+                            value={corTargetAction}
+                            onChange={(e) => setCorTargetAction(e.target.value)}
+                            style={{ fontSize: '0.82rem' }}
+                          >
+                            <option value="FILL_VACANT">Fill Vacant Position (Recommended if Link is Vacant)</option>
+                            <option value="REPLACE_TO_VACANT">Replace Current Occupant (Leave outgoing slot vacant)</option>
+                            <option value="SWAP">Swap Positions (Move current occupant to this staff's old slot)</option>
+                          </select>
+                        </div>
+
+                        <div style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(168, 85, 247, 0.1)',
+                          border: '1px solid rgba(168, 85, 247, 0.3)',
+                          fontSize: '0.76rem',
+                          color: '#d8b4fe'
+                        }}>
+                          ℹ️ Permanent promotion will update the master roster. Their old slot on <strong>Row {initialStaffObj?.row_position || targetLink}</strong> in <strong>{categories.find(c => c.id === dutyModal.categoryId)?.name || 'Current Category'}</strong> will be preserved as <strong style={{ color: '#10b981' }}>VACANT (V)</strong>.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Multi-day date range for Daily Upgrade */}
+                    {upgradeMode === 'TEMPORARY' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.76rem' }}>From Date:</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ fontSize: '0.76rem' }}>To Date (Optional multi-day):</label>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={leaveToDate}
+                            min={selectedDate}
+                            onChange={(e) => setLeaveToDate(e.target.value)}
+                            style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                      ℹ️ Upgraded Conductor duty will be recorded as <strong style={{ color: '#10b981' }}>[P] (Present)</strong> on the Muster Roll and Staff Movement Register.
+                    </div>
+                  </div>
+                )}
+
+                {/* SUB-OPTION 8: REASSIGN STAFF */}
+                {deleteReason === 'REASSIGN_STAFF' && (
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>👥 Option 8: Reassign Link / Duty to Staff</span>
+                      </div>
+                      <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', fontSize: '0.72rem', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                        Link #{targetLink || 'Duty'}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+                      Reassign <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> to another employee from LR pool or Roster.
+                    </div>
+
+                    {/* 1. Status of Current Staff */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#93c5fd' }}>
+                        1. What happens to {dutyModal.name || 'current employee'}?
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px' }}>
+                        {[
+                          { id: 'SPARE_HQ', label: '🟢 Spare at HQ [P]', desc: 'Available for duty booking' },
+                          { id: 'LEAVE', label: '🏖️ Send on Leave', desc: 'CL, LAP, LHAP, etc.' },
+                          { id: 'REST', label: '🛋️ Weekly Rest [R]', desc: 'Rest day / Off' },
+                          { id: 'SHIFTED', label: '🔄 Shifted Place', desc: 'Shifted to other duty' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => setReassignOriginalStaffAction(st.id)}
+                            style={{
+                              padding: '8px 6px',
+                              borderRadius: '6px',
+                              border: reassignOriginalStaffAction === st.id ? '2px solid #3b82f6' : '1px solid var(--border-glass)',
+                              background: reassignOriginalStaffAction === st.id ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.02)',
+                              color: reassignOriginalStaffAction === st.id ? '#ffffff' : 'var(--color-text-secondary)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '2px',
+                              fontSize: '0.78rem',
+                              fontWeight: reassignOriginalStaffAction === st.id ? 700 : 500
+                            }}
+                          >
+                            <span>{st.label}</span>
+                            <span style={{ fontSize: '0.64rem', opacity: 0.75 }}>{st.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* If Leave selected for original staff */}
+                      {reassignOriginalStaffAction === 'LEAVE' && (
+                        <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {LEAVE_TYPES.map(l => (
+                            <button
+                              key={l.code}
+                              type="button"
+                              onClick={() => setReassignLeaveType(l.code)}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: reassignLeaveType === l.code ? `1px solid ${l.color}` : '1px solid var(--border-glass)',
+                                background: reassignLeaveType === l.code ? l.bg : 'rgba(255,255,255,0.02)',
+                                color: reassignLeaveType === l.code ? '#ffffff' : 'var(--color-text-secondary)',
+                                fontSize: '0.74rem',
+                                fontWeight: reassignLeaveType === l.code ? 700 : 500,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {l.code}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Choose Replacement Staff */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#93c5fd', margin: 0 }}>
+                          2. Choose New Assigned / Replacement Employee:
+                        </label>
+                        <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={showAlreadyAssigned}
+                            onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
+                          />
+                          <span>⚠️ Show busy staff</span>
+                        </label>
+                      </div>
+
+                      {/* Category Filter Pills */}
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                        {[
+                          { id: 'ENTIRE_ROSTER', label: '👥 Entire Roster' },
+                          { id: 'ALL', label: '🟢 Available at HQ' },
+                          { id: '4', label: 'LR Pool' },
+                          { id: '2', label: 'Sleeper' },
+                          { id: '1', label: 'Conductors' },
+                          { id: '3', label: 'Ladies' },
+                          { id: 'NON_DAILY', label: '⚡ Non-Daily' }
+                        ].map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setReassignCatFilter(c.id);
+                              setReplacementCatId(c.id);
+                            }}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              border: reassignCatFilter === c.id ? '1px solid #3b82f6' : '1px solid var(--border-glass)',
+                              background: reassignCatFilter === c.id ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.02)',
+                              color: reassignCatFilter === c.id ? '#93c5fd' : 'var(--color-text-secondary)',
+                              fontSize: '0.74rem',
+                              fontWeight: reassignCatFilter === c.id ? 700 : 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Search and Dropdown */}
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="🔍 Search name, PF, designation..."
+                          value={reassignSearchText}
+                          onChange={(e) => setReassignSearchText(e.target.value)}
+                          style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+                        />
+                        {reassignSearchText && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setReassignSearchText('')}
+                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        className="form-input"
+                        value={reassignStaffId || replacementStaffId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setReassignStaffId(val);
+                          setReplacementStaffId(val);
+                          const found = allStaffList.find(s => String(s.id) === String(val));
+                          if (found) setReplacementName(found.name);
+                        }}
+                        style={{ fontSize: '0.84rem' }}
+                      >
+                        <option value="">-- Choose Employee to Reassign ({eligibleReplacementStaff.filter(s => !reassignSearchText || s.name.toLowerCase().includes(reassignSearchText.toLowerCase()) || (s.pf_no && s.pf_no.includes(reassignSearchText))).length} options) --</option>
+                        {eligibleReplacementStaff
+                          .filter(s => !reassignSearchText || s.name.toLowerCase().includes(reassignSearchText.toLowerCase()) || (s.pf_no && s.pf_no.includes(reassignSearchText)))
+                          .map(s => {
+                            const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                            const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+                            const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                            let statusPrefix = '';
+                            if (assignStatus.isAssigned) {
+                              statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
+                            } else if (assignStatus.isUnavailable) {
+                              statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
+                            } else {
+                              statusPrefix = '🟢 [AVAILABLE] ';
+                            }
+                            return (
+                              <option key={s.id} value={s.id}>
+                                {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+
+                    {/* Selected Replacement Card Preview */}
+                    {(() => {
+                      const repId = reassignStaffId || replacementStaffId;
+                      const repObj = allStaffList?.find(s => String(s.id) === String(repId));
+                      if (!repObj) return null;
+                      const assignStatus = getStaffAssignmentStatus(repObj, selectedDate);
+                      const catName = categories.find(c => c.id === repObj.category_id)?.name || 'Staff';
+                      return (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ color: '#93c5fd' }}>
+                              👤 New Assignee: {repObj.name} ({repObj.designation || 'Staff'})
+                            </strong>
+                            <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
+                              Takes Link #{targetLink || 'Duty'}
+                            </span>
+                          </div>
+                          <div style={{ color: 'var(--color-text-secondary)' }}>
+                            Category: <strong>{catName}</strong> {repObj.pf_no ? `| PF: ${repObj.pf_no}` : ''} | Current Status: <strong>{assignStatus.isAssigned ? `Working ${assignStatus.trainDesc}` : (assignStatus.isUnavailable ? (assignStatus.unavailableReason || 'Rest') : '🟢 Available at HQ')}</strong>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Date Range Selection */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '2px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>From Date:</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>To Date (Optional multi-day):</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={leaveToDate}
+                          min={selectedDate}
+                          onChange={(e) => setLeaveToDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                      ℹ️ Replacement employee will be allotted to <strong>Link #{targetLink || 'Duty'}</strong> with Muster Roll <strong style={{ color: '#10b981' }}>[P] (Present)</strong>.
+                    </div>
+                  </div>
+                )}
+
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
-                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && (
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && (
                   <div style={{
                     background: 'rgba(255, 255, 255, 0.02)',
                     border: '1px solid var(--border-glass)',
@@ -3669,27 +4266,35 @@ export default function DutyEditModal({
                 disabled={submitting}
                 style={{
                   background: activeMode === 'DELETE' 
-                    ? ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
-                        ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
-                        : 'linear-gradient(135deg, #ef4444, #dc2626)')
+                    ? (deleteReason === 'UPGRADE_COR'
+                        ? 'linear-gradient(135deg, #d97706, #b45309)'
+                        : (deleteReason === 'REASSIGN_STAFF'
+                            ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                            : ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
+                                ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                                : 'linear-gradient(135deg, #ef4444, #dc2626)')))
                     : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#ffffff',
                   border: 'none',
                   fontWeight: 700,
                   padding: '8px 20px',
                   minWidth: '160px',
-                  boxShadow: (activeMode === 'DELETE' && deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
-                    ? '0 0 16px rgba(2, 132, 199, 0.45)'
+                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')))
+                    ? '0 0 16px rgba(212, 161, 92, 0.45)'
                     : 'none'
                 }}
               >
-                {submitting ? 'Shifting...' :
+                {submitting ? 'Saving Changes...' :
                  activeMode === 'DELETE' ? (
-                   deleteReason === 'WRONG_ALLOTMENT'
-                     ? (deleteSlotAction === 'REPLACE' ? '🔄 Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '⏮️ Revert Wrong Allotment' : '❌ Remove Wrong Allotment'))
-                     : (deleteReason === 'SHIFTED' 
-                         ? (shiftedMode === 'MUTUAL' ? '🤝 Allow & Shift Employee Names' : '🔄 Shift & Save Duty') 
-                         : `🗑️ Delete & Save Status`)
+                   deleteReason === 'UPGRADE_COR'
+                     ? (upgradeMode === 'PERMANENT' ? '🎖️ Upgrade to COR (Cadre)' : `⭐ Upgrade to COR Link #${targetCorLink || '1'}`)
+                     : (deleteReason === 'REASSIGN_STAFF'
+                         ? `👥 Reassign Link #${targetLink || 'Duty'} to Staff`
+                         : (deleteReason === 'WRONG_ALLOTMENT'
+                             ? (deleteSlotAction === 'REPLACE' ? '🔄 Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '⏮️ Revert Wrong Allotment' : '❌ Remove Wrong Allotment'))
+                             : (deleteReason === 'SHIFTED' 
+                                 ? (shiftedMode === 'MUTUAL' ? '🤝 Allow & Shift Employee Names' : '🔄 Shift & Save Duty') 
+                                 : `🗑️ Delete & Save Status`)))
                  ) :
                  `➕ Assign to Link #${targetLink || 'Duty'}`}
               </button>
