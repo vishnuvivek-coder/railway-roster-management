@@ -9141,6 +9141,249 @@ const NON_DAILY_LINK_TRAINS = {
   63: 'R'
 };
 
+const NON_DAILY_PAIRS_MAP = {
+  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #60)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
+  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #61)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
+  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #62)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
+  '17261': { returnTrain: '17070', serviceName: 'GNT-TPTY-RU-GNT Exp', from: 'GNT', via: 'TPTY/RU', to: 'GNT', depTime: '16:30', retDepTime: '22:40', arrHqTime: '05:15', totalDays: 3, restTill: '13:15', coaches: 'SL / AC' },
+  '17231': { returnTrain: '17232', serviceName: 'BZA-CHZ-BZA Exp', from: 'BZA', via: 'CHZ', to: 'BZA', depTime: '13:50', retDepTime: '23:40', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
+  '07029': { returnTrain: '17232', serviceName: 'BZA-CHZ-BZA Exp', from: 'BZA', via: 'CHZ', to: 'BZA', depTime: '11:05', retDepTime: '23:40', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
+  '02811': { returnTrain: '02812', serviceName: 'GNT-DMM-BZA Spl', from: 'GNT', via: 'DMM', to: 'BZA', depTime: '08:30', retDepTime: '08:30', arrHqTime: '18:00', totalDays: 2, restTill: '02:00', coaches: 'SL / AC' },
+  '07609': { returnTrain: '07610', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '02:55', retDepTime: '13:35', arrHqTime: '10:00', totalDays: 2, restTill: '18:00', coaches: 'SL / AC' },
+  '07615': { returnTrain: '07616', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '23:10', retDepTime: '07:30', arrHqTime: '15:05', totalDays: 2, restTill: '23:05', coaches: 'SL / AC' },
+  '17041': { returnTrain: '17042', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '10:40', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
+  '12604': { returnTrain: '16357', serviceName: 'GNT-MAS-MS-GNT Exp', from: 'GNT', via: 'MAS/MS', to: 'GNT', depTime: '22:00', retDepTime: '13:00', arrHqTime: '21:10', totalDays: 2, restTill: '05:10', coaches: 'SL / AC' },
+  '18063': { returnTrain: '18064', serviceName: 'GNT-DMM-GNT Exp', from: 'GNT', via: 'DMM', to: 'GNT', depTime: '09:45', retDepTime: '08:15', arrHqTime: '19:25', totalDays: 2, restTill: '03:25', coaches: 'SL / AC' },
+  '07193': { returnTrain: '07194', serviceName: 'GNT-KPD-GNT Spl', from: 'GNT', via: 'KPD', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
+  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' },
+  '17646': { returnTrain: '17625', serviceName: 'GNT-SC-KCG-RAL Exp', from: 'GNT', via: 'SC/KCG', to: 'RAL', depTime: '08:50', retDepTime: '22:20', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
+  '17425': { returnTrain: '17426', serviceName: 'GNT-SC-GNT Exp', from: 'GNT', via: 'SC', to: 'GNT', depTime: '10:40', retDepTime: '11:40', arrHqTime: '17:10', totalDays: 2, restTill: '01:10', coaches: 'SL / AC' }
+};
+
+const NON_DAILY_MULTI_DAY_SERVICES = [
+  {
+    id: '22882_22881',
+    name: 'BBS-PUNE Exp (Link #60)',
+    linkNumber: 60,
+    serviceDays: ['WED'],
+    totalDays: 3,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (WED)', train: '22882', from: 'GNT', to: 'WADI', depTime: '10:35', arrTime: '21:10', coaches: 'SL / AC', dutyCode: '22882', remarks: 'BBS-PUNE Exp (GNT-WADI)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (THU)', train: '22881', from: 'WADI', to: 'GNT', depTime: '16:55', arrTime: '02:05', coaches: 'SL / AC', dutyCode: '22881', remarks: 'PUNE-BBS Exp (WADI-GNT)' },
+      { dayIndex: 3, dayLabel: 'Day 3 (FRI)', train: '---', from: 'GNT', to: 'GNT', depTime: '', arrTime: '02:05', coaches: '-', dutyCode: 'AVL', remarks: 'Arr GNT 02:05 • 8h HQ Rest till 10:05 • Available (AVL)' }
+    ]
+  },
+  {
+    id: '17221_17222_WED',
+    name: 'COA-LTT Exp (Link #61 - Wed Run)',
+    linkNumber: 61,
+    serviceDays: ['WED'],
+    totalDays: 3,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (WED)', train: '17221', from: 'GNT', to: 'WADI', depTime: '13:35', arrTime: '00:05', coaches: 'SL / AC', dutyCode: '17221', remarks: 'COA-LTT Exp (GNT-WADI)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (THU)', train: '17222', from: 'WADI', to: 'GNT', depTime: '23:00', arrTime: '08:15', coaches: 'SL / AC', dutyCode: '17222', remarks: 'LTT-COA Exp (WADI-GNT)' },
+      { dayIndex: 3, dayLabel: 'Day 3 (FRI)', train: '---', from: 'GNT', to: 'GNT', depTime: '', arrTime: '08:15', coaches: '-', dutyCode: 'AVL', remarks: 'Arr GNT 08:15 • 8h HQ Rest till 16:15 • Available (AVL)' }
+    ]
+  },
+  {
+    id: '17221_17222_SAT',
+    name: 'COA-LTT Exp (Link #61 - Sat Run)',
+    linkNumber: 61,
+    serviceDays: ['SAT'],
+    totalDays: 3,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SAT)', train: '17221', from: 'GNT', to: 'WADI', depTime: '13:35', arrTime: '00:05', coaches: 'SL / AC', dutyCode: '17221', remarks: 'COA-LTT Exp (GNT-WADI)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SUN)', train: '17222', from: 'WADI', to: 'GNT', depTime: '23:00', arrTime: '08:15', coaches: 'SL / AC', dutyCode: '17222', remarks: 'LTT-COA Exp (WADI-GNT)' },
+      { dayIndex: 3, dayLabel: 'Day 3 (MON)', train: '---', from: 'GNT', to: 'GNT', depTime: '', arrTime: '08:15', coaches: '-', dutyCode: 'AVL', remarks: 'Arr GNT 08:15 • 8h HQ Rest till 16:15 • Available (AVL)' }
+    ]
+  },
+  {
+    id: '17069_17262',
+    name: 'GNT-TPTY / RU-GNT Exp (Link #62)',
+    linkNumber: 62,
+    serviceDays: ['WED'],
+    totalDays: 3,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (WED)', train: '17069', from: 'GNT', to: 'RU', depTime: '22:40', arrTime: '07:15', coaches: 'SL / AC', dutyCode: '17069', remarks: 'GNT-TPTY / RU Exp (GNT-RU)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (THU)', train: '17262', from: 'TPTY', to: 'GNT', depTime: '19:25', arrTime: '07:20', coaches: 'SL / AC', dutyCode: '17262', remarks: 'TPTY-GNT Exp (TPTY-GNT)' },
+      { dayIndex: 3, dayLabel: 'Day 3 (FRI)', train: '---', from: 'GNT', to: 'GNT', depTime: '', arrTime: '07:20', coaches: '-', dutyCode: 'AVL', remarks: 'Arr GNT 07:20 • 8h HQ Rest till 15:20 • Available (AVL)' }
+    ]
+  },
+  {
+    id: '17261_17070',
+    name: 'GNT-TPTY-RU-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['THU'],
+    totalDays: 3,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (THU)', train: '17261', from: 'GNT', to: 'TPTY', depTime: '16:30', arrTime: '03:50', coaches: 'SL / AC', dutyCode: '17261', remarks: 'GNT-TPTY Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (FRI)', train: '17070', from: 'RU', to: 'GNT', depTime: '22:40', arrTime: '05:15', coaches: 'SL / AC', dutyCode: '17070', remarks: 'RU-GNT Exp' },
+      { dayIndex: 3, dayLabel: 'Day 3 (SAT)', train: '---', from: 'GNT', to: 'GNT', depTime: '', arrTime: '05:15', coaches: '-', dutyCode: 'AVL', remarks: 'Arr GNT 05:15 • 8h HQ Rest till 13:15 • Available (AVL)' }
+    ]
+  },
+  {
+    id: '17231_17232_SUN',
+    name: 'BZA-CHZ-BZA Exp (Sun Run)',
+    linkNumber: null,
+    serviceDays: ['SUN'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '17231', from: 'BZA', to: 'CHZ', depTime: '13:50', arrTime: '20:40', coaches: 'SL / AC', dutyCode: '17231', remarks: 'BZA-CHZ Exp (or 07029)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (MON)', train: '17232', from: 'CHZ', to: 'BZA', depTime: '23:40', arrTime: '06:25', coaches: 'SL / AC', dutyCode: '17232', remarks: 'CHZ-BZA Exp (Arr 06:25)' }
+    ]
+  },
+  {
+    id: '17231_17232_FRI',
+    name: 'BZA-CHZ-BZA Exp (Fri Run)',
+    linkNumber: null,
+    serviceDays: ['FRI'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (FRI)', train: '17231', from: 'BZA', to: 'CHZ', depTime: '13:50', arrTime: '20:40', coaches: 'SL / AC', dutyCode: '17231', remarks: 'BZA-CHZ Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SAT)', train: '17232', from: 'CHZ', to: 'BZA', depTime: '23:40', arrTime: '06:25', coaches: 'SL / AC', dutyCode: '17232', remarks: 'CHZ-BZA Exp (Arr 06:25)' }
+    ]
+  },
+  {
+    id: '02811_02812',
+    name: 'GNT-DMM-BZA Spl',
+    linkNumber: null,
+    serviceDays: ['SUN'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '02811', from: 'GNT', to: 'DMM', depTime: '08:30', arrTime: '21:00', coaches: 'SL / AC', dutyCode: '02811', remarks: 'GNT-DMM Spl' },
+      { dayIndex: 2, dayLabel: 'Day 2 (MON)', train: '02812', from: 'DMM', to: 'BZA', depTime: '08:30', arrTime: '18:00', coaches: 'SL / AC', dutyCode: '02812', remarks: 'DMM-BZA Spl' }
+    ]
+  },
+  {
+    id: '07609_07610',
+    name: 'GNT-RU-GNT Spl',
+    linkNumber: null,
+    serviceDays: ['MON'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (MON)', train: '07609', from: 'GNT', to: 'RU', depTime: '02:55', arrTime: '09:30', coaches: 'SL / AC', dutyCode: '07609', remarks: 'GNT-RU Spl' },
+      { dayIndex: 2, dayLabel: 'Day 2 (TUE)', train: '07610', from: 'RU', to: 'GNT', depTime: '13:35', arrTime: '10:00', coaches: 'SL / AC', dutyCode: '07610', remarks: 'RU-GNT Spl (Arr 10:00)' }
+    ]
+  },
+  {
+    id: '07615_07616',
+    name: 'GNT-RU-GNT Spl',
+    linkNumber: null,
+    serviceDays: ['TUE'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (TUE)', train: '07615', from: 'GNT', to: 'RU', depTime: '23:10', arrTime: '08:10', coaches: 'SL / AC', dutyCode: '07615', remarks: 'GNT-RU Spl' },
+      { dayIndex: 2, dayLabel: 'Day 2 (WED)', train: '07616', from: 'RU', to: 'GNT', depTime: '07:30', arrTime: '15:05', coaches: 'SL / AC', dutyCode: '07616', remarks: 'RU-GNT Spl' }
+    ]
+  },
+  {
+    id: '17041_17042',
+    name: 'GNT-RU-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['TUE'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (TUE)', train: '17041', from: 'GNT', to: 'RU', depTime: '12:20', arrTime: '19:20', coaches: 'SL / AC', dutyCode: '17041', remarks: 'GNT-RU Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (WED)', train: '17042', from: 'RU', to: 'GNT', depTime: '10:40', arrTime: '17:40', coaches: 'SL / AC', dutyCode: '17042', remarks: 'RU-GNT Exp' }
+    ]
+  },
+  {
+    id: '12604_16357',
+    name: 'GNT-MAS-MS-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['THU'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (THU)', train: '12604', from: 'GNT', to: 'MAS', depTime: '22:00', arrTime: '05:40', coaches: 'SL / AC', dutyCode: '12604', remarks: 'GNT-MAS Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (FRI)', train: '16357', from: 'MS', to: 'GNT', depTime: '13:00', arrTime: '21:10', coaches: 'SL / AC', dutyCode: '16357', remarks: 'MS-GNT Exp' }
+    ]
+  },
+  {
+    id: '18063_18064',
+    name: 'GNT-DMM-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['FRI'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (FRI)', train: '18063', from: 'GNT', to: 'DMM', depTime: '09:45', arrTime: '20:30', coaches: 'SL / AC', dutyCode: '18063', remarks: 'GNT-DMM Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SAT)', train: '18064', from: 'DMM', to: 'GNT', depTime: '08:15', arrTime: '19:25', coaches: 'SL / AC', dutyCode: '18064', remarks: 'DMM-GNT Exp' }
+    ]
+  },
+  {
+    id: '07193_07194',
+    name: 'GNT-KPD-GNT Spl',
+    linkNumber: null,
+    serviceDays: ['SAT'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SAT)', train: '07193', from: 'GNT', to: 'KPD', depTime: '05:30', arrTime: '16:30', coaches: 'SL / AC', dutyCode: '07193', remarks: 'GNT-KPD Spl' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SUN/TUE)', train: '07194', from: 'KPD', to: 'GNT', depTime: '01:00', arrTime: '10:40', coaches: 'SL / AC', dutyCode: '07194', remarks: 'KPD-GNT Spl' }
+    ]
+  },
+  {
+    id: '16358_12603',
+    name: 'GNT-MS-MAS-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['SAT'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SAT)', train: '16358', from: 'GNT', to: 'MS', depTime: '14:00', arrTime: '22:55', coaches: 'SL / AC', dutyCode: '16358', remarks: 'GNT-MS Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SUN)', train: '12603', from: 'MAS', to: 'GNT', depTime: '16:45', arrTime: '23:25', coaches: 'SL / AC', dutyCode: '12603', remarks: 'MAS-GNT Exp' }
+    ]
+  },
+  {
+    id: '17646_17625',
+    name: 'GNT-SC-KCG-RAL Exp',
+    linkNumber: null,
+    serviceDays: ['MON'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (MON)', train: '17646', from: 'GNT', to: 'SC', depTime: '08:50', arrTime: '16:00', coaches: 'SL / AC', dutyCode: '17646', remarks: 'GNT-SC Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (TUE)', train: '17625', from: 'KCG', to: 'RAL', depTime: '22:20', arrTime: '06:25', coaches: 'SL / AC', dutyCode: '17625', remarks: 'KCG-RAL Exp' }
+    ]
+  },
+  {
+    id: '17425_17426',
+    name: 'GNT-SC-GNT Exp',
+    linkNumber: null,
+    serviceDays: ['SUN'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '17425', from: 'GNT', to: 'SC', depTime: '10:40', arrTime: '16:00', coaches: 'SL / AC', dutyCode: '17425', remarks: 'GNT-SC Exp' },
+      { dayIndex: 2, dayLabel: 'Day 2 (MON)', train: '17426', from: 'SC', to: 'GNT', depTime: '11:40', arrTime: '17:10', coaches: 'SL / AC', dutyCode: '17426', remarks: 'SC-GNT Exp' }
+    ]
+  }
+];
+
+function getMultiDayNonDailyMatch(trainCodeOrReason) {
+  if (!trainCodeOrReason) return null;
+  const str = String(trainCodeOrReason).toUpperCase();
+  for (const [outTrain, info] of Object.entries(NON_DAILY_PAIRS_MAP)) {
+    if (str.includes(outTrain) || (info.returnTrain && str.includes(info.returnTrain))) {
+      const isReturn = info.returnTrain && str.includes(info.returnTrain);
+      return { ...info, outTrain, isReturn };
+    }
+  }
+  return null;
+}
+
 async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestDay, dataPool = null) {
   let overrides, links, nonDaily, dutyRegister, muster, dailyEarnings;
   if (dataPool) {
@@ -9228,8 +9471,8 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     }
   }
 
-  // 1.5. Check multi-day link continuation (2-day, 3-day, or 4-day link sets)
-  if (!ov && overrides && links) {
+  // 1.5. Check multi-day link and multi-day non-daily continuation (2-day & 3-day services)
+  if (!ov && overrides) {
     const dMinus1 = new Date(dateStr + 'T12:00:00');
     dMinus1.setDate(dMinus1.getDate() - 1);
     const dMinus1Str = dMinus1.toISOString().split('T')[0];
@@ -9237,18 +9480,42 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
                  || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus1Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
 
     if (prev1Ov && prev1Ov.status !== 'REST' && prev1Ov.status !== 'SICK' && prev1Ov.status !== 'LEAVE' && prev1Ov.status !== 'CR' && prev1Ov.status !== 'ABSENT') {
-      const prev1Link = prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined
-        ? prev1Ov.overridden_link_number
-        : (prev1Ov.substitute_staff_id === staffId ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number) : null);
-      const prev1Cat = prev1Ov.target_category_id || 2;
-      const setInfo1 = getLinkSetDetails(prev1Cat, prev1Link);
-      if (setInfo1 && setInfo1.dayIndexInSet < setInfo1.setLength) {
-        const nextLegIndex = setInfo1.dayIndexInSet;
-        const nextLegLinkNum = setInfo1.setLinks[nextLegIndex];
-        const nextLink = links.find(l => l.category_id === prev1Cat && l.link_number === nextLegLinkNum)
-                      || links.find(l => l.link_number === nextLegLinkNum);
-        if (nextLink && nextLink.train_numbers) {
-          return { code: formatTrainString(nextLink.train_numbers), remarks: `Day ${nextLegIndex + 1} of Link #${setInfo1.setLinks[0]} (${setInfo1.setLength}-day link set)` };
+      // Check if prev1 was a non-daily multi-day train service
+      const prev1TrainStr = prev1Ov.extra_train_no || prev1Ov.reason || (prev1Ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[prev1Ov.overridden_link_number] : '');
+      const ndMatch1 = getMultiDayNonDailyMatch(prev1TrainStr);
+      if (ndMatch1 && !ndMatch1.isReturn) {
+        return {
+          code: ndMatch1.returnTrain,
+          remarks: `Day 2 Return of ${ndMatch1.outTrain} (${ndMatch1.serviceName}) • ${ndMatch1.via} ➔ ${ndMatch1.to}`,
+          multiDayInfo: {
+            serviceName: ndMatch1.serviceName,
+            dayNumber: 2,
+            totalDays: ndMatch1.totalDays,
+            dayRole: 'Return Leg',
+            trainNo: ndMatch1.returnTrain,
+            route: `${ndMatch1.via} ➔ ${ndMatch1.to}`,
+            depTime: ndMatch1.retDepTime,
+            arrTime: ndMatch1.arrHqTime,
+            coaches: ndMatch1.coaches
+          }
+        };
+      }
+
+      // Check standard cyclic link sets
+      if (links) {
+        const prev1Link = prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined
+          ? prev1Ov.overridden_link_number
+          : (prev1Ov.substitute_staff_id === staffId ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number) : null);
+        const prev1Cat = prev1Ov.target_category_id || 2;
+        const setInfo1 = getLinkSetDetails(prev1Cat, prev1Link);
+        if (setInfo1 && setInfo1.dayIndexInSet < setInfo1.setLength) {
+          const nextLegIndex = setInfo1.dayIndexInSet;
+          const nextLegLinkNum = setInfo1.setLinks[nextLegIndex];
+          const nextLink = links.find(l => l.category_id === prev1Cat && l.link_number === nextLegLinkNum)
+                        || links.find(l => l.link_number === nextLegLinkNum);
+          if (nextLink && nextLink.train_numbers) {
+            return { code: formatTrainString(nextLink.train_numbers), remarks: `Day ${nextLegIndex + 1} of Link #${setInfo1.setLinks[0]} (${setInfo1.setLength}-day link set)` };
+          }
         }
       }
     }
@@ -9260,18 +9527,43 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
                  || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus2Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
 
     if (prev2Ov && prev2Ov.status !== 'REST' && prev2Ov.status !== 'SICK' && prev2Ov.status !== 'LEAVE' && prev2Ov.status !== 'CR' && prev2Ov.status !== 'ABSENT') {
-      const prev2Link = prev2Ov.overridden_link_number !== null && prev2Ov.overridden_link_number !== undefined
-        ? prev2Ov.overridden_link_number
-        : (prev2Ov.substitute_staff_id === staffId ? (prev2Ov.original_link_number || prev2Ov.overridden_link_number) : null);
-      const prev2Cat = prev2Ov.target_category_id || 2;
-      const setInfo2 = getLinkSetDetails(prev2Cat, prev2Link);
-      if (setInfo2 && setInfo2.dayIndexInSet + 1 < setInfo2.setLength) {
-        const leg3Index = setInfo2.dayIndexInSet + 1;
-        const leg3LinkNum = setInfo2.setLinks[leg3Index];
-        const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === leg3LinkNum)
-                   || links.find(l => l.link_number === leg3LinkNum);
-        if (link3 && link3.train_numbers) {
-          return { code: formatTrainString(link3.train_numbers), remarks: `Day ${leg3Index + 1} of Link #${setInfo2.setLinks[0]} (${setInfo2.setLength}-day link set)` };
+      // Check if prev2 was Day 1 of a 3-day non-daily train service
+      const prev2TrainStr = prev2Ov.extra_train_no || prev2Ov.reason || (prev2Ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[prev2Ov.overridden_link_number] : '');
+      const ndMatch2 = getMultiDayNonDailyMatch(prev2TrainStr);
+      if (ndMatch2 && !ndMatch2.isReturn && ndMatch2.totalDays === 3) {
+        return {
+          code: 'AVL',
+          arrivalTime: ndMatch2.arrHqTime,
+          remarks: `Day 3: Arrived GNT ${ndMatch2.arrHqTime} on ${ndMatch2.returnTrain} • 8h HQ Rest till ${ndMatch2.restTill} • Available for duty`,
+          multiDayInfo: {
+            serviceName: ndMatch2.serviceName,
+            dayNumber: 3,
+            totalDays: 3,
+            dayRole: 'Arrival & Statutory HQ Rest',
+            trainNo: '---',
+            route: 'GNT (At Headquarters)',
+            arrTime: ndMatch2.arrHqTime,
+            restTill: ndMatch2.restTill,
+            coaches: '-'
+          }
+        };
+      }
+
+      // Check standard cyclic link sets (Day 3 / Leg 3)
+      if (links) {
+        const prev2Link = prev2Ov.overridden_link_number !== null && prev2Ov.overridden_link_number !== undefined
+          ? prev2Ov.overridden_link_number
+          : (prev2Ov.substitute_staff_id === staffId ? (prev2Ov.original_link_number || prev2Ov.overridden_link_number) : null);
+        const prev2Cat = prev2Ov.target_category_id || 2;
+        const setInfo2 = getLinkSetDetails(prev2Cat, prev2Link);
+        if (setInfo2 && setInfo2.dayIndexInSet + 1 < setInfo2.setLength) {
+          const leg3Index = setInfo2.dayIndexInSet + 1;
+          const leg3LinkNum = setInfo2.setLinks[leg3Index];
+          const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === leg3LinkNum)
+                     || links.find(l => l.link_number === leg3LinkNum);
+          if (link3 && link3.train_numbers) {
+            return { code: formatTrainString(link3.train_numbers), remarks: `Day ${leg3Index + 1} of Link #${setInfo2.setLinks[0]} (${setInfo2.setLength}-day link set)` };
+          }
         }
       }
     }
@@ -9654,6 +9946,31 @@ app.get('/api/lr-sheet', async (req, res) => {
       }
     }
 
+    // Enrich records with multiDayInfo if matching non-daily service
+    Object.keys(recordsMap).forEach(key => {
+      const rec = recordsMap[key];
+      if (rec && rec.dutyCode) {
+        const ndMatch = getMultiDayNonDailyMatch(rec.dutyCode) || getMultiDayNonDailyMatch(rec.remarks);
+        if (ndMatch) {
+          const isReturn = ndMatch.returnTrain && String(rec.dutyCode).includes(ndMatch.returnTrain);
+          const isOutward = String(rec.dutyCode).includes(ndMatch.outTrain);
+          rec.isNonDaily = true;
+          rec.multiDayInfo = {
+            serviceName: ndMatch.serviceName,
+            dayNumber: isOutward ? 1 : (isReturn ? 2 : (rec.dutyCode === 'AVL' ? 3 : 1)),
+            totalDays: ndMatch.totalDays,
+            dayRole: isOutward ? 'Outward Leg' : (isReturn ? 'Return Leg' : 'Arrival & HQ Rest'),
+            trainNo: isOutward ? ndMatch.outTrain : (isReturn ? ndMatch.returnTrain : '---'),
+            route: isOutward ? `${ndMatch.from} ➔ ${ndMatch.via}` : `${ndMatch.via} ➔ ${ndMatch.to}`,
+            depTime: isOutward ? ndMatch.depTime : ndMatch.retDepTime,
+            arrTime: isOutward ? '' : ndMatch.arrHqTime,
+            restTill: ndMatch.restTill,
+            coaches: ndMatch.coaches
+          };
+        }
+      }
+    });
+
     const monthDate = new Date(year, month - 1, 1);
     const monthName = monthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
@@ -9664,12 +9981,18 @@ app.get('/api/lr-sheet', async (req, res) => {
       monthName,
       days,
       staff: staffList,
-      records: recordsMap
+      records: recordsMap,
+      nonDailyServices: NON_DAILY_MULTI_DAY_SERVICES
     });
   } catch (err) {
     console.error('Error fetching LR sheet:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/lr-sheet/multi-day-services - Fetch dedicated 2-day & 3-day non-daily schedules reference
+app.get('/api/lr-sheet/multi-day-services', (req, res) => {
+  res.json({ success: true, services: NON_DAILY_MULTI_DAY_SERVICES });
 });
 
 // Centralized helper for bidirectional synchronization when an LR Sheet cell is modified or cleared
