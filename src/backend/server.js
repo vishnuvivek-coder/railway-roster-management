@@ -351,22 +351,45 @@ const NON_DAILY_LINK_TRAINS = {
 };
 
 const NON_DAILY_PAIRS_MAP = {
-  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #60)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
-  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #61)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
-  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #62)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
-  '17261': { returnTrain: '17070', serviceName: 'GNT-TPTY-RU-GNT Exp', from: 'GNT', via: 'TPTY/RU', to: 'GNT', depTime: '16:30', retDepTime: '22:40', arrHqTime: '05:15', totalDays: 3, restTill: '13:15', coaches: 'SL / AC' },
+  // SUNDAY
+  '17032': { returnTrain: '17031', serviceName: 'BZA-CHZ-BZA Exp', from: 'BZA', via: 'CHZ', to: 'BZA', depTime: '11:05', retDepTime: '12:40', arrHqTime: '12:40', totalDays: 2, restTill: '20:40', coaches: 'SL / AC' },
   '17231': { returnTrain: '17232', serviceName: 'BZA-CHZ-BZA Exp', from: 'BZA', via: 'CHZ', to: 'BZA', depTime: '13:50', retDepTime: '23:40', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
   '07029': { returnTrain: '17232', serviceName: 'BZA-CHZ-BZA Exp', from: 'BZA', via: 'CHZ', to: 'BZA', depTime: '11:05', retDepTime: '23:40', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
   '02811': { returnTrain: '02812', serviceName: 'GNT-DMM-BZA Spl', from: 'GNT', via: 'DMM', to: 'BZA', depTime: '08:30', retDepTime: '08:30', arrHqTime: '18:00', totalDays: 2, restTill: '02:00', coaches: 'SL / AC' },
+  '17425': { returnTrain: '17426', serviceName: 'GNT-SC-GNT Exp', from: 'GNT', via: 'SC', to: 'GNT', depTime: '10:40', retDepTime: '11:40', arrHqTime: '17:10', totalDays: 2, restTill: '01:10', coaches: 'SL / AC' },
+
+  // MONDAY
   '07609': { returnTrain: '07610', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '02:55', retDepTime: '13:35', arrHqTime: '10:00', totalDays: 2, restTill: '18:00', coaches: 'SL / AC' },
-  '07615': { returnTrain: '07616', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '23:10', retDepTime: '07:30', arrHqTime: '15:05', totalDays: 2, restTill: '23:05', coaches: 'SL / AC' },
-  '17041': { returnTrain: '17042', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '10:40', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
-  '12604': { returnTrain: '16357', serviceName: 'GNT-MAS-MS-GNT Exp', from: 'GNT', via: 'MAS/MS', to: 'GNT', depTime: '22:00', retDepTime: '13:00', arrHqTime: '21:10', totalDays: 2, restTill: '05:10', coaches: 'SL / AC' },
-  '18063': { returnTrain: '18064', serviceName: 'GNT-DMM-GNT Exp', from: 'GNT', via: 'DMM', to: 'GNT', depTime: '09:45', retDepTime: '08:15', arrHqTime: '19:25', totalDays: 2, restTill: '03:25', coaches: 'SL / AC' },
-  '07193': { returnTrain: '07194', serviceName: 'GNT-KPD-GNT Spl', from: 'GNT', via: 'KPD', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
-  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' },
   '17646': { returnTrain: '17625', serviceName: 'GNT-SC-KCG-RAL Exp', from: 'GNT', via: 'SC/KCG', to: 'RAL', depTime: '08:50', retDepTime: '22:20', arrHqTime: '06:25', totalDays: 2, restTill: '14:25', coaches: 'SL / AC' },
-  '17425': { returnTrain: '17426', serviceName: 'GNT-SC-GNT Exp', from: 'GNT', via: 'SC', to: 'GNT', depTime: '10:40', retDepTime: '11:40', arrHqTime: '17:10', totalDays: 2, restTill: '01:10', coaches: 'SL / AC' }
+  '17637': { returnTrain: '17638', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '07:00', retDepTime: '14:30', arrHqTime: '14:30', totalDays: 2, restTill: '22:30', coaches: 'SL / AC' },
+  '20629': { returnTrain: '07198', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '19:10', retDepTime: '01:50', arrHqTime: '01:50', totalDays: 2, restTill: '09:50', coaches: 'SL / AC' },
+  '07227': { returnTrain: '07228', serviceName: 'GNT-CHZ-GNT Spl', from: 'GNT', via: 'CHZ', to: 'GNT', depTime: '06:00', retDepTime: '12:00', arrHqTime: '12:00', totalDays: 2, restTill: '20:00', coaches: 'SL / AC' },
+
+  // TUESDAY
+  '17041': { returnTrain: '17042', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '10:40', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
+  '07615': { returnTrain: '07616', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '23:10', retDepTime: '07:30', arrHqTime: '15:05', totalDays: 2, restTill: '23:05', coaches: 'SL / AC' },
+  '17077': { returnTrain: '17078', serviceName: 'GNT-TPTY-GNT Exp', from: 'GNT', via: 'TPTY', to: 'GNT', depTime: '18:00', retDepTime: '02:30', arrHqTime: '02:30', totalDays: 2, restTill: '10:30', coaches: 'SL / AC' },
+
+  // WEDNESDAY (3-Day Beats)
+  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #60)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
+  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #61)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
+  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #62)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
+
+  // THURSDAY
+  '12755': { returnTrain: '12756', serviceName: 'BZA-SC-BZA Exp', from: 'BZA', via: 'SC', to: 'BZA', depTime: '08:40', retDepTime: '06:40', arrHqTime: '12:50', totalDays: 2, restTill: '20:50', coaches: 'SL / AC' },
+  '12604': { returnTrain: '16357', serviceName: 'GNT-MAS-MS-GNT Exp', from: 'GNT', via: 'MAS/MS', to: 'GNT', depTime: '22:00', retDepTime: '13:00', arrHqTime: '21:10', totalDays: 2, restTill: '05:10', coaches: 'SL / AC' },
+  '17261': { returnTrain: '17070', serviceName: 'GNT-TPTY-RU-GNT Exp', from: 'GNT', via: 'TPTY/RU', to: 'GNT', depTime: '16:30', retDepTime: '22:40', arrHqTime: '05:15', totalDays: 3, restTill: '13:15', coaches: 'SL / AC' },
+  '07001': { returnTrain: '07002', serviceName: 'GNT-TPTY-GNT Spl', from: 'GNT', via: 'TPTY', to: 'GNT', depTime: '16:30', retDepTime: '03:50', arrHqTime: '03:50', totalDays: 2, restTill: '11:50', coaches: 'SL / AC' },
+
+  // FRIDAY
+  '18063': { returnTrain: '18064', serviceName: 'GNT-DMM-GNT Exp', from: 'GNT', via: 'DMM', to: 'GNT', depTime: '09:45', retDepTime: '08:15', arrHqTime: '19:25', totalDays: 2, restTill: '03:25', coaches: 'SL / AC' },
+  '07125': { returnTrain: '07126', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '17:40', retDepTime: '01:10', arrHqTime: '01:10', totalDays: 2, restTill: '09:10', coaches: 'SL / AC' },
+  '07195': { returnTrain: '20630', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '19:10', retDepTime: '01:50', arrHqTime: '01:50', totalDays: 2, restTill: '09:50', coaches: 'SL / AC' },
+  '17607': { returnTrain: '17608', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '19:20', arrHqTime: '19:20', totalDays: 2, restTill: '03:20', coaches: 'SL / AC' },
+
+  // SATURDAY
+  '07193': { returnTrain: '07194', serviceName: 'GNT-KPD-GNT Spl', from: 'GNT', via: 'KPD', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
+  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' }
 };
 
 function getMultiDayNonDailyMatch(trainCodeOrReason) {

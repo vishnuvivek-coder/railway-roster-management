@@ -6529,14 +6529,22 @@ export default function App() {
                                 </thead>
                                 <tbody>
                                   {searchedTrains.map((item, idx) => {
-                                    // Live assigned staff check on selectedDate
-                                    const staffOnTrain = staffDuties.find(s => 
-                                      s.extra_train_no && String(s.extra_train_no).trim() === String(item.train_number).trim()
-                                    );
+                                    // Live assigned staff check on selectedDate (matches 1st day or return train)
+                                    const staffOnTrain = staffDuties.find(s => {
+                                      const t1 = String(item.train_number || '').trim();
+                                      const t2 = String(item.last_day_train_number || '').trim();
+                                      const extra = String(s.extra_train_no || '').trim();
+                                      const dutyCode = String(s.dutyCode || s.code || s.train_numbers || s.trainNo || '').trim();
+                                      const reason = String(s.reason || s.remarks || '').trim();
+
+                                      if (t1 && (extra === t1 || extra.includes(t1) || dutyCode === t1 || dutyCode.includes(t1) || reason.includes(t1))) return true;
+                                      if (t2 && (extra === t2 || extra.includes(t2) || dutyCode === t2 || dutyCode.includes(t2) || reason.includes(t2))) return true;
+                                      return false;
+                                    });
                                     const assignedStaff = staffOnTrain || null;
-                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : null;
-                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : '';
-                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : null;
+                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : (item.assigned_staff_name || null);
+                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : (item.assigned_staff_name ? 'TTI' : '');
+                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : (item.assigned_staff_id || null);
 
                                     const isRowOver = dragOverNonDailyId === item.id;
 

@@ -1073,23 +1073,35 @@ async function initDb() {
   // Auto-populate well-known return train pairs for non-daily services if not already populated
   try {
     const knownReturnPairs = [
-      { first: '02811', last: '02812' },
-      { first: '22882', last: '22881' },
-      { first: '17221', last: '17222' },
-      { first: '17069', last: '17262' },
-      { first: '07609', last: '07610' },
-      { first: '07615', last: '07616' },
-      { first: '17041', last: '17042' },
-      { first: '17425', last: '17426' },
-      { first: '07029', last: '17232' },
-      { first: '17231', last: '17232' },
-      { first: '12604', last: '12603' },
-      { first: '17261', last: '17262' },
-      { first: '07032', last: '07194' },
-      { first: '17646', last: '17625' },
+      { day: 'SUNDAY', first: '17032', last: '17031' },
+      { day: 'SUNDAY', first: '17231', last: '17232' },
       { day: 'SUNDAY', first: '02811', last: '02812' },
+      { day: 'SUNDAY', first: '17425', last: '17426' },
+      { day: 'MONDAY', first: '07609', last: '07610' },
+      { day: 'MONDAY', first: '17646', last: '17625' },
+      { day: 'MONDAY', first: '17637', last: '17638' },
+      { day: 'MONDAY', first: '20629', last: '07198' },
+      { day: 'MONDAY', first: '07227', last: '07228' },
+      { day: 'TUESDAY', first: '17041', last: '17042' },
+      { day: 'TUESDAY', first: '07615', last: '07616' },
+      { day: 'TUESDAY', first: '17077', last: '17078' },
       { day: 'WEDNESDAY', first: '22882', last: '22881' },
-      { day: 'WEDNESDAY', first: '17221', last: '17222' }
+      { day: 'WEDNESDAY', first: '17221', last: '17222' },
+      { day: 'WEDNESDAY', first: '17069', last: '17262' },
+      { day: 'THURSDAY', first: '12755', last: '12756' },
+      { day: 'THURSDAY', first: '12604', last: '16357' },
+      { day: 'THURSDAY', first: '17261', last: '17070' },
+      { day: 'THURSDAY', first: '07001', last: '07002' },
+      { day: 'FRIDAY', first: '17231', last: '17232' },
+      { day: 'FRIDAY', first: '18063', last: '18064' },
+      { day: 'FRIDAY', first: '07125', last: '07126' },
+      { day: 'FRIDAY', first: '07195', last: '20630' },
+      { day: 'FRIDAY', first: '17607', last: '17608' },
+      { day: 'SATURDAY', first: '17221', last: '17222' },
+      { day: 'SATURDAY', first: '17646', last: '17625' },
+      { day: 'SATURDAY', first: '07193', last: '07194' },
+      { day: 'SATURDAY', first: '16358', last: '12603' },
+      { day: 'SATURDAY', first: '20629', last: '07196' }
     ];
     for (const p of knownReturnPairs) {
       if (p.day) {
@@ -1106,67 +1118,55 @@ async function initDb() {
   const nonDailyCount = await get('SELECT COUNT(*) as count FROM non_daily_trains');
   if (nonDailyCount.count === 0) {
     const nonDailyTrainsSeed = [
-      // SUNDAY (7)
-      { day: 'SUNDAY', train: '07029', dep_stn: 'BZA', dep_time: '11:05', arr_stn: 'CHZ', arr_time: '12:40', remarks: '' },
-      { day: 'SUNDAY', train: '17231', dep_stn: 'BZA', dep_time: '13:50', arr_stn: 'CHZ', arr_time: '20:40', remarks: '' },
-      { day: 'SUNDAY', train: '17232', dep_stn: 'CHZ', dep_time: '23:40', arr_stn: 'BZA', arr_time: '06:25', remarks: 'Returns MON' },
-      { day: 'SUNDAY', train: '02811', dep_stn: 'GNT', dep_time: '08:30', arr_stn: 'DMM', arr_time: '21:00', remarks: '' },
-      { day: 'SUNDAY', train: '02812', dep_stn: 'DMM', dep_time: '08:30', arr_stn: 'BZA', arr_time: '18:00', remarks: 'Returns MON' },
-      { day: 'SUNDAY', train: '17425', dep_stn: 'GNT', dep_time: '10:40', arr_stn: 'SC', arr_time: '16:00', remarks: '' },
-      { day: 'SUNDAY', train: '17625', dep_stn: 'KCG', dep_time: '22:20', arr_stn: 'RAL', arr_time: '06:25', remarks: '' },
+      // SUNDAY (4 beats)
+      { day: 'SUNDAY', train: '17032', last: '17031', dep_stn: 'BZA', dep_time: '11:05', arr_stn: 'CHZ', arr_time: '12:40', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SUNDAY', train: '17231', last: '17232', dep_stn: 'BZA', dep_time: '13:50', arr_stn: 'CHZ', arr_time: '20:40', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SUNDAY', train: '02811', last: '02812', dep_stn: 'GNT', dep_time: '08:30', arr_stn: 'DMM', arr_time: '21:00', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SUNDAY', train: '17425', last: '17426', dep_stn: 'GNT', dep_time: '10:40', arr_stn: 'SC', arr_time: '16:00', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // MONDAY (6)
-      { day: 'MONDAY', train: '07609', dep_stn: 'GNT', dep_time: '02:55', arr_stn: 'RU', arr_time: '09:30', remarks: 'Runs TUE' },
-      { day: 'MONDAY', train: '07610', dep_stn: 'RU', dep_time: '13:35', arr_stn: 'GNT', arr_time: '10:00', remarks: 'Runs TUE' },
-      { day: 'MONDAY', train: '17646', dep_stn: 'GNT', dep_time: '08:50', arr_stn: 'SC', arr_time: '16:00', remarks: '' },
-      { day: 'MONDAY', train: '17426', dep_stn: 'SC', dep_time: '11:40', arr_stn: 'GNT', arr_time: '17:10', remarks: 'Returns TUE' },
-      { day: 'MONDAY', train: '07032', dep_stn: 'GNT', dep_time: '00:10', arr_stn: 'TPTY', arr_time: '10:30', remarks: '' },
-      { day: 'MONDAY', train: '07194', dep_stn: 'TPTY', dep_time: '03:15', arr_stn: 'GNT', arr_time: '10:40', remarks: '' },
+      // MONDAY (5 beats)
+      { day: 'MONDAY', train: '07609', last: '07610', dep_stn: 'GNT', dep_time: '02:55', arr_stn: 'RU', arr_time: '09:30', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: 'Runs TUE' },
+      { day: 'MONDAY', train: '17646', last: '17625', dep_stn: 'GNT', dep_time: '08:50', arr_stn: 'SC', arr_time: '16:00', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'MONDAY', train: '17637', last: '17638', dep_stn: 'GNT', dep_time: '07:00', arr_stn: 'RU', arr_time: '14:30', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'MONDAY', train: '20629', last: '07198', dep_stn: 'GNT', dep_time: '19:10', arr_stn: 'RU', arr_time: '01:50', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'MONDAY', train: '07227', last: '07228', dep_stn: 'GNT', dep_time: '06:00', arr_stn: 'CHZ', arr_time: '12:00', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // TUESDAY (4)
-      { day: 'TUESDAY', train: '07615', dep_stn: 'GNT', dep_time: '23:10', arr_stn: 'RU', arr_time: '08:10', remarks: '' },
-      { day: 'TUESDAY', train: '07616', dep_stn: 'RU', dep_time: '07:30', arr_stn: 'GNT', arr_time: '15:05', remarks: 'Returns WED' },
-      { day: 'TUESDAY', train: '17041', dep_stn: 'GNT', dep_time: '12:20', arr_stn: 'RU', arr_time: '19:20', remarks: '' },
-      { day: 'TUESDAY', train: '17042', dep_stn: 'RU', dep_time: '10:40', arr_stn: 'GNT', arr_time: '17:40', remarks: 'Returns WED' },
+      // TUESDAY (3 beats)
+      { day: 'TUESDAY', train: '17041', last: '17042', dep_stn: 'GNT', dep_time: '12:20', arr_stn: 'RU', arr_time: '19:20', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'TUESDAY', train: '07615', last: '07616', dep_stn: 'GNT', dep_time: '23:10', arr_stn: 'RU', arr_time: '08:10', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'TUESDAY', train: '17077', last: '17078', dep_stn: 'GNT', dep_time: '18:00', arr_stn: 'TPTY', arr_time: '02:30', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // WEDNESDAY (6)
-      { day: 'WEDNESDAY', train: '22882', dep_stn: 'GNT', dep_time: '10:35', arr_stn: 'WADI', arr_time: '21:10', remarks: '' },
-      { day: 'WEDNESDAY', train: '22881', dep_stn: 'WADI', dep_time: '16:55', arr_stn: 'GNT', arr_time: '02:05', remarks: 'Returns THU' },
-      { day: 'WEDNESDAY', train: '17221', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'WADI', arr_time: '00:05', remarks: '' },
-      { day: 'WEDNESDAY', train: '17222', dep_stn: 'WADI', dep_time: '23:00', arr_stn: 'GNT', arr_time: '08:15', remarks: 'Returns THU' },
-      { day: 'WEDNESDAY', train: '17069', dep_stn: 'GNT', dep_time: '22:40', arr_stn: 'RU', arr_time: '07:15', remarks: '' },
-      { day: 'WEDNESDAY', train: '17262', dep_stn: 'TPTY', dep_time: '19:25', arr_stn: 'GNT', arr_time: '07:20', remarks: '' },
+      // WEDNESDAY (3 beats)
+      { day: 'WEDNESDAY', train: '22882', last: '22881', dep_stn: 'GNT', dep_time: '10:35', arr_stn: 'WADI', arr_time: '21:10', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'WEDNESDAY', train: '17221', last: '17222', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'WADI', arr_time: '00:05', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'WEDNESDAY', train: '17069', last: '17262', dep_stn: 'GNT', dep_time: '22:40', arr_stn: 'RU', arr_time: '07:15', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // THURSDAY (6)
-      { day: 'THURSDAY', train: '12755', dep_stn: 'BZA', dep_time: '08:40', arr_stn: 'SC', arr_time: '02:40', remarks: '' },
-      { day: 'THURSDAY', train: '17625', dep_stn: 'KCG', dep_time: '22:20', arr_stn: 'RAL', arr_time: '06:25', remarks: '' },
-      { day: 'THURSDAY', train: '12604', dep_stn: 'GNT', dep_time: '22:00', arr_stn: 'MAS', arr_time: '05:40', remarks: '' },
-      { day: 'THURSDAY', train: '16357', dep_stn: 'MS', dep_time: '13:00', arr_stn: 'GNT', arr_time: '21:10', remarks: '' },
-      { day: 'THURSDAY', train: '17261', dep_stn: 'GNT', dep_time: '16:30', arr_stn: 'TPTY', arr_time: '03:50', remarks: '' },
-      { day: 'THURSDAY', train: '17070', dep_stn: 'RU', dep_time: '22:40', arr_stn: 'GNT', arr_time: '05:15', remarks: '' },
+      // THURSDAY (4 beats)
+      { day: 'THURSDAY', train: '12755', last: '12756', dep_stn: 'BZA', dep_time: '08:40', arr_stn: 'SC', arr_time: '02:40', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'THURSDAY', train: '12604', last: '16357', dep_stn: 'GNT', dep_time: '22:00', arr_stn: 'MAS', arr_time: '05:40', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'THURSDAY', train: '17261', last: '17070', dep_stn: 'GNT', dep_time: '16:30', arr_stn: 'TPTY', arr_time: '03:50', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'THURSDAY', train: '07001', last: '07002', dep_stn: 'GNT', dep_time: '16:30', arr_stn: 'TPTY', arr_time: '03:50', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // FRIDAY (4)
-      { day: 'FRIDAY', train: '17231', dep_stn: 'BZA', dep_time: '13:50', arr_stn: 'CHZ', arr_time: '20:40', remarks: '' },
-      { day: 'FRIDAY', train: '17232', dep_stn: 'CHZ', dep_time: '23:40', arr_stn: 'BZA', arr_time: '06:25', remarks: '' },
-      { day: 'FRIDAY', train: '18063', dep_stn: 'GNT', dep_time: '09:45', arr_stn: 'DMM', arr_time: '20:30', remarks: '' },
-      { day: 'FRIDAY', train: '18064', dep_stn: 'DMM', dep_time: '08:15', arr_stn: 'GNT', arr_time: '19:25', remarks: '' },
+      // FRIDAY (5 beats)
+      { day: 'FRIDAY', train: '17231', last: '17232', dep_stn: 'BZA', dep_time: '13:50', arr_stn: 'CHZ', arr_time: '20:40', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'FRIDAY', train: '18063', last: '18064', dep_stn: 'GNT', dep_time: '09:45', arr_stn: 'DMM', arr_time: '20:30', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'FRIDAY', train: '07125', last: '07126', dep_stn: 'GNT', dep_time: '17:40', arr_stn: 'RU', arr_time: '01:10', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'FRIDAY', train: '07195', last: '20630', dep_stn: 'GNT', dep_time: '19:10', arr_stn: 'RU', arr_time: '01:50', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'FRIDAY', train: '17607', last: '17608', dep_stn: 'GNT', dep_time: '12:20', arr_stn: 'RU', arr_time: '19:20', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
 
-      // SATURDAY (8)
-      { day: 'SATURDAY', train: '17221', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'WADI', arr_time: '00:05', remarks: '' },
-      { day: 'SATURDAY', train: '17222', dep_stn: 'WADI', dep_time: '23:00', arr_stn: 'GNT', arr_time: '08:15', remarks: '' },
-      { day: 'SATURDAY', train: '17221', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'SC', arr_time: '00:05', remarks: '' },
-      { day: 'SATURDAY', train: '12756', dep_stn: 'SC', dep_time: '06:40', arr_stn: 'BZA', arr_time: '12:50', remarks: '' },
-      { day: 'SATURDAY', train: '07193', dep_stn: 'GNT', dep_time: '05:30', arr_stn: 'KPD', arr_time: '16:30', remarks: 'Runs SUN' },
-      { day: 'SATURDAY', train: '07194', dep_stn: 'KPD', dep_time: '01:00', arr_stn: 'GNT', arr_time: '10:40', remarks: 'Runs TUE' },
-      { day: 'SATURDAY', train: '16358', dep_stn: 'GNT', dep_time: '14:00', arr_stn: 'MS', arr_time: '22:55', remarks: '' },
-      { day: 'SATURDAY', train: '12603', dep_stn: 'MAS', dep_time: '16:45', arr_stn: 'GNT', arr_time: '23:25', remarks: '' }
+      // SATURDAY (5 beats)
+      { day: 'SATURDAY', train: '17221', last: '17222', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'WADI', arr_time: '00:05', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SATURDAY', train: '17646', last: '17625', dep_stn: 'GNT', dep_time: '13:35', arr_stn: 'SC', arr_time: '00:05', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SATURDAY', train: '07193', last: '07194', dep_stn: 'GNT', dep_time: '05:30', arr_stn: 'KPD', arr_time: '16:30', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: 'Runs SUN' },
+      { day: 'SATURDAY', train: '16358', last: '12603', dep_stn: 'GNT', dep_time: '14:00', arr_stn: 'MS', arr_time: '22:55', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' },
+      { day: 'SATURDAY', train: '20629', last: '07196', dep_stn: 'GNT', dep_time: '19:10', arr_stn: 'RU', arr_time: '01:50', coaches: 'SL / AC', last_coaches: 'SL / AC', remarks: '' }
     ];
 
     for (const t of nonDailyTrainsSeed) {
       await run(
-        `INSERT INTO non_daily_trains (day_of_week, train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, remarks)
-         VALUES (?, ?, ?, ?, ?, ?, 'SL / AC', ?)`,
-        [t.day, t.train, t.dep_stn, t.dep_time, t.arr_stn, t.arr_time, t.remarks || null]
+        `INSERT INTO non_daily_trains (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [t.day, t.train, t.last, t.dep_stn, t.dep_time, t.arr_stn, t.arr_time, t.coaches || 'SL / AC', t.last_coaches || 'SL / AC', t.remarks || null]
       );
     }
   }
