@@ -6,11 +6,6 @@ const computePresetDates = (preset, y, m) => {
   const yr = parseInt(y, 10) || 2026;
   const mo = parseInt(m, 10) || 9;
   const lastDay = new Date(yr, mo, 0).getDate();
-  const now = new Date();
-  const isCurrentMonth = (now.getFullYear() === yr && (now.getMonth() + 1) === mo);
-  const isFutureMonth = (yr > now.getFullYear() || (yr === now.getFullYear() && mo > (now.getMonth() + 1)));
-  const currentDay = now.getDate();
-  const upToDay = isCurrentMonth ? Math.min(lastDay, currentDay) : (isFutureMonth ? 1 : lastDay);
 
   const prevYr = mo === 1 ? yr - 1 : yr;
   const prevMo = mo === 1 ? 12 : mo - 1;
@@ -19,28 +14,25 @@ const computePresetDates = (preset, y, m) => {
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
   if (preset === 'wage_period') {
-    const wageEndDay = isCurrentMonth ? Math.min(10, currentDay) : 10;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(wageEndDay).padStart(2, '0')}`
+      end: `${yr}-${String(mo).padStart(2, '0')}-10`
     };
   } else if (preset === 'fortnight_1') {
-    const fn1End = isCurrentMonth ? Math.min(15, currentDay) : 15;
     return {
       start: prevMonth30thIso,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(fn1End).padStart(2, '0')}`
+      end: `${yr}-${String(mo).padStart(2, '0')}-15`
     };
   } else if (preset === 'fortnight_2') {
-    const fn2End = isCurrentMonth ? Math.min(lastDay, currentDay) : lastDay;
     return {
       start: `${yr}-${String(mo).padStart(2, '0')}-16`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(Math.max(16, fn2End)).padStart(2, '0')}`
+      end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     };
   }
-  // Default 'full_month' / up-to-date (strictly up to today for current month, starting from previous month 30th)
+  // Default 'full_month' (starting from previous month 30th to last day of selected month)
   return {
     start: prevMonth30thIso,
-    end: `${yr}-${String(mo).padStart(2, '0')}-${String(upToDay).padStart(2, '0')}`
+    end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
   };
 };
 
@@ -168,8 +160,8 @@ export default function DiaryDocument({
 
   // Fetch staff for selected category
   useEffect(() => {
-    const catId = selectedCatId || (categories && categories.length > 0 ? categories[0].id.toString() : '1');
-    fetch(`${API_BASE}/staff?category_id=${catId}`, {
+    const catParam = (selectedCatId && selectedCatId !== 'ALL') ? `?category_id=${selectedCatId}` : '';
+    fetch(`${API_BASE}/staff${catParam}`, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     })
       .then(res => res.json())

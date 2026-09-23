@@ -1430,34 +1430,20 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const prev30thDay = Math.min(30, maxDaysPrev);
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
-  let actualStart = startDate || prevMonth30thIso;
-  let actualEnd = endDate || (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
+  let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  // Strict rule: TA can only be claimed/calculated for duties already performed up-to-date!
-  // Future dates yet to be performed must never be included in the TA claim calculation.
-  if (isCurrentMonth && actualEnd > todayIso) {
-    actualEnd = todayIso;
-  }
-  if (isFutureMonth) {
-    actualEnd = actualStart;
-  }
-
-  // 1. Ensure up-to-date claims exist in ta_approvals for all months covered in the range
+  // 1. Ensure claims exist in ta_approvals for all months covered in the range
   const monthsCovered = getMonthsBetween(actualStart, actualEnd);
   for (const mInfo of monthsCovered) {
-    const isThisCurrentMonth = (mInfo.year === currentYear && mInfo.month === currentMonth);
-    const isThisFutureMonth = (mInfo.year > currentYear || (mInfo.year === currentYear && mInfo.month > currentMonth));
-    const targetDays = isThisCurrentMonth ? Math.min(new Date(mInfo.year, mInfo.month, 0).getDate(), currentDay) : (isThisFutureMonth ? 0 : new Date(mInfo.year, mInfo.month, 0).getDate());
-
-    if (targetDays > 0) {
-      const existingClaims = await all(
-        'SELECT COUNT(DISTINCT duty_date) as cnt FROM ta_approvals WHERE staff_id = ? AND month_year = ? AND duty_date <= ?',
-        [staffId, mInfo.monthYearStr, isThisCurrentMonth ? todayIso : `${mInfo.year}-${String(mInfo.month).padStart(2, '0')}-31`]
-      );
-      const hasFullClaims = existingClaims && existingClaims[0] && existingClaims[0].cnt >= targetDays;
-      if (!hasFullClaims) {
-        await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
-      }
+    const totalDaysInMo = new Date(mInfo.year, mInfo.month, 0).getDate();
+    const existingClaims = await all(
+      'SELECT COUNT(DISTINCT duty_date) as cnt FROM ta_approvals WHERE staff_id = ? AND month_year = ?',
+      [staffId, mInfo.monthYearStr]
+    );
+    const hasFullClaims = existingClaims && existingClaims[0] && existingClaims[0].cnt >= totalDaysInMo;
+    if (!hasFullClaims) {
+      await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
     }
   }
 

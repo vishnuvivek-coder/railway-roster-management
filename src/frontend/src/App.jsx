@@ -3386,6 +3386,13 @@ export default function App() {
                   <div className="spinner"></div> Loading Employee Schedule...
                 </div>
               ) : rosterData ? (() => {
+                if (!rosterData.rows || !Array.isArray(rosterData.rows)) {
+                  return (
+                    <div className="alert-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
+                      <span>⚠️</span> Could not load staff movement data.
+                    </div>
+                  );
+                }
                 // Find selected staff member row
                 const staffRow = rosterData.rows.find(r => String(r.staffId) === String(selectedStaffId)) || rosterData.rows[0];
                 
@@ -3396,6 +3403,8 @@ export default function App() {
                     </div>
                   );
                 }
+
+                const staffCategoryName = categories.find(c => c.id === (allStaffList.find(s => String(s.id) === String(staffRow.staffId))?.category_id))?.name || rosterData.category?.name || '-';
 
                 return (
                   <div>
@@ -3428,7 +3437,7 @@ export default function App() {
                                     staffId: staffRow.staffId,
                                     name: staffRow.staffName,
                                     designation: staffRow.designation,
-                                    categoryId: parseInt(selectedCatId, 10),
+                                    categoryId: parseInt(selectedCatId, 10) || staffRow.category_id || 1,
                                     status: 'DUTY'
                                   }, (movementStartDate || `${year}-${String(month).padStart(2, '0')}-01`))}
                                   style={{
@@ -3447,7 +3456,7 @@ export default function App() {
                               )}
                             </div>
                             <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                              <span>Designation: <strong>{staffRow.designation || '-'}</strong> | Category: <strong>{rosterData.category.name}</strong></span>
+                              <span>Designation: <strong>{staffRow.designation || '-'}</strong> | Category: <strong>{staffCategoryName}</strong></span>
                               {(staffRow.cr_available || (allStaffList.find(s => s.id === staffRow.staffId)?.cr_available)) && (
                                 <span className="badge" style={{ 
                                   background: 'rgba(139, 92, 246, 0.2)', 

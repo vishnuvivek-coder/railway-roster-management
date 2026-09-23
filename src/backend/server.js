@@ -1450,7 +1450,7 @@ app.get('/api/staff', async (req, res) => {
   try {
     let sql = 'SELECT * FROM staff';
     let params = [];
-    if (category_id) {
+    if (category_id && category_id !== 'ALL') {
       sql += ' WHERE category_id = ? ORDER BY row_position';
       params.push(category_id);
     } else {
@@ -5774,20 +5774,28 @@ app.get('/api/roster', async (req, res) => {
   const month = req.query.month;
   const start_date = req.query.start_date || req.query.startDate;
   const end_date = req.query.end_date || req.query.endDate;
-  if (!category_id || (!start_date && (!year || !month))) {
-    return res.status(400).json({ error: 'Category ID and date parameters are required' });
+  if (!start_date && (!year || !month)) {
+    return res.status(400).json({ error: 'Date parameters are required' });
   }
 
   try {
-    const category = await get('SELECT * FROM categories WHERE id = ?', [category_id]);
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
+    const isAllCategories = (!category_id || String(category_id).toUpperCase() === 'ALL');
+    let category = null;
+    let categoriesList = [];
+    if (isAllCategories) {
+      categoriesList = await all('SELECT * FROM categories ORDER BY id ASC');
+      category = { id: 'ALL', name: 'All Categories', anchor_date: '2020-01-01', cycle_length: 21 };
+    } else {
+      category = await get('SELECT * FROM categories WHERE id = ?', [category_id]);
+      if (!category) {
+        return res.status(404).json({ error: 'Category not found' });
+      }
+      categoriesList = [category];
     }
 
-    const staffMembers = await all(
-      'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position',
-      [category_id]
-    );
+    const staffMembers = isAllCategories
+      ? await all('SELECT * FROM staff ORDER BY category_id ASC, row_position ASC')
+      : await all('SELECT * FROM staff WHERE category_id = ? ORDER BY row_position ASC', [category_id]);
 
     const crBalances = await calculateStaffCrBalances();
 
@@ -5928,17 +5936,22 @@ app.get('/api/roster', async (req, res) => {
       curDate.setDate(curDate.getDate() + 1);
     }
 
-    const isCat4Category = parseInt(category_id, 10) === 4;
-
     // Build the grid
     const gridRows = [];
     for (const staff of staffMembers) {
+      const staffCat = categoriesList.find(c => c.id === staff.category_id) || category;
+      const isCat4Category = staff.category_id === 4;
+      const currentCatId = staff.category_id;
+      const staffAnchorDate = staffCat.anchor_date || '2020-01-01';
+      const staffCycleLength = staffCat.cycle_length || 21;
+
       const rowCells = [];
       let lastAssignedLink = null;
       let lastTargetCat = null;
       let lastAssignedNonDaily = null;
       
       for (const d of dates) {
+        const staffDayOffset = getDayOffset(staffAnchorDate, d.dateString);
         const key = `${staff.id}_${d.dateString}`;
         const muster = musterMap[key];
         const directOv = directOverrideMap[key];
@@ -5948,7 +5961,7 @@ app.get('/api/roster', async (req, res) => {
         const dreg = dutyRegisterMap[key];
 
         let linkNum = null;
-        let targetCatId = isCat4Category ? 1 : parseInt(category_id, 10);
+        let targetCatId = isCat4Category ? 1 : currentCatId;
         let isOverridden = false;
         let status = 'DUTY';
         let substituteStaffId = null;
@@ -6356,7 +6369,7 @@ app.get('/api/roster', async (req, res) => {
               lastAssignedNonDaily = null;
             } else if (directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined) {
               linkNum = directOv.overridden_link_number;
-              targetCatId = directOv.target_category_id || (linkNum > 21 ? 2 : parseInt(category_id, 10));
+              targetCatId = directOv.target_category_id || (linkNum > 21 ? 2 : currentCatId);
               status = directOv.status || 'CHANGED_LINK';
               lastAssignedLink = linkNum;
               lastTargetCat = targetCatId;
@@ -6414,7 +6427,7 @@ app.get('/api/roster', async (req, res) => {
               : subOv.original_link_number;
             if (assignedLink) {
               linkNum = assignedLink;
-              targetCatId = subOv.target_category_id || (assignedLink > 21 ? 2 : parseInt(category_id, 10));
+              targetCatId = subOv.target_category_id || (assignedLink > 21 ? 2 : currentCatId);
               status = 'DUTY';
               overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'} on Link #${linkNum}`;
               lastAssignedLink = linkNum;
@@ -6454,13 +6467,13 @@ app.get('/api/roster', async (req, res) => {
             } else {
               lastAssignedNonDaily = null;
             }
-          } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category_id, lastAssignedLink)) {
+          } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || currentCatId, lastAssignedLink)) {
             // Multi-day link continuation (e.g. Day 2 / Day 3 return leg)
-            const setDetails = getLinkSetDetails(lastTargetCat || category_id, lastAssignedLink);
+            const setDetails = getLinkSetDetails(lastTargetCat || currentCatId, lastAssignedLink);
             if (setDetails && setDetails.remainingLinks && setDetails.remainingLinks.length > 0) {
               const nextLink = setDetails.remainingLinks[0];
               linkNum = nextLink;
-              targetCatId = lastTargetCat || parseInt(category_id, 10);
+              targetCatId = lastTargetCat || currentCatId;
               status = 'DUTY';
               isOverridden = true;
               overrideReason = (muster && muster.remarks) ? `Muster: ${muster.remarks}` : `Return Leg of Multi-Day Link #${nextLink} (Set: ${setDetails.setLinks.join('➔')})`;
@@ -6471,8 +6484,8 @@ app.get('/api/roster', async (req, res) => {
           }
 
           if (linkNum === null && status === 'DUTY' && !isOverridden) {
-            linkNum = getBaseLinkNumber(staff.row_position, d.dayOffset, category.cycle_length);
-            const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, category_id, staff.row_position, category.cycle_length, category.anchor_date, d.dateString);
+            linkNum = getBaseLinkNumber(staff.row_position, staffDayOffset, staffCycleLength);
+            const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, currentCatId, staff.row_position, staffCycleLength, staffAnchorDate, d.dateString);
             if (multiDayLeaveReturn) {
               isOverridden = true;
               status = 'AVAILABLE_FOR_BOOKING';
@@ -6483,13 +6496,13 @@ app.get('/api/roster', async (req, res) => {
               lastAssignedLink = null;
             } else {
               lastAssignedLink = linkNum;
-              lastTargetCat = parseInt(category_id, 10);
+              lastTargetCat = currentCatId;
             }
           }
 
           let dutyDetails = null;
           if (linkNum !== null) {
-            dutyDetails = await getActiveLinkDef(targetCatId || category_id, linkNum, d.dateString);
+            dutyDetails = await getActiveLinkDef(targetCatId || currentCatId, linkNum, d.dateString);
           }
 
           let lrRestInfo = null;
@@ -6499,10 +6512,10 @@ app.get('/api/roster', async (req, res) => {
 
           rowCells.push({
             date: d.dateString,
-            dayOffset: d.dayOffset,
-            calculatedLinkNumber: getBaseLinkNumber(staff.row_position, d.dayOffset, category.cycle_length),
+            dayOffset: staffDayOffset,
+            calculatedLinkNumber: getBaseLinkNumber(staff.row_position, staffDayOffset, staffCycleLength),
             actualLinkNumber: linkNum,
-            target_category_id: targetCatId || parseInt(category_id, 10),
+            target_category_id: targetCatId || currentCatId,
             isRest: (linkNum === null && !customTrainNo) || (dutyDetails && dutyDetails.is_rest === 1) || (status === 'AVAILABLE_FOR_BOOKING' && !customTrainNo) || status === 'REST',
             isOverridden,
             status,

@@ -38,14 +38,7 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
-  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
-
-  if (isCurrentMonth && actualEnd > todayIso) {
-    actualEnd = todayIso;
-  }
-  if (isFutureMonth) {
-    actualEnd = actualStart;
-  }
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
   const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
   const linkMap = {};
