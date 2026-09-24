@@ -1234,18 +1234,15 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           } else {
             lastAssignedNonDaily = null;
           }
-        } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)) {
+        } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0) {
           const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
-          if (setDetails && setDetails.remainingLinks && setDetails.remainingLinks.length > 0) {
-            const nextLink = setDetails.remainingLinks[0];
-            linkNum = nextLink;
-            const targetCatId = lastTargetCat || category.id;
-            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
-            lastAssignedLink = nextLink;
-          } else {
-            lastAssignedLink = null;
-          }
+          const nextLink = setDetails.remainingLinks[0];
+          linkNum = nextLink;
+          const targetCatId = lastTargetCat || category.id;
+          duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
+          lastAssignedLink = nextLink;
         } else if (category.id === 4) {
+          lastAssignedLink = null;
           // Category 4: LR Staff
           const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
           if (!dutyCode || ['AVL', 'OFF', 'REST', 'R', 'REST_HQ', 'SPARE', 'CL', 'LAP', 'LHAP', 'SICK', 'CR', 'OD', 'CCL', 'SCL', 'NH', '---', '-'].includes(dutyCode.trim().toUpperCase()) || isEffectiveLeave) {
@@ -1280,6 +1277,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             lastAssignedLink = null;
           }
         } else {
+          lastAssignedLink = null;
           // Regular staff: check multi-day leave return
           const multiDayLeaveReturn = checkMultiDayLeaveReturnSync(
             staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dateStrIso, musterMap, directOverrideMap
@@ -1836,6 +1834,7 @@ module.exports = {
   generatePendingTaClaimsForMonth,
   generateStaffTaJournal,
   getDutyRowsForLinkNumber,
-  resolveDutyCodeToRows
+  resolveDutyCodeToRows,
+  getLinkSetDetails
 };
 
