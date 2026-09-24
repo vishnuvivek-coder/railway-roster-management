@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 const API_BASE = '/api';
 
@@ -333,10 +333,19 @@ export default function DailyEarningsDocument({
     return computeSubtotal(allRows);
   }, [rangeDays, dutyFilter]);
 
-  // Save changes
-  const handleSave = async () => {
+  const autoSaveTimerRef = useRef(null);
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+
+  // Save changes (supports explicit click and automatic background save)
+  const handleSave = async (silent = false) => {
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+    isSavingRef.current = true;
     setSaving(true);
-    setStatusMsg('');
+    if (!silent) setStatusMsg('⏳ Saving Daily Earnings sheet...');
 
     try {
       if (viewMode === 'continuous') {
@@ -344,6 +353,10 @@ export default function DailyEarningsDocument({
           date: d.date,
           entries: d.rows
         }));
+
+        try {
+          localStorage.setItem(`railway_daily_earnings_cont_${rangeStartDate}_${rangeEndDate}`, JSON.stringify(payloadDays));
+        } catch (e) {}
 
         const res = await fetch(`${API_BASE}/documents/daily-earnings/range`, {
           method: 'POST',
@@ -356,12 +369,17 @@ export default function DailyEarningsDocument({
 
         const result = await res.json();
         if (res.ok) {
-          setStatusMsg('✅ Continuous Multi-Day Earnings saved successfully and synced with monthly sheets.');
+          const timeStr = new Date().toLocaleTimeString();
+          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
         }
       } else if (viewMode === 'single_day') {
+        try {
+          localStorage.setItem(`railway_daily_earnings_single_${singleDate}`, JSON.stringify(singleRows));
+        } catch (e) {}
+
         const res = await fetch(`${API_BASE}/documents/daily-earnings`, {
           method: 'POST',
           headers: {
@@ -377,12 +395,17 @@ export default function DailyEarningsDocument({
 
         const result = await res.json();
         if (res.ok) {
-          setStatusMsg('✅ Daily Sheet saved successfully.');
+          const timeStr = new Date().toLocaleTimeString();
+          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
         }
       } else {
+        try {
+          localStorage.setItem(`railway_daily_earnings_monthly_${selectedStaffId}_${year}_${month}`, JSON.stringify(monthlyRows));
+        } catch (e) {}
+
         const res = await fetch(`${API_BASE}/documents/daily-earnings/staff/${selectedStaffId}`, {
           method: 'POST',
           headers: {
@@ -398,19 +421,57 @@ export default function DailyEarningsDocument({
 
         const result = await res.json();
         if (res.ok) {
-          setStatusMsg('✅ Employee monthly earnings saved and synced.');
+          const timeStr = new Date().toLocaleTimeString();
+          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
         }
       }
     } catch (err) {
       console.error('Error saving earnings:', err);
-      setStatusMsg(`❌ Save failed: ${err.message}`);
+      if (!silent) setStatusMsg(`❌ Save failed: ${err.message}`);
     } finally {
       setSaving(false);
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        handleSave(true);
+      }
     }
   };
+
+  // Debounced auto-save on any cell edit (1200ms)
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave(true);
+    }, 1200);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [hasUnsavedChanges, rangeDays, singleRows, monthlyRows]);
+
+  // Emergency auto-save on beforeunload
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (hasUnsavedChanges) {
+        try {
+          if (viewMode === 'continuous' && rangeDays?.length) {
+            localStorage.setItem(`railway_daily_earnings_cont_${rangeStartDate}_${rangeEndDate}`, JSON.stringify(rangeDays));
+          } else if (viewMode === 'single_day' && singleRows?.length) {
+            localStorage.setItem(`railway_daily_earnings_single_${singleDate}`, JSON.stringify(singleRows));
+          } else if (viewMode === 'monthly' && monthlyRows?.length) {
+            localStorage.setItem(`railway_daily_earnings_monthly_${selectedStaffId}_${year}_${month}`, JSON.stringify(monthlyRows));
+          }
+        } catch (e) {}
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedChanges, viewMode, rangeDays, singleRows, monthlyRows, rangeStartDate, rangeEndDate, singleDate, selectedStaffId, year, month]);
 
   // Quick helper to jump to single date
   const jumpToSingleDay = (dateIso) => {
@@ -1586,6 +1647,57 @@ export default function DailyEarningsDocument({
               </tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Floating Save Button & Status on Every Screen & Scroll Position */}
+      {(rangeDays.length > 0 || singleRows.length > 0 || monthlyRows.length > 0) && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '28px',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          background: 'rgba(20, 20, 24, 0.95)',
+          border: hasUnsavedChanges ? '2px solid #f59e0b' : '1.5px solid var(--border-gold)',
+          padding: '10px 18px',
+          borderRadius: '30px',
+          boxShadow: '0 10px 35px rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          {saving ? (
+            <span style={{ color: '#60a5fa', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
+              Saving automatically...
+            </span>
+          ) : hasUnsavedChanges ? (
+            <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>
+              ⚠️ Unsaved edits (Auto-saving...)
+            </span>
+          ) : (
+            <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
+              ✅ All changes saved permanently
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => handleSave(false)}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{
+              fontSize: '0.85rem',
+              padding: '6px 18px',
+              borderRadius: '20px',
+              fontWeight: 700,
+              background: hasUnsavedChanges ? 'linear-gradient(135deg, #e5a93c 0%, #d48b1e 100%)' : 'var(--primary)',
+              boxShadow: hasUnsavedChanges ? '0 0 12px rgba(245, 158, 11, 0.6)' : 'none'
+            }}
+            title="Save now (auto-saves automatically on edit)"
+          >
+            {saving ? 'Saving...' : '💾 Save Changes'}
+          </button>
         </div>
       )}
     </div>

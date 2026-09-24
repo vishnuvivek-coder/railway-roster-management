@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = '/api';
 
@@ -212,7 +212,8 @@ export default function TaDocument({
               object_of_journey: r.object_of_journey || '',
               remarks: r.remarks || r.nature_of_leave || '',
               nature_of_leave: r.nature_of_leave || '',
-              is_leave: !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave')))
+              is_leave: !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave'))),
+              is_manual_ta: !!(r.is_manual_ta || (r._isSaved && b1Val !== ''))
             };
           });
 
@@ -700,42 +701,99 @@ export default function TaDocument({
     }
   };
 
-  // Save changes to database
-  const handleSave = async () => {
-    if (!selectedStaffId || !journalData) return;
+  const autoSaveTimerRef = useRef(null);
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+
+  // Save changes to database (supports explicit click and automatic background save)
+  const handleSave = async (silent = false) => {
+    if (!selectedStaffId || !journalData || !journalData.rows) return;
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+    isSavingRef.current = true;
     setSaving(true);
-    setStatusMsg('');
+    if (!silent) setStatusMsg('⏳ Saving TA journal...');
 
     try {
+      const payload = {
+        month_year: journalData?.month_year || `${year}-${String(month).padStart(2, '0')}`,
+        start_date: startDate,
+        end_date: endDate,
+        entries: journalData.rows,
+        employee_meta: editableMeta
+      };
+
+      // 1. Instant local storage mirror
+      try {
+        localStorage.setItem(`railway_ta_backup_${selectedStaffId}_${startDate}_${endDate}`, JSON.stringify(payload));
+      } catch (e) {}
+
+      // 2. Database save
       const res = await fetch(`${API_BASE}/documents/ta/${selectedStaffId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({
-          month_year: journalData?.month_year || `${year}-${String(month).padStart(2, '0')}`,
-          start_date: startDate,
-          end_date: endDate,
-          entries: journalData.rows,
-          employee_meta: editableMeta
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
       if (res.ok) {
         setHasUnsavedChanges(false);
-        setStatusMsg('✅ TA Journal saved successfully!');
+        const timeStr = new Date().toLocaleTimeString();
+        setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
         setTimeout(() => setStatusMsg(''), 4500);
       } else {
-        alert(data.error || 'Failed to save TA journal.');
+        if (!silent) alert(data.error || 'Failed to save TA journal.');
       }
     } catch (err) {
-      alert('Error saving TA journal: ' + err.message);
+      console.error('Error saving TA journal:', err);
+      if (!silent) alert('Error saving TA journal: ' + err.message);
     } finally {
       setSaving(false);
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        handleSave(true);
+      }
     }
   };
+
+  // Debounced auto-save on any cell or header edit (1200ms)
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      handleSave(true);
+    }, 1200);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [hasUnsavedChanges, journalData, editableMeta]);
+
+  // Emergency auto-save on beforeunload
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (hasUnsavedChanges && selectedStaffId && journalData?.rows) {
+        try {
+          const payload = {
+            month_year: journalData?.month_year || `${year}-${String(month).padStart(2, '0')}`,
+            start_date: startDate,
+            end_date: endDate,
+            entries: journalData.rows,
+            employee_meta: editableMeta
+          };
+          localStorage.setItem(`railway_ta_backup_${selectedStaffId}_${startDate}_${endDate}`, JSON.stringify(payload));
+        } catch (e) {}
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedChanges, selectedStaffId, journalData, editableMeta, startDate, endDate]);
 
   // Reset to auto-generated master rotation
   const handleResetToAuto = async () => {
@@ -2040,6 +2098,57 @@ export default function TaDocument({
               Load First Employee ({staffList[0].name})
             </button>
           )}
+        </div>
+      )}
+
+      {/* Floating Save Button & Status on Every Screen & Scroll Position */}
+      {journalData && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '28px',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          background: 'rgba(20, 20, 24, 0.95)',
+          border: hasUnsavedChanges ? '2px solid #f59e0b' : '1.5px solid var(--border-gold)',
+          padding: '10px 18px',
+          borderRadius: '30px',
+          boxShadow: '0 10px 35px rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          {saving ? (
+            <span style={{ color: '#60a5fa', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
+              Saving automatically...
+            </span>
+          ) : hasUnsavedChanges ? (
+            <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>
+              ⚠️ Unsaved edits (Auto-saving...)
+            </span>
+          ) : (
+            <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
+              ✅ All changes saved permanently
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => handleSave(false)}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{
+              fontSize: '0.85rem',
+              padding: '6px 18px',
+              borderRadius: '20px',
+              fontWeight: 700,
+              background: hasUnsavedChanges ? 'linear-gradient(135deg, #e5a93c 0%, #d48b1e 100%)' : 'var(--primary)',
+              boxShadow: hasUnsavedChanges ? '0 0 12px rgba(245, 158, 11, 0.6)' : 'none'
+            }}
+            title="Save now (auto-saves automatically on edit)"
+          >
+            {saving ? 'Saving...' : '💾 Save Changes'}
+          </button>
         </div>
       )}
     </div>

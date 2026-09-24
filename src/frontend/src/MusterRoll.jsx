@@ -247,6 +247,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       });
 
       setActiveCellModal(null);
+      showToast('✅ Attendance code saved permanently to database');
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
       }));
@@ -274,6 +275,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to reset cell');
 
       setActiveCellModal(null);
+      showToast('🔄 Cell reset and saved permanently to database');
       await fetchMuster(selectedCycleStart);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
@@ -486,9 +488,12 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.18)', color: 'var(--primary)', fontWeight: 800, fontSize: '0.82rem', border: '1px solid var(--border-gold)' }}>
                 Wage Period Cycle: 11th - 10th
               </span>
+              <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', fontWeight: 800, fontSize: '0.82rem', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                ✅ Auto-Save Active (Instant Database Sync)
+              </span>
             </div>
             <p style={{ margin: '6px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.86rem' }}>
-              Monthly attendance register running continuously from the 11th of the current month to the 10th of the following month.
+              Monthly attendance register running continuously from the 11th of the current month to the 10th of the following month. All code updates and edits save automatically in real time.
             </p>
           </div>
 

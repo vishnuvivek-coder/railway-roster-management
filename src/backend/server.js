@@ -15,20 +15,18 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'railway_roster_luxury_editorial_secret_2026';
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Database on startup
 initDb().then(async () => {
   console.log('Database loaded and ready.');
-  // Purge any stale dummy cache records, stale pre-calculated approval claims, and stale ta/nda entries
+  // Clear only temporary NTES network run cache on startup, NEVER delete user data!
   try {
-    await run("DELETE FROM actual_train_runs");
-    await run("DELETE FROM ta_approvals");
-    await run("DELETE FROM ta_entries");
-    await run("DELETE FROM nda_entries");
-    console.log('Purged actual_train_runs, ta_approvals, ta_entries, and nda_entries for fresh dynamic calculation.');
+    await run("DELETE FROM actual_train_runs WHERE source = 'NTES'");
+    console.log('Cleared temporary NTES cache on startup. User data preserved permanently.');
   } catch (e) {
-    console.error('Failed to clean caches on startup:', e);
+    console.error('Failed to clean cache on startup:', e);
   }
   // Auto-sync LR sheet records with any existing Daily Duty allotments
   try {
@@ -10466,6 +10464,85 @@ const possibleDistPaths = [
   path.join(process.cwd(), 'dist'),
   path.join(__dirname, 'dist')
 ];
+
+// -------------------------------------------------------------
+// Database Backup, Export & Import / Cross-Sync API
+// -------------------------------------------------------------
+
+// GET /api/db/export - Download roster.db file directly
+app.get('/api/db/export', (req, res) => {
+  const dbFile = path.join(__dirname, 'roster.db');
+  if (!fs.existsSync(dbFile)) {
+    return res.status(404).json({ error: 'Database file not found.' });
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.download(dbFile, `railway_roster_backup_${dateStr}.db`);
+});
+
+// GET /api/db/json-export - Full database snapshot as JSON
+app.get('/api/db/json-export', async (req, res) => {
+  try {
+    const tables = [
+      'categories', 'staff', 'links', 'overrides', 'leave_requests',
+      'muster_records', 'ta_entries', 'nda_entries', 'diary_entries',
+      'daily_earnings_entries', 'ta_approvals', 'lr_sheet_records', 'lr_duty_completions'
+    ];
+    const data = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      tables: {}
+    };
+    for (const t of tables) {
+      try {
+        data.tables[t] = await all(`SELECT * FROM ${t}`);
+      } catch (err) {
+        data.tables[t] = [];
+      }
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Error exporting JSON backup:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/db/json-import - Restore full database snapshot from JSON
+app.post('/api/db/json-import', async (req, res) => {
+  try {
+    const { tables } = req.body;
+    if (!tables || typeof tables !== 'object') {
+      return res.status(400).json({ error: 'Invalid backup format. "tables" object required.' });
+    }
+
+    await run('BEGIN TRANSACTION');
+    try {
+      for (const [tableName, rows] of Object.entries(tables)) {
+        if (!Array.isArray(rows) || rows.length === 0) continue;
+        const tblExists = await get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [tableName]);
+        if (!tblExists) continue;
+
+        await run(`DELETE FROM ${tableName}`);
+
+        const cols = Object.keys(rows[0]);
+        const placeholders = cols.map(() => '?').join(', ');
+        const insertSql = `INSERT OR REPLACE INTO ${tableName} (${cols.join(', ')}) VALUES (${placeholders})`;
+
+        for (const row of rows) {
+          const values = cols.map(c => row[c]);
+          await run(insertSql, values);
+        }
+      }
+      await run('COMMIT');
+      res.json({ success: true, message: 'Database restored successfully from backup!' });
+    } catch (txErr) {
+      await run('ROLLBACK');
+      throw txErr;
+    }
+  } catch (err) {
+    console.error('Error importing JSON backup:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 let frontendDistPath = possibleDistPaths.find(p => fs.existsSync(path.join(p, 'index.html')));
 
