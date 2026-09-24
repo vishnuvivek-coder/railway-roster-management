@@ -3953,6 +3953,7 @@ export default function App() {
                 }, []) || [];
 
                 const MASTER_DAILY_SLOTS = [
+                  // 1. Train 17253 / 17252 (GNT - DHNE - GNT)
                   {
                     slotId: 1,
                     page: 172,
@@ -3960,66 +3961,37 @@ export default function App() {
                     lastTrain: '17252',
                     links: [
                       { categoryId: 2, linkNum: 1, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 15, firstCoach: 'SL', lastCoach: 'SL' }
-                    ]
-                  },
-                  {
-                    slotId: 2,
-                    page: 172,
-                    firstTrain: '17239',
-                    lastTrain: '17240',
-                    links: [
+                      { categoryId: 2, linkNum: 15, firstCoach: 'SL', lastCoach: 'SL' },
                       { categoryId: 2, linkNum: 29, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
                     ]
                   },
+                  // 2. Train 17251 / 17254 (GNT - DHNE - GNT)
                   {
-                    slotId: 3,
-                    page: 172,
-                    firstTrain: '17646',
-                    lastTrain: '12796',
-                    links: [
-                      { categoryId: 2, linkNum: 17, firstCoach: 'AC+SL', lastCoach: 'AC+2S' }
-                    ]
-                  },
-                  {
-                    slotId: 4,
-                    page: 172,
-                    firstTrain: '12805',
-                    lastTrain: '12806',
-                    links: [
-                      { categoryId: 2, linkNum: 19, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
-                    ]
-                  },
-                  {
-                    slotId: 5,
-                    page: 172,
-                    firstTrain: '12795',
-                    lastTrain: '17645',
-                    links: [
-                      { categoryId: 2, linkNum: 47, firstCoach: 'AC+2S', lastCoach: 'AC+SL' }
-                    ]
-                  },
-                  {
-                    slotId: 6,
+                    slotId: 2,
                     page: 172,
                     firstTrain: '17251',
                     lastTrain: '17254',
                     links: [
-                      { categoryId: 2, linkNum: 5, altLinkNums: [6], firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 33, altLinkNums: [34], firstCoach: 'SL', lastCoach: 'SL' }
+                      { categoryId: 2, linkNum: 5, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+                      { categoryId: 2, linkNum: 19, firstCoach: 'SL', lastCoach: 'SL' },
+                      { categoryId: 2, linkNum: 33, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
                     ]
                   },
+                  // 3. Train 12604 / 12603 (GNT - MAS - GNT)
                   {
-                    slotId: 7,
+                    slotId: 3,
                     page: 172,
-                    firstTrain: '17281',
-                    lastTrain: '17282',
+                    firstTrain: '12604',
+                    lastTrain: '12603',
                     links: [
-                      { categoryId: 2, linkNum: 45, firstCoach: '2S', lastTrain: '17282', lastCoach: '2S' }
+                      { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastCoach: 'S1-S5' },
+                      { categoryId: 2, linkNum: 17, firstCoach: 'S6-S10', lastCoach: 'S6-S10' },
+                      { categoryId: 2, linkNum: 31, firstCoach: 'S6-S10', lastCoach: 'S6-S10' }
                     ]
                   },
+                  // 4. Train 17261 / 12733 / 17262 (GNT - TPTY - GNT)
                   {
-                    slotId: 8,
+                    slotId: 4,
                     page: 172,
                     firstTrain: '17261',
                     lastTrain: '12733',
@@ -4029,86 +4001,93 @@ export default function App() {
                       { categoryId: 3, linkNum: 4, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
                     ]
                   },
+                  // 5. Train 20629 / 12733 / 20630 (GNT - TPTY - GNT)
                   {
-                    slotId: 9,
+                    slotId: 5,
                     page: 172,
                     firstTrain: '20629',
                     lastTrain: '12733',
                     links: [
                       { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
-                      { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 43, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' }
+                      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
                     ]
                   },
+                  // 6. Train 17225 / 17226 (Amaravati Exp BZA - GTL - BZA)
                   {
-                    slotId: 10,
+                    slotId: 6,
                     page: 172,
                     firstTrain: '17225',
                     lastTrain: '17226',
                     links: [
                       { categoryId: 1, linkNum: 1, firstCoach: 'AC', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 11, firstCoach: 'SL', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 25, firstCoach: 'SL', lastCoach: 'SL' }
+                      { categoryId: 2, linkNum: 11, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
                     ]
                   },
+                  // 7. Train 18047 / 18048 (Amaravati Exp BZA - GTL - BZA)
                   {
-                    slotId: 11,
+                    slotId: 7,
                     page: 172,
                     firstTrain: '18047',
                     lastTrain: '18048',
                     links: [
                       { categoryId: 1, linkNum: 15, firstCoach: 'AC', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 57, firstCoach: 'SL', lastCoach: 'SL' }
+                      { categoryId: 2, linkNum: 25, firstCoach: 'S1-S5', lastTrain: '17226', lastCoach: 'S1-S5' },
+                      { categoryId: 2, linkNum: 57, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
                     ]
                   },
+                  // 8. Train 17645 / 17646 (Circar & KCG Exp GNT - RAL - KCG - SC - RAL - GNT)
                   {
-                    slotId: 12,
+                    slotId: 8,
                     page: 172,
-                    firstTrain: '17626',
-                    lastTrain: '17625',
+                    firstTrain: '17645',
+                    lastTrain: '17646',
                     links: [
-                      { categoryId: 2, linkNum: 36, altLinkNums: [37], firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 50, altLinkNums: [51], firstCoach: 'SL', lastCoach: 'SL' }
+                      { categoryId: 2, linkNum: 36, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+                      { categoryId: 2, linkNum: 50, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
                     ]
                   },
+                  // 9. Train 12734 / 20630 / 17262 (Narayanadri Exp GNT - TPTY/SC - GNT)
                   {
-                    slotId: 13,
-                    page: 173,
-                    firstTrain: '12604',
-                    lastTrain: '12603',
-                    links: [
-                      { categoryId: 1, linkNum: 12, firstCoach: 'AC', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 3, firstCoach: 'SL', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 31, firstCoach: 'SL', lastCoach: 'SL' }
-                    ]
-                  },
-                  {
-                    slotId: 14,
+                    slotId: 9,
                     page: 173,
                     firstTrain: '12734',
                     lastTrain: '20630',
                     links: [
-                      { categoryId: 1, linkNum: 10, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
-                      { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' }
+                      { categoryId: 1, linkNum: 11, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
+                      { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' },
+                      { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
+                      { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
                     ]
                   },
+                  // 10. Train 17243 / 17244 (Rayagada Exp GNT - VSKP - GNT)
                   {
-                    slotId: 15,
-                    page: 173,
-                    firstTrain: '12734',
-                    lastTrain: '20630',
-                    links: [
-                      { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastCoach: 'SL' }
-                    ]
-                  },
-                  {
-                    slotId: 16,
+                    slotId: 10,
                     page: 173,
                     firstTrain: '17243',
                     lastTrain: '17244',
                     links: [
                       { categoryId: 2, linkNum: 39, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
                       { categoryId: 2, linkNum: 53, firstCoach: 'SL', lastCoach: 'SL' }
+                    ]
+                  },
+                  // 11. Train 17281 / 17282 (GNT - NS - GNT)
+                  {
+                    slotId: 11,
+                    page: 173,
+                    firstTrain: '17281',
+                    lastTrain: '17282',
+                    links: [
+                      { categoryId: 2, linkNum: 45, firstCoach: 'D1-D2', lastTrain: '17282', lastCoach: 'D1-D2' }
+                    ]
+                  },
+                  // 12. Train 12705/12795 / 17645 (Intercity Exp GNT - BZA/SC - GNT)
+                  {
+                    slotId: 12,
+                    page: 173,
+                    firstTrain: '12705/12795',
+                    lastTrain: '17645',
+                    links: [
+                      { categoryId: 2, linkNum: 47, firstCoach: 'AC', lastTrain: '17645', lastCoach: 'SL' }
                     ]
                   }
                 ];
@@ -4651,15 +4630,15 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Daily Train Slots (16 Slots) Table */}
+                    {/* Daily Train Slots (12 Services) Table */}
                     <div className="table-responsive" style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-glass)', marginBottom: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            🚆 Daily Train Slots (16 Slots)
+                            🚆 Daily Train Slots (12 Services)
                           </h3>
                           <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.78rem' }}>
-                            16 Daily Services
+                            12 Daily Services
                           </span>
                         </div>
                         <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem' }}>

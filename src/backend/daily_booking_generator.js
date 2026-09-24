@@ -17,8 +17,7 @@ const KNOWN_TRAIN_METADATA = {
   '17228': { depTime: '13:00', route: 'GNT/DHNE/GNT', retTrain: '17227', coaches: 'SL' },
   '17221': { depTime: '13:35', route: 'GNT/WADI/GNT', retTrain: '17222', coaches: 'SL / AC' },
   '20630': { depTime: '14:30', route: 'TPTY/GNT/MAS', retTrain: '20629', coaches: 'VB / AC' },
-  '67230': { depTime: '16:25', route: 'GNT/BZA/GTL', retTrain: '17226', coaches: 'AC / SL' },
-  '17225': { depTime: '16:25', route: 'BZA/GTL/BZA', retTrain: '17226', coaches: 'AC / SL' },
+  '17225': { depTime: '19:45', route: 'BZA/GTL/BZA', retTrain: '17226', retTime: '3:45', coaches: 'AC / SL' },
   '17261': { depTime: '16:30', route: 'GNT/TPTY/GNT', retTrain: '12733', coaches: 'AC / SL' },
   '17251': { depTime: '16:30', route: 'GNT/DHNE/GNT', retTrain: '17252', coaches: 'SL' },
   '12603': { depTime: '16:45', route: 'MAS/GNT/HYB', retTrain: '12604', coaches: 'AC / SL' },
@@ -26,25 +25,70 @@ const KNOWN_TRAIN_METADATA = {
   '17252': { depTime: '17:45', route: 'DHNE/GNT/GNT', retTrain: '17252', coaches: 'SL' },
   '17254': { depTime: '17:45', route: 'DHNE/GNT/GNT', retTrain: '17254', coaches: 'AC+SL' },
   '17244': { depTime: '17:45', route: 'VSKP/GNT/GNT', retTrain: '17244', coaches: 'SL' },
-  '17625, 17646': { depTime: '17:45', route: 'SC, RAL/RAL, GNT/GNT', retTrain: '17646', coaches: 'SL / AC' },
-  '17645, 17626': { depTime: '17:45', route: 'GNT, RAL/RAL, KCG/GNT', retTrain: '17626', coaches: 'AC+SL' },
-  '17645': { depTime: '17:45', route: 'SC/GNT/GNT', retTrain: '17645', coaches: 'AC+SL' },
+  '17625': { depTime: '17:45', route: 'SC, RAL/RAL, GNT/GNT', retTrain: '17646', coaches: 'SL / AC' },
+  '17645': { depTime: '17:45', route: 'GNT, RAL/RAL, KCG/GNT', retTrain: '17626', coaches: 'AC+SL' },
   '17646': { depTime: '17:45', route: 'GNT/RAL/GNT', retTrain: '12796', coaches: 'AC+SL' },
   '17626': { depTime: '17:45', route: 'RAL/KCG/RAL', retTrain: '17625', coaches: 'AC+SL' },
-  '17626, 17625': { depTime: '17:45', route: 'RAL/KCG/RAL', retTrain: '17625', coaches: 'AC+SL' },
-  '18047': { depTime: '17:45', route: 'BZA/GTL/BZA', retTrain: '18048', coaches: 'AC / SL' },
-  '18048, PILOT(12727)': { depTime: '17:45', route: 'BZA/GNT/GNT', retTrain: 'PILOT(12703)', coaches: 'AC / SL' },
-  '18048': { depTime: '17:45', route: 'BZA/GNT/GNT', retTrain: 'PILOT(12703)', coaches: 'AC / SL' },
+  '18047': { depTime: '19:45', route: 'BZA/GTL/BZA', retTrain: '18048', retTime: '3:45', coaches: 'AC / SL' },
+  '18048': { depTime: '17:45', route: 'BZA/GNT/GNT', retTrain: '18048', coaches: 'AC / SL' },
+  '17226': { depTime: '17:45', route: 'GTL/BZA/GNT', retTrain: '17226', retTime: '3:45', coaches: 'AC / SL' },
   '17262': { depTime: '19:30', route: 'TPTY/GNT/TPTY', retTrain: '17261', coaches: 'SL / AC' },
   '20629': { depTime: '19:10', route: 'GNT/TPTY/GNT', retTrain: '12733', coaches: 'VB / AC' },
   '17215': { depTime: '22:35', route: 'GNT/DMM/GNT', retTrain: '17216', coaches: 'SL' },
   '17069': { depTime: '22:40', route: 'GNT/TPTY/GNT', retTrain: '17262', coaches: 'SL / AC' },
-  '12604': { depTime: '22:40', route: 'GNT/MAS/GNT', retTrain: '12603', coaches: 'AC / SL' },
+  '12604': { depTime: '22:00', route: 'GNT/MAS/GNT', retTrain: '12603', coaches: 'AC / SL' },
   '12734': { depTime: '23:10', route: 'GNT/TPTY/GNT', retTrain: '20630', coaches: 'AC / SL' },
   '17243': { depTime: '23:20', route: 'GNT/VSKP/GNT', retTrain: '17244', coaches: 'SL' },
   '17255': { depTime: '23:20', route: 'GNT/KCG/GNT', retTrain: '17256', coaches: 'SL' },
+  '12705/12795': { depTime: '17:45', route: 'GNT/BZA/SC/GNT', retTrain: '12795', coaches: 'AC' },
   'SPARE': { depTime: '17:45', route: 'GNT/---/GNT', retTrain: 'SPARE / NON-DAILY', coaches: 'SL / AC' }
 };
+
+/**
+ * Resolves the primary working train key for Amenity charts, completely eliminating
+ * any pilot train movements (such as 67230, 57201, 57210, PILOT(...)).
+ */
+function resolveWorkingTrainKey(dutyStr, categoryId, linkNumber) {
+  if (!dutyStr) return 'SPARE';
+  let t = dutyStr.trim();
+  if (categoryId === 4 && (t.startsWith('LR-') || t.startsWith('LR '))) return '17281';
+  if (t.includes('17225')) {
+    if (t === '17226' || t.includes('17226, PILOT') || t.includes('17226, 572')) {
+      return '17226';
+    }
+    return '17225';
+  }
+  if (t.includes('18047')) {
+    if (t === '18047, 17226' && (linkNumber === 16 || linkNumber === 26)) return '17226';
+    return '18047';
+  }
+  if (t.includes('17226')) return '17226';
+  if (t.includes('18048')) return '18048';
+  if (t.includes('17645') && t.includes('17626')) return '17645';
+  if (t.includes('17626') && t.includes('17625')) return '17626';
+  if (t.includes('17625') && t.includes('17646')) return '17625';
+  if (t.includes('17646')) return '17646';
+  if (t.includes('17243')) return '17243';
+  if (t.includes('17244')) return '17244';
+  if (t.includes('17261')) return '17261';
+  if (t.includes('20629')) return '20629';
+  if (t.includes('12734')) return '12734';
+  if (t.includes('12604')) return '12604';
+  if (t.includes('12603')) return '12603';
+  if (t.includes('17253')) return '17253';
+  if (t.includes('17251')) return '17251';
+  if (t.includes('17252')) return '17252';
+  if (t.includes('17254')) return '17254';
+  if (t.includes('12705') || t.includes('12795')) return '12705/12795';
+  if (t.includes('17281')) return '17281';
+  if (t.includes('17282')) return '17282';
+  if (t.includes('12733')) return '12733';
+  if (t.includes('20630')) return '20630';
+
+  const cleaned = t.replace(/PILOT\s*\([^)]*\)/gi, '').replace(/^,\s*|,\s*$/g, '').trim();
+  const first = cleaned.split(/[,/]/)[0].trim();
+  return first || t;
+}
 
 /**
  * Generate the Daily Amenity Staff Booking Chart / Daily Summary
@@ -340,39 +384,38 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
       return;
     }
 
-    // Active Train duty - normalize train group keys
-    let tKey = s.train_numbers.trim();
-    if (s.categoryId === 4 && (tKey.startsWith('LR-') || tKey.startsWith('LR '))) {
-      tKey = '17281';
-    } else if (tKey.includes('67230')) {
-      tKey = '67230';
-    } else if (tKey.includes('18048') && tKey.includes('PILOT')) {
-      tKey = '18048, PILOT(12727)';
-    } else if (tKey.includes('17625') && tKey.includes('17646')) {
-      tKey = '17625, 17646';
-    } else if (tKey.includes('17645') && tKey.includes('17626')) {
-      tKey = '17645, 17626';
-    } else if (tKey.includes('17281') && tKey.includes('17225')) {
-      tKey = '17281';
-    }
+    // Active Train duty - resolve primary working train key (eliminating pilot movements)
+    const tKey = resolveWorkingTrainKey(s.train_numbers, s.categoryId, s.link_number);
 
     const primaryTrain = tKey.split(/[,/]/)[0].replace(/PILOT\s*\(/i, '').replace(/\)/g, '').trim();
     const meta = KNOWN_TRAIN_METADATA[tKey] || KNOWN_TRAIN_METADATA[primaryTrain] || {
       depTime: s.dep_time || '17:45',
       route: `${s.from_station || 'GNT'}/${s.to_station || '---'}/GNT`,
-      retTrain: s.last_train || primaryTrain
+      retTrain: primaryTrain,
+      retTime: ''
     };
+
+    let retTrainClean = meta.retTrain || primaryTrain;
+    if (retTrainClean.includes('PILOT') || retTrainClean.includes('57201') || retTrainClean.includes('57210') || retTrainClean.includes('67230')) {
+      retTrainClean = tKey;
+    }
 
     if (!trainMap.has(tKey)) {
       trainMap.set(tKey, {
         trainNumber: tKey,
         depTime: meta.depTime,
         route: meta.route,
-        retTrain: meta.retTrain,
+        retTime: meta.retTime || '',
+        retTrain: retTrainClean,
         isSpecial: !!meta.isSpecial,
         coaches: s.coaches || meta.coaches,
         crew: []
       });
+    }
+
+    let coachTagClean = retTrainClean;
+    if (s.coaches && !s.coaches.includes('PILOT') && !s.coaches.includes('57201') && !s.coaches.includes('57210') && !s.coaches.includes('67230')) {
+      coachTagClean = retTrainClean;
     }
 
     trainMap.get(tKey).crew.push({
@@ -381,7 +424,7 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
       designation: s.designation,
       roleBadge: s.roleBadge,
       categoryId: s.categoryId,
-      coachTag: meta.retTrain || s.coaches || '',
+      coachTag: coachTagClean,
       isCancelled: false,
       remarks: s.remarks || ''
     });
@@ -412,7 +455,8 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
   whatsappText += `📋 *BOOKED TRAIN SERVICES (${trainBlocks.length} Services • ${totalBookedCrew} Staff):*\n\n`;
 
   trainBlocks.forEach(tb => {
-    whatsappText += `🔹 *Train ${tb.trainNumber}* | ${tb.depTime} @ ${tb.route} | Ret: ${tb.retTrain || '-'}\n`;
+    const timeRoute = `${tb.depTime} @ ${tb.route}${tb.retTime ? ' ' + tb.retTime : ''}`;
+    whatsappText += `🔹 *Train ${tb.trainNumber}* | ${timeRoute} | Ret: ${tb.retTrain || '-'}\n`;
     tb.crew.forEach(c => {
       const cancelStr = c.isCancelled ? ' ❌ [CANCELLED]' : '';
       whatsappText += `   • ${c.roleBadge}: ${c.name}${c.coachTag ? ` (${c.coachTag})` : ''}${cancelStr}\n`;
@@ -481,5 +525,6 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
 
 module.exports = {
   generateDailyBookingChart,
-  KNOWN_TRAIN_METADATA
+  KNOWN_TRAIN_METADATA,
+  resolveWorkingTrainKey
 };

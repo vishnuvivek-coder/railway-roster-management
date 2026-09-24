@@ -411,7 +411,7 @@ export default function DailyAmenityBookingDocument({
                               {tb.trainNumber}
                             </td>
                             <td style={{ width: '56%', padding: '4px 2px', borderRight: '1px solid #000000', fontSize: '9.5px', whiteSpace: 'nowrap' }}>
-                              {tb.depTime} @ {tb.route}
+                              {tb.depTime} @ {tb.route}{tb.retTime ? ` ${tb.retTime}` : ''}
                             </td>
                             <td style={{ width: '22%', padding: '4px 2px', fontSize: '10px' }}>
                               {tb.retTrain || '-'}
