@@ -4,8 +4,7 @@ const KNOWN_LINK_SETS = {
   1: [
     [1, 2, 3],
     [4, 5, 6],
-    [8, 9, 10],
-    [11, 12, 13],
+    [8, 9, 10, 11, 12, 13],
     [15, 16, 17],
     [18, 19, 20]
   ],
@@ -536,27 +535,32 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
         return []; // REST
       case 8:
         return [
-          { train_no: '20629', from: 'GNT', to: 'TPTY', dep: '19:10', arr: '01:50', ta: 0.7 }
+          { train_no: '20629', from: 'GNT', to: '---', dep: '19:10', arr: '---', ta: 0.3 }
         ];
       case 9:
         return [
-          { train_no: '12733', from: 'TPTY', to: 'GNT', dep: '18:20', arr: '00:50', ta: 0.7 }
+          { train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null },
+          { train_no: '12733', from: 'TPTY', to: '---', dep: '18:20', arr: '---', ta: 1.0 }
         ];
       case 10:
         return [
-          { train_no: '12734', from: 'GNT', to: 'TPTY', dep: '23:10', arr: '06:00', ta: 0.7 }
+          { train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 },
+          { train_no: '12734', from: 'GNT', to: '---', dep: '23:10', arr: '---', ta: 0.3 }
         ];
       case 11:
         return [
-          { train_no: '20630', from: 'TPTY', to: 'GNT', dep: '23:15', arr: '05:55', ta: 0.7 }
+          { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:00', ta: null },
+          { train_no: '20630', from: 'TPTY', to: '---', dep: '23:15', arr: '---', ta: 1.0 }
         ];
       case 12:
         return [
-          { train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:40', ta: 0.7 }
+          { train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 },
+          { train_no: '12604', from: 'GNT', to: '---', dep: '22:00', arr: '---', ta: 0.3 }
         ];
       case 13:
         return [
-          { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:35', arr: '23:55', ta: 0.7 }
+          { train_no: '12604', from: '---', to: 'MAS', dep: '---', arr: '05:45', ta: null },
+          { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '23:30', ta: 1.0 }
         ];
       case 14:
         return []; // REST
@@ -841,12 +845,12 @@ function resolveDutyCodeToRows(dutyCode) {
     return [{ train_no: '17426', from: 'SC', to: 'GNT', dep: '11:40', arr: '17:10', ta: 0.7 }];
   }
   if (code.includes('12604 / 12603') || code.includes('12604/12603') || code === '12604') {
-    return [{ train_no: '12604', from: 'GNT', to: '---', dep: '22:10', arr: '---', ta: 0.3 }];
+    return [{ train_no: '12604', from: 'GNT', to: '---', dep: '22:00', arr: '---', ta: 0.3 }];
   }
   if (code === '12603') {
     return [
       { train_no: '12604', from: '---', to: 'MAS', dep: '---', arr: '05:45', ta: null },
-      { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '00:00', ta: 1.0 }
+      { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '23:30', ta: 1.0 }
     ];
   }
   if (code === '17226') {

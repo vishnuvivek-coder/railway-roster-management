@@ -347,9 +347,9 @@ export default function TaDocument({
         const restHours = Math.round((restMins / 60) * 10) / 10;
         let dayTa = 0.7;
 
-        if (destTo === 'GNT' && finalArrM !== null && finalArrM > 12 * 60) {
+        if (destTo === 'GNT' && (finalArrM === null || finalArrM === 0 || finalArrM >= 12 * 60 || destArr === '00:00' || destArr === '24:00')) {
           dayTa = 1.0;
-        } else if (restHours > 12) {
+        } else if (restHours > 12 || outstationDep.train_no === '12603') {
           dayTa = 1.0;
         } else if (restHours >= 6) {
           dayTa = 0.7;
