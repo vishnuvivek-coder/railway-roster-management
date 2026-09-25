@@ -394,7 +394,7 @@ function getMultiDayNonDailyMatch(trainCodeOrReason) {
   const str = String(trainCodeOrReason).toUpperCase();
   for (const [outTrain, info] of Object.entries(NON_DAILY_PAIRS_MAP)) {
     if (str.includes(outTrain) || (info.returnTrain && str.includes(info.returnTrain))) {
-      const isReturn = info.returnTrain && str.includes(info.returnTrain) && !str.includes(outTrain);
+      const isReturn = str.includes('RETURN') || str.includes('DAY 2') || (info.returnTrain && str.includes(info.returnTrain) && !str.includes(outTrain));
       return { ...info, outTrain, isReturn };
     }
   }
@@ -5238,6 +5238,126 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
       isLeave: false
     });
 
+    // Multi-Day Continuation for Non-Daily Services (2-Day or 3-Day services)
+    const ndMatch = NON_DAILY_PAIRS_MAP[String(finalTrainNo).trim()] || getMultiDayNonDailyMatch(finalTrainNo);
+    const returnTrain = ndMatch?.returnTrain || (trainObj && trainObj.last_day_train_number ? trainObj.last_day_train_number : null);
+    const totalDays = ndMatch?.totalDays || (returnTrain ? 2 : 1);
+    const via = ndMatch?.via || (trainObj && trainObj.departure_station ? `${trainObj.departure_station} ➔ ${trainObj.arrival_station}` : '');
+    const to = ndMatch?.to || 'GNT';
+    const arrHqTime = ndMatch?.arrHqTime || '';
+    const restTill = ndMatch?.restTill || '';
+
+    if (totalDays >= 2 && returnTrain) {
+      const d2Obj = new Date(date + 'T12:00:00');
+      d2Obj.setDate(d2Obj.getDate() + 1);
+      const d2Str = d2Obj.toISOString().split('T')[0];
+      const d2Offset = getDayOffset(cat.anchor_date, d2Str);
+      const d2OrigLink = getBaseLinkNumber(staff.row_position, d2Offset, cat.cycle_length);
+      const d2Reason = `Day 2 Return of ${finalTrainNo} (${returnTrain}${via ? ` ${via}` : ''} ➔ ${to})`;
+
+      await run(
+        `INSERT INTO overrides (
+          staff_id, date, overridden_link_number, status, target_category_id,
+          reason, original_link_number, extra_train_no, is_extra,
+          shifted_from_link, shifted_from_train, shifted_place,
+          advance_train_no, is_advance_duty
+        ) VALUES (?, ?, NULL, 'EXTRA_CREW', ?, ?, ?, ?, 1, ?, 'NON_DAILY', 'NON_DAILY_RETURN', NULL, 0)
+        ON CONFLICT(staff_id, date) DO UPDATE SET
+          overridden_link_number = NULL,
+          status = 'EXTRA_CREW',
+          target_category_id = excluded.target_category_id,
+          reason = excluded.reason,
+          original_link_number = COALESCE(overrides.original_link_number, excluded.original_link_number),
+          extra_train_no = excluded.extra_train_no,
+          is_extra = 1,
+          shifted_from_link = excluded.shifted_from_link,
+          shifted_from_train = excluded.shifted_from_train,
+          shifted_place = 'NON_DAILY_RETURN',
+          advance_train_no = NULL,
+          is_advance_duty = 0`,
+        [
+          staff.id,
+          d2Str,
+          staff.category_id,
+          d2Reason,
+          d2OrigLink,
+          returnTrain,
+          d2OrigLink || null
+        ]
+      );
+
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = 'P',
+           remarks = excluded.remarks,
+           updated_by = 'Admin',
+           updated_at = CURRENT_TIMESTAMP`,
+        [staff.id, d2Str, `Train ${returnTrain}`]
+      );
+
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, d2Str, {
+        targetTrain: returnTrain,
+        isLeave: false
+      });
+    }
+
+    if (totalDays === 3) {
+      const d3Obj = new Date(date + 'T12:00:00');
+      d3Obj.setDate(d3Obj.getDate() + 2);
+      const d3Str = d3Obj.toISOString().split('T')[0];
+      const d3Offset = getDayOffset(cat.anchor_date, d3Str);
+      const d3OrigLink = getBaseLinkNumber(staff.row_position, d3Offset, cat.cycle_length);
+      const d3Reason = `Day 3: Arrived GNT ${arrHqTime || ''} on ${returnTrain || ''}${restTill ? ` • 8h HQ Rest till ${restTill}` : ''} • 3-Day Link Complete`;
+
+      await run(
+        `INSERT INTO overrides (
+          staff_id, date, overridden_link_number, status, target_category_id,
+          reason, original_link_number, extra_train_no, is_extra,
+          shifted_from_link, shifted_from_train, shifted_place,
+          advance_train_no, is_advance_duty
+        ) VALUES (?, ?, NULL, 'DUTY', ?, ?, ?, NULL, 0, ?, 'NON_DAILY', 'NON_DAILY_REST', NULL, 0)
+        ON CONFLICT(staff_id, date) DO UPDATE SET
+          overridden_link_number = NULL,
+          status = 'DUTY',
+          target_category_id = excluded.target_category_id,
+          reason = excluded.reason,
+          original_link_number = COALESCE(overrides.original_link_number, excluded.original_link_number),
+          extra_train_no = NULL,
+          is_extra = 0,
+          shifted_from_link = excluded.shifted_from_link,
+          shifted_from_train = excluded.shifted_from_train,
+          shifted_place = 'NON_DAILY_REST',
+          advance_train_no = NULL,
+          is_advance_duty = 0`,
+        [
+          staff.id,
+          d3Str,
+          staff.category_id,
+          d3Reason,
+          d3OrigLink,
+          d3OrigLink || null
+        ]
+      );
+
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = 'P',
+           remarks = excluded.remarks,
+           updated_by = 'Admin',
+           updated_at = CURRENT_TIMESTAMP`,
+        [staff.id, d3Str, `HQ Rest after Tr ${returnTrain || ''}`]
+      );
+
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, d3Str, {
+        targetTrain: null,
+        isLeave: false
+      });
+    }
+
     const undoData = {
       action: 'ASSIGN_NON_DAILY_TRAIN',
       staff_id: staff.id,
@@ -5286,6 +5406,44 @@ app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) =>
         targetTrain: null,
         isLeave: false
       });
+
+      // Also clean up Day 2 and Day 3 continuation overrides if present
+      const d2Obj = new Date(date + 'T12:00:00');
+      d2Obj.setDate(d2Obj.getDate() + 1);
+      const d2Str = d2Obj.toISOString().split('T')[0];
+
+      const d3Obj = new Date(date + 'T12:00:00');
+      d3Obj.setDate(d3Obj.getDate() + 2);
+      const d3Str = d3Obj.toISOString().split('T')[0];
+
+      // Also check if current date itself was Day 2 or Day 3 of a multi-day service
+      const dMinus1 = new Date(date + 'T12:00:00');
+      dMinus1.setDate(dMinus1.getDate() - 1);
+      const dMinus1Str = dMinus1.toISOString().split('T')[0];
+
+      const dMinus2 = new Date(date + 'T12:00:00');
+      dMinus2.setDate(dMinus2.getDate() - 2);
+      const dMinus2Str = dMinus2.toISOString().split('T')[0];
+
+      const affectedDates = [dMinus2Str, dMinus1Str, d2Str, d3Str];
+      for (const affDate of affectedDates) {
+        const affOv = await get(
+          `SELECT * FROM overrides 
+           WHERE staff_id = ? AND date = ? AND shifted_place IN ('NON_DAILY_TRAIN', 'NON_DAILY_RETURN', 'NON_DAILY_REST')`,
+          [resolvedStaffId, affDate]
+        );
+        if (affOv) {
+          await run('DELETE FROM overrides WHERE id = ?', [affOv.id]);
+          await run(
+            `DELETE FROM muster_records WHERE staff_id = ? AND date = ? AND (remarks LIKE '%Train%' OR remarks LIKE '%HQ Rest%')`,
+            [resolvedStaffId, affDate]
+          );
+          await syncDutyChangeAcrossAllModules({ get, all, run }, resolvedStaffId, affDate, {
+            targetTrain: null,
+            isLeave: false
+          });
+        }
+      }
     }
     if (non_daily_train_id) {
       await run(
@@ -7068,6 +7226,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         let targetCategoryId = null;
         let leaveType = null;
         
+        let multiDayContinuation = null;
         if (override) {
           activeLink = override.overridden_link_number;
           isOverridden = true;
@@ -7097,6 +7256,57 @@ app.get('/api/reports/daily-view', async (req, res) => {
             substituteStaffId = multiDayLeaveReturn.substituteStaffId;
             substituteName = multiDayLeaveReturn.substituteName;
             activeLink = null;
+          } else {
+            // Check yesterday for multi-day return leg (2-Day and 3-Day services)
+            const dMinus1 = new Date(date + 'T12:00:00');
+            dMinus1.setDate(dMinus1.getDate() - 1);
+            const dMinus1Str = dMinus1.toISOString().split('T')[0];
+            const prev1Ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dMinus1Str]);
+
+            if (prev1Ov && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(prev1Ov.status)) {
+              const prev1TrainStr = prev1Ov.extra_train_no || prev1Ov.reason;
+              const ndMatch1 = getMultiDayNonDailyMatch(prev1TrainStr);
+              if (ndMatch1 && !ndMatch1.isReturn && (ndMatch1.totalDays || 2) >= 2) {
+                isOverridden = true;
+                status = 'EXTRA_CREW';
+                overrideReason = `Day 2 Return of ${ndMatch1.outTrain} (${ndMatch1.returnTrain}${ndMatch1.via ? ` ${ndMatch1.via}` : ''} ➔ ${ndMatch1.to || 'GNT'})`;
+                activeLink = null;
+                multiDayContinuation = {
+                  type: 'RETURN',
+                  train: ndMatch1.returnTrain,
+                  outTrain: ndMatch1.outTrain,
+                  via: ndMatch1.via || 'WADI',
+                  to: ndMatch1.to || 'GNT',
+                  totalDays: ndMatch1.totalDays
+                };
+              }
+            }
+
+            if (!multiDayContinuation) {
+              const dMinus2 = new Date(date + 'T12:00:00');
+              dMinus2.setDate(dMinus2.getDate() - 2);
+              const dMinus2Str = dMinus2.toISOString().split('T')[0];
+              const prev2Ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dMinus2Str]);
+
+              if (prev2Ov && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(prev2Ov.status)) {
+                const prev2TrainStr = prev2Ov.extra_train_no || prev2Ov.reason;
+                const ndMatch2 = getMultiDayNonDailyMatch(prev2TrainStr);
+                if (ndMatch2 && !ndMatch2.isReturn && ndMatch2.totalDays === 3) {
+                  isOverridden = true;
+                  status = 'REST';
+                  overrideReason = `Day 3: Arrived GNT ${ndMatch2.arrHqTime || ''} on ${ndMatch2.returnTrain} • 8h HQ Rest till ${ndMatch2.restTill || ''}`;
+                  activeLink = null;
+                  multiDayContinuation = {
+                    type: 'REST',
+                    train: null,
+                    returnTrain: ndMatch2.returnTrain,
+                    arrHqTime: ndMatch2.arrHqTime,
+                    restTill: ndMatch2.restTill,
+                    totalDays: 3
+                  };
+                }
+              }
+            }
           }
         }
 
@@ -7162,6 +7372,33 @@ app.get('/api/reports/daily-view', async (req, res) => {
           lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, date);
         }
 
+        const activeExtraTrain = override?.extra_train_no || (multiDayContinuation?.type === 'RETURN' ? multiDayContinuation.train : null);
+        const activeShiftedPlace = override?.shifted_place || (multiDayContinuation?.type === 'RETURN' ? 'NON_DAILY_RETURN' : (multiDayContinuation?.type === 'REST' ? 'NON_DAILY_REST' : null));
+
+        let resolvedTrainNumbers = status === 'UTILISED_ADVANCE' ? `ADVANCE (${override?.advance_train_no || (overrideReason ? (overrideReason.match(/(?:train\s*(?:no\.?|#)?\s*|tr\.?\s*)(\d{4,5})/i)?.[1] || overrideReason.match(/(\d{4,5})/)?.[1]) : 'TR')})` : (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? `LEAVE (${musterCode || 'LV'})` : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST')));
+        let resolvedFromStation = (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE') ? 'GNT' : (dutyDetails ? dutyDetails.from_station : '');
+        let resolvedToStation = (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE') ? 'GNT' : (dutyDetails ? dutyDetails.to_station : '');
+        let resolvedSetType = status === 'UTILISED_ADVANCE' ? 'Advance Utilisation' : (status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : 'Other / REST'));
+
+        if (activeShiftedPlace === 'NON_DAILY_RETURN' && activeExtraTrain) {
+          const ndMatch = getMultiDayNonDailyMatch(activeExtraTrain) || (overrideReason ? getMultiDayNonDailyMatch(overrideReason) : null);
+          resolvedTrainNumbers = activeExtraTrain;
+          resolvedFromStation = ndMatch?.via || 'OUTSTATION';
+          resolvedToStation = ndMatch?.to || 'GNT';
+          resolvedSetType = 'Non-Daily Return';
+        } else if (activeShiftedPlace === 'NON_DAILY_REST') {
+          resolvedTrainNumbers = 'HQ Rest (Day 3)';
+          resolvedFromStation = 'GNT';
+          resolvedToStation = 'GNT';
+          resolvedSetType = 'HQ Rest (Day 3)';
+        } else if (activeExtraTrain) {
+          const ndMatch = getMultiDayNonDailyMatch(activeExtraTrain);
+          resolvedTrainNumbers = activeExtraTrain;
+          resolvedFromStation = ndMatch?.from || 'GNT';
+          resolvedToStation = ndMatch?.via || ndMatch?.to || '---';
+          resolvedSetType = 'Non-Daily';
+        }
+
         staffDuties.push({
           staffId: staff.id,
           name: staff.name,
@@ -7173,7 +7410,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
           rest_day: staff.rest_day,
           link_number: activeLink,
           original_link_number: (override && override.original_link_number !== null && override.original_link_number !== undefined) ? override.original_link_number : getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length),
-          isRest: isCat4RestDay || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE',
+          isRest: isCat4RestDay || (activeShiftedPlace === 'NON_DAILY_REST') || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE',
           isOverridden,
           status,
           muster_code: musterCode,
@@ -7181,9 +7418,9 @@ app.get('/api/reports/daily-view', async (req, res) => {
           substituteStaffId,
           substituteName,
           overrideReason,
-          extra_train_no: override?.extra_train_no || null,
-          is_extra: override?.is_extra || 0,
-          shifted_place: override?.shifted_place || null,
+          extra_train_no: activeExtraTrain,
+          is_extra: activeExtraTrain ? 1 : (override?.is_extra || 0),
+          shifted_place: activeShiftedPlace,
           shifted_from_link: override?.shifted_from_link || null,
           shifted_from_train: override?.shifted_from_train || null,
           advance_train_no: (status === 'UTILISED_ADVANCE' || override?.is_advance_duty === 1 || (status !== 'EXTRA_CREW' && status !== 'SHIFTED' && status !== 'CHANGED_LINK' && /utili[sz]ed\s+advance/i.test(overrideReason || '')))
@@ -7196,11 +7433,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
           cr_count: crInfo.count,
           cr_dates: crInfo.dates,
           lr_rest_info: lrRestInfo,
-          train_numbers: status === 'UTILISED_ADVANCE' ? `ADVANCE (${override?.advance_train_no || (overrideReason ? (overrideReason.match(/(?:train\s*(?:no\.?|#)?\s*|tr\.?\s*)(\d{4,5})/i)?.[1] || overrideReason.match(/(\d{4,5})/)?.[1]) : 'TR')})` : (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? `LEAVE (${musterCode || 'LV'})` : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST'))),
-          from_station: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE') ? 'GNT' : (dutyDetails ? dutyDetails.from_station : ''),
-          to_station: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE') ? 'GNT' : (dutyDetails ? dutyDetails.to_station : ''),
-          coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE') ? '-' : (dutyDetails ? dutyDetails.coaches : ''),
-          set_type: status === 'UTILISED_ADVANCE' ? 'Advance Utilisation' : (status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : 'Other / REST'))
+          train_numbers: resolvedTrainNumbers,
+          from_station: resolvedFromStation,
+          to_station: resolvedToStation,
+          coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE' || activeShiftedPlace === 'NON_DAILY_REST') ? '-' : (dutyDetails ? dutyDetails.coaches : 'SL / AC'),
+          set_type: resolvedSetType
         });
       }
 
@@ -7632,6 +7869,22 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
             statusReason = `Assigned to Non-Daily Train ${override.extra_train_no || override.advance_train_no}`;
             currentLocation = `🚆 Working Train (${override.extra_train_no || override.advance_train_no})`;
             catBreakdown.booked_to_duty++;
+          } else if (override && override.shifted_place === 'NON_DAILY_RETURN') {
+            isAvailable = false;
+            dotStatus = 'RED';
+            statusCategory = 'NOT_AVAILABLE_OUTSTATION';
+            statusLabel = 'Not Available (Return Leg)';
+            statusReason = override.reason || 'Working Day 2 Return Leg of Non-Daily Service';
+            currentLocation = '🚆 Outstation Return';
+            catBreakdown.outstation++;
+          } else if (override && override.shifted_place === 'NON_DAILY_REST') {
+            isAvailable = false;
+            dotStatus = 'YELLOW';
+            statusCategory = 'NOT_AVAILABLE_REST';
+            statusLabel = 'In Statutory HQ Rest';
+            statusReason = override.reason || '8h HQ Rest after 3-day non-daily service';
+            currentLocation = '🏠 GNT (HQ Rest)';
+            catBreakdown.available_weekly_rest++;
           } else {
             isAvailable = true;
             dotStatus = 'GREEN';

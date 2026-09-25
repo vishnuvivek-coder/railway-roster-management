@@ -760,6 +760,7 @@ export default function App() {
   const [dailyTrainSearch, setDailyTrainSearch] = useState('');
   const [nonDailyTrainSearch, setNonDailyTrainSearch] = useState('');
   const [dailyNonDailySearch, setDailyNonDailySearch] = useState('');
+  const [poolFilterMode, setPoolFilterMode] = useState('available'); // 'available' | 'all'
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [rosterSearchQuery, setRosterSearchQuery] = useState('');
 
@@ -1583,9 +1584,17 @@ export default function App() {
     }, []);
     const d = flatDuties.find(s => s.staffId === staffId);
     if (d) {
-      // 1. Extra / Non-daily train
+      // 1. Extra / Non-daily train or multi-day return leg
       if (d.extra_train_no) {
+        if (d.shifted_place === 'NON_DAILY_RETURN' || /return/i.test(d.overrideReason || '')) {
+          return `Train ${d.extra_train_no} (Day 2 Return)`;
+        }
         return `Train ${d.extra_train_no} (Non-Daily / Extra)`;
+      }
+
+      // 1.5 Multi-day rest leg
+      if (d.shifted_place === 'NON_DAILY_REST' || (/day\s*3/i.test(d.overrideReason || '') && /rest/i.test(d.overrideReason || ''))) {
+        return null; // In statutory HQ Rest
       }
 
       // 2. Substitute assignment on another staff's duty
@@ -1621,6 +1630,10 @@ export default function App() {
 
       // 5. Working cyclic train link
       if (d.link_number !== null && d.link_number !== undefined) {
+        // If it's a spare non-daily pool link (60, 61, 62) and no extra train is assigned, staff is available at HQ!
+        if ([60, 61, 62].includes(parseInt(d.link_number, 10)) && !d.extra_train_no && d.shifted_place !== 'NON_DAILY_RETURN') {
+          return null; // Spare in Non-Daily Pool!
+        }
         const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.train_numbers)
           ? ` (Tr ${d.train_numbers})`
           : '';
@@ -6826,13 +6839,50 @@ export default function App() {
 
                       // 3 cyclic links: 60, 61, 62
                       const cyclicPoolLinks = [60, 61, 62];
-                      const poolStaffDuties = cyclicPoolLinks.map(linkNum => {
+                      const evaluatedPoolDuties = cyclicPoolLinks.map(linkNum => {
                         const duty = cat2Staff.find(s => 
                           parseInt(s.original_link_number, 10) === linkNum || 
                           (s.link_number && parseInt(s.link_number, 10) === linkNum)
                         );
-                        return { linkNum, duty };
+                        if (!duty) return { linkNum, duty: null, isAvailable: false, isVacant: true };
+
+                        const isVacant = !duty.name || duty.name.includes('VACANT') || duty.name.trim() === 'V' || duty.name.trim() === '(V)';
+                        const isReturnLeg = duty.shifted_place === 'NON_DAILY_RETURN' || /return/i.test(duty.overrideReason || '') || (duty.extra_train_no && duty.from_station && duty.from_station !== 'GNT');
+                        const isHqRestLeg = duty.shifted_place === 'NON_DAILY_REST' || (/day\s*3/i.test(duty.overrideReason || '') && /rest/i.test(duty.overrideReason || ''));
+                        const isShiftedOther = duty.link_number && parseInt(duty.link_number, 10) !== linkNum;
+                        const isAssignedExtra = Boolean(duty.extra_train_no && !isReturnLeg);
+                        const isLeave = duty.status === 'LEAVE' || duty.isLeave;
+                        const isSick = duty.status === 'SICK';
+                        const isCr = duty.status === 'CR';
+                        const isRestCycle = (duty.status === 'REST' || duty.isRest || duty.link_number === null) && !isHqRestLeg;
+                        const isOutstation = (duty.from_station && duty.from_station !== 'GNT' && duty.from_station !== '---') || isReturnLeg;
+
+                        const isBusy = isVacant || isReturnLeg || isHqRestLeg || isShiftedOther || isAssignedExtra || isLeave || isSick || isCr || isRestCycle || isOutstation;
+                        const isAvailable = !isBusy;
+                        const canDrag = isAdmin && isAvailable && typeof duty.staffId === 'number';
+
+                        return {
+                          linkNum,
+                          duty,
+                          isVacant,
+                          isAssignedExtra,
+                          isReturnLeg,
+                          isHqRestLeg,
+                          isShiftedOther,
+                          isLeave,
+                          isSick,
+                          isCr,
+                          isRestCycle,
+                          isOutstation,
+                          isBusy,
+                          isAvailable,
+                          canDrag
+                        };
                       });
+
+                      const availablePoolItems = evaluatedPoolDuties.filter(item => item.isAvailable);
+                      const busyMultiDayStaff = evaluatedPoolDuties.filter(item => item.duty && !item.isVacant && (item.isReturnLeg || item.isHqRestLeg || item.isShiftedOther || item.isAssignedExtra));
+                      const displayPoolItems = poolFilterMode === 'available' ? availablePoolItems : evaluatedPoolDuties;
 
                       const searchedTrains = displayTrains.filter(item => {
                         if (!dailyNonDailySearch.trim()) return true;
@@ -6867,228 +6917,362 @@ export default function App() {
                                     🚆 Non-Daily Cyclic Staff Pool (Links #60, #61, #62)
                                   </h3>
                                   <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', fontWeight: 700, fontSize: '0.78rem', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
-                                    3 Cyclic Staff (Roster Grid)
+                                    {availablePoolItems.length} Available / 3 Total
                                   </span>
                                 </div>
                                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', margin: '5px 0 0 0' }}>
-                                  These 3 employees rotate through Non-Daily Duty Links (#60, #61, #62) on <strong>{currentSelectedDay} ({selectedDate})</strong>. Drag any employee below to assign them to a scheduled service.
+                                  These 3 employees rotate through Non-Daily Duty Links (#60, #61, #62) on <strong>{currentSelectedDay} ({selectedDate})</strong>. Drag any available employee below to assign them to a scheduled service.
                                 </p>
                               </div>
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                {/* Available vs All filter buttons */}
+                                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.25)', borderRadius: '8px', padding: '2px', border: '1px solid var(--border-glass)' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPoolFilterMode('available')}
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '0.76rem',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      background: poolFilterMode === 'available' ? 'var(--primary)' : 'transparent',
+                                      color: poolFilterMode === 'available' ? '#000' : 'var(--color-text-secondary)',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="Show only employees available for duty today"
+                                  >
+                                    🟢 Available ({availablePoolItems.length})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPoolFilterMode('all')}
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '0.76rem',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      background: poolFilterMode === 'all' ? 'var(--primary)' : 'transparent',
+                                      color: poolFilterMode === 'all' ? '#000' : 'var(--color-text-secondary)',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="Show all 3 cyclic pool slots including outstation / multi-day staff"
+                                  >
+                                    📋 All 3 Slots (3)
+                                  </button>
+                                </div>
                                 <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)', fontSize: '0.78rem', fontWeight: 600 }}>
                                   💡 Drag & Drop onto any train below
                                 </span>
                               </div>
                             </div>
 
-                            {/* 4 CARDS FOR THE 4 LINKS */}
-                            <div style={{ 
-                              display: 'grid', 
-                              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', 
-                              gap: '14px',
-                              marginTop: '8px'
-                            }}>
-                              {poolStaffDuties.map(({ linkNum, duty }) => {
-                                if (!duty) {
-                                  return (
-                                    <div key={linkNum} style={{
-                                      padding: '14px',
-                                      background: 'rgba(0,0,0,0.18)',
-                                      borderRadius: '10px',
-                                      border: '1px dashed var(--border-glass)'
-                                    }}>
-                                      <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '6px' }}>Link #{linkNum}</div>
-                                      <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>No staff data found in cycle.</div>
-                                    </div>
-                                  );
-                                }
+                            {/* Informational banner when cyclic staff are on multi-day duty */}
+                            {busyMultiDayStaff.length > 0 && poolFilterMode === 'available' && (
+                              <div style={{
+                                marginBottom: '14px',
+                                padding: '8px 12px',
+                                background: 'rgba(59, 130, 246, 0.08)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                borderRadius: '8px',
+                                fontSize: '0.8rem',
+                                color: '#93c5fd',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                flexWrap: 'wrap'
+                              }}>
+                                <span style={{ fontWeight: 600 }}>ℹ️ Continuing Multi-Day Service (Excluded from Today's Available Pool):</span>
+                                {busyMultiDayStaff.map(item => (
+                                  <span key={item.linkNum} className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 600, fontSize: '0.75rem' }}>
+                                    {item.duty.name} (Link #{item.linkNum}: {item.isReturnLeg ? `Day 2 Return Tr. ${item.duty.extra_train_no || ''}` : (item.isHqRestLeg ? 'Day 3 HQ Rest' : (item.isShiftedOther ? `Shifted to Link #${item.duty.link_number}` : `Tr. ${item.duty.extra_train_no}`))})
+                                  </span>
+                                ))}
+                              </div>
+                            )}
 
-                                const isVacant = duty.name && (duty.name.includes('VACANT') || duty.name.trim() === 'V' || duty.name.trim() === '(V)');
-                                const isAssignedExtra = Boolean(duty.extra_train_no);
-                                const isLeave = duty.status === 'LEAVE' || duty.isLeave;
-                                const isSick = duty.status === 'SICK';
-                                const isCr = duty.status === 'CR';
-                                const isRestCycle = duty.status === 'REST' || duty.isRest || duty.link_number === null;
-                                const canDrag = isAdmin && !isVacant && typeof duty.staffId === 'number';
+                            {/* Empty state when 0 staff available */}
+                            {displayPoolItems.length === 0 && (
+                              <div style={{
+                                padding: '24px 20px',
+                                background: 'rgba(234, 179, 8, 0.06)',
+                                border: '1px dashed rgba(234, 179, 8, 0.3)',
+                                borderRadius: '10px',
+                                textAlign: 'center',
+                                color: 'var(--color-text-secondary)',
+                                marginTop: '8px'
+                              }}>
+                                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#facc15', marginBottom: '6px' }}>
+                                  ℹ️ No Cyclic Pool Staff Available for Assignment Today
+                                </div>
+                                <div style={{ fontSize: '0.84rem', maxWidth: '600px', margin: '0 auto', color: 'var(--color-text-muted)' }}>
+                                  All employees rotating through Links #60, #61, and #62 are currently outstation working multi-day legs, availing statutory HQ rest, or assigned to other beats.
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => setPoolFilterMode('all')}
+                                  style={{ marginTop: '12px', fontSize: '0.78rem', padding: '4px 14px', borderRadius: '6px' }}
+                                >
+                                  📋 View All 3 Cyclic Slots
+                                </button>
+                              </div>
+                            )}
 
-                                return (
-                                  <div 
-                                    key={linkNum}
-                                    style={{
-                                      padding: '14px',
-                                      background: isAssignedExtra ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-                                      borderRadius: '10px',
-                                      border: isAssignedExtra ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-glass)',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      justifyContent: 'space-between',
-                                      gap: '10px',
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                  >
-                                    <div>
-                                      {/* Header with Link Badge & Status */}
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                        <span className="badge" style={{ 
-                                          background: 'rgba(212, 161, 92, 0.2)', 
-                                          color: 'var(--primary)', 
-                                          border: '1px solid var(--border-gold)',
-                                          fontWeight: 800,
-                                          fontSize: '0.8rem'
-                                        }}>
-                                          Link #{linkNum}
-                                        </span>
-                                        {duty.rowPosition && (
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                            Row #{duty.rowPosition}
-                                          </span>
-                                        )}
+                            {/* CARDS GRID */}
+                            {displayPoolItems.length > 0 && (
+                              <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', 
+                                gap: '14px',
+                                marginTop: '8px'
+                              }}>
+                                {displayPoolItems.map(({
+                                  linkNum,
+                                  duty,
+                                  isVacant,
+                                  isAssignedExtra,
+                                  isReturnLeg,
+                                  isHqRestLeg,
+                                  isShiftedOther,
+                                  isLeave,
+                                  isSick,
+                                  isCr,
+                                  isRestCycle,
+                                  isBusy,
+                                  isAvailable,
+                                  canDrag
+                                }) => {
+                                  if (!duty) {
+                                    return (
+                                      <div key={linkNum} style={{
+                                        padding: '14px',
+                                        background: 'rgba(0,0,0,0.18)',
+                                        borderRadius: '10px',
+                                        border: '1px dashed var(--border-glass)'
+                                      }}>
+                                        <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '6px' }}>Link #{linkNum}</div>
+                                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>No staff data found in cycle.</div>
                                       </div>
+                                    );
+                                  }
 
-                                      {/* Staff Name / Draggable Pill */}
-                                      {isVacant ? (
-                                        <div style={{
-                                          padding: '8px 10px',
-                                          borderRadius: '8px',
-                                          background: 'rgba(239, 68, 68, 0.1)',
-                                          border: '1px dashed rgba(239, 68, 68, 0.3)',
-                                          color: '#ef4444',
-                                          fontWeight: 700,
-                                          fontSize: '0.9rem'
-                                        }}>
-                                          ⚠️ {duty.name}
-                                        </div>
-                                      ) : (
-                                        <div
-                                          draggable={canDrag}
-                                          onDragStart={(e) => {
-                                            if (!canDrag) return;
-                                            const payload = {
-                                              staffId: duty.staffId,
-                                              staffName: duty.name,
-                                              sourceLink: linkNum,
-                                              sourceCategoryId: 2,
-                                              sourceTrain: duty.extra_train_no || 'CYCLIC_POOL'
-                                            };
-                                            e.dataTransfer.setData('text/plain', JSON.stringify(payload));
-                                            e.dataTransfer.effectAllowed = 'move';
-                                            setDraggedStaff(payload);
-                                          }}
-                                          onDragEnd={() => setDraggedStaff(null)}
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            padding: '8px 10px',
-                                            borderRadius: '8px',
-                                            background: 'rgba(255, 255, 255, 0.06)',
-                                            border: '1px solid rgba(255, 255, 255, 0.14)',
-                                            cursor: canDrag ? 'grab' : 'default',
-                                            userSelect: 'none',
-                                            opacity: (draggedStaff && draggedStaff.staffId === duty.staffId) ? 0.4 : 1,
-                                            transition: 'all 0.15s ease'
-                                          }}
-                                          title={canDrag ? `Drag ${duty.name} to assign to any non-daily train below` : ''}
-                                        >
-                                          {canDrag && (
-                                            <span style={{ fontSize: '1.15rem', color: 'var(--primary)', lineHeight: 1 }} className="no-print">
-                                              ⠿
+                                  const cardBg = isReturnLeg
+                                    ? 'rgba(239, 68, 68, 0.05)'
+                                    : isHqRestLeg
+                                    ? 'rgba(245, 158, 11, 0.05)'
+                                    : isAssignedExtra
+                                    ? 'rgba(16, 185, 129, 0.08)'
+                                    : isBusy
+                                    ? 'rgba(0,0,0,0.18)'
+                                    : 'rgba(255, 255, 255, 0.03)';
+
+                                  const cardBorder = isReturnLeg
+                                    ? '1px dashed rgba(239, 68, 68, 0.4)'
+                                    : isHqRestLeg
+                                    ? '1px dashed rgba(245, 158, 11, 0.4)'
+                                    : isAssignedExtra
+                                    ? '1px solid rgba(16, 185, 129, 0.4)'
+                                    : isBusy
+                                    ? '1px dashed var(--border-glass)'
+                                    : '1px solid var(--border-glass)';
+
+                                  return (
+                                    <div 
+                                      key={linkNum}
+                                      style={{
+                                        padding: '14px',
+                                        background: cardBg,
+                                        borderRadius: '10px',
+                                        border: cardBorder,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'space-between',
+                                        gap: '10px',
+                                        opacity: isBusy && !isAssignedExtra ? 0.7 : 1,
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      <div>
+                                        {/* Header with Link Badge & Status */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                          <span className="badge" style={{ 
+                                            background: 'rgba(212, 161, 92, 0.2)', 
+                                            color: 'var(--primary)', 
+                                            border: '1px solid var(--border-gold)',
+                                            fontWeight: 800,
+                                            fontSize: '0.8rem'
+                                          }}>
+                                            Link #{linkNum}
+                                          </span>
+                                          {duty.rowPosition && (
+                                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                              Row #{duty.rowPosition}
                                             </span>
                                           )}
-                                          <div style={{ minWidth: 0, flex: 1 }}>
-                                            <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                              {duty.name}
-                                            </div>
-                                            <div style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
-                                              {duty.designation || 'TTI'}
+                                        </div>
+
+                                        {/* Staff Name / Draggable Pill */}
+                                        {isVacant ? (
+                                          <div style={{
+                                            padding: '8px 10px',
+                                            borderRadius: '8px',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            border: '1px dashed rgba(239, 68, 68, 0.3)',
+                                            color: '#ef4444',
+                                            fontWeight: 700,
+                                            fontSize: '0.9rem'
+                                          }}>
+                                            ⚠️ {duty.name}
+                                          </div>
+                                        ) : (
+                                          <div
+                                            draggable={canDrag}
+                                            onDragStart={(e) => {
+                                              if (!canDrag) return;
+                                              const payload = {
+                                                staffId: duty.staffId,
+                                                staffName: duty.name,
+                                                sourceLink: linkNum,
+                                                sourceCategoryId: 2,
+                                                sourceTrain: duty.extra_train_no || 'CYCLIC_POOL'
+                                              };
+                                              e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                                              e.dataTransfer.effectAllowed = 'move';
+                                              setDraggedStaff(payload);
+                                            }}
+                                            onDragEnd={() => setDraggedStaff(null)}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '8px',
+                                              padding: '8px 10px',
+                                              borderRadius: '8px',
+                                              background: canDrag ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.02)',
+                                              border: canDrag ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                              cursor: canDrag ? 'grab' : 'default',
+                                              userSelect: 'none',
+                                              opacity: (draggedStaff && draggedStaff.staffId === duty.staffId) ? 0.4 : 1,
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                            title={canDrag ? `Drag ${duty.name} to assign to any non-daily train below` : (isBusy ? `${duty.name} is not available today` : '')}
+                                          >
+                                            {canDrag && (
+                                              <span style={{ fontSize: '1.15rem', color: 'var(--primary)', lineHeight: 1 }} className="no-print">
+                                                ⠿
+                                              </span>
+                                            )}
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: isBusy && !isAssignedExtra ? 'var(--color-text-secondary)' : 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {duty.name}
+                                              </div>
+                                              <div style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
+                                                {duty.designation || 'TTI'}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
 
-                                      {/* Assignment Status Tag */}
-                                      <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                        {isAssignedExtra ? (
-                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid #10b981', fontWeight: 700, fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            🚆 Assigned to Train {duty.extra_train_no}
+                                        {/* Assignment Status Tag */}
+                                        <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                          {isReturnLeg ? (
+                                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid #ef4444', fontWeight: 700, fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🚆 Outstation / Return Tr. {duty.extra_train_no || duty.train_numbers} (Day 2 of 3) • Not Available
+                                            </span>
+                                          ) : isHqRestLeg ? (
+                                            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid #f59e0b', fontWeight: 700, fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              💤 In Statutory HQ Rest (Day 3 of 3) • Not Available
+                                            </span>
+                                          ) : isAssignedExtra ? (
+                                            <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid #10b981', fontWeight: 700, fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🚆 Assigned to Train {duty.extra_train_no}
+                                            </span>
+                                          ) : isShiftedOther ? (
+                                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid #ef4444', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🚆 Shifted to Link #{duty.link_number} ({duty.train_numbers}) • Not Available
+                                            </span>
+                                          ) : isLeave ? (
+                                            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid #f59e0b', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🏖️ LEAVE
+                                            </span>
+                                          ) : isSick ? (
+                                            <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid #ef4444', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🤒 SICK
+                                            </span>
+                                          ) : isCr ? (
+                                            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid #8b5cf6', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              💤 CR
+                                            </span>
+                                          ) : isRestCycle ? (
+                                            <span className="badge" style={{ background: 'rgba(107, 114, 128, 0.2)', color: '#9ca3af', border: '1px solid #6b7280', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              💤 Weekly Rest (Cyclic)
+                                            </span>
+                                          ) : (
+                                            <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.75rem', padding: '3px 8px' }}>
+                                              🟢 Available for Non-Daily Duty
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Action Bar: Unassign or Drag Hint */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', gap: '6px' }}>
+                                        {(isAssignedExtra || isReturnLeg || isHqRestLeg) ? (
+                                          <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => handleUnassignStaffFromNonDailyTrain(duty.staffId, null)}
+                                            style={{
+                                              padding: '4px 10px',
+                                              fontSize: '0.74rem',
+                                              fontWeight: 700,
+                                              borderRadius: '6px',
+                                              background: 'rgba(239, 68, 68, 0.15)',
+                                              color: '#ef4444',
+                                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                                              cursor: 'pointer'
+                                            }}
+                                            title="Unassign from non-daily train and restore cyclic pool status"
+                                          >
+                                            ↩️ Unassign
+                                          </button>
+                                        ) : canDrag ? (
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                                            👇 Drag to train below
                                           </span>
-                                        ) : isLeave ? (
-                                          <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid #f59e0b', fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            🏖️ LEAVE
-                                          </span>
-                                        ) : isSick ? (
-                                          <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid #ef4444', fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            🤒 SICK
-                                          </span>
-                                        ) : isCr ? (
-                                          <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid #8b5cf6', fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            💤 CR
-                                          </span>
-                                        ) : isRestCycle ? (
-                                          <span className="badge" style={{ background: 'rgba(107, 114, 128, 0.2)', color: '#9ca3af', border: '1px solid #6b7280', fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            💤 Weekly Rest (Cyclic)
-                                          </span>
-                                        ) : (
-                                          <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.75rem', padding: '3px 8px' }}>
-                                            🟢 Available for Non-Daily Duty
-                                          </span>
+                                        ) : null}
+
+                                        {isAdmin && !isVacant && (
+                                          <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => openDutyEditModal(duty, selectedDate)}
+                                            style={{
+                                              padding: '3px 8px',
+                                              fontSize: '0.72rem',
+                                              fontWeight: 600,
+                                              borderRadius: '6px',
+                                              background: 'rgba(255,255,255,0.06)',
+                                              border: '1px solid var(--border-glass)',
+                                              cursor: 'pointer',
+                                              marginLeft: 'auto'
+                                            }}
+                                            title="Edit duty status"
+                                          >
+                                            ✏️ Edit
+                                          </button>
                                         )}
                                       </div>
                                     </div>
-
-                                    {/* Action Bar: Unassign or Drag Hint */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', gap: '6px' }}>
-                                      {isAssignedExtra ? (
-                                        <button
-                                          type="button"
-                                          className="btn btn-secondary"
-                                          onClick={() => handleUnassignStaffFromNonDailyTrain(duty.staffId, null)}
-                                          style={{
-                                            padding: '4px 10px',
-                                            fontSize: '0.74rem',
-                                            fontWeight: 700,
-                                            borderRadius: '6px',
-                                            background: 'rgba(239, 68, 68, 0.15)',
-                                            color: '#ef4444',
-                                            border: '1px solid rgba(239, 68, 68, 0.35)',
-                                            cursor: 'pointer'
-                                          }}
-                                          title="Unassign from non-daily train and restore cyclic pool status"
-                                        >
-                                          ↩️ Unassign
-                                        </button>
-                                      ) : canDrag ? (
-                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-                                          👇 Drag to train below
-                                        </span>
-                                      ) : null}
-
-                                      {isAdmin && !isVacant && (
-                                        <button
-                                          type="button"
-                                          className="btn btn-secondary"
-                                          onClick={() => openDutyEditModal(duty, selectedDate)}
-                                          style={{
-                                            padding: '3px 8px',
-                                            fontSize: '0.72rem',
-                                            fontWeight: 600,
-                                            borderRadius: '6px',
-                                            background: 'rgba(255,255,255,0.06)',
-                                            border: '1px solid var(--border-glass)',
-                                            cursor: 'pointer',
-                                            marginLeft: 'auto'
-                                          }}
-                                          title="Edit duty status"
-                                        >
-                                          ✏️ Edit
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
+
 
                           {/* 2. SUB-TABBED NON-DAILY SERVICES TABLE WITH INTERACTIVE DRAG & DROP */}
                           <div className="card" style={{ 
