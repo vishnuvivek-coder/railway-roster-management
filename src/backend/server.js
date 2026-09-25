@@ -4795,7 +4795,8 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     target_slot_id,
     target_link,
     target_category_id,
-    is_extra
+    is_extra,
+    replace_staff_id
   } = req.body;
 
   if (!staff_id || !date || !target_train) {
@@ -4863,6 +4864,64 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
       'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
       [staff.id, date]
     );
+
+    // If replacing an existing employee on this duty slot, relieve the replaced staff to Available at HQ
+    if (replace_staff_id && parseInt(replace_staff_id, 10) !== parseInt(staff.id, 10)) {
+      const replacedStaff = await get('SELECT * FROM staff WHERE id = ?', [replace_staff_id]);
+      if (replacedStaff) {
+        const replacedCat = await get('SELECT * FROM categories WHERE id = ?', [replacedStaff.category_id]);
+        const replacedDayOffset = getDayOffset(replacedCat.anchor_date, date);
+        const replacedOrigLink = getBaseLinkNumber(replacedStaff.row_position, replacedDayOffset, replacedCat.cycle_length);
+        const relievedReason = `Available at HQ (Relieved by ${staff.name} on Train ${target_train}${effectiveLink ? ` Link #${effectiveLink}` : ''})`;
+
+        await run(
+          `INSERT INTO overrides (
+            staff_id, date, overridden_link_number, status, target_category_id,
+            reason, original_link_number, extra_train_no, is_extra,
+            shifted_from_link, shifted_from_train, shifted_place,
+            advance_train_no, is_advance_duty
+          ) VALUES (?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?, ?, NULL, 0, ?, ?, 'AVAILABLE_AT_HQ', NULL, 0)
+          ON CONFLICT(staff_id, date) DO UPDATE SET
+            overridden_link_number = NULL,
+            status = 'AVAILABLE_FOR_BOOKING',
+            target_category_id = excluded.target_category_id,
+            reason = excluded.reason,
+            extra_train_no = NULL,
+            is_extra = 0,
+            shifted_from_link = excluded.shifted_from_link,
+            shifted_from_train = excluded.shifted_from_train,
+            shifted_place = 'AVAILABLE_AT_HQ',
+            advance_train_no = NULL,
+            is_advance_duty = 0`,
+          [
+            replacedStaff.id,
+            date,
+            replacedStaff.category_id,
+            relievedReason,
+            replacedOrigLink || null,
+            effectiveLink || replacedOrigLink || null,
+            target_train || null
+          ]
+        );
+
+        await syncDutyChangeAcrossAllModules({ get, all, run }, replacedStaff.id, date, {
+          targetTrain: null,
+          targetLink: null,
+          isLeave: false
+        });
+
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = 'P',
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [replacedStaff.id, date, relievedReason]
+        );
+      }
+    }
 
     // Check if Day 1 was a scheduled REST day
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
