@@ -174,6 +174,7 @@ function EditTrainCoachModalDialog({ data, onClose, onSave, onReset }) {
             dutyKey: data.dutyKey,
             categoryId: data.categoryId,
             linkNum: data.linkNum,
+            isSlotLevel: data.isSlotLevel,
             firstTrain,
             firstCoaches,
             lastTrain,
@@ -348,6 +349,178 @@ function EditTrainCoachModalDialog({ data, onClose, onSave, onReset }) {
   );
 }
 
+const MASTER_DAILY_SLOTS = [
+  // 1. Train 17253 / 17252 (GNT - DHNE - GNT)
+  {
+    slotId: 1,
+    page: 172,
+    firstTrain: '17253',
+    lastTrain: '17252',
+    links: [
+      { categoryId: 2, linkNum: 1, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+      { categoryId: 2, linkNum: 15, firstCoach: 'SL', lastCoach: 'SL' },
+      { categoryId: 2, linkNum: 29, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
+    ]
+  },
+  // 2. Train 17251 / 17254 (GNT - DHNE - GNT)
+  {
+    slotId: 2,
+    page: 172,
+    firstTrain: '17251',
+    lastTrain: '17254',
+    links: [
+      { categoryId: 2, linkNum: 5, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+      { categoryId: 2, linkNum: 19, firstCoach: 'SL', lastCoach: 'SL' },
+      { categoryId: 2, linkNum: 33, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
+    ]
+  },
+  // 3. Train 12604 / 12603 (GNT - MAS - GNT)
+  {
+    slotId: 3,
+    page: 172,
+    firstTrain: '12604',
+    lastTrain: '12603',
+    links: [
+      { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastCoach: 'S1-S5' },
+      { categoryId: 2, linkNum: 17, firstCoach: 'S6-S10', lastCoach: 'S6-S10' },
+      { categoryId: 2, linkNum: 31, firstCoach: 'S6-S10', lastCoach: 'S6-S10' }
+    ]
+  },
+  // 4. Train 17261 / 12733 / 17262 (GNT - TPTY - GNT)
+  {
+    slotId: 4,
+    page: 172,
+    firstTrain: '17261',
+    lastTrain: '12733',
+    links: [
+      { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
+      { categoryId: 3, linkNum: 1, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' },
+      { categoryId: 3, linkNum: 4, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
+    ]
+  },
+  // 5. Train 20629 / 12733 / 20630 (GNT - TPTY - GNT)
+  {
+    slotId: 5,
+    page: 172,
+    firstTrain: '20629',
+    lastTrain: '12733',
+    links: [
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
+    ]
+  },
+  // 6. Train 17225 / 17226 (Amaravati Exp BZA - GTL - BZA)
+  {
+    slotId: 6,
+    page: 172,
+    firstTrain: '17225',
+    lastTrain: '17226',
+    links: [
+      { categoryId: 1, linkNum: 1, firstCoach: 'AC', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 11, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
+    ]
+  },
+  // 7. Train 18047 / 18048 (Amaravati Exp BZA - GTL - BZA)
+  {
+    slotId: 7,
+    page: 172,
+    firstTrain: '18047',
+    lastTrain: '18048',
+    links: [
+      { categoryId: 1, linkNum: 15, firstCoach: 'AC', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 25, firstCoach: 'S1-S5', lastTrain: '17226', lastCoach: 'S1-S5' },
+      { categoryId: 2, linkNum: 57, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
+    ]
+  },
+  // 8. Train 17645 / 17646 (Circar & KCG Exp GNT - RAL - KCG - SC - RAL - GNT)
+  {
+    slotId: 8,
+    page: 172,
+    firstTrain: '17645',
+    lastTrain: '17646',
+    links: [
+      { categoryId: 2, linkNum: 36, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+      { categoryId: 2, linkNum: 50, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
+    ]
+  },
+  // 9. Train 12734 / 20630 / 17262 (Narayanadri Exp GNT - TPTY/SC - GNT)
+  {
+    slotId: 9,
+    page: 173,
+    firstTrain: '12734',
+    lastTrain: '20630',
+    links: [
+      { categoryId: 1, linkNum: 11, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
+      { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
+    ]
+  },
+  // 10. Train 17243 / 17244 (Rayagada Exp GNT - VSKP - GNT)
+  {
+    slotId: 10,
+    page: 173,
+    firstTrain: '17243',
+    lastTrain: '17244',
+    links: [
+      { categoryId: 2, linkNum: 39, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
+      { categoryId: 2, linkNum: 53, firstCoach: 'SL', lastCoach: 'SL' }
+    ]
+  },
+  // 11. Train 17281 / 17282 (GNT - NS - GNT)
+  {
+    slotId: 11,
+    page: 173,
+    firstTrain: '17281',
+    lastTrain: '17282',
+    links: [
+      { categoryId: 2, linkNum: 45, firstCoach: 'D1-D2', lastTrain: '17282', lastCoach: 'D1-D2' }
+    ]
+  },
+  // 12. Train 12705/12795 / 17645 (Intercity Exp GNT - BZA/SC - GNT)
+  {
+    slotId: 12,
+    page: 173,
+    firstTrain: '12705/12795',
+    lastTrain: '17645',
+    links: [
+      { categoryId: 2, linkNum: 47, firstCoach: 'AC', lastTrain: '17645', lastCoach: 'SL' }
+    ]
+  }
+];
+
+// Dedicated Non-Daily Cyclic Links (Links #60, #61, #62)
+const NON_DAILY_LINK_SLOTS = [
+  {
+    slotId: 60,
+    page: 174,
+    firstTrain: '22882',
+    lastTrain: '22881',
+    links: [
+      { categoryId: 2, linkNum: 60, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+    ]
+  },
+  {
+    slotId: 61,
+    page: 174,
+    firstTrain: '17221',
+    lastTrain: '17222',
+    links: [
+      { categoryId: 2, linkNum: 61, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+    ]
+  },
+  {
+    slotId: 62,
+    page: 174,
+    firstTrain: '17069',
+    lastTrain: '17262',
+    links: [
+      { categoryId: 2, linkNum: 62, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
+    ]
+  }
+];
+
+const ALL_MASTER_SLOTS = [...MASTER_DAILY_SLOTS, ...NON_DAILY_LINK_SLOTS];
 
 export default function App() {
   // Authentication & Session State
@@ -941,8 +1114,23 @@ export default function App() {
       .catch(err => console.error('Error fetching non-daily trains:', err));
   };
 
+  const fetchSlotCustomizations = () => {
+    fetch(`${API_BASE}/slot-customizations`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setSlotCustomizations(data);
+          try {
+            localStorage.setItem('railway_slot_customizations', JSON.stringify(data));
+          } catch (e) {}
+        }
+      })
+      .catch(err => console.error('Error fetching slot customizations:', err));
+  };
+
   useEffect(() => {
     fetchNonDailyTrains();
+    fetchSlotCustomizations();
   }, []);
 
   // Real-time universal synchronization across all tabs and components
@@ -951,6 +1139,7 @@ export default function App() {
       fetchDailyDuties();
       fetchRoster();
       fetchNonDailyTrains();
+      fetchSlotCustomizations();
       fetchAllStaff();
     };
     window.addEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
@@ -1102,50 +1291,104 @@ export default function App() {
   });
   const [editTrainCoachModal, setEditTrainCoachModal] = useState(null);
 
-  const handleSaveTrainCoachCustomization = (customData) => {
-    setSlotCustomizations(prev => {
-      const updated = { ...prev };
-      
-      if (customData.slotId) {
-        if (!updated[`slot_${customData.slotId}`]) updated[`slot_${customData.slotId}`] = {};
-        if (customData.firstTrain !== undefined) updated[`slot_${customData.slotId}`].firstTrain = customData.firstTrain.trim();
-        if (customData.lastTrain !== undefined) updated[`slot_${customData.slotId}`].lastTrain = customData.lastTrain.trim();
-      }
+  const handleSaveTrainCoachCustomization = async (customData) => {
+    const isSlotOnly = customData.isSlotLevel || (!customData.dutyKey && customData.slotId);
+    let specificKey = isSlotOnly 
+      ? `slot_${customData.slotId}`
+      : (customData.dutyKey || (customData.slotId && customData.linkNum ? `slot_${customData.slotId}_link_${customData.categoryId || 0}_${customData.linkNum}` : null));
+    const updatedCustomizations = { ...slotCustomizations };
 
-      const specificKey = customData.dutyKey || (customData.slotId && customData.linkNum ? `slot_${customData.slotId}_link_${customData.categoryId || 0}_${customData.linkNum}` : null);
-      if (specificKey) {
-        if (!updated[specificKey]) updated[specificKey] = {};
-        if (customData.firstTrain !== undefined) updated[specificKey].firstTrain = customData.firstTrain.trim();
-        if (customData.firstCoaches !== undefined) updated[specificKey].firstCoach = customData.firstCoaches.trim();
-        if (customData.lastTrain !== undefined) updated[specificKey].lastTrain = customData.lastTrain.trim();
-        if (customData.lastCoaches !== undefined) updated[specificKey].lastCoach = customData.lastCoaches.trim();
-      }
+    if (isSlotOnly && customData.slotId) {
+      const slotKey = `slot_${customData.slotId}`;
+      updatedCustomizations[slotKey] = {
+        firstTrain: customData.firstTrain !== undefined ? customData.firstTrain.trim() : '',
+        lastTrain: customData.lastTrain !== undefined ? customData.lastTrain.trim() : ''
+      };
+    } else if (specificKey) {
+      if (!updatedCustomizations[specificKey]) updatedCustomizations[specificKey] = {};
+      if (customData.firstTrain !== undefined) updatedCustomizations[specificKey].firstTrain = customData.firstTrain.trim();
+      if (customData.firstCoaches !== undefined) updatedCustomizations[specificKey].firstCoach = customData.firstCoaches.trim();
+      if (customData.lastTrain !== undefined) updatedCustomizations[specificKey].lastTrain = customData.lastTrain.trim();
+      if (customData.lastCoaches !== undefined) updatedCustomizations[specificKey].lastCoach = customData.lastCoaches.trim();
+    }
 
+    setSlotCustomizations(updatedCustomizations);
+    try {
+      localStorage.setItem('railway_slot_customizations', JSON.stringify(updatedCustomizations));
+    } catch (e) {}
+
+    // Persist to Backend SQLite database
+    try {
+      const matchingSlotDef = ALL_MASTER_SLOTS.find(s => s.slotId === customData.slotId);
+      const linksToUpdate = (matchingSlotDef && matchingSlotDef.links)
+        ? matchingSlotDef.links.map(l => ({ category_id: l.categoryId, link_num: l.linkNum }))
+        : (customData.categoryId && customData.linkNum ? [{ category_id: customData.categoryId, link_num: customData.linkNum }] : []);
+
+      await fetch(`${API_BASE}/slot-customizations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({
+          key: specificKey,
+          slot_id: customData.slotId,
+          link_num: customData.linkNum,
+          category_id: customData.categoryId,
+          first_train: customData.firstTrain,
+          last_train: customData.lastTrain,
+          first_coach: customData.firstCoaches,
+          last_coach: customData.lastCoaches,
+          links_to_update: linksToUpdate
+        })
+      });
+
+      // Synchronize all links from backend
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      fetchDailyDuties();
       try {
-        localStorage.setItem('railway_slot_customizations', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
       } catch (e) {}
-
-      return updated;
-    });
+    } catch (err) {
+      console.error('Error saving slot customization to backend:', err);
+    }
 
     setEditTrainCoachModal(null);
-    setDragNotice('✓ Train No & Coach numbers updated successfully!');
+    setDragNotice('✓ Train No & Coach numbers saved successfully!');
     setTimeout(() => setDragNotice(null), 3500);
   };
 
-  const handleResetTrainCoachCustomization = (slotId, dutyKey, categoryId, linkNum) => {
+  const handleResetTrainCoachCustomization = async (slotId, dutyKey, categoryId, linkNum) => {
+    const keysToDelete = [];
+    if (slotId) keysToDelete.push(`slot_${slotId}`);
+    if (dutyKey) keysToDelete.push(dutyKey);
+    if (slotId && linkNum) keysToDelete.push(`slot_${slotId}_link_${categoryId || 0}_${linkNum}`);
+
     setSlotCustomizations(prev => {
       const updated = { ...prev };
-      if (slotId) delete updated[`slot_${slotId}`];
-      if (dutyKey) delete updated[dutyKey];
-      if (slotId && linkNum) delete updated[`slot_${slotId}_link_${categoryId || 0}_${linkNum}`];
-
+      keysToDelete.forEach(k => delete updated[k]);
       try {
         localStorage.setItem('railway_slot_customizations', JSON.stringify(updated));
       } catch (e) {}
-
       return updated;
     });
+
+    try {
+      await fetch(`${API_BASE}/slot-customizations/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({ keys: keysToDelete })
+      });
+      fetchDailyDuties();
+      try {
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+      } catch (e) {}
+    } catch (err) {
+      console.error('Error resetting slot customization in backend:', err);
+    }
 
     setEditTrainCoachModal(null);
     setDragNotice('🔄 Reset Train & Coach numbers to baseline defaults.');
@@ -1978,34 +2221,45 @@ export default function App() {
   // ----------------------------------------------------
   // LINKS CRUD HANDLERS
   // ----------------------------------------------------
-  const saveLink = (e) => {
+  const saveLink = async (e) => {
     e.preventDefault();
     if (!isAdmin) return;
     const catId = linkForm.category_id || (selectedCatId === 'ALL' ? '1' : selectedCatId) || '1';
     const url = editingLink ? `${API_BASE}/links/${editingLink.id}` : `${API_BASE}/links`;
     const method = editingLink ? 'PUT' : 'POST';
-    fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
-      body: JSON.stringify({
-        category_id: parseInt(catId, 10),
-        ...linkForm,
-        link_number: parseInt(linkForm.link_number, 10)
-      })
-    }).then(() => {
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          category_id: parseInt(catId, 10),
+          ...linkForm,
+          link_number: parseInt(linkForm.link_number, 10)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save link');
+
       setEditingLink(null);
       setLinkForm({
         category_id: catId,
         link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
       });
       fetchLinks(selectedCatId || catId);
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      fetchDailyDuties();
       if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-    }).catch(err => {
+      try {
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+      } catch (e) {}
+      setDragNotice('✓ Link and train number saved successfully!');
+      setTimeout(() => setDragNotice(null), 3000);
+    } catch (err) {
       alert(`Failed to save link: ${err.message}`);
-    });
+    }
   };
 
   const deleteLink = (id) => {
@@ -4033,176 +4287,7 @@ export default function App() {
                   return acc.concat(staffWithCat);
                 }, []) || [];
 
-                const MASTER_DAILY_SLOTS = [
-                  // 1. Train 17253 / 17252 (GNT - DHNE - GNT)
-                  {
-                    slotId: 1,
-                    page: 172,
-                    firstTrain: '17253',
-                    lastTrain: '17252',
-                    links: [
-                      { categoryId: 2, linkNum: 1, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 15, firstCoach: 'SL', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 29, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
-                    ]
-                  },
-                  // 2. Train 17251 / 17254 (GNT - DHNE - GNT)
-                  {
-                    slotId: 2,
-                    page: 172,
-                    firstTrain: '17251',
-                    lastTrain: '17254',
-                    links: [
-                      { categoryId: 2, linkNum: 5, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 19, firstCoach: 'SL', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 33, firstCoach: 'AC+2S', lastCoach: 'AC+2S' }
-                    ]
-                  },
-                  // 3. Train 12604 / 12603 (GNT - MAS - GNT)
-                  {
-                    slotId: 3,
-                    page: 172,
-                    firstTrain: '12604',
-                    lastTrain: '12603',
-                    links: [
-                      { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastCoach: 'S1-S5' },
-                      { categoryId: 2, linkNum: 17, firstCoach: 'S6-S10', lastCoach: 'S6-S10' },
-                      { categoryId: 2, linkNum: 31, firstCoach: 'S6-S10', lastCoach: 'S6-S10' }
-                    ]
-                  },
-                  // 4. Train 17261 / 12733 / 17262 (GNT - TPTY - GNT)
-                  {
-                    slotId: 4,
-                    page: 172,
-                    firstTrain: '17261',
-                    lastTrain: '12733',
-                    links: [
-                      { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
-                      { categoryId: 3, linkNum: 1, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' },
-                      { categoryId: 3, linkNum: 4, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
-                    ]
-                  },
-                  // 5. Train 20629 / 12733 / 20630 (GNT - TPTY - GNT)
-                  {
-                    slotId: 5,
-                    page: 172,
-                    firstTrain: '20629',
-                    lastTrain: '12733',
-                    links: [
-                      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
-                      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
-                    ]
-                  },
-                  // 6. Train 17225 / 17226 (Amaravati Exp BZA - GTL - BZA)
-                  {
-                    slotId: 6,
-                    page: 172,
-                    firstTrain: '17225',
-                    lastTrain: '17226',
-                    links: [
-                      { categoryId: 1, linkNum: 1, firstCoach: 'AC', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 11, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
-                    ]
-                  },
-                  // 7. Train 18047 / 18048 (Amaravati Exp BZA - GTL - BZA)
-                  {
-                    slotId: 7,
-                    page: 172,
-                    firstTrain: '18047',
-                    lastTrain: '18048',
-                    links: [
-                      { categoryId: 1, linkNum: 15, firstCoach: 'AC', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 25, firstCoach: 'S1-S5', lastTrain: '17226', lastCoach: 'S1-S5' },
-                      { categoryId: 2, linkNum: 57, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
-                    ]
-                  },
-                  // 8. Train 17645 / 17646 (Circar & KCG Exp GNT - RAL - KCG - SC - RAL - GNT)
-                  {
-                    slotId: 8,
-                    page: 172,
-                    firstTrain: '17645',
-                    lastTrain: '17646',
-                    links: [
-                      { categoryId: 2, linkNum: 36, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 50, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
-                    ]
-                  },
-                  // 9. Train 12734 / 20630 / 17262 (Narayanadri Exp GNT - TPTY/SC - GNT)
-                  {
-                    slotId: 9,
-                    page: 173,
-                    firstTrain: '12734',
-                    lastTrain: '20630',
-                    links: [
-                      { categoryId: 1, linkNum: 11, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
-                      { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' },
-                      { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
-                      { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
-                    ]
-                  },
-                  // 10. Train 17243 / 17244 (Rayagada Exp GNT - VSKP - GNT)
-                  {
-                    slotId: 10,
-                    page: 173,
-                    firstTrain: '17243',
-                    lastTrain: '17244',
-                    links: [
-                      { categoryId: 2, linkNum: 39, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
-                      { categoryId: 2, linkNum: 53, firstCoach: 'SL', lastCoach: 'SL' }
-                    ]
-                  },
-                  // 11. Train 17281 / 17282 (GNT - NS - GNT)
-                  {
-                    slotId: 11,
-                    page: 173,
-                    firstTrain: '17281',
-                    lastTrain: '17282',
-                    links: [
-                      { categoryId: 2, linkNum: 45, firstCoach: 'D1-D2', lastTrain: '17282', lastCoach: 'D1-D2' }
-                    ]
-                  },
-                  // 12. Train 12705/12795 / 17645 (Intercity Exp GNT - BZA/SC - GNT)
-                  {
-                    slotId: 12,
-                    page: 173,
-                    firstTrain: '12705/12795',
-                    lastTrain: '17645',
-                    links: [
-                      { categoryId: 2, linkNum: 47, firstCoach: 'AC', lastTrain: '17645', lastCoach: 'SL' }
-                    ]
-                  }
-                ];
-
-                // Dedicated Non-Daily Cyclic Links (Links #60, #61, #62)
-                const NON_DAILY_LINK_SLOTS = [
-                  {
-                    slotId: 60,
-                    page: 174,
-                    firstTrain: '22882',
-                    lastTrain: '22881',
-                    links: [
-                      { categoryId: 2, linkNum: 60, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
-                    ]
-                  },
-                  {
-                    slotId: 61,
-                    page: 174,
-                    firstTrain: '17221',
-                    lastTrain: '17222',
-                    links: [
-                      { categoryId: 2, linkNum: 61, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
-                    ]
-                  },
-                  {
-                    slotId: 62,
-                    page: 174,
-                    firstTrain: '17069',
-                    lastTrain: '17262',
-                    links: [
-                      { categoryId: 2, linkNum: 62, firstCoach: 'SL / AC', lastCoach: 'SL / AC' }
-                    ]
-                  }
-                ];
+                // (MASTER_DAILY_SLOTS and NON_DAILY_LINK_SLOTS are defined at module level)
 
                 // Helper to resolve duty assignments for a given slot list
                 const activeWorkedStaffIds = new Set();
@@ -4211,18 +4296,61 @@ export default function App() {
                   const resolvedRows = [];
                   slotsList.forEach(slot => {
                     const customSlot = slotCustomizations[`slot_${slot.slotId}`] || {};
-                    const effectiveSlotFirstTrain = (customSlot.firstTrain !== undefined && customSlot.firstTrain !== '') ? customSlot.firstTrain : slot.firstTrain;
-                    const effectiveSlotLastTrain = (customSlot.lastTrain !== undefined && customSlot.lastTrain !== '') ? customSlot.lastTrain : slot.lastTrain;
+
+                    // Dynamically check allLinksList for this slot's links if no explicit slot customization
+                    let dynamicSlotFirst = '';
+                    let dynamicSlotLast = '';
+                    if (Array.isArray(slot.links)) {
+                      for (const lDef of slot.links) {
+                        const matched = allLinksList.find(al => 
+                          parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
+                          parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
+                        );
+                        if (matched && matched.train_numbers && matched.train_numbers.trim() && matched.train_numbers.toUpperCase() !== 'REST') {
+                          const parts = matched.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                          if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
+                          if (parts.length > 1 && !dynamicSlotLast) dynamicSlotLast = parts[parts.length - 1];
+                        }
+                      }
+                    }
+
+                    const baselineSlotFirst = dynamicSlotFirst || slot.firstTrain;
+                    const baselineSlotLast = dynamicSlotLast || slot.lastTrain;
+
+                    const effectiveSlotFirstTrain = (customSlot.firstTrain !== undefined && customSlot.firstTrain !== '') ? customSlot.firstTrain : baselineSlotFirst;
+                    const effectiveSlotLastTrain = (customSlot.lastTrain !== undefined && customSlot.lastTrain !== '') ? customSlot.lastTrain : baselineSlotLast;
 
                     const dutiesInSlot = [];
                     slot.links.forEach(lDef => {
                       const dutyKey = `slot_${slot.slotId}_link_${lDef.categoryId || 0}_${lDef.linkNum}`;
                       const customDuty = slotCustomizations[dutyKey] || {};
 
-                      const effectiveFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : effectiveSlotFirstTrain;
-                      const effectiveFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : lDef.firstCoach;
-                      const effectiveLastTrain = (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '') ? customDuty.lastTrain : (lDef.lastTrain || effectiveSlotLastTrain);
-                      const effectiveLastCoach = (customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : (lDef.lastCoach || slot.lastCoach || '-');
+                      const matchedLink = allLinksList.find(al => 
+                        parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
+                        parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
+                      );
+
+                      let linkFirstTrain = '';
+                      let linkLastTrain = '';
+                      let linkCoach = '';
+                      if (matchedLink && matchedLink.train_numbers && matchedLink.train_numbers.trim() && matchedLink.train_numbers.toUpperCase() !== 'REST') {
+                        const parts = matchedLink.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                        if (parts.length > 0) linkFirstTrain = parts[0];
+                        if (parts.length > 1) linkLastTrain = parts[parts.length - 1];
+                      }
+                      if (matchedLink && matchedLink.coaches && matchedLink.coaches.trim()) {
+                        linkCoach = matchedLink.coaches.trim();
+                      }
+
+                      const baselineFirstTrain = linkFirstTrain || effectiveSlotFirstTrain;
+                      const baselineLastTrain = linkLastTrain || lDef.lastTrain || effectiveSlotLastTrain;
+                      const baselineFirstCoach = linkCoach || lDef.firstCoach;
+                      const baselineLastCoach = linkCoach || lDef.lastCoach || slot.lastCoach || '-';
+
+                      const effectiveFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : baselineFirstTrain;
+                      const effectiveFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : baselineFirstCoach;
+                      const effectiveLastTrain = (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '') ? customDuty.lastTrain : baselineLastTrain;
+                      const effectiveLastCoach = (customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : baselineLastCoach;
 
                       // Helper to match overridden duty to this slot link (direct linkNum or altLinkNums)
                       const matchesOverrideLink = (duty) => {
@@ -5512,14 +5640,15 @@ export default function App() {
                                       if (isAdmin) {
                                         setEditTrainCoachModal({
                                           slotId: group.slotId,
+                                          isSlotLevel: true,
                                           slotTitle: group.title || `Slot ${group.slotId}`,
                                           firstTrain: group.firstTrain || '',
                                           lastTrain: group.lastTrain || '',
                                           firstCoaches: (group.duties && group.duties[0] && group.duties[0].firstCoaches) || '',
                                           lastCoaches: (group.duties && group.duties[0] && group.duties[0].lastCoaches) || '',
-                                          dutyKey: (group.duties && group.duties[0] && group.duties[0].dutyKey) || null,
-                                          categoryId: (group.duties && group.duties[0] && group.duties[0].categoryId) || null,
-                                          linkNum: (group.duties && group.duties[0] && group.duties[0].link_number) || null
+                                          dutyKey: null,
+                                          categoryId: null,
+                                          linkNum: null
                                         });
                                       }
                                     }}
@@ -6330,14 +6459,15 @@ export default function App() {
                                       if (isAdmin) {
                                         setEditTrainCoachModal({
                                           slotId: group.slotId,
+                                          isSlotLevel: true,
                                           slotTitle: group.title || `Slot ${group.slotId}`,
                                           firstTrain: group.firstTrain || '',
                                           lastTrain: group.lastTrain || '',
                                           firstCoaches: (group.duties && group.duties[0] && group.duties[0].firstCoaches) || '',
                                           lastCoaches: (group.duties && group.duties[0] && group.duties[0].lastCoaches) || '',
-                                          dutyKey: (group.duties && group.duties[0] && group.duties[0].dutyKey) || null,
-                                          categoryId: (group.duties && group.duties[0] && group.duties[0].categoryId) || null,
-                                          linkNum: (group.duties && group.duties[0] && group.duties[0].link_number) || null
+                                          dutyKey: null,
+                                          categoryId: null,
+                                          linkNum: null
                                         });
                                       }
                                     }}
@@ -7324,7 +7454,7 @@ export default function App() {
                                                     if (res.ok) {
                                                       fetch(`${API_BASE}/non-daily-trains`)
                                                         .then(r => r.json())
-                                                        .then(data => setNonDailyList(data.nonDailyTrains || []));
+                                                        .then(data => setNonDailyList(Array.isArray(data) ? data : (data.nonDailyTrains || [])));
                                                     }
                                                   } catch (err) {
                                                     alert('Error deleting non-daily train: ' + err.message);
@@ -8767,13 +8897,15 @@ export default function App() {
                                       onClick={() => {
                                         setEditingLink(item.linkObj);
                                         setLinkForm({
+                                          category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
                                           link_number: item.linkObj.link_number,
                                           train_numbers: item.linkObj.train_numbers || '',
                                           from_station: item.linkObj.from_station || '',
                                           to_station: item.linkObj.to_station || '',
                                           coaches: item.linkObj.coaches || '',
                                           is_rest: !!item.linkObj.is_rest,
-                                          effective_from: item.linkObj.effective_from || '2026-07-01'
+                                          effective_from: item.linkObj.effective_from || '2026-07-01',
+                                          set_type: item.linkObj.set_type || '2-Day Set'
                                         });
                                         setLinkSubTab('list');
                                       }}
@@ -10808,9 +10940,10 @@ export default function App() {
             restStaffList={currentRestStaffList}
             onSaveSuccess={() => {
               fetchNonDailyTrains(nonDailySelectedDay);
-              if (activeTab === 'daily-summary') {
-                fetchDailyDuties();
-              }
+              fetchDailyDuties();
+              try {
+                window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+              } catch (e) {}
             }}
             authToken={authToken}
             API_BASE={API_BASE}

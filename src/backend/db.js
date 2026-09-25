@@ -112,6 +112,17 @@ async function initDb() {
   }
 
   await run(`
+    CREATE TABLE IF NOT EXISTS slot_customizations (
+      custom_key TEXT PRIMARY KEY,
+      first_train TEXT,
+      last_train TEXT,
+      first_coach TEXT,
+      last_coach TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS staff (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

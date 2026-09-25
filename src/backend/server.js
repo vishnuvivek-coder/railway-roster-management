@@ -2179,15 +2179,30 @@ app.post('/api/links', requireAdmin, async (req, res) => {
 app.put('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   console.log('PUT /api/links/:id body:', req.body);
-  const { train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name } = req.body;
+  const { train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, link_number, category_id } = req.body;
   try {
     await run(
       `UPDATE links 
-       SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, effective_from = ?, effective_to = ?, set_type = ?, set_name = ? 
+       SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, effective_from = ?, effective_to = ?, set_type = ?, set_name = ?,
+           link_number = COALESCE(?, link_number),
+           category_id = COALESCE(?, category_id)
        WHERE id = ?`,
-      [train_numbers, from_station, to_station, coaches, is_rest ? 1 : 0, effective_from, effective_to || '9999-12-31', set_type || '2-Day Set', set_name !== undefined ? set_name : null, id]
+      [
+        train_numbers, 
+        from_station, 
+        to_station, 
+        coaches, 
+        is_rest ? 1 : 0, 
+        effective_from, 
+        effective_to || '9999-12-31', 
+        set_type || '2-Day Set', 
+        set_name !== undefined ? set_name : null,
+        link_number ? parseInt(link_number, 10) : null,
+        category_id ? parseInt(category_id, 10) : null,
+        id
+      ]
     );
-    await logAudit('Admin', 'UPDATE_LINK', `Updated Link ID ${id}`);
+    await logAudit('Admin', 'UPDATE_LINK', `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''}`);
     res.json({ message: 'Link updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2210,6 +2225,94 @@ app.post('/api/links/clear-all', requireAdmin, async (req, res) => {
     await run('DELETE FROM links');
     await logAudit('Admin', 'CLEAR_ALL_LINKS', 'Cleared all roster links / train entries');
     res.json({ message: 'All links cleared successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// SLOT & TRAIN/COACH CUSTOMIZATIONS API (PERSISTENT IN DB)
+// ----------------------------------------------------
+app.get('/api/slot-customizations', async (req, res) => {
+  try {
+    const rows = await all('SELECT * FROM slot_customizations');
+    const result = {};
+    for (const row of rows) {
+      result[row.custom_key] = {
+        firstTrain: row.first_train || '',
+        lastTrain: row.last_train || '',
+        firstCoach: row.first_coach || '',
+        lastCoach: row.last_coach || ''
+      };
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
+  try {
+    const { key, slot_id, link_num, category_id, first_train, last_train, first_coach, last_coach, links_to_update } = req.body;
+    if (!key && !slot_id) {
+      return res.status(400).json({ error: 'Custom key or slot_id is required' });
+    }
+    const targetKey = key || `slot_${slot_id}`;
+    const cleanFirstTrain = first_train !== undefined && first_train !== null ? String(first_train).trim() : null;
+    const cleanLastTrain = last_train !== undefined && last_train !== null ? String(last_train).trim() : null;
+    const cleanFirstCoach = first_coach !== undefined && first_coach !== null ? String(first_coach).trim() : null;
+    const cleanLastCoach = last_coach !== undefined && last_coach !== null ? String(last_coach).trim() : null;
+
+    await run(
+      `INSERT INTO slot_customizations (custom_key, first_train, last_train, first_coach, last_coach, updated_at)
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(custom_key) DO UPDATE SET
+         first_train = COALESCE(excluded.first_train, first_train),
+         last_train = COALESCE(excluded.last_train, last_train),
+         first_coach = COALESCE(excluded.first_coach, first_coach),
+         last_coach = COALESCE(excluded.last_coach, last_coach),
+         updated_at = CURRENT_TIMESTAMP`,
+      [targetKey, cleanFirstTrain, cleanLastTrain, cleanFirstCoach, cleanLastCoach]
+    );
+
+    // If specific links are associated with this train edit, also synchronize links table in SQLite!
+    if (Array.isArray(links_to_update) && links_to_update.length > 0) {
+      for (const l of links_to_update) {
+        if (l.category_id && l.link_num && cleanFirstTrain) {
+          const formattedTrain = cleanLastTrain ? `${cleanFirstTrain}, ${cleanLastTrain}` : cleanFirstTrain;
+          await run(
+            `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ?`,
+            [formattedTrain, l.category_id, l.link_num]
+          );
+        }
+      }
+    } else if (category_id && link_num && cleanFirstTrain) {
+      const formattedTrain = cleanLastTrain ? `${cleanFirstTrain}, ${cleanLastTrain}` : cleanFirstTrain;
+      await run(
+        `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ?`,
+        [formattedTrain, category_id, link_num]
+      );
+    }
+
+    await logAudit('Admin', 'UPDATE_SLOT_TRAIN_COACH', `Updated train/coaches for ${targetKey} (Train: ${cleanFirstTrain || ''} / ${cleanLastTrain || ''})`);
+    res.json({ success: true, message: 'Train & Coach customization saved successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/slot-customizations/reset', requireAdmin, async (req, res) => {
+  try {
+    const { keys, key } = req.body;
+    if (Array.isArray(keys) && keys.length > 0) {
+      for (const k of keys) {
+        await run('DELETE FROM slot_customizations WHERE custom_key = ?', [k]);
+      }
+    } else if (key) {
+      await run('DELETE FROM slot_customizations WHERE custom_key = ?', [key]);
+    }
+    await logAudit('Admin', 'RESET_SLOT_TRAIN_COACH', 'Reset slot train/coach customizations to default');
+    res.json({ success: true, message: 'Customizations reset to baseline' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
