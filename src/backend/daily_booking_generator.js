@@ -203,7 +203,8 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
       }
 
       // B. Override Check
-      if (!musterCode && override) {
+      const isLeaveMuster = musterCode && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'R', 'O'].includes(musterCode);
+      if (!isLeaveMuster && override) {
         activeLink = override.overridden_link_number;
         isOverridden = true;
         status = override.status || (override.overridden_link_number === null ? 'REST' : 'CHANGED_LINK');
@@ -212,8 +213,35 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
         overrideReason = override.reason || '';
         targetCategoryId = override.target_category_id || (override.status === 'SUBSTITUTE' ? 1 : cat.id);
         leaveType = override.leave_type;
-      } else if (!musterCode) {
+      } else if (!isLeaveMuster) {
         activeLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
+      }
+
+      // Handle Extra Train / Non-Daily overrides directly
+      if (override && (override.is_extra || override.status === 'EXTRA_CREW' || override.extra_train_no)) {
+        const extraTrain = override.extra_train_no || override.shifted_place || 'SPECIAL';
+        const firstTr = extraTrain.split(/[,/]/)[0].trim();
+        allStaffDuties.push({
+          staffId: staff.id,
+          name: staff.name,
+          designation: staff.designation || 'TTI',
+          categoryId: cat.id,
+          categoryCode: cat.code,
+          roleBadge: 'LR',
+          status: 'DUTY',
+          link_number: null,
+          train_numbers: extraTrain,
+          from_station: 'GNT',
+          to_station: '---',
+          coaches: 'AC+SL',
+          last_train: extraTrain.split(/[,/]/).pop()?.trim() || firstTr,
+          dep_time: '10:00',
+          remarks: override.reason || 'Extra Duty',
+          isOverridden: true,
+          isNonDaily: true,
+          target_category_id: 4
+        });
+        continue;
       }
 
       // C. Category 4 Weekly Rest

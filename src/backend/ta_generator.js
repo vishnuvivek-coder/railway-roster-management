@@ -323,7 +323,7 @@ function calculateDayDutiesTa(duties) {
     }
   }
 
-  // 3. Check for Departure from HQ outward journey
+  // 3. Check for Departure from HQ outward journey vs Outstation departure
   const gntLeg = updated.find(d => (d.from || d.from_station) === 'GNT' && (d.dep || d.dep_time) && (d.dep || d.dep_time) !== '---');
   const nightDepLeg = updated.find(d => {
     const dep = d.dep || d.dep_time;
@@ -334,6 +334,32 @@ function calculateDayDutiesTa(duties) {
   const gntArrLeg = updated.find(d => (d.to || d.to_station) === 'GNT' && (d.arr || d.arr_time) && (d.arr || d.arr_time) !== '---');
 
   if ((gntLeg || nightDepLeg) && !gntArrLeg) {
+    const mainClaimLeg = nightDepLeg || gntLeg;
+    const fromStn = (mainClaimLeg.from || mainClaimLeg.from_station || '').trim();
+    const isOutstationDep = fromStn && !['GNT', 'BZA', '---'].includes(fromStn);
+
+    if (isOutstationDep) {
+      // Outstation stay returning in evening/night -> Full Day TA (1.0)
+      const depTime = mainClaimLeg.dep || mainClaimLeg.dep_time;
+      const depM = parseMinutes(depTime);
+      const hours = depM !== null ? Math.round((depM / 60) * 10) / 10 : 24.0;
+      updated.forEach(d => {
+        if (d === mainClaimLeg) {
+          d.ta_b1 = '1';
+          d.days_claiming_ta = 1.0;
+          d.ta = 1.0;
+          d.ta_percentage = 1.0;
+          d.absence_hours = hours > 12 ? hours : 24.0;
+        } else {
+          d.ta_b1 = '';
+          d.days_claiming_ta = null;
+          d.ta = null;
+          d.ta_percentage = null;
+        }
+      });
+      return updated;
+    }
+
     const hqDepTime = gntLeg ? (gntLeg.dep || gntLeg.dep_time) : (nightDepLeg.dep || nightDepLeg.dep_time);
     const depM = parseMinutes(hqDepTime);
 
@@ -348,7 +374,6 @@ function calculateDayDutiesTa(duties) {
         dayTa = 0.3;
       }
 
-      const mainClaimLeg = nightDepLeg || gntLeg;
       updated.forEach(d => {
         if (d === mainClaimLeg) {
           d.ta_b1 = String(dayTa);
@@ -475,14 +500,17 @@ function recalculateJournalRowsTa(rows) {
     calculated.forEach(r => {
       const orig = updatedRows[r._origIdx];
       const effectiveDaRate = orig.da_rate || (orig.pay_amount ? (orig.pay_amount >= 53100 ? 800 : (orig.pay_amount >= 35400 ? 500 : 800)) : 800);
-      const amt = r.days_claiming_ta !== null && r.days_claiming_ta !== undefined
-        ? Math.round(r.days_claiming_ta * effectiveDaRate)
+      const hasExplicitSavedTa = orig._isSaved && orig.days_claiming_ta !== null && orig.days_claiming_ta !== undefined;
+      const daysClaim = hasExplicitSavedTa ? orig.days_claiming_ta : (r.days_claiming_ta !== undefined ? r.days_claiming_ta : null);
+      const b1Val = hasExplicitSavedTa ? (orig.ta_b1 || String(orig.days_claiming_ta)) : (r.ta_b1 !== undefined ? r.ta_b1 : (r.days_claiming_ta !== null ? String(r.days_claiming_ta) : ''));
+      const amt = daysClaim !== null && daysClaim !== undefined
+        ? Math.round(daysClaim * effectiveDaRate)
         : (orig.claim_amount || 0);
       updatedRows[r._origIdx] = {
         ...orig,
-        ta_b1: r.ta_b1 !== undefined ? r.ta_b1 : (r.days_claiming_ta !== null ? String(r.days_claiming_ta) : ''),
-        days_claiming_ta: r.days_claiming_ta !== undefined ? r.days_claiming_ta : null,
-        ta_percentage: r.days_claiming_ta !== undefined ? r.days_claiming_ta : null,
+        ta_b1: b1Val,
+        days_claiming_ta: daysClaim,
+        ta_percentage: daysClaim,
         absence_hours: r.absence_hours !== undefined ? r.absence_hours : orig.absence_hours,
         claim_amount: amt
       };
@@ -498,6 +526,11 @@ function recalculateJournalRowsTa(rows) {
 function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
   if (!link || link.is_rest || !link.train_numbers || link.train_numbers === 'REST' || link.train_numbers === 'OFF') {
     return [];
+  }
+
+  // Fallback: If a COR staff (Cat 1) is assigned a Sleeper link (> 21)
+  if (categoryId === 1 && linkNumber > 21) {
+    categoryId = 2;
   }
 
   // Category 1: Conductors (COR) - 21-day cycle
@@ -686,6 +719,39 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
           { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:05', ta: null },
           { train_no: '17262', from: 'TPTY', to: '---', dep: '19:30', arr: '---', ta: 1.0 }
         ];
+      case 29:
+        return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7 }];
+      case 30:
+        return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7 }];
+      case 36:
+      case 50:
+        return [{ train_no: '17645', from: 'GNT', to: 'RAL', dep: '07:30', arr: '08:45', ta: null }, { train_no: '17626', from: 'RAL', to: '---', dep: '22:40', arr: '---', ta: 0.3 }];
+      case 37:
+      case 51:
+        return [{ train_no: '17626', from: '---', to: 'KCG', dep: '---', arr: '07:15', ta: null }, { train_no: '17625', from: 'KCG', to: '---', dep: '22:10', arr: '---', ta: 1.0 }];
+      case 38:
+      case 52:
+        return [{ train_no: '17625', from: '---', to: 'RAL', dep: '---', arr: '04:10', ta: null }, { train_no: '17646', from: 'RAL', to: 'GNT', dep: '05:55', arr: '07:00', ta: 1.0 }];
+      case 40:
+      case 54:
+        return [{ train_no: '17243', from: 'GNT', to: '---', dep: '23:20', arr: '---', ta: 0.3 }];
+      case 41:
+      case 55:
+        return [{ train_no: '17243', from: '---', to: 'VSKP', dep: '---', arr: '09:30', ta: null }, { train_no: '17244', from: 'VSKP', to: '---', dep: '15:30', arr: '---', ta: 1.0 }];
+      case 43:
+        return [{ train_no: '20629', from: 'GNT', to: '---', dep: '19:10', arr: '---', ta: 0.3 }];
+      case 44:
+        return [{ train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null }, { train_no: '12733', from: 'TPTY', to: '---', dep: '18:20', arr: '---', ta: 1.0 }];
+      case 45:
+        return [{ train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 }, { train_no: '17281', from: 'GNT', to: '---', dep: '23:30', arr: '---', ta: 0.3 }];
+      case 48:
+        return [{ train_no: '17646', from: '---', to: 'GNT', dep: '---', arr: '07:00', ta: 1.0 }];
+      case 57:
+        return [{ train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null }, { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }];
+      case 58:
+        return [{ train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null }, { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }];
+      case 59:
+        return [{ train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null }, { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }];
       default:
         if (link && link.train_numbers && link.train_numbers !== 'REST' && link.train_numbers !== 'OFF') {
           return [
@@ -1182,11 +1248,16 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           lastAssignedNonDaily = null;
         } else if (directOverride && (directOverride.overridden_link_number !== null && directOverride.overridden_link_number !== undefined)) {
           linkNum = directOverride.overridden_link_number;
-          const targetCatId = directOverride.target_category_id || (linkNum > 21 ? 2 : category.id);
+          let targetCatId = directOverride.target_category_id || (linkNum > 21 ? 2 : category.id);
+          if (targetCatId === 1 && linkNum > 21) targetCatId = 2;
           duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
           if (duties.length === 0 && linkNum > 100) {
             duties = resolveDutyCodeToRows(String(linkNum));
           }
+          
+          const derivedRemark = directOverride.reason || `Assigned to Link #${linkNum}`;
+          duties.forEach(d => { d.remarks = derivedRemark; });
+          
           lastAssignedLink = linkNum;
           lastTargetCat = targetCatId;
           lastAssignedNonDaily = null;
@@ -1203,10 +1274,14 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             lastAssignedNonDaily = null;
             lastAssignedLink = null;
           }
+          const derivedRemark = directOverride.reason || `Working as EXTRA on ${trNo}`;
+          duties.forEach(d => { d.remarks = derivedRemark; });
         } else if (directOverride && (directOverride.status === 'UTILISED_ADVANCE' || directOverride.advance_train_no)) {
           const trNo = directOverride.advance_train_no || 'ADVANCE';
           duties = resolveDutyCodeToRows(trNo);
           if (duties.length === 0) duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
+          const derivedRemark = directOverride.reason || `Utilised in Advance on ${trNo}`;
+          duties.forEach(d => { d.remarks = derivedRemark; });
           lastAssignedNonDaily = null;
           lastAssignedLink = null;
         } else if (subOverride && subOverride.status !== 'AVAILABLE_FOR_BOOKING') {
@@ -1216,11 +1291,16 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             : subOverride.original_link_number;
           if (assignedLink) {
             linkNum = assignedLink;
-            const targetCatId = subOverride.target_category_id || subOverride.regular_staff_category || (linkNum > 21 ? 2 : 1);
+            let targetCatId = subOverride.target_category_id || subOverride.regular_staff_category || (linkNum > 21 ? 2 : 1);
+            if (targetCatId === 1 && linkNum > 21) targetCatId = 2;
             duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
             if (duties.length === 0 && linkNum > 100) {
               duties = resolveDutyCodeToRows(String(linkNum));
             }
+            
+            const derivedRemark = subOverride.reason || `Substitute for ${subOverride.regular_staff_name || 'Staff'}`;
+            duties.forEach(d => { d.remarks = derivedRemark; });
+            
             lastAssignedLink = linkNum;
             lastTargetCat = targetCatId;
             lastAssignedNonDaily = null;
@@ -1229,6 +1309,8 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
             const nd = lastAssignedNonDaily.service;
             duties = resolveDutyCodeToRows(nd.returnTrain);
+            const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily)`;
+            duties.forEach(d => { d.remarks = derivedRemark; });
             lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
             lastAssignedLink = null;
           } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
@@ -1244,6 +1326,11 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           linkNum = nextLink;
           const targetCatId = lastTargetCat || category.id;
           duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
+          
+          const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
+          const derivedRemark = `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
+          duties.forEach(d => { d.remarks = derivedRemark; });
+          
           lastAssignedLink = nextLink;
         } else if (category.id === 4) {
           lastAssignedLink = null;
@@ -1296,6 +1383,11 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             linkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
             const link = linkMap[`${category.id}_${linkNum}`];
             duties = getDutyRowsForLinkNumber(category.id, linkNum, link);
+            
+            const isRest = link && link.is_rest;
+            const derivedRemark = isRest ? 'Weekly Rest Day' : `Assigned to Link #${linkNum}`;
+            duties.forEach(d => { d.remarks = derivedRemark; });
+            
             lastAssignedLink = linkNum;
             lastTargetCat = category.id;
           }
@@ -1345,7 +1437,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           const claimAmt = taPct !== null && taPct !== undefined ? Math.round(taPct * daRate) : 0;
           const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
           const claimStatus = isEffectiveLeave ? 'REJECTED' : 'APPROVED';
-          const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : '';
+          const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (duty.remarks || '');
 
           await run(
             `INSERT INTO ta_approvals (
@@ -1614,8 +1706,8 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dIso, musterMap, staffOverrideMap);
         const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
 
-        // If duty was changed via roster override, or staff is on leave / standby at HQ, discard stale saved entry
-        if (isStandby || isMultiDayReturn || leaveInfoMap[dIso] || hasDutyOverride) {
+        // If staff is on leave or standby at HQ, discard stale saved duty entry
+        if (isStandby || isMultiDayReturn || leaveInfoMap[dIso]) {
           return;
         }
 
@@ -1687,8 +1779,19 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       const b1Val = item.ta_b1 || (item.ta_percentage !== null && item.ta_percentage !== undefined ? String(item.ta_percentage) : (item.days_claiming_ta !== null && item.days_claiming_ta !== undefined ? String(item.days_claiming_ta) : ''));
       const daysClaim = item.days_claiming_ta !== undefined ? item.days_claiming_ta : (item.ta_percentage !== undefined ? item.ta_percentage : null);
 
+      let rowRemarks = item.remarks || '';
+      if (!rowRemarks && dIso) {
+        const ov = staffOverrideMap[dIso];
+        if (ov && ov.reason) {
+          rowRemarks = ov.reason;
+        } else if (musterMap[dIso] && musterMap[dIso].remarks) {
+          rowRemarks = musterMap[dIso].remarks;
+        }
+      }
+
       finalRows.push({
         id: item.id || null,
+        _isSaved: item._isSaved || false,
         row_order: finalRows.length + 1,
         link_number: item.link_number || null,
         date_str: item.date_str || (dIso ? `${parseInt(dIso.split('-')[2], 10)}/${parseInt(dIso.split('-')[1], 10)}/${dIso.split('-')[0].slice(-2)}` : ''),
@@ -1708,7 +1811,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         absence_hours: item.absence_hours || 0,
         claim_amount: item.claim_amount || 0,
         object_of_journey: item.object_of_journey || (category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'),
-        remarks: item.remarks || ''
+        remarks: rowRemarks
       });
     }
   }

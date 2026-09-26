@@ -100,7 +100,7 @@ const DATES_CONFIG = [
       { staff_id: 5, overridden_link_number: 18, status: 'CHANGED_LINK', reason: 'COR Link #18 (12734/20630 COR-1)', target_category_id: 1 },
       { staff_id: 17, overridden_link_number: 10, status: 'CHANGED_LINK', reason: 'COR Link #10 (12734 COR-2 / 17262 SL)', target_category_id: 1 },
       { staff_id: 118, overridden_link_number: 8, status: 'CHANGED_LINK', reason: 'Link #8 (12734/20630 SL)', target_category_id: 2 },
-      { staff_id: 78, overridden_link_number: 39, status: 'CHANGED_LINK', reason: 'Link #39 (17243/17244 AC+SL)', target_category_id: 2 },
+      { staff_id: 59, overridden_link_number: 39, status: 'CHANGED_LINK', reason: 'Link #39 (17243/17244 AC+SL)', target_category_id: 2 },
       { staff_id: 73, overridden_link_number: 53, status: 'CHANGED_LINK', reason: 'Link #53 (17243/17244 SL)', target_category_id: 2 },
       // Non-Daily
       { staff_id: 80, status: 'EXTRA_CREW', is_extra: 1, extra_train_no: '22882/22881', shifted_place: 'Train 22882/22881 AC+SL', reason: '3-Day Non-Daily Link 22882/22881 (GNT-WADI-GNT)', target_category_id: 2 },
@@ -128,7 +128,7 @@ const DATES_CONFIG = [
       { staff_id: 75, overridden_link_number: 1, status: 'CHANGED_LINK', reason: 'Link #1 (17253/17252 AC+SL)', target_category_id: 2 },
       { staff_id: 106, overridden_link_number: 29, status: 'CHANGED_LINK', reason: 'Link #29 (17239/17240 AC+2S)', target_category_id: 2 },
       { staff_id: 36, overridden_link_number: 17, status: 'CHANGED_LINK', reason: 'Link #17 (17646/12796 AC+SL)', target_category_id: 2 },
-      { staff_id: 58, overridden_link_number: 19, status: 'CHANGED_LINK', reason: 'Link #19 (12805/12806 AC+2S)', target_category_id: 2 },
+      { staff_id: 38, overridden_link_number: 19, status: 'CHANGED_LINK', reason: 'Link #19 (12805/12806 AC+2S)', target_category_id: 2 },
       { staff_id: 112, overridden_link_number: 47, status: 'CHANGED_LINK', reason: 'Link #47 (12795/17645 AC+2S)', target_category_id: 2 },
       { staff_id: 24, overridden_link_number: 5, status: 'CHANGED_LINK', reason: 'Link #5 (17251/17254 AC+SL)', target_category_id: 2 },
       { staff_id: 114, overridden_link_number: 45, status: 'CHANGED_LINK', reason: 'Link #45 (17281/17282 2S)', target_category_id: 2 },
@@ -149,8 +149,8 @@ const DATES_CONFIG = [
       { staff_id: 86, overridden_link_number: 18, status: 'SUBSTITUTE', reason: 'COR Link #18 (12734/20630 COR-1)', target_category_id: 1 },
       { staff_id: 16, overridden_link_number: 10, status: 'CHANGED_LINK', reason: 'COR Link #10 (12734 COR-2 / 17262 AC)', target_category_id: 1 },
       { staff_id: 79, overridden_link_number: 8, status: 'CHANGED_LINK', reason: 'Link #8 (12734/20630 SL)', target_category_id: 2 },
-      { staff_id: 44, overridden_link_number: 39, status: 'CHANGED_LINK', reason: 'Link #39 (17243/17244 AC+SL)', target_category_id: 2 },
-      { staff_id: 84, overridden_link_number: 53, status: 'CHANGED_LINK', reason: 'Link #53 (17243/17244 SL)', target_category_id: 2 },
+      { staff_id: 58, overridden_link_number: 39, status: 'CHANGED_LINK', reason: 'Link #39 (17243/17244 AC+SL)', target_category_id: 2 },
+      { staff_id: 44, overridden_link_number: 53, status: 'CHANGED_LINK', reason: 'Link #53 (17243/17244 SL)', target_category_id: 2 },
       // Non-Daily
       { staff_id: 105, status: 'EXTRA_CREW', is_extra: 1, extra_train_no: '12755/17625', shifted_place: 'Train 12755 AC+SL / 17625 SL', reason: 'Non-Daily Train 12755/17625 (GNT-COA-GNT)', target_category_id: 4 },
       { staff_id: 101, status: 'EXTRA_CREW', is_extra: 1, extra_train_no: '12704/16357', shifted_place: 'Train 12704 SL / 16357 SL', reason: 'Non-Daily Train 12704/16357', target_category_id: 4 },

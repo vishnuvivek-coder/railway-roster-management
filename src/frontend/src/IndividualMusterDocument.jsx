@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import SearchableStaffSelect from './SearchableStaffSelect';
+import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
 
@@ -277,18 +279,16 @@ export default function IndividualMusterDocument({
             </select>
           </div>
 
-          <div className="filter-group">
+          <div className="filter-group" style={{ minWidth: '240px' }}>
             <label className="form-label" style={{ marginBottom: 0 }}>Select Employee:</label>
-            <select
-              className="select-input"
+            <SearchableStaffSelect
+              staffList={staffList || []}
               value={selectedStaffId}
-              onChange={(e) => setSelectedStaffId(parseInt(e.target.value, 10))}
-              style={{ minWidth: '220px', fontWeight: 600 }}
-            >
-              {(staffList || []).map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({s.designation || '-'})</option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedStaffId(parseInt(val, 10))}
+              customStyles={{
+                control: (base) => ({ ...base, minHeight: '28px', fontSize: '0.88rem' })
+              }}
+            />
           </div>
 
           <div className="filter-group">
@@ -319,11 +319,15 @@ export default function IndividualMusterDocument({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => window.print()}
+            onClick={() => printElement('printable-individual-muster', {
+              title: `Muster_${staffInfo?.name || 'Staff'}_${month}_${year}`,
+              orientation: 'portrait',
+              pageFormat: 'a4'
+            })}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -336,8 +340,32 @@ export default function IndividualMusterDocument({
               border: 'none',
               cursor: 'pointer'
             }}
+            title="Print Individual Muster"
           >
-            🖨️ Print Individual Muster
+            🖨️ Print
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => downloadPdfFromElement('printable-individual-muster', `Muster_${staffInfo?.name || 'Staff'}_${month}_${year}`, {
+              orientation: 'portrait',
+              format: 'a4'
+            })}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+              color: '#ffffff',
+              fontWeight: 700,
+              padding: '8px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+            title="Download Direct PDF"
+          >
+            📄 Download PDF
           </button>
           {onClose && (
             <button
@@ -357,7 +385,7 @@ export default function IndividualMusterDocument({
           <div className="spinner"></div> Loading Monthly Muster Details...
         </div>
       ) : staffInfo ? (
-        <div style={{
+        <div id="printable-individual-muster" style={{
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border-glass)',
           borderRadius: '12px',

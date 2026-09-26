@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import SearchableStaffSelect from './SearchableStaffSelect';
+import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
 
@@ -592,8 +594,33 @@ export default function DiaryDocument({
     }
   };
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   const handlePrint = () => {
-    window.print();
+    printElement('.diary-document-container', {
+      title: `EFT_Diary_${editableMeta.name || 'Staff'}_${diaryData?.month_name || month}_${year}`,
+      orientation: 'landscape',
+      pageFormat: 'legal'
+    });
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    setStatusMsg('⏳ Generating and downloading Remittance Diary PDF...');
+    try {
+      await downloadPdfFromElement('.diary-document-container', `EFT_Diary_${editableMeta.name || 'Staff'}_${diaryData?.month_name || month}_${year}`, {
+        orientation: 'landscape',
+        format: 'legal',
+        margin: [4, 4, 4, 4]
+      });
+      setStatusMsg('✅ Remittance Diary PDF downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      setStatusMsg('⚠️ PDF generation failed, opened print window instead.');
+    } finally {
+      setDownloadingPdf(false);
+      setTimeout(() => setStatusMsg(''), 4000);
+    }
   };
 
   // 2-Page Partitioning: Page 1 holds up to 24 rows, Page 2 holds up to 20 rows
@@ -768,10 +795,19 @@ export default function DiaryDocument({
             <button
               onClick={handlePrint}
               className="btn btn-secondary"
-              style={{ fontSize: '0.84rem', padding: '8px 16px', background: 'rgba(212, 161, 92, 0.15)', border: '1px solid var(--border-gold)' }}
+              style={{ fontSize: '0.84rem', padding: '8px 16px', background: 'rgba(212, 161, 92, 0.15)', border: '1px solid var(--border-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Print formatted on LEGAL LANDSCAPE paper size"
             >
-              🖨️ Print / Save PDF (Legal Landscape)
+              🖨️ Print
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              className="btn btn-primary"
+              disabled={downloadingPdf}
+              style={{ fontSize: '0.84rem', padding: '8px 16px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Directly download PDF file"
+            >
+              {downloadingPdf ? '⏳ Generating PDF...' : '📄 Download PDF'}
             </button>
           </div>
         </div>
@@ -792,20 +828,13 @@ export default function DiaryDocument({
             </select>
           </div>
 
-          <div>
+          <div style={{ flexGrow: 1, minWidth: '240px' }}>
             <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>Select Employee Sheet</label>
-            <select
-              className="form-input"
+            <SearchableStaffSelect
+              staffList={sortedStaffList}
               value={selectedStaffId}
-              onChange={(e) => setSelectedStaffId(e.target.value)}
-              style={{ padding: '7px 10px', fontWeight: 600, fontSize: '0.85rem' }}
-            >
-              {sortedStaffList.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.designation || 'Staff'}) [Link #{s.row_position}]
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedStaffId(val)}
+            />
           </div>
 
           <div>

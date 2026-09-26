@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import SearchableStaffSelect from './SearchableStaffSelect';
 
 // Multi-day link sets for Indian Railways train roster
 export const KNOWN_LINK_SETS = {
@@ -2892,23 +2893,28 @@ export default function DutyEditModal({
                           <label className="form-label" style={{ fontSize: '0.78rem' }}>
                             Select Staff B to Mutually Shift Places With ({eligibleMutualStaff.length}):
                           </label>
-                          <select
-                            className="form-input"
-                            value={mutualStaffId}
-                            onChange={(e) => setMutualStaffId(e.target.value)}
-                            style={{ fontSize: '0.84rem', fontWeight: 600, color: mutualStaffId ? '#38bdf8' : 'inherit' }}
-                          >
-                            <option value="">-- Choose Employee to Exchange Places ({eligibleMutualStaff.length}) --</option>
-                            {eligibleMutualStaff.map(s => {
-                              const dInfo = getStaffDutyInfo(s, selectedDate);
-                              const catName = categories?.find(c => c.id === s.category_id)?.name?.split(' ')[0] || `Cat ${s.category_id}`;
-                              return (
-                                <option key={s.id} value={s.id}>
-                                  {s.name} ({catName}) ➔ {dInfo.label || 'Duty'}
-                                </option>
-                              );
-                            })}
-                          </select>
+                          <div style={{ zIndex: 10 }}>
+                            <SearchableStaffSelect
+                              staffList={eligibleMutualStaff}
+                              value={mutualStaffId}
+                              onChange={(val) => setMutualStaffId(val)}
+                              placeholder={`-- Choose Employee to Exchange Places (${eligibleMutualStaff.length}) --`}
+                              formatLabel={(s) => {
+                                const dInfo = getStaffDutyInfo(s, selectedDate);
+                                const catName = categories?.find(c => c.id === s.category_id)?.name?.split(' ')[0] || `Cat ${s.category_id}`;
+                                return `${s.name} (${catName}) ➔ ${dInfo.label || 'Duty'}`;
+                              }}
+                              customStyles={{
+                                control: (base) => ({
+                                  ...base,
+                                  minHeight: '34px',
+                                  fontSize: '0.84rem',
+                                  fontWeight: 600,
+                                  color: mutualStaffId ? '#38bdf8' : 'inherit'
+                                })
+                              }}
+                            />
+                          </div>
                         </div>
 
                         {/* Live Mutual Shift Preview Card */}
@@ -4282,19 +4288,19 @@ export default function DutyEditModal({
                     : 'none'
                 }}
               >
-                {submitting ? 'Saving Changes...' :
+                {submitting ? '💾 Saving Changes...' :
                  activeMode === 'DELETE' ? (
                    deleteReason === 'UPGRADE_COR'
-                     ? (upgradeMode === 'PERMANENT' ? '🎖️ Upgrade to COR (Cadre)' : `⭐ Upgrade to COR Link #${targetCorLink || '1'}`)
+                     ? (upgradeMode === 'PERMANENT' ? '💾 Save & Upgrade to COR (Cadre)' : `💾 Save & Upgrade to COR Link #${targetCorLink || '1'}`)
                      : (deleteReason === 'REASSIGN_STAFF'
-                         ? `👥 Reassign Link #${targetLink || 'Duty'} to Staff`
+                         ? `💾 Save & Reassign Link #${targetLink || 'Duty'} to Staff`
                          : (deleteReason === 'WRONG_ALLOTMENT'
-                             ? (deleteSlotAction === 'REPLACE' ? '🔄 Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '⏮️ Revert Wrong Allotment' : '❌ Remove Wrong Allotment'))
+                             ? (deleteSlotAction === 'REPLACE' ? '💾 Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '💾 Save & Revert Wrong Allotment' : '💾 Save & Remove Wrong Allotment'))
                              : (deleteReason === 'SHIFTED' 
-                                 ? (shiftedMode === 'MUTUAL' ? '🤝 Allow & Shift Employee Names' : '🔄 Shift & Save Duty') 
-                                 : `🗑️ Delete & Save Status`)))
+                                 ? (shiftedMode === 'MUTUAL' ? '💾 Save & Shift Employee Names' : '💾 Shift & Save Duty') 
+                                 : `💾 Save Status Change`)))
                  ) :
-                 `➕ Assign to Link #${targetLink || 'Duty'}`}
+                 `💾 Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>
             </div>
           </div>

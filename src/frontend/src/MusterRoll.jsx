@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import LRList from './LRList';
+import { printElement, downloadPdfFromElement } from './printUtils';
 
 const MUSTER_CODES = [
   { code: 'P', label: 'Present / Regular / Outstation Duty', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.35)' },
@@ -402,8 +403,32 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     document.body.removeChild(link);
   };
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   const handlePrint = () => {
-    window.print();
+    printElement('.muster-roll-container', {
+      title: `Railway_Muster_Roll_${cycleData?.cycle?.periodLabel?.replace(/[\s,]+/g, '_') || 'Sheet'}`,
+      orientation: 'landscape',
+      pageFormat: 'a3'
+    });
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    showToast('⏳ Generating and downloading Muster Roll PDF...');
+    try {
+      await downloadPdfFromElement('.muster-roll-container', `Railway_Muster_Roll_${cycleData?.cycle?.periodLabel?.replace(/[\s,]+/g, '_') || 'Sheet'}`, {
+        orientation: 'landscape',
+        format: 'a3',
+        margin: [4, 4, 4, 4]
+      });
+      showToast('✅ Muster Roll PDF downloaded successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('⚠️ PDF generation failed, opened print window instead.');
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
@@ -521,6 +546,29 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <button
               type="button"
               className="btn btn-primary"
+              onClick={() => {
+                fetchMusterData();
+                showToast('✅ All attendance codes, remarks, and employee edits are saved permanently in the database.');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+              title="Verify and save all muster attendance codes to database"
+            >
+              💾 Save Muster
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
               onClick={handlePrint}
               style={{
                 display: 'flex',
@@ -534,8 +582,30 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 border: 'none',
                 cursor: 'pointer'
               }}
+              title="Print formatted Muster Roll"
             >
-              🖨️ Print Muster Roll
+              🖨️ Print
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={downloadingPdf}
+              onClick={handleDownloadPdf}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+              title="Directly download Muster Roll PDF"
+            >
+              {downloadingPdf ? '⏳ Generating PDF...' : '📄 Download PDF'}
             </button>
           </div>
         </div>

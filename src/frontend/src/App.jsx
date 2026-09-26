@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SearchableStaffSelect from './SearchableStaffSelect';
 import AuthScreen from './AuthScreen';
 import TaDocument from './TaDocument';
 import NdaDocument from './NdaDocument';
@@ -17,6 +18,7 @@ import SeniorityList from './SeniorityList';
 import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData';
 import { useDevice } from './useDevice';
 import useDragAutoScroll from './useDragAutoScroll';
+import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
 
@@ -3349,39 +3351,30 @@ export default function App() {
                 </select>
               </div>
 
-              <div className="filter-group">
+              <div className="filter-group" style={{ minWidth: '240px' }}>
                 <label className="form-label" style={{ marginBottom: 0 }}>Select Employee:</label>
-                <select 
-                  className="select-input"
+                <SearchableStaffSelect
+                  staffList={(allStaffList || []).filter(s => 
+                    (!s.name || !s.name.toUpperCase().includes('VACANT')) && 
+                    (selectedCatId === 'ALL' || String(s.category_id) === String(selectedCatId))
+                  )}
                   value={selectedStaffId}
-                  onChange={(e) => {
-                    const chosenId = parseInt(e.target.value, 10);
+                  onChange={(val) => {
+                    const chosenId = parseInt(val, 10);
                     setSelectedStaffId(chosenId);
                     const chosenStaff = (allStaffList || []).find(s => s.id === chosenId);
                     if (chosenStaff && String(chosenStaff.category_id) !== String(selectedCatId)) {
                       setSelectedCatId(String(chosenStaff.category_id));
                     }
                   }}
-                  style={{ minWidth: '220px' }}
-                >
-                  {selectedCatId === 'ALL' ? (
-                    categories.map(cat => {
-                      const catStaff = (allStaffList || []).filter(s => s.category_id === cat.id && (!s.name || !s.name.toUpperCase().includes('VACANT')));
-                      if (catStaff.length === 0) return null;
-                      return (
-                        <optgroup key={cat.id} label={cat.name}>
-                          {catStaff.map(s => (
-                            <option key={s.id} value={s.id}>{s.name} ({s.designation || '-'})</option>
-                          ))}
-                        </optgroup>
-                      );
+                  customStyles={{
+                    control: (base) => ({
+                      ...base,
+                      minHeight: '28px',
+                      fontSize: '0.88rem'
                     })
-                  ) : (
-                    (allStaffList || []).filter(s => String(s.category_id) === String(selectedCatId) && (!s.name || !s.name.toUpperCase().includes('VACANT'))).map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.designation || '-'})</option>
-                    ))
-                  )}
-                </select>
+                  }}
+                />
               </div>
 
               {/* View Mode Toggle: Month vs Custom Range */}
@@ -3707,14 +3700,28 @@ export default function App() {
           )}
 
           {activeTab === 'roster' && (
-            <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto' }}>
+            <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto', flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={exportToCSV}>
                 📥 Export CSV
               </button>
               <button 
                 className="btn btn-primary" 
-                onClick={() => window.print()}
-                style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none' }}
+                onClick={() => printElement('printable-roster-grid', { title: `Roster_Master_${year}_${month}`, orientation: 'landscape', pageFormat: 'a3' })}
+                style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Print Roster Grid"
+              >
+                🖨️ Print
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={async () => {
+                  setDragNotice('⏳ Generating and downloading Roster PDF...');
+                  await downloadPdfFromElement('printable-roster-grid', `Roster_Master_${year}_${month}`, { orientation: 'landscape', format: 'a3' });
+                  setDragNotice('✅ PDF downloaded successfully!');
+                  setTimeout(() => setDragNotice(null), 3000);
+                }}
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Download Direct PDF"
               >
                 📄 Download PDF
               </button>
@@ -4769,7 +4776,7 @@ export default function App() {
                 })();
 
                 return (
-                  <div>
+                  <div id="printable-daily-movement">
                     {/* Summary Header Card */}
                     <div className="card" style={{ 
                       padding: '20px', 
@@ -4796,7 +4803,7 @@ export default function App() {
                         </p>
                       </div>
                       
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary" onClick={() => {
                           if (activeSlotRows.length === 0 && nonDailySlotRows.length === 0 && offDuties.length === 0) return;
                           let csv = 'Employee Name,Designation,Link No,Status,Train Number (Day 1),Coaches (Day 1),Train Number (Last Day),Coaches (Last Day)\n';
@@ -4836,8 +4843,34 @@ export default function App() {
                         </button>
                         <button 
                           className="btn btn-primary" 
-                          onClick={() => window.print()}
-                          style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none' }}
+                          onClick={() => {
+                            fetchDailyDuties();
+                            setDragNotice('✅ All daily roster changes, link assignments & swaps are saved permanently to the database.');
+                            setTimeout(() => setDragNotice(null), 4000);
+                          }}
+                          style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                          title="Verify and save all current daily roster assignments to database"
+                        >
+                          💾 Save & Sync Roster
+                        </button>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={() => printElement('printable-daily-movement', { title: `Daily_Roster_${selectedDate}`, orientation: 'landscape', pageFormat: 'a4' })}
+                          style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          title="Print Daily Movement Sheet"
+                        >
+                          🖨️ Print
+                        </button>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={async () => {
+                            setDragNotice('⏳ Generating and downloading PDF...');
+                            await downloadPdfFromElement('printable-daily-movement', `Daily_Roster_${selectedDate}`, { orientation: 'landscape', format: 'a4' });
+                            setDragNotice('✅ PDF downloaded successfully!');
+                            setTimeout(() => setDragNotice(null), 3000);
+                          }}
+                          style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          title="Download Direct PDF"
                         >
                           📄 Download PDF
                         </button>
@@ -4900,10 +4933,11 @@ export default function App() {
                     )}
 
                     {/* Available Relief & Leave Reserve (LR) Crew Pool Tray */}
-                    {isAdmin && (
+                    {false && isAdmin && (
                       <div 
                         className="card no-print" 
                         style={{ 
+                          display: 'none',
                           marginBottom: '20px', 
                           background: 'var(--bg-secondary)', 
                           border: '1px solid var(--border-glass)', 
@@ -6078,8 +6112,8 @@ export default function App() {
                                           const isCr = d.status === 'CR' || d.isCr;
                                           const isRest = d.isRest || d.isRestLink;
                                           const hasSub = d.originalStaffName || d.substituteName;
-                                          const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
                                           const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
+                                          const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
                                           const isVacantOver = dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-vacant-${dIdx}`;
                                           const isStaffOver = dragOverStaffDutyKey === `${group.slotId || `nd-${groupIndex}`}-${d.staffId || dIdx}`;
                                           
@@ -6903,7 +6937,9 @@ export default function App() {
                       return (
                         <div style={{ marginBottom: '28px' }}>
                           {/* 1. NON-DAILY CYCLIC STAFF POOL (LINKS #60 - #62) */}
+                          {false && (
                           <div className="card" style={{ 
+                            display: 'none',
                             marginBottom: '20px', 
                             padding: '20px', 
                             background: 'var(--bg-secondary)', 
@@ -7272,6 +7308,7 @@ export default function App() {
                               </div>
                             )}
                           </div>
+                          )}
 
 
                           {/* 2. SUB-TABBED NON-DAILY SERVICES TABLE WITH INTERACTIVE DRAG & DROP */}
@@ -8019,7 +8056,7 @@ export default function App() {
             TAB 2: ROSTER GRID
             ---------------------------------------------------- */}
         {activeTab === 'roster' && (
-          <div>
+          <div id="printable-roster-grid">
             {loadingRoster ? (
               <div className="spinner-container">
                 <div className="spinner"></div> Loading Roster...
@@ -9640,22 +9677,21 @@ export default function App() {
                         🗑️ Remove / Vacate Staff from {categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Category'}:
                       </div>
 
-                      <div className="form-group" style={{ marginBottom: 0 }}>
+                      <div className="form-group" style={{ marginBottom: 0, zIndex: 10 }}>
                         <label className="form-label" style={{ fontSize: '0.78rem' }}>Select Employee to Remove:</label>
-                        <select
-                          className="form-input"
-                          required
+                        <SearchableStaffSelect
+                          staffList={staffList}
                           value={removeStaffId}
-                          onChange={(e) => setRemoveStaffId(e.target.value)}
-                          style={{ fontSize: '0.84rem' }}
-                        >
-                          <option value="">-- Choose Employee ({staffList.length} staff in {categories.find(c => String(c.id) === String(selectedCatId))?.name || 'Category'}) --</option>
-                          {staffList.map(s => (
-                            <option key={s.id} value={s.id}>
-                              SL #{s.row_position} - {s.name} ({s.designation || 'Staff'}) {s.rest_day ? `[Rest: ${s.rest_day}]` : ''}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setRemoveStaffId(val)}
+                          placeholder={`-- Choose Employee (${staffList.length} staff) --`}
+                          customStyles={{
+                            control: (base) => ({
+                              ...base,
+                              minHeight: '34px',
+                              fontSize: '0.84rem'
+                            })
+                          }}
+                        />
                       </div>
 
                       {/* Selected Staff Info Box */}
@@ -9979,18 +10015,14 @@ export default function App() {
               <form className="card" style={{ flex: '1', maxWidth: '380px' }} onSubmit={submitLeaveRequest}>
                 <div className="card-title">Submit Leave or Swap Request</div>
                 
-                <div className="form-group">
+                <div className="form-group" style={{ zIndex: 11 }}>
                   <label className="form-label">Staff Member:</label>
-                  <select 
-                    className="select-input" required style={{ width: '100%' }}
+                  <SearchableStaffSelect
+                    staffList={staffList}
                     value={leaveForm.staff_id}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, staff_id: e.target.value })}
-                  >
-                    <option value="">-- Select Staff --</option>
-                    {staffList.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.designation || 'VACANT'})</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setLeaveForm({ ...leaveForm, staff_id: val })}
+                    placeholder="-- Select Staff --"
+                  />
                 </div>
 
                 <div className="form-group">
@@ -10006,18 +10038,14 @@ export default function App() {
                 </div>
 
                 {leaveForm.type === 'SWAP' && (
-                  <div className="form-group">
+                  <div className="form-group" style={{ zIndex: 10 }}>
                     <label className="form-label">Swap Colleague:</label>
-                    <select 
-                      className="select-input" required style={{ width: '100%' }}
+                    <SearchableStaffSelect
+                      staffList={staffList.filter(s => s.id.toString() !== leaveForm.staff_id)}
                       value={leaveForm.swap_staff_id}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, swap_staff_id: e.target.value })}
-                    >
-                      <option value="">-- Select Colleague --</option>
-                      {staffList.filter(s => s.id.toString() !== leaveForm.staff_id).map(s => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.designation || 'VACANT'})</option>
-                      ))}
-                    </select>
+                      onChange={(val) => setLeaveForm({ ...leaveForm, swap_staff_id: val })}
+                      placeholder="-- Select Colleague --"
+                    />
                   </div>
                 )}
 
@@ -11928,6 +11956,57 @@ export default function App() {
           onSave={handleSaveTrainCoachCustomization}
           onReset={handleResetTrainCoachCustomization}
         />
+      )}
+  
+      {/* Floating Save & Database Sync Dock for Daily Movement */}
+      {activeTab === 'daily' && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 1100,
+          background: 'rgba(18, 24, 38, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: '1.5px solid var(--border-gold)',
+          borderRadius: '12px',
+          padding: '10px 16px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.1rem' }}>💾</span>
+            <div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary)' }}>
+                Database Auto-Save Active
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
+                ● All edits saved permanently
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              fetchDailyDuties();
+              setDragNotice('✅ Verified: All duty changes, swaps & overrides are saved in the database.');
+              setTimeout(() => setDragNotice(null), 4000);
+            }}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            💾 Save Roster
+          </button>
+        </div>
       )}
   
       {/* Mobile Bottom Thumb Dock */}

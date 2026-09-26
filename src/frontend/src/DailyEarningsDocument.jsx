@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import SearchableStaffSelect from './SearchableStaffSelect';
+import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
 
@@ -735,25 +737,29 @@ export default function DailyEarningsDocument({
           ) : (
             /* Controls for Monthly Mode */
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>👤 Employee:</span>
-                <select
-                  className="select-input"
-                  value={selectedStaffId}
-                  onChange={(e) => {
-                    if (setSelectedStaffId) setSelectedStaffId(e.target.value);
-                  }}
-                  style={{ padding: '6px 12px', fontSize: '0.88rem', fontWeight: 700, minWidth: '220px', color: 'var(--primary)' }}
-                >
-                  {[...staffList]
-                    .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))
-                    .map(s => (
-                      <option key={s.id} value={s.id.toString()}>
-                        {s.name} ({s.designation || 'TTI'}) [Link #{s.row_position}]
-                      </option>
-                    ))}
-                </select>
-              </div>
+                <div style={{ flexGrow: 1, minWidth: '240px' }}>
+                  <SearchableStaffSelect
+                    staffList={[...staffList].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))}
+                    value={selectedStaffId}
+                    onChange={(val) => { if (setSelectedStaffId) setSelectedStaffId(val); }}
+                    customStyles={{
+                      control: (base, state) => ({
+                        ...base,
+                        background: 'transparent',
+                        borderColor: 'transparent',
+                        boxShadow: 'none',
+                        minHeight: '28px',
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        color: 'var(--primary)'
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: 'var(--primary)'
+                      })
+                    }}
+                  />
+                </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Month:</span>
@@ -809,10 +815,28 @@ export default function DailyEarningsDocument({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => window.print()}
-              style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600 }}
+              onClick={() => printElement('.earnings-sheet-container', {
+                title: `Daily_Earnings_${date}`,
+                orientation: 'portrait',
+                pageFormat: 'a4'
+              })}
+              style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Print Daily Earnings Sheet"
             >
-              🖨️ Print / PDF
+              🖨️ Print
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => downloadPdfFromElement('.earnings-sheet-container', `Daily_Earnings_${date}`, {
+                orientation: 'portrait',
+                format: 'a4'
+              })}
+              style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Download Direct PDF"
+            >
+              📄 Download PDF
             </button>
           </div>
         </div>
