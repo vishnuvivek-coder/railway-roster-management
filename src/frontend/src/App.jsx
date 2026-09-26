@@ -692,13 +692,22 @@ export default function App() {
   const [overrideReason, setOverrideReason] = useState('');
   const [hoveredCell, setHoveredCell] = useState(null); // tooltip card
 
-  // State for Links CRUD
+  // State for Links CRUD & Link Sets
   const [linksList, setLinksList] = useState([]);
   const [editingLink, setEditingLink] = useState(null);
   const [linkForm, setLinkForm] = useState({
     category_id: '1', link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
   });
-  const [linkSubTab, setLinkSubTab] = useState('train-centric'); // 'train-centric' or 'list'
+  const [linkSubTab, setLinkSubTab] = useState('sets'); // 'sets' (All Link Sets), 'list' (Table Editor), 'train-centric'
+  const [linkSetsList, setLinkSetsList] = useState([]);
+  const [selectedLinkSetId, setSelectedLinkSetId] = useState(null);
+  const [duplicateModal, setDuplicateModal] = useState(null); // { set } or null
+  const [duplicateNameInput, setDuplicateNameInput] = useState('');
+  const [publishModal, setPublishModal] = useState(null); // { set } or null
+  const [publishDateInput, setPublishDateInput] = useState('');
+  const [editLinkSetModal, setEditLinkSetModal] = useState(null); // { set } or null
+  const [editSetNameInput, setEditSetNameInput] = useState('');
+  const [editSetDateInput, setEditSetDateInput] = useState('');
   const [trainCategoryFilter, setTrainCategoryFilter] = useState('ALL'); // 'ALL' or cat.id
   const [customSets, setCustomSets] = useState([]);
   const [newSetName, setNewSetName] = useState('');
@@ -993,13 +1002,14 @@ export default function App() {
   // Load other data based on active tab
   useEffect(() => {
     if (activeTab === 'links') {
-      fetchLinks(trainCategoryFilter);
+      fetchLinkSets(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter);
+      fetchLinks(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter, selectedLinkSetId);
       fetchNonDailyTrains();
     }
     if (activeTab === 'staff' && selectedCatId) fetchStaff();
     if (activeTab === 'leaves' || activeTab === 'daily-summary') fetchLeaveRequests();
     if (activeTab === 'audit') fetchAuditLogs();
-  }, [activeTab, selectedCatId, trainCategoryFilter]);
+  }, [activeTab, selectedCatId, trainCategoryFilter, selectedLinkSetId]);
 
   // Automatically sync staff list for dropdowns
   useEffect(() => {
@@ -1048,12 +1058,36 @@ export default function App() {
       .catch(() => setLoadingRoster(false));
   };
 
-  const fetchLinks = (catFilter = selectedCatId) => {
-    let url = `${API_BASE}/links`;
+  const fetchLinkSets = (catFilter = selectedCatId) => {
+    let url = `${API_BASE}/link-sets`;
     if (catFilter && catFilter !== 'ALL') {
       url += `?category_id=${catFilter}`;
     }
-    fetch(url)
+    return fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setLinkSetsList(data);
+          setSelectedLinkSetId(prev => {
+            if (prev && data.some(s => s.id === prev)) return prev;
+            const match = data.find(s => s.status === 'published') || data[0];
+            return match ? match.id : null;
+          });
+        }
+        return data;
+      })
+      .catch(err => console.error('fetchLinkSets error:', err));
+  };
+
+  const fetchLinks = (catFilter = selectedCatId, targetLinkSetId = null) => {
+    let url = `${API_BASE}/links`;
+    const setId = targetLinkSetId !== null ? targetLinkSetId : selectedLinkSetId;
+    if (setId) {
+      url += `?link_set_id=${setId}`;
+    } else if (catFilter && catFilter !== 'ALL') {
+      url += `?category_id=${catFilter}`;
+    }
+    return fetch(url)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -1076,6 +1110,7 @@ export default function App() {
             return merged;
           });
         }
+        return data;
       })
       .catch(err => console.error('fetchLinks error:', err));
   };
@@ -2234,12 +2269,14 @@ export default function App() {
   };
 
   // ----------------------------------------------------
-  // LINKS CRUD HANDLERS
+  // LINKS & LINK SETS CRUD HANDLERS
   // ----------------------------------------------------
   const saveLink = async (e) => {
     e.preventDefault();
     if (!isAdmin) return;
     const catId = linkForm.category_id || (selectedCatId === 'ALL' ? '1' : selectedCatId) || '1';
+    const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+    const isSetDraft = currentSet?.status === 'draft';
     const url = editingLink ? `${API_BASE}/links/${editingLink.id}` : `${API_BASE}/links`;
     const method = editingLink ? 'PUT' : 'POST';
     try {
@@ -2251,7 +2288,10 @@ export default function App() {
         },
         body: JSON.stringify({
           category_id: parseInt(catId, 10),
+          link_set_id: selectedLinkSetId || null,
+          status: isSetDraft ? 'draft' : (editingLink?.status || 'published'),
           ...linkForm,
+          effective_from: linkForm.effective_from || (currentSet?.effective_from || ''),
           link_number: parseInt(linkForm.link_number, 10)
         })
       });
@@ -2261,16 +2301,20 @@ export default function App() {
       setEditingLink(null);
       setLinkForm({
         category_id: catId,
-        link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
+        link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false,
+        effective_from: currentSet?.effective_from || '2026-07-01', set_type: '2-Day Set'
       });
-      fetchLinks(selectedCatId || catId);
-      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
-      fetchDailyDuties();
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-      try {
-        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
-      } catch (e) {}
-      setDragNotice('✓ Link and train number saved successfully!');
+      fetchLinks(selectedCatId || catId, selectedLinkSetId);
+      fetchLinkSets(selectedCatId || catId);
+      if (!isSetDraft) {
+        fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+        fetchDailyDuties();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        try {
+          window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+        } catch (e) {}
+      }
+      setDragNotice(`✓ Link ${isSetDraft ? '(Draft)' : ''} saved successfully!`);
       setTimeout(() => setDragNotice(null), 3000);
     } catch (err) {
       alert(`Failed to save link: ${err.message}`);
@@ -2286,8 +2330,12 @@ export default function App() {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
       }).then(() => {
-        fetchLinks(selectedCatId);
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        fetchLinks(selectedCatId, selectedLinkSetId);
+        fetchLinkSets(selectedCatId);
+        const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+        if (currentSet?.status !== 'draft') {
+          if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        }
       }).catch(err => {
         alert(`Failed to delete link: ${err.message}`);
       });
@@ -2296,13 +2344,25 @@ export default function App() {
 
   const clearAllLinks = () => {
     if (!isAdmin) return;
-    if (confirm('WARNING: This will permanently delete all links/trains from the database. Are you sure?')) {
+    const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+    const isSetDraft = currentSet?.status === 'draft';
+    const msg = isSetDraft 
+      ? `Clear all links in draft set "${currentSet?.name}"?` 
+      : 'WARNING: This will permanently delete all published links/trains from the database. Are you sure?';
+    if (confirm(msg)) {
       fetch(`${API_BASE}/links/clear-all`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}` }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}` 
+        },
+        body: JSON.stringify({ link_set_id: selectedLinkSetId || null })
       }).then(() => {
-        fetchLinks();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        fetchLinks(selectedCatId, selectedLinkSetId);
+        fetchLinkSets(selectedCatId);
+        if (!isSetDraft) {
+          if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        }
       });
     }
   };
@@ -2324,7 +2384,7 @@ export default function App() {
         set_type: setType || link.set_type
       })
     }).then(() => {
-      fetchLinks();
+      fetchLinks(selectedCatId, selectedLinkSetId);
       if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
     });
   };
@@ -2349,7 +2409,7 @@ export default function App() {
 
       Promise.all(promises).then(() => {
         setCustomSets(prev => prev.filter(s => !(s.name === setName && s.category_id === parseInt(selectedCatId, 10))));
-        fetchLinks();
+        fetchLinks(selectedCatId, selectedLinkSetId);
         if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
       });
     }
@@ -2378,9 +2438,118 @@ export default function App() {
       },
       body: JSON.stringify({ reorders })
     }).then(() => {
-      fetchLinks();
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      fetchLinks(selectedCatId, selectedLinkSetId);
+      const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+      if (currentSet?.status !== 'draft') {
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      }
     });
+  };
+
+  // LINK SET DUPLICATION, PUBLISHING & MANAGEMENT HANDLERS
+  const duplicateLinkSet = async (setId, customName) => {
+    if (!isAdmin) return;
+    const target = linkSetsList.find(s => s.id === setId);
+    const targetName = target ? target.name : `Set #${setId}`;
+    const name = customName !== undefined && customName !== null ? customName : `${targetName} (Draft Copy)`;
+
+    try {
+      const res = await fetch(`${API_BASE}/link-sets/${setId}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to duplicate link set');
+
+      await fetchLinkSets(selectedCatId);
+      setSelectedLinkSetId(data.id);
+      await fetchLinks(selectedCatId, data.id);
+      setLinkSubTab('list'); // Switch to table editor so user can immediately edit the draft rows
+      setDuplicateModal(null);
+      setDragNotice(`📋 Duplicated as Draft: "${data.name}" (${data.link_count} links cloned)`);
+      setTimeout(() => setDragNotice(null), 4000);
+    } catch (err) {
+      alert(`Error duplicating link set: ${err.message}`);
+    }
+  };
+
+  const publishLinkSet = async (setId, effDate) => {
+    if (!isAdmin) return;
+    const target = linkSetsList.find(s => s.id === setId);
+    if (!target) return;
+    const finalDate = effDate || target.effective_from || new Date().toISOString().split('T')[0];
+
+    try {
+      const res = await fetch(`${API_BASE}/link-sets/${setId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ effective_from: finalDate })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to publish link set');
+
+      await fetchLinkSets(selectedCatId);
+      await fetchLinks(selectedCatId, setId);
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      setPublishModal(null);
+      setDragNotice(`🚀 Link Set "${target.name}" is now PUBLISHED and live on the roster!`);
+      setTimeout(() => setDragNotice(null), 4000);
+    } catch (err) {
+      alert(`Error publishing link set: ${err.message}`);
+    }
+  };
+
+  const updateLinkSetMeta = async (setId, name, effectiveFrom) => {
+    if (!isAdmin) return;
+    try {
+      const res = await fetch(`${API_BASE}/link-sets/${setId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ name, effective_from: effectiveFrom })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update link set');
+      await fetchLinkSets(selectedCatId);
+      await fetchLinks(selectedCatId, setId);
+      setEditLinkSetModal(null);
+      setDragNotice('✓ Link set details updated');
+      setTimeout(() => setDragNotice(null), 3000);
+    } catch (err) {
+      alert(`Error updating link set: ${err.message}`);
+    }
+  };
+
+  const deleteLinkSet = async (setId) => {
+    if (!isAdmin) return;
+    const target = linkSetsList.find(s => s.id === setId);
+    if (!target) return;
+    if (!confirm(`Are you sure you want to delete ${target.status === 'draft' ? 'draft ' : ''}link set "${target.name}" (${target.link_count || 0} links)? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/link-sets/${setId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete link set');
+      await fetchLinkSets(selectedCatId);
+      setDragNotice(`✓ Deleted link set "${target.name}"`);
+      setTimeout(() => setDragNotice(null), 3000);
+    } catch (err) {
+      alert(`Error deleting link set: ${err.message}`);
+    }
   };
 
   // ----------------------------------------------------
@@ -8364,11 +8533,18 @@ export default function App() {
             {/* Sub-tabs navigation */}
             <div className="subtabs-nav" style={{ marginBottom: '20px', display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '8px' }}>
               <button 
+                className={`btn ${linkSubTab === 'sets' ? 'btn-primary' : 'btn-secondary'}`} 
+                onClick={() => setLinkSubTab('sets')}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem' }}
+              >
+                📋 All Link Sets
+              </button>
+              <button 
                 className={`btn ${linkSubTab === 'list' ? 'btn-primary' : 'btn-secondary'}`} 
                 onClick={() => setLinkSubTab('list')}
                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem' }}
               >
-                🔗 Link Definitions
+                🔗 Link Definitions (Table)
               </button>
               <button 
                 className={`btn ${linkSubTab === 'train-centric' ? 'btn-primary' : 'btn-secondary'}`} 
@@ -8379,8 +8555,269 @@ export default function App() {
               </button>
             </div>
 
+            {/* 1. LIST VIEW OF ALL LINK SETS (DRAFT & PUBLISHED) */}
+            {linkSubTab === 'sets' && (() => {
+              const currentActiveCatId = selectedCatId || '1';
+              const displayedSets = linkSetsList.filter(s => {
+                if (currentActiveCatId !== 'ALL' && String(s.category_id) !== String(currentActiveCatId)) return false;
+                if (!linkSearchQuery.trim()) return true;
+                const q = linkSearchQuery.toLowerCase().trim();
+                return s.name.toLowerCase().includes(q) || (s.cloned_from_name && s.cloned_from_name.toLowerCase().includes(q));
+              });
+
+              return (
+                <div>
+                  {/* Category Selector Pills */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginRight: '4px', fontWeight: 600 }}>Category:</span>
+                      {[
+                        { id: '1', label: '🚆 Conductors (COR)' },
+                        { id: '2', label: '🛌 TTI / Sleeper Staff' },
+                        { id: '3', label: '👩 Ladies Staff / TTE' },
+                        { id: '4', label: '📋 Leave Reserve (LR) Staff' },
+                        { id: 'ALL', label: '🌐 All Categories' }
+                      ].map(cat => {
+                        const isSelected = String(currentActiveCatId) === String(cat.id);
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCatId(cat.id);
+                              fetchLinkSets(cat.id);
+                              fetchLinks(cat.id);
+                            }}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.82rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              background: isSelected ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                              color: isSelected ? '#000' : 'var(--color-text-secondary)',
+                              border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span>{cat.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ position: 'relative', minWidth: '240px' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="🔍 Search link sets..."
+                        value={linkSearchQuery}
+                        onChange={(e) => setLinkSearchQuery(e.target.value)}
+                        style={{ padding: '6px 12px', fontSize: '0.82rem', width: '100%' }}
+                      />
+                      {linkSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setLinkSearchQuery('')}
+                          style={{
+                            position: 'absolute',
+                            right: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--color-text-secondary)',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* List View Container */}
+                  <div className="data-table-container">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                          📋 Link Sets Directory ({displayedSets.length} {displayedSets.length === 1 ? 'Set' : 'Sets'})
+                        </h3>
+                        <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                          Manage published schedules and draft copies. Duplicate any link set to safely edit rows without touching live roster grid.
+                        </p>
+                      </div>
+                    </div>
+
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Link Set Name</th>
+                          <th>Category</th>
+                          <th>Status</th>
+                          <th>Effective Date</th>
+                          <th>Total Links</th>
+                          <th>Cloned From</th>
+                          <th style={{ textAlign: 'center' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedSets.map(s => {
+                          const isDraft = s.status === 'draft';
+                          return (
+                            <tr key={s.id} style={{ background: isDraft ? 'rgba(234, 179, 8, 0.04)' : undefined }}>
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <strong style={{ fontSize: '0.92rem', color: isDraft ? '#facc15' : 'var(--color-text-primary)' }}>
+                                    {s.name}
+                                  </strong>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                                    ID #{s.id} {isDraft ? '• Draft Version' : '• Current Schedule'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
+                                  {s.category_name || (s.category_id === 1 ? 'Conductors (COR)' : s.category_id === 2 ? 'TTI / Sleeper' : s.category_id === 3 ? 'Ladies' : 'LR Staff')}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`badge ${isDraft ? 'badge-pending' : 'badge-approved'}`} style={{ fontWeight: 700, padding: '4px 10px' }}>
+                                  {isDraft ? '🟡 Draft (Inactive)' : '🟢 Published (Live)'}
+                                </span>
+                              </td>
+                              <td>
+                                {s.effective_from ? (
+                                  <span style={{ fontSize: '0.85rem', fontFamily: 'monospace' }}>📅 {s.effective_from}</span>
+                                ) : (
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>⚠️ Blank / Unset</span>
+                                )}
+                              </td>
+                              <td>
+                                <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
+                                  {s.link_count || 0} Links
+                                </span>
+                              </td>
+                              <td>
+                                {s.cloned_from_name ? (
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                                    ↳ {s.cloned_from_name}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                  {/* Duplicate as Draft button on each link set */}
+                                  {isAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                                      onClick={() => {
+                                        setDuplicateNameInput(`${s.name} (Draft Copy)`);
+                                        setDuplicateModal({ set: s });
+                                      }}
+                                      title="Duplicate this link set and all its rows as a new draft"
+                                    >
+                                      📋 Duplicate as Draft
+                                    </button>
+                                  )}
+
+                                  {/* Edit Rows button */}
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                                    onClick={() => {
+                                      setSelectedLinkSetId(s.id);
+                                      if (String(s.category_id) !== String(selectedCatId)) {
+                                        setSelectedCatId(String(s.category_id));
+                                      }
+                                      fetchLinks(s.category_id, s.id);
+                                      setLinkSubTab('list');
+                                    }}
+                                    title="Open table editor to view and edit link rows"
+                                  >
+                                    ✏️ Edit Rows
+                                  </button>
+
+                                  {/* Rename & Date Settings */}
+                                  {isAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                      onClick={() => {
+                                        setEditSetNameInput(s.name);
+                                        setEditSetDateInput(s.effective_from || '');
+                                        setEditLinkSetModal({ set: s });
+                                      }}
+                                      title="Edit name and effective date"
+                                    >
+                                      ⚙️
+                                    </button>
+                                  )}
+
+                                  {/* Publish Draft */}
+                                  {isDraft && isAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary"
+                                      style={{ padding: '4px 10px', fontSize: '0.75rem', background: '#22c55e', color: '#000', fontWeight: 700 }}
+                                      onClick={() => {
+                                        setPublishDateInput(s.effective_from || new Date().toISOString().split('T')[0]);
+                                        setPublishModal({ set: s });
+                                      }}
+                                      title="Publish this draft set to make it active on the live roster"
+                                    >
+                                      🚀 Publish
+                                    </button>
+                                  )}
+
+                                  {/* Delete Draft */}
+                                  {isDraft && isAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger"
+                                      style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                      onClick={() => deleteLinkSet(s.id)}
+                                      title="Delete draft link set"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {displayedSets.length === 0 && (
+                          <tr>
+                            <td colSpan="7" style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '30px' }}>
+                              No link sets found for this category.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 2. TABLE EDITOR FOR CURRENT LINK SET */}
             {linkSubTab === 'list' && (() => {
               const currentActiveCatId = selectedCatId || '1';
+              const availableSets = linkSetsList.filter(s => currentActiveCatId === 'ALL' || String(s.category_id) === String(currentActiveCatId));
+              const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId) || availableSets[0];
+              const isDraft = currentSet?.status === 'draft';
+
               const filteredLinks = linksList.filter(l => {
                 if (!linkSearchQuery.trim()) return true;
                 const q = linkSearchQuery.toLowerCase().trim();
@@ -8407,7 +8844,7 @@ export default function App() {
                   to_station: '',
                   coaches: '',
                   is_rest: false,
-                  effective_from: '2026-07-01',
+                  effective_from: currentSet?.effective_from || '2026-07-01',
                   set_type: '2-Day Set'
                 });
               };
@@ -8423,8 +8860,8 @@ export default function App() {
 
               return (
                 <div>
-                  {/* Category Selector Pills & Actions Bar for Link Definitions */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                  {/* Category Selector Pills */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginRight: '4px', fontWeight: 600 }}>Category:</span>
                       {[
@@ -8441,7 +8878,15 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setSelectedCatId(cat.id);
-                              fetchLinks(cat.id);
+                              fetchLinkSets(cat.id).then(sets => {
+                                const firstSet = sets && sets.length > 0 ? (sets.find(s => s.status === 'published') || sets[0]) : null;
+                                if (firstSet) {
+                                  setSelectedLinkSetId(firstSet.id);
+                                  fetchLinks(cat.id, firstSet.id);
+                                } else {
+                                  fetchLinks(cat.id);
+                                }
+                              });
                               if (cat.id !== 'ALL') {
                                 setLinkForm(prev => ({ ...prev, category_id: cat.id }));
                               }
@@ -8474,13 +8919,148 @@ export default function App() {
                           className="btn btn-primary"
                           onClick={() => handleOpenAddLink(currentActiveCatId)}
                           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', padding: '6px 14px', borderRadius: '8px' }}
-                          title={`Add a new link to ${currentCatName}`}
+                          title={`Add a new link row`}
                         >
                           <span>➕</span> Add New Link
                         </button>
                       </div>
                     )}
                   </div>
+
+                  {/* Link Set Selector Toolbar */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '10px',
+                    padding: '10px 16px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                        Link Set:
+                      </span>
+                      <select
+                        className="form-input"
+                        style={{ padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600, minWidth: '280px' }}
+                        value={selectedLinkSetId || (currentSet?.id || '')}
+                        onChange={(e) => {
+                          const newId = parseInt(e.target.value, 10);
+                          setSelectedLinkSetId(newId);
+                          fetchLinks(selectedCatId, newId);
+                        }}
+                      >
+                        {availableSets.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} [{s.status.toUpperCase()}] ({s.link_count || 0} links)
+                          </option>
+                        ))}
+                      </select>
+
+                      <span className={`badge ${isDraft ? 'badge-pending' : 'badge-approved'}`} style={{ fontWeight: 700 }}>
+                        {isDraft ? '🟡 Draft Set' : '🟢 Published Set'}
+                      </span>
+
+                      {currentSet?.effective_from ? (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                          📅 Effective: {currentSet.effective_from}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#facc15', fontStyle: 'italic' }}>
+                          ⚠️ Effective Date: Blank / Unset
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {/* Duplicate as Draft Button on Current Set */}
+                      {currentSet && isAdmin && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setDuplicateNameInput(`${currentSet.name} (Draft Copy)`);
+                            setDuplicateModal({ set: currentSet });
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 12px', borderRadius: '8px' }}
+                          title="Duplicate this link set as a draft copy"
+                        >
+                          <span>📋</span> Duplicate as Draft
+                        </button>
+                      )}
+
+                      {/* Publish Draft Button */}
+                      {isDraft && isAdmin && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setPublishDateInput(currentSet.effective_from || new Date().toISOString().split('T')[0]);
+                            setPublishModal({ set: currentSet });
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 14px', borderRadius: '8px', background: '#22c55e', color: '#000', fontWeight: 700 }}
+                          title="Publish this draft set to make it active on the live roster"
+                        >
+                          <span>🚀</span> Publish Draft
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setLinkSubTab('sets')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 12px', borderRadius: '8px' }}
+                        title="View all link sets"
+                      >
+                        <span>📋</span> All Sets View
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Draft Mode Banner */}
+                  {isDraft && (
+                    <div style={{
+                      background: 'rgba(234, 179, 8, 0.12)',
+                      border: '1.5px solid rgba(234, 179, 8, 0.4)',
+                      borderRadius: '10px',
+                      padding: '12px 18px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      fontSize: '0.88rem',
+                      color: '#facc15'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.3rem' }}>⚠️</span>
+                        <div>
+                          <strong>DRAFT MODE ACTIVE:</strong> You are editing Draft Set: <em>"{currentSet?.name}"</em>.
+                          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>
+                            Rows added, updated, or removed here are saved to this draft set only and <strong>DO NOT affect the live Roster Grid</strong> until published.
+                            {currentSet?.cloned_from_name ? ` (Cloned from: ${currentSet.cloned_from_name})` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setPublishDateInput(currentSet.effective_from || new Date().toISOString().split('T')[0]);
+                            setPublishModal({ set: currentSet });
+                          }}
+                          style={{ padding: '6px 14px', fontSize: '0.82rem', borderRadius: '8px', whiteSpace: 'nowrap', background: '#22c55e', color: '#000', fontWeight: 700 }}
+                        >
+                          🚀 Publish Set Now
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', width: '100%' }}>
                     {isAdmin && (
@@ -8646,9 +9226,9 @@ export default function App() {
                           )}
 
                           <div className="form-group">
-                            <label className="form-label">Effective From:</label>
+                            <label className="form-label">Effective From {isDraft ? '(Optional for Draft)' : ''}:</label>
                             <input 
-                              type="date" required className="form-input"
+                              type="date" required={!isDraft} className="form-input"
                               value={linkForm.effective_from}
                               onChange={(e) => setLinkForm({ ...linkForm, effective_from: e.target.value })}
                             />
@@ -8656,7 +9236,7 @@ export default function App() {
 
                           <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                             <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                              {editingLink ? 'Update Link' : 'Create Link'}
+                              {editingLink ? (isDraft ? 'Update Draft Link' : 'Update Link') : (isDraft ? 'Add Link to Draft' : 'Create Link')}
                             </button>
                             {editingLink && (
                               <button 
@@ -8665,7 +9245,7 @@ export default function App() {
                                   setEditingLink(null);
                                   setLinkForm({
                                     category_id: currentActiveCatId === 'ALL' ? '1' : currentActiveCatId,
-                                    link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: '2026-07-01', set_type: '2-Day Set'
+                                    link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false, effective_from: currentSet?.effective_from || '2026-07-01', set_type: '2-Day Set'
                                   });
                                 }}
                               >
@@ -8682,8 +9262,11 @@ export default function App() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                            {currentCatName} ({filteredLinks.length} {filteredLinks.length === 1 ? 'Link' : 'Links'})
+                            {currentSet ? currentSet.name : currentCatName} ({filteredLinks.length} {filteredLinks.length === 1 ? 'Link' : 'Links'})
                           </h3>
+                          <span className={`badge ${isDraft ? 'badge-pending' : 'badge-approved'}`} style={{ fontWeight: 700, fontSize: '0.75rem' }}>
+                            {isDraft ? '🟡 Draft' : '🟢 Published'}
+                          </span>
                         </div>
 
                         <div style={{ position: 'relative', minWidth: '240px' }}>
@@ -8799,7 +9382,7 @@ export default function App() {
                                             to_station: link.to_station || '',
                                             coaches: link.coaches || '',
                                             is_rest: !!link.is_rest,
-                                            effective_from: link.effective_from || '2026-07-01',
+                                            effective_from: link.effective_from || (currentSet?.effective_from || '2026-07-01'),
                                             set_type: link.set_type || '2-Day Set'
                                           });
                                         }}
@@ -8824,7 +9407,7 @@ export default function App() {
                           {filteredLinks.length === 0 && (
                             <tr>
                               <td colSpan={isAdmin ? (currentActiveCatId === 'ALL' ? "9" : "8") : (currentActiveCatId === 'ALL' ? "7" : "6")} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '30px' }}>
-                                {linkSearchQuery ? `No links matching "${linkSearchQuery}".` : `No link definitions found for this category.`}
+                                {linkSearchQuery ? `No links matching "${linkSearchQuery}".` : `No link definitions found for this link set.`}
                               </td>
                             </tr>
                           )}
@@ -12008,7 +12591,218 @@ export default function App() {
           </button>
         </div>
       )}
-  
+
+      {/* Duplicate Link Set Modal */}
+      {duplicateModal && (
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="modal-content" style={{
+            maxWidth: '520px',
+            width: '92%',
+            background: 'var(--bg-primary, #1e1e24)',
+            border: '1.5px solid var(--primary, #d4a15c)',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📋</span> Duplicate as Draft
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDuplicateModal(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px', fontSize: '0.88rem', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>
+              You are cloning Link Set <strong>"{duplicateModal.set.name}"</strong> ({duplicateModal.set.link_count || 0} links).
+              A brand new draft copy will be created with blank effective date. <em>The original set will not be modified.</em>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              duplicateLinkSet(duplicateModal.set.id, duplicateNameInput);
+            }}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Draft Copy Name:</label>
+                <input
+                  type="text"
+                  required
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={duplicateNameInput}
+                  onChange={(e) => setDuplicateNameInput(e.target.value)}
+                  placeholder="e.g. Conductors Revision (Draft)"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDuplicateModal(null)}
+                  style={{ padding: '8px 16px', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '8px 20px', borderRadius: '8px', fontWeight: 700 }}
+                >
+                  📋 Create Draft Copy
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Publish Link Set Modal */}
+      {publishModal && (
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="modal-content" style={{
+            maxWidth: '520px',
+            width: '92%',
+            background: 'var(--bg-primary, #1e1e24)',
+            border: '1.5px solid #22c55e',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🚀</span> Publish Draft Link Set
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPublishModal(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px', fontSize: '0.88rem', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>
+              Publishing <strong>"{publishModal.set.name}"</strong> will change its status from <strong>Draft</strong> to <strong>Published</strong> and make all its {publishModal.set.link_count || 0} links active on the live roster grid.
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              publishLinkSet(publishModal.set.id, publishDateInput);
+            }}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Effective Start Date (YYYY-MM-DD):</label>
+                <input
+                  type="date"
+                  required
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={publishDateInput}
+                  onChange={(e) => setPublishDateInput(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setPublishModal(null)}
+                  style={{ padding: '8px 16px', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '8px 20px', borderRadius: '8px', background: '#22c55e', color: '#000', fontWeight: 700 }}
+                >
+                  🚀 Publish & Make Active
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Link Set Settings Modal */}
+      {editLinkSetModal && (
+        <div className="modal-overlay" style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="modal-content" style={{
+            maxWidth: '520px',
+            width: '92%',
+            background: 'var(--bg-primary, #1e1e24)',
+            border: '1.5px solid var(--border-glass)',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚙️</span> Link Set Settings
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditLinkSetModal(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              updateLinkSetMeta(editLinkSetModal.set.id, editSetNameInput, editSetDateInput);
+            }}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Link Set Name:</label>
+                <input
+                  type="text"
+                  required
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={editSetNameInput}
+                  onChange={(e) => setEditSetNameInput(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Effective Date (YYYY-MM-DD):</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={editSetDateInput}
+                  onChange={(e) => setEditSetDateInput(e.target.value)}
+                  placeholder="Optional for draft"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditLinkSetModal(null)}
+                  style={{ padding: '8px 16px', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '8px 20px', borderRadius: '8px', fontWeight: 700 }}
+                >
+                  Save Settings
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Bottom Thumb Dock */}
       <div className="mobile-bottom-nav no-print">
         <button 

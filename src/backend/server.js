@@ -91,6 +91,7 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
     link = await get(
       `SELECT * FROM links 
        WHERE category_id = ? AND link_number = ? 
+         AND (status = 'published' OR status IS NULL OR status = '')
          AND date(effective_from) <= date(?) 
          AND date(effective_to) >= date(?)`,
       [catId, linkNumber, dateStr, dateStr]
@@ -101,6 +102,7 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
       `SELECT * FROM links 
        WHERE link_number = ? 
          AND category_id != 4
+         AND (status = 'published' OR status IS NULL OR status = '')
          AND date(effective_from) <= date(?) 
          AND date(effective_to) >= date(?)
        ORDER BY category_id ASC LIMIT 1`,
@@ -880,7 +882,7 @@ async function calculateStaffCrBalances() {
   const catMap = {};
   categories.forEach(c => catMap[c.id] = c);
 
-  const links = await all('SELECT * FROM links');
+  const links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
   const linkRestMap = {};
   links.forEach(l => {
     linkRestMap[l.category_id + '_' + l.link_number] = l.is_rest;
@@ -1526,7 +1528,7 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
+    const allLinks = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = '' ORDER BY category_id ASC, link_number ASC");
     
     const results = [];
     const curr = new Date(beforeDateStr + 'T12:00:00');
@@ -2108,19 +2110,246 @@ app.post('/api/staff/upgrade-to-cor', requireAdmin, async (req, res) => {
 });
 
 // ----------------------------------------------------
-// LINK MASTER API
+// LINK SETS & LINK MASTER API
 // ----------------------------------------------------
-app.get('/api/links', async (req, res) => {
+
+// 1. GET all link sets (draft & published), optionally by category_id
+app.get('/api/link-sets', async (req, res) => {
   const { category_id } = req.query;
   try {
-    let sql = 'SELECT * FROM links';
-    let params = [];
-    if (category_id) {
-      sql += ' WHERE category_id = ? ORDER BY link_number, effective_from';
+    let sql = `
+      SELECT 
+        ls.*,
+        c.name as category_name,
+        p.name as cloned_from_name,
+        (SELECT COUNT(*) FROM links l WHERE l.link_set_id = ls.id) as link_count
+      FROM link_sets ls
+      LEFT JOIN categories c ON ls.category_id = c.id
+      LEFT JOIN link_sets p ON ls.cloned_from_id = p.id
+    `;
+    const params = [];
+    if (category_id && category_id !== 'ALL') {
+      sql += ' WHERE ls.category_id = ?';
       params.push(category_id);
-    } else {
-      sql += ' ORDER BY category_id, link_number, effective_from';
     }
+    sql += ' ORDER BY ls.category_id ASC, CASE WHEN ls.status = "published" THEN 0 ELSE 1 END, ls.id DESC';
+    const linkSets = await all(sql, params);
+    res.json(linkSets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. GET a single link set with its member links
+app.get('/api/link-sets/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const set = await get(`
+      SELECT 
+        ls.*,
+        c.name as category_name,
+        p.name as cloned_from_name,
+        (SELECT COUNT(*) FROM links l WHERE l.link_set_id = ls.id) as link_count
+      FROM link_sets ls
+      LEFT JOIN categories c ON ls.category_id = c.id
+      LEFT JOIN link_sets p ON ls.cloned_from_id = p.id
+      WHERE ls.id = ?
+    `, [id]);
+    if (!set) return res.status(404).json({ error: 'Link set not found' });
+    const links = await all('SELECT * FROM links WHERE link_set_id = ? ORDER BY link_number ASC, id ASC', [id]);
+    res.json({ ...set, links });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. POST duplicate link set as draft
+// Copies all its link rows (link number, train number, from, to, coaches, REST flag, set type, set name)
+// into a brand new link set with status = 'draft', blank/empty effective date, cloned_from_id = orig.id.
+// Original set is NOT modified.
+app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name: customName } = req.body || {};
+  try {
+    const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
+    if (!origSet) return res.status(404).json({ error: 'Source link set not found' });
+
+    const newName = customName && customName.trim() 
+      ? customName.trim() 
+      : `${origSet.name} (Draft Copy)`;
+
+    // Insert brand new draft link set
+    const setInsert = await run(
+      `INSERT INTO link_sets (category_id, name, status, effective_from, effective_to, cloned_from_id)
+       VALUES (?, ?, 'draft', '', '9999-12-31', ?)`,
+      [origSet.category_id, newName, origSet.id]
+    );
+    const newSetId = setInsert.lastID;
+
+    // Fetch all link rows from original set (or fallback to category published links if set had no direct links)
+    let origLinks = await all('SELECT * FROM links WHERE link_set_id = ? ORDER BY link_number ASC, id ASC', [origSet.id]);
+    if (!origLinks || origLinks.length === 0) {
+      origLinks = await all(
+        'SELECT * FROM links WHERE category_id = ? AND (status = "published" OR status IS NULL OR status = "") ORDER BY link_number ASC, id ASC',
+        [origSet.category_id]
+      );
+    }
+
+    // Clone every link row into the new draft link set
+    for (const link of origLinks) {
+      await run(
+        `INSERT INTO links (category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+        [
+          origSet.category_id,
+          newSetId,
+          link.link_number,
+          link.train_numbers || '',
+          link.from_station || '',
+          link.to_station || '',
+          link.coaches || '',
+          link.is_rest ? 1 : 0,
+          '', // blank/empty effective date as requested
+          '9999-12-31',
+          link.set_type || '2-Day Set',
+          link.set_name || null
+        ]
+      );
+    }
+
+    await logAudit('Admin', 'DUPLICATE_LINK_SET', `Duplicated Link Set "${origSet.name}" (#${origSet.id}) into Draft Set #${newSetId} with ${origLinks.length} links`);
+    res.json({
+      success: true,
+      id: newSetId,
+      name: newName,
+      category_id: origSet.category_id,
+      status: 'draft',
+      effective_from: '',
+      cloned_from_id: origSet.id,
+      cloned_from_name: origSet.name,
+      link_count: origLinks.length,
+      message: 'Link set duplicated as draft successfully'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. PUT update link set metadata (name, effective_from, effective_to)
+app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, effective_from, effective_to, status } = req.body;
+  try {
+    const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
+    if (!origSet) return res.status(404).json({ error: 'Link set not found' });
+
+    await run(
+      `UPDATE link_sets 
+       SET name = COALESCE(?, name),
+           effective_from = COALESCE(?, effective_from),
+           effective_to = COALESCE(?, effective_to),
+           status = COALESCE(?, status),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [name, effective_from, effective_to, status, id]
+    );
+
+    // If effective_from is changed, sync it to member links
+    if (effective_from !== undefined) {
+      await run('UPDATE links SET effective_from = ? WHERE link_set_id = ?', [effective_from, id]);
+    }
+    if (status !== undefined) {
+      await run('UPDATE links SET status = ? WHERE link_set_id = ?', [status, id]);
+    }
+
+    await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name})`);
+    res.json({ success: true, message: 'Link set updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. POST publish draft link set
+app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { effective_from } = req.body || {};
+  try {
+    const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
+    if (!origSet) return res.status(404).json({ error: 'Link set not found' });
+
+    const effDate = (effective_from && effective_from.trim()) ? effective_from.trim() : (origSet.effective_from || new Date().toISOString().split('T')[0]);
+
+    // Update set to published
+    await run(
+      `UPDATE link_sets 
+       SET status = 'published',
+           effective_from = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [effDate, id]
+    );
+
+    // Update all member links to published and set their effective_from
+    await run(
+      `UPDATE links 
+       SET status = 'published',
+           effective_from = ?
+       WHERE link_set_id = ?`,
+      [effDate, id]
+    );
+
+    await logAudit('Admin', 'PUBLISH_LINK_SET', `Published Link Set #${id} "${origSet.name}" with effective date ${effDate}`);
+    res.json({ success: true, message: `Link set "${origSet.name}" published successfully!` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. DELETE link set
+app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
+    if (!origSet) return res.status(404).json({ error: 'Link set not found' });
+
+    // Delete all member links
+    await run('DELETE FROM links WHERE link_set_id = ?', [id]);
+    // Delete the set
+    await run('DELETE FROM link_sets WHERE id = ?', [id]);
+
+    await logAudit('Admin', 'DELETE_LINK_SET', `Deleted Link Set #${id} "${origSet.name}" and all its links`);
+    res.json({ success: true, message: 'Link set deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. GET links (supports category_id, link_set_id, status)
+app.get('/api/links', async (req, res) => {
+  const { category_id, link_set_id, status } = req.query;
+  try {
+    let sql = 'SELECT * FROM links WHERE 1=1';
+    let params = [];
+    if (link_set_id) {
+      sql += ' AND link_set_id = ?';
+      params.push(link_set_id);
+      if (status) {
+        sql += ' AND status = ?';
+        params.push(status);
+      }
+    } else {
+      if (status) {
+        sql += ' AND status = ?';
+        params.push(status);
+      } else {
+        sql += " AND (status = 'published' OR status IS NULL OR status = '')";
+      }
+      if (category_id && category_id !== 'ALL') {
+        sql += ' AND category_id = ?';
+        params.push(category_id);
+      }
+    }
+    sql += ' ORDER BY category_id, link_number, effective_from';
     const links = await all(sql, params);
     res.json(links);
   } catch (err) {
@@ -2145,31 +2374,50 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/links', requireAdmin, async (req, res) => {
-  const { category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name } = req.body;
-  if (!category_id || !link_number || !effective_from) {
-    return res.status(400).json({ error: 'Category ID, Link Number and Effective From date are required' });
+  const { category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name, status } = req.body;
+  const isDraft = status === 'draft';
+  if (!category_id || !link_number) {
+    return res.status(400).json({ error: 'Category ID and Link Number are required' });
+  }
+  if (!isDraft && !effective_from) {
+    return res.status(400).json({ error: 'Effective From date is required' });
   }
   try {
-    // Check if there is an overlapping link definition and set its effective_to
-    const previous = await get(
-      `SELECT * FROM links 
-       WHERE category_id = ? AND link_number = ? AND effective_to = '9999-12-31' 
-         AND date(effective_from) < date(?)`,
-      [category_id, link_number, effective_from]
-    );
-    if (previous) {
-      // Calculate one day before effective_from
-      const prevEnd = new Date(new Date(effective_from) - 86400000).toISOString().split('T')[0];
-      await run('UPDATE links SET effective_to = ? WHERE id = ?', [prevEnd, previous.id]);
+    if (!isDraft && effective_from) {
+      // Check if there is an overlapping link definition and set its effective_to
+      const previous = await get(
+        `SELECT * FROM links 
+         WHERE category_id = ? AND link_number = ? AND (status = 'published' OR status IS NULL) AND effective_to = '9999-12-31' 
+           AND date(effective_from) < date(?)`,
+        [category_id, link_number, effective_from]
+      );
+      if (previous) {
+        const prevEnd = new Date(new Date(effective_from) - 86400000).toISOString().split('T')[0];
+        await run('UPDATE links SET effective_to = ? WHERE id = ?', [prevEnd, previous.id]);
+      }
     }
 
     const result = await run(
-      `INSERT INTO links (category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest ? 1 : 0, effective_from, set_type || '2-Day Set', set_name || null]
+      `INSERT INTO links (category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        category_id, 
+        link_set_id || null, 
+        link_number, 
+        train_numbers || '', 
+        from_station || '', 
+        to_station || '', 
+        coaches || '', 
+        is_rest ? 1 : 0, 
+        effective_from || '', 
+        '9999-12-31', 
+        set_type || '2-Day Set', 
+        set_name || null, 
+        status || 'published'
+      ]
     );
 
-    await logAudit('Admin', 'CREATE_LINK', `Created Link ${link_number} for Category ${category_id}`);
+    await logAudit('Admin', 'CREATE_LINK', `Created Link ${link_number} for Category ${category_id}${isDraft ? ' (Draft)' : ''}`);
     res.json({ id: result.lastID });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2178,14 +2426,16 @@ app.post('/api/links', requireAdmin, async (req, res) => {
 
 app.put('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  console.log('PUT /api/links/:id body:', req.body);
-  const { train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, link_number, category_id } = req.body;
+  const { train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, link_number, category_id, link_set_id, status } = req.body;
   try {
     await run(
       `UPDATE links 
-       SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, effective_from = ?, effective_to = ?, set_type = ?, set_name = ?,
+       SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, 
+           effective_from = ?, effective_to = ?, set_type = ?, set_name = ?,
            link_number = COALESCE(?, link_number),
-           category_id = COALESCE(?, category_id)
+           category_id = COALESCE(?, category_id),
+           link_set_id = COALESCE(?, link_set_id),
+           status = COALESCE(?, status)
        WHERE id = ?`,
       [
         train_numbers, 
@@ -2193,12 +2443,14 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
         to_station, 
         coaches, 
         is_rest ? 1 : 0, 
-        effective_from, 
+        effective_from !== undefined ? effective_from : '', 
         effective_to || '9999-12-31', 
         set_type || '2-Day Set', 
         set_name !== undefined ? set_name : null,
         link_number ? parseInt(link_number, 10) : null,
         category_id ? parseInt(category_id, 10) : null,
+        link_set_id !== undefined ? link_set_id : null,
+        status !== undefined ? status : null,
         id
       ]
     );
@@ -2221,10 +2473,16 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/links/clear-all', requireAdmin, async (req, res) => {
+  const { link_set_id } = req.body || {};
   try {
-    await run('DELETE FROM links');
-    await logAudit('Admin', 'CLEAR_ALL_LINKS', 'Cleared all roster links / train entries');
-    res.json({ message: 'All links cleared successfully' });
+    if (link_set_id) {
+      await run('DELETE FROM links WHERE link_set_id = ?', [link_set_id]);
+      await logAudit('Admin', 'CLEAR_LINKS_IN_SET', `Cleared all links for Link Set #${link_set_id}`);
+    } else {
+      await run("DELETE FROM links WHERE status = 'published' OR status IS NULL");
+      await logAudit('Admin', 'CLEAR_ALL_LINKS', 'Cleared all published roster links');
+    }
+    res.json({ message: 'Links cleared successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6147,7 +6405,7 @@ app.get('/api/roster', async (req, res) => {
     let allLinks = [];
 
     if (staffMembers.length > 0) {
-      allLinks = await all('SELECT * FROM links');
+      allLinks = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
       
       // Load direct overrides AND substitute overrides
       overrides = await all(
@@ -6898,7 +7156,7 @@ app.get('/api/roster/preview-rest-change', async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const restLinks = await all('SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1', [category.id]);
+    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '')", [category.id]);
     const restLinkNums = restLinks.map(l => l.link_number);
 
     const scheduledRestDate = findScheduledRestDate(
@@ -6944,7 +7202,7 @@ app.post('/api/roster/change-rest-day', requireAdmin, async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const restLinks = await all('SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1', [category.id]);
+    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '')", [category.id]);
     const restLinkNums = restLinks.map(l => l.link_number);
 
     const scheduledRestDate = findScheduledRestDate(
@@ -7680,7 +7938,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           const targetCatId = override?.target_category_id || cat.id;
           dutyDetails = await getActiveLinkDef(targetCatId, activeLink, targetDate);
           if (!dutyDetails) {
-            dutyDetails = await get('SELECT * FROM links WHERE link_number = ?', [activeLink]);
+            dutyDetails = await get("SELECT * FROM links WHERE link_number = ? AND (status = 'published' OR status IS NULL OR status = '')", [activeLink]);
           }
         }
 
@@ -9614,7 +9872,7 @@ app.get('/api/muster', async (req, res) => {
     `;
 
     const staffMembers = await all(staffSql, staffParams);
-    const links = await all('SELECT * FROM links');
+    const links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
     const linkMap = {};
     links.forEach(l => {
       linkMap[`${l.category_id}_${l.link_number}`] = l;
@@ -10082,7 +10340,7 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [dMinus2Start, dateStr]);
-    links = await all('SELECT * FROM links');
+    links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
     nonDaily = await all('SELECT * FROM non_daily_trains');
     dutyRegister = await all(`
       SELECT dre.*, drs.staff_id
@@ -10330,7 +10588,7 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [startDateStr, endDateStr]);
-    const linksList = await all('SELECT * FROM links');
+    const linksList = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
     const nonDailyList = await all('SELECT * FROM non_daily_trains');
     const dutyRegisterEntries = await all(`
       SELECT dre.*, drs.staff_id
@@ -10524,7 +10782,7 @@ app.get('/api/lr-sheet', async (req, res) => {
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [startDateStr, endDateStr]);
-    const linksList = await all('SELECT * FROM links');
+    const linksList = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
     const nonDailyList = await all('SELECT * FROM non_daily_trains');
     const dutyRegisterEntries = await all(`
       SELECT dre.*, drs.staff_id

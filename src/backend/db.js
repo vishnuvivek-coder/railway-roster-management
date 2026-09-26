@@ -111,6 +111,52 @@ async function initDb() {
     // Ignore if column already exists
   }
 
+  // LINK SETS TABLE (for Published and Draft Link Schedules)
+  await run(`
+    CREATE TABLE IF NOT EXISTS link_sets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'published', -- 'draft', 'published'
+      effective_from TEXT,                      -- Empty / blank for draft sets until set manually
+      effective_to TEXT DEFAULT '9999-12-31',
+      cloned_from_id INTEGER REFERENCES link_sets(id) ON DELETE SET NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  try {
+    await run(`ALTER TABLE links ADD COLUMN link_set_id INTEGER REFERENCES link_sets(id) ON DELETE CASCADE`);
+  } catch (e) {}
+
+  try {
+    await run(`ALTER TABLE links ADD COLUMN status TEXT DEFAULT 'published'`);
+  } catch (e) {}
+
+  // Auto-seed initial published link sets for categories if empty
+  try {
+    const existingSets = await all('SELECT COUNT(*) as count FROM link_sets');
+    if (!existingSets || existingSets[0].count === 0) {
+      const cats = await all('SELECT * FROM categories');
+      for (const cat of cats) {
+        const defaultDate = cat.id === 1 ? '2026-07-01' : '2020-01-01';
+        const res = await run(
+          `INSERT INTO link_sets (category_id, name, status, effective_from) VALUES (?, ?, 'published', ?)`,
+          [cat.id, `${cat.name} (Current Link Schedule)`, defaultDate]
+        );
+        await run(
+          `UPDATE links SET link_set_id = ?, status = 'published' WHERE category_id = ? AND (link_set_id IS NULL OR link_set_id = 0)`,
+          [res.lastID, cat.id]
+        );
+      }
+    } else {
+      await run(`UPDATE links SET status = 'published' WHERE status IS NULL OR status = ''`);
+    }
+  } catch (err) {
+    console.error('Error migrating link sets in db.js:', err);
+  }
+
   await run(`
     CREATE TABLE IF NOT EXISTS slot_customizations (
       custom_key TEXT PRIMARY KEY,
