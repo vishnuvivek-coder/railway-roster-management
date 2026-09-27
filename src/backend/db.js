@@ -414,6 +414,24 @@ async function initDb() {
   `);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS train_ta_nda_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category_id INTEGER NOT NULL,
+      link_number INTEGER NOT NULL,
+      train_number TEXT NOT NULL,
+      ta_percentage REAL DEFAULT 0.7,
+      ta_amount INTEGER DEFAULT 560,
+      nda_hours REAL DEFAULT 0,
+      nda_amount INTEGER DEFAULT 0,
+      absence_hours REAL DEFAULT 0,
+      remarks TEXT,
+      updated_by TEXT DEFAULT 'Admin',
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(category_id, link_number, train_number)
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS lr_sheet_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

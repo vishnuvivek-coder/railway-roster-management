@@ -2577,6 +2577,165 @@ app.post('/api/slot-customizations/reset', requireAdmin, async (req, res) => {
 });
 
 // ----------------------------------------------------
+// TRAIN MOVEMENT TA & NDA RULES / CALCULATOR API
+// ----------------------------------------------------
+app.get('/api/train-ta-nda', async (req, res) => {
+  try {
+    const rules = await all('SELECT * FROM train_ta_nda_rules ORDER BY category_id, link_number, train_number');
+    const map = {};
+    for (const r of rules) {
+      map[`${r.category_id}_${r.link_number}_${r.train_number}`] = r;
+    }
+    res.json({ success: true, rules, map });
+  } catch (err) {
+    console.error('Error fetching train TA/NDA rules:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/train-ta-nda', async (req, res) => {
+  try {
+    if (req.user && req.user.role === 'Staff') {
+      return res.status(403).json({ error: 'Permission denied: Administrator privileges required to modify data.' });
+    }
+    const catId = req.body.category_id || req.body.categoryId;
+    const linkNum = req.body.link_number || req.body.linkNumber;
+    const trainNum = req.body.train_number || req.body.trainNumber;
+    const taPctRaw = req.body.ta_percentage !== undefined ? req.body.ta_percentage : req.body.taPercentage;
+    const taAmtRaw = req.body.ta_amount !== undefined ? req.body.ta_amount : req.body.taAmount;
+    const ndaHoursRaw = req.body.nda_hours !== undefined ? req.body.nda_hours : req.body.ndaHours;
+    const ndaAmtRaw = req.body.nda_amount !== undefined ? req.body.nda_amount : req.body.ndaAmount;
+    const absenceRaw = req.body.absence_hours !== undefined ? req.body.absence_hours : req.body.absenceHours;
+    const remarks = req.body.remarks || null;
+
+    if (!catId || !linkNum || !trainNum) {
+      return res.status(400).json({ error: 'category_id, link_number, and train_number are required' });
+    }
+
+    const cleanCat = parseInt(catId, 10);
+    const cleanLink = parseInt(linkNum, 10);
+    const cleanTrain = String(trainNum).trim();
+    const cleanTaPct = taPctRaw !== undefined && taPctRaw !== null ? parseFloat(taPctRaw) : 0.7;
+    const cleanTaAmt = taAmtRaw !== undefined && taAmtRaw !== null ? parseInt(taAmtRaw, 10) : Math.round(cleanTaPct * 800);
+    const cleanNdaHours = ndaHoursRaw !== undefined && ndaHoursRaw !== null ? parseFloat(ndaHoursRaw) : 0;
+    const cleanNdaAmt = ndaAmtRaw !== undefined && ndaAmtRaw !== null ? parseInt(ndaAmtRaw, 10) : Math.round(cleanNdaHours * 168);
+    const cleanAbsence = absenceRaw !== undefined && absenceRaw !== null ? parseFloat(absenceRaw) : 0;
+    const updatedBy = req.user?.username || req.user?.name || 'Admin';
+
+    await run(`
+      INSERT INTO train_ta_nda_rules (
+        category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks, updated_by, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
+        ta_percentage = excluded.ta_percentage,
+        ta_amount = excluded.ta_amount,
+        nda_hours = excluded.nda_hours,
+        nda_amount = excluded.nda_amount,
+        absence_hours = excluded.absence_hours,
+        remarks = excluded.remarks,
+        updated_by = excluded.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, updatedBy]);
+
+    const updated = await get(
+      'SELECT * FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ? AND train_number = ?',
+      [cleanCat, cleanLink, cleanTrain]
+    );
+
+    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${Math.round(cleanTaPct * 100)}% (₹${cleanTaAmt}), NDA ${cleanNdaHours}h (₹${cleanNdaAmt})`);
+    res.json({ success: true, rule: updated });
+  } catch (err) {
+    console.error('Error saving train TA/NDA rule:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/train-ta-nda/batch', async (req, res) => {
+  try {
+    if (req.user && req.user.role === 'Staff') {
+      return res.status(403).json({ error: 'Permission denied: Administrator privileges required to modify data.' });
+    }
+    const { rules } = req.body;
+    if (!Array.isArray(rules) || rules.length === 0) {
+      return res.status(400).json({ error: 'Array of rules is required' });
+    }
+
+    const updatedBy = req.user?.username || req.user?.name || 'Admin';
+    await run('BEGIN TRANSACTION');
+    for (const r of rules) {
+      const catId = r.category_id || r.categoryId;
+      const linkNum = r.link_number || r.linkNumber;
+      const trainNum = r.train_number || r.trainNumber;
+      if (!catId || !linkNum || !trainNum) continue;
+
+      const cleanCat = parseInt(catId, 10);
+      const cleanLink = parseInt(linkNum, 10);
+      const cleanTrain = String(trainNum).trim();
+      const taPctRaw = r.ta_percentage !== undefined ? r.ta_percentage : r.taPercentage;
+      const taAmtRaw = r.ta_amount !== undefined ? r.ta_amount : r.taAmount;
+      const ndaHoursRaw = r.nda_hours !== undefined ? r.nda_hours : r.ndaHours;
+      const ndaAmtRaw = r.nda_amount !== undefined ? r.nda_amount : r.ndaAmount;
+      const absenceRaw = r.absence_hours !== undefined ? r.absence_hours : r.absenceHours;
+
+      const cleanTaPct = taPctRaw !== undefined && taPctRaw !== null ? parseFloat(taPctRaw) : 0.7;
+      const cleanTaAmt = taAmtRaw !== undefined && taAmtRaw !== null ? parseInt(taAmtRaw, 10) : Math.round(cleanTaPct * 800);
+      const cleanNdaHours = ndaHoursRaw !== undefined && ndaHoursRaw !== null ? parseFloat(ndaHoursRaw) : 0;
+      const cleanNdaAmt = ndaAmtRaw !== undefined && ndaAmtRaw !== null ? parseInt(ndaAmtRaw, 10) : Math.round(cleanNdaHours * 168);
+      const cleanAbsence = absenceRaw !== undefined && absenceRaw !== null ? parseFloat(absenceRaw) : 0;
+
+      await run(`
+        INSERT INTO train_ta_nda_rules (
+          category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks, updated_by, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
+          ta_percentage = excluded.ta_percentage,
+          ta_amount = excluded.ta_amount,
+          nda_hours = excluded.nda_hours,
+          nda_amount = excluded.nda_amount,
+          absence_hours = excluded.absence_hours,
+          remarks = excluded.remarks,
+          updated_by = excluded.updated_by,
+          updated_at = CURRENT_TIMESTAMP
+      `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, r.remarks || null, updatedBy]);
+    }
+    await run('COMMIT');
+
+    await logAudit(updatedBy, 'BATCH_UPDATE_TRAIN_TA_NDA', `Batch updated ${rules.length} train TA/NDA rules`);
+    res.json({ success: true, message: `Successfully updated ${rules.length} train TA/NDA rules` });
+  } catch (err) {
+    await run('ROLLBACK');
+    console.error('Error batch updating train TA/NDA rules:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/train-ta-nda/reset', async (req, res) => {
+  try {
+    if (req.user && req.user.role === 'Staff') {
+      return res.status(403).json({ error: 'Permission denied: Administrator privileges required to modify data.' });
+    }
+    const { category_id, categoryId, link_number, linkNumber } = req.body;
+    const cat = category_id || categoryId;
+    const link = link_number || linkNumber;
+    const updatedBy = req.user?.username || req.user?.name || 'Admin';
+    if (cat && link) {
+      await run('DELETE FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ?', [cat, link]);
+      await logAudit(updatedBy, 'RESET_TRAIN_TA_NDA', `Reset train TA/NDA rules for category ID ${cat} link #${link}`);
+    } else if (cat) {
+      await run('DELETE FROM train_ta_nda_rules WHERE category_id = ?', [parseInt(cat, 10)]);
+      await logAudit(updatedBy, 'RESET_TRAIN_TA_NDA', `Reset train TA/NDA rules for category ID ${cat}`);
+    } else {
+      await run('DELETE FROM train_ta_nda_rules');
+      await logAudit(updatedBy, 'RESET_TRAIN_TA_NDA', 'Reset all train TA/NDA rules to default baseline');
+    }
+    res.json({ success: true, message: 'Train TA/NDA rules reset to default baseline' });
+  } catch (err) {
+    console.error('Error resetting train TA/NDA rules:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
 // NON-DAILY TRAINS API
 // ----------------------------------------------------
 app.get('/api/non-daily-trains', async (req, res) => {

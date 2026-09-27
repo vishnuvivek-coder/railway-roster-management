@@ -19,6 +19,13 @@ import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData
 import { useDevice } from './useDevice';
 import useDragAutoScroll from './useDragAutoScroll';
 import { printElement, downloadPdfFromElement } from './printUtils';
+import {
+  getDefaultTaNdaForTrain,
+  calculateLinkCumulativeTotals,
+  exportTaNdaMasterCsv,
+  DEFAULT_DA_RATE,
+  DEFAULT_NDA_HOURLY_RATE
+} from './trainTaNdaCalculator';
 
 const API_BASE = '/api';
 
@@ -774,6 +781,108 @@ export default function App() {
   const [poolFilterMode, setPoolFilterMode] = useState('available'); // 'available' | 'all'
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [rosterSearchQuery, setRosterSearchQuery] = useState('');
+
+  // Train Movement TA & NDA Calculator State
+  const [trainTaNdaRules, setTrainTaNdaRules] = useState(() => {
+    try {
+      const saved = localStorage.getItem('railway_train_ta_nda_customizations');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [baseDaRate, setBaseDaRate] = useState(DEFAULT_DA_RATE);
+  const [baseNdaRate, setBaseNdaRate] = useState(DEFAULT_NDA_HOURLY_RATE);
+  const [savingTaNda, setSavingTaNda] = useState(false);
+  const [taNdaToast, setTaNdaToast] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/train-ta-nda`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.map) {
+          setTrainTaNdaRules(prev => {
+            const merged = { ...prev, ...data.map };
+            try {
+              localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
+        }
+      })
+      .catch(err => console.error('Failed to load train TA/NDA rules:', err));
+  }, []);
+
+  const handleUpdateTrainTaNda = async (catId, linkNum, trainNo, updates) => {
+    const key = `${catId}_${linkNum}_${trainNo}`;
+    const existing = trainTaNdaRules[key] || {};
+    const updatedRule = {
+      ...existing,
+      category_id: parseInt(catId, 10),
+      link_number: parseInt(linkNum, 10),
+      train_number: String(trainNo).trim(),
+      ...updates
+    };
+
+    if (updates.ta_percentage !== undefined && updates.ta_amount === undefined) {
+      updatedRule.ta_amount = Math.round(updates.ta_percentage * baseDaRate);
+    }
+    if (updates.nda_hours !== undefined && updates.nda_amount === undefined) {
+      updatedRule.nda_amount = Math.round(updates.nda_hours * baseNdaRate);
+    }
+
+    const newRules = {
+      ...trainTaNdaRules,
+      [key]: updatedRule
+    };
+    setTrainTaNdaRules(newRules);
+    try {
+      localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(newRules));
+    } catch (e) {}
+
+    try {
+      setSavingTaNda(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      await fetch(`${API_BASE}/train-ta-nda`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(updatedRule)
+      });
+      setTaNdaToast(`✓ Defined TA/NDA for Train ${trainNo}`);
+      setTimeout(() => setTaNdaToast(null), 2500);
+    } catch (err) {
+      console.error('Failed to save train TA/NDA rule:', err);
+    } finally {
+      setSavingTaNda(false);
+    }
+  };
+
+  const handleResetTrainTaNda = async (catId = null) => {
+    if (!window.confirm('Reset all TA and NDA calculations back to official Railway baseline formula?')) return;
+    try {
+      setSavingTaNda(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      await fetch(`${API_BASE}/train-ta-nda/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ category_id: catId })
+      });
+      setTrainTaNdaRules({});
+      localStorage.removeItem('railway_train_ta_nda_customizations');
+      setTaNdaToast('🔄 Reset calculations to official Railway baseline');
+      setTimeout(() => setTaNdaToast(null), 2500);
+    } catch (err) {
+      console.error('Failed to reset train TA/NDA rules:', err);
+    } finally {
+      setSavingTaNda(false);
+    }
+  };
 
   // Drag & drop state for Daily Summary Table
   const [draggedStaff, setDraggedStaff] = useState(null);
@@ -9568,176 +9677,555 @@ export default function App() {
                 {/* CATEGORY 1: DAILY TRAINS */}
                 {trainRosterCategory === 'daily' && (
                   <div>
-                    <div style={{ marginBottom: '16px' }}>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>🚆 Daily Trains Master Chart</h3>
-                      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-                        List of all daily running train services mapped to seniority links across all running categories.
-                      </p>
-                    </div>
+                    {/* DAILY TRAINS MASTER CHART WITH TA & NDA CALCULATOR */}
+                    {(() => {
+                      const { linkTotals, grandTotalTa, grandTotalNda, grandTotalNdaAmt } = calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules, baseDaRate, baseNdaRate);
 
-                    {/* Category Filter Pills & Search Bar for Daily Trains */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginRight: '4px' }}>Category:</span>
-                        {[
-                          { id: 'ALL', label: 'All Daily Trains' },
-                          { id: '1', label: 'Conductors (COR)' },
-                          { id: '2', label: 'TTI / Sleeper Staff' },
-                          { id: '3', label: 'Ladies Staff / TTE' },
-                          { id: '4', label: 'Leave Reserve (LR) Staff' }
-                        ].map(cat => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => {
-                              setTrainCategoryFilter(cat.id);
-                              fetchLinks(cat.id);
-                            }}
-                            style={{
-                              padding: '4px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
-                              fontWeight: trainCategoryFilter === cat.id ? 700 : 500,
-                              background: trainCategoryFilter === cat.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                              color: trainCategoryFilter === cat.id ? '#000' : 'var(--color-text-secondary)',
-                              border: trainCategoryFilter === cat.id ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
-                      </div>
+                      const searchedDailyTrains = trainRosterItems.filter(item => {
+                        if (!dailyTrainSearch.trim()) return true;
+                        const q = dailyTrainSearch.toLowerCase().trim();
+                        const trainMatch = item.trainNumber && item.trainNumber.toLowerCase().includes(q);
+                        const linkMatch = String(item.linkNumber).includes(q) || getLinkDisplayLabel(item.categoryId, item.linkNumber).toLowerCase().includes(q);
+                        const catMatch = item.categoryName && item.categoryName.toLowerCase().includes(q);
+                        const routeMatch = (item.from_station && item.from_station.toLowerCase().includes(q)) || (item.to_station && item.to_station.toLowerCase().includes(q));
+                        const coachMatch = item.coaches && item.coaches.toLowerCase().includes(q);
+                        return trainMatch || linkMatch || catMatch || routeMatch || coachMatch;
+                      });
 
-                      {/* Daily Train Search Input */}
-                      <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
-                        <input 
-                          type="text"
-                          className="form-input"
-                          placeholder="🔍 Search train (e.g. 20629), link (#8), route..."
-                          value={dailyTrainSearch}
-                          onChange={(e) => setDailyTrainSearch(e.target.value)}
-                          style={{
-                            paddingRight: dailyTrainSearch ? '36px' : '14px',
-                            background: 'rgba(255,255,255,0.03)',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            border: '1px solid var(--border-glass)'
-                          }}
-                        />
-                        {dailyTrainSearch && (
-                          <button
-                            type="button"
-                            onClick={() => setDailyTrainSearch('')}
-                            style={{
-                              position: 'absolute',
-                              right: '10px',
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--color-text-secondary)',
-                              cursor: 'pointer',
-                              fontSize: '0.85rem'
-                            }}
-                            title="Clear search"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                      return (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--color-text-primary)' }}>🚆 Daily Trains Master Chart</h3>
+                                <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.78rem' }}>
+                                  {searchedDailyTrains.length} Movements ({Object.keys(linkTotals).length} Links)
+                                </span>
+                              </div>
+                              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', marginTop: '4px', marginBottom: 0 }}>
+                                Interactive TA &amp; NDA Calculator. Define claimable TA percentage/amount and Night Duty Allowance for each train movement with cumulative link aggregation.
+                              </p>
+                            </div>
 
-                    <div className="data-table-container">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Train Number</th>
-                            <th>Category</th>
-                            <th>Seniority Link</th>
-                            <th>Route</th>
-                            <th>Coaches</th>
-                            {isAdmin && <th>Actions</th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(() => {
-                            const searchedDailyTrains = trainRosterItems.filter(item => {
-                              if (!dailyTrainSearch.trim()) return true;
-                              const q = dailyTrainSearch.toLowerCase().trim();
-                              const trainMatch = item.trainNumber && item.trainNumber.toLowerCase().includes(q);
-                              const linkMatch = String(item.linkNumber).includes(q) || getLinkDisplayLabel(item.categoryId, item.linkNumber).toLowerCase().includes(q);
-                              const catMatch = item.categoryName && item.categoryName.toLowerCase().includes(q);
-                              const routeMatch = (item.from_station && item.from_station.toLowerCase().includes(q)) || (item.to_station && item.to_station.toLowerCase().includes(q));
-                              const coachMatch = item.coaches && item.coaches.toLowerCase().includes(q);
-                              return trainMatch || linkMatch || catMatch || routeMatch || coachMatch;
-                            });
+                            {/* Toast Notification */}
+                            {taNdaToast && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                color: '#fff',
+                                padding: '6px 14px',
+                                borderRadius: '8px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                                animation: 'fadeIn 0.2s ease-in-out'
+                              }}>
+                                {taNdaToast}
+                              </div>
+                            )}
+                          </div>
 
-                            return searchedDailyTrains.map((item, idx) => (
-                              <tr key={`${item.trainNumber}_${item.categoryId}_${item.linkNumber}_${idx}`}>
-                                <td><strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>{item.trainNumber}</strong></td>
-                                <td>
-                                  <span className="badge" style={{ 
-                                    background: item.categoryId === 1 ? 'rgba(59, 130, 246, 0.15)' : item.categoryId === 2 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(236, 72, 153, 0.15)',
-                                    color: item.categoryId === 1 ? '#60a5fa' : item.categoryId === 2 ? '#34d399' : '#f472b6',
-                                    fontSize: '0.78rem'
-                                  }}>
-                                    {item.categoryName}
-                                  </span>
-                                </td>
-                                <td>
-                                  <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
-                                    {getLinkDisplayLabel(item.categoryId, item.linkNumber)}
-                                  </span>
-                                </td>
-                                <td>{item.from_station && item.to_station ? `${item.from_station} ➔ ${item.to_station}` : '-'}</td>
-                                <td>{item.coaches}</td>
-                                {isAdmin && (
-                                  <td>
-                                    <button 
-                                      className="btn btn-secondary" 
-                                      style={{ padding: '6px 12px', fontSize: '0.8rem', marginRight: '8px' }}
-                                      onClick={() => {
-                                        setEditingLink(item.linkObj);
-                                        setLinkForm({
-                                          category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
-                                          link_number: item.linkObj.link_number,
-                                          train_numbers: item.linkObj.train_numbers || '',
-                                          from_station: item.linkObj.from_station || '',
-                                          to_station: item.linkObj.to_station || '',
-                                          coaches: item.linkObj.coaches || '',
-                                          is_rest: !!item.linkObj.is_rest,
-                                          effective_from: item.linkObj.effective_from || '2026-07-01',
-                                          set_type: item.linkObj.set_type || '2-Day Set'
-                                        });
-                                        setLinkSubTab('list');
-                                      }}
-                                    >
-                                      ✏️ Edit
-                                    </button>
-                                    <button 
-                                      className="btn btn-danger" 
-                                      style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                                      onClick={() => deleteLink(item.linkId)}
-                                    >
-                                      🗑️ Delete
-                                    </button>
-                                  </td>
+                          {/* Rate Settings & Cumulative Totals Toolbar */}
+                          <div style={{
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: '1px solid var(--border-glass)',
+                            borderRadius: '12px',
+                            padding: '12px 16px',
+                            marginBottom: '16px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '14px'
+                          }}>
+                            {/* Rate Configuration Selectors */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#34d399' }}>💰 Base DA Rate:</span>
+                                <select
+                                  className="form-input"
+                                  style={{ padding: '4px 10px', fontSize: '0.82rem', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px' }}
+                                  value={baseDaRate}
+                                  onChange={(e) => setBaseDaRate(parseInt(e.target.value, 10))}
+                                  title="Select standard Daily Allowance (DA) daily rate"
+                                >
+                                  <option value={800}>₹800 / day (Level 6–8: CTI / TTI)</option>
+                                  <option value={500}>₹500 / day (Level 5: TE / Jr)</option>
+                                  <option value={1000}>₹1,000 / day (Spl / Officer)</option>
+                                </select>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c4b5fd' }}>🌙 Base NDA Rate:</span>
+                                <select
+                                  className="form-input"
+                                  style={{ padding: '4px 10px', fontSize: '0.82rem', fontWeight: 700, background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px' }}
+                                  value={baseNdaRate}
+                                  onChange={(e) => setBaseNdaRate(parseInt(e.target.value, 10))}
+                                  title="Select Night Duty Allowance (NDA) hourly rate"
+                                >
+                                  <option value={168}>₹168 / hr (Standard Level 6)</option>
+                                  <option value={140}>₹140 / hr (Level 5)</option>
+                                  <option value={196}>₹196 / hr (Level 7+)</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Cumulative Summary Metrics Pill */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                borderRadius: '8px',
+                                padding: '4px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Cumulative TA:</span>
+                                <strong style={{ color: '#34d399', fontSize: '0.92rem' }}>₹{grandTotalTa.toLocaleString('en-IN')}</strong>
+                              </div>
+
+                              <div style={{
+                                background: 'rgba(139, 92, 246, 0.12)',
+                                border: '1px solid rgba(139, 92, 246, 0.3)',
+                                borderRadius: '8px',
+                                padding: '4px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Cumulative NDA:</span>
+                                <strong style={{ color: '#c4b5fd', fontSize: '0.92rem' }}>{grandTotalNda} hrs (₹{grandTotalNdaAmt.toLocaleString('en-IN')})</strong>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => exportTaNdaMasterCsv(searchedDailyTrains, trainTaNdaRules, baseDaRate, baseNdaRate)}
+                                style={{ padding: '5px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                title="Download complete TA & NDA rates breakdown as CSV"
+                              >
+                                <span>📥</span> Export CSV
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Category Filter Pills & Search Bar for Daily Trains */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginRight: '4px', fontWeight: 600 }}>Category:</span>
+                              {[
+                                { id: 'ALL', label: 'All Daily Trains' },
+                                { id: '1', label: 'Conductors (COR)' },
+                                { id: '2', label: 'TTI / Sleeper Staff' },
+                                { id: '3', label: 'Ladies Staff / TTE' },
+                                { id: '4', label: 'Leave Reserve (LR) Staff' }
+                              ].map(cat => (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setTrainCategoryFilter(cat.id);
+                                    fetchLinks(cat.id);
+                                  }}
+                                  style={{
+                                    padding: '5px 14px',
+                                    borderRadius: '20px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: trainCategoryFilter === cat.id ? 700 : 500,
+                                    background: trainCategoryFilter === cat.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                                    color: trainCategoryFilter === cat.id ? '#000' : 'var(--color-text-secondary)',
+                                    border: trainCategoryFilter === cat.id ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  {cat.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Daily Train Search Input */}
+                            <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+                              <input 
+                                type="text"
+                                className="form-input"
+                                placeholder="🔍 Search train (e.g. 20629), link (#8), route..."
+                                value={dailyTrainSearch}
+                                onChange={(e) => setDailyTrainSearch(e.target.value)}
+                                style={{
+                                  paddingRight: dailyTrainSearch ? '36px' : '14px',
+                                  background: 'rgba(255,255,255,0.03)',
+                                  borderRadius: '8px',
+                                  fontSize: '0.85rem',
+                                  border: '1px solid var(--border-glass)'
+                                }}
+                              />
+                              {dailyTrainSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDailyTrainSearch('')}
+                                  style={{
+                                    position: 'absolute',
+                                    right: '10px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--color-text-secondary)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem'
+                                  }}
+                                  title="Clear search"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="data-table-container">
+                            <table className="data-table">
+                              <thead>
+                                <tr>
+                                  <th>Train Number</th>
+                                  <th>Category</th>
+                                  <th>Seniority Link</th>
+                                  <th>Route</th>
+                                  <th>Coaches</th>
+                                  <th style={{ minWidth: '230px', background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', borderBottom: '2px solid #10b981' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span>💰</span>
+                                      <span style={{ fontWeight: 800 }}>TA Calculator</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Claim / Train Movement &amp; Cumulative Link</div>
+                                  </th>
+                                  <th style={{ minWidth: '230px', background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', borderBottom: '2px solid #8b5cf6' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span>🌙</span>
+                                      <span style={{ fontWeight: 800 }}>NDA Calculator</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Window (22–06h) &amp; Cumulative Link</div>
+                                  </th>
+                                  {isAdmin && <th>Actions</th>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {searchedDailyTrains.map((item, idx) => {
+                                  const linkKey = `${item.categoryId}_${item.linkNumber}`;
+                                  const linkTotal = linkTotals[linkKey] || { totalTaAmount: 0, totalTaPercentage: 0, totalNdaHours: 0, totalNdaAmount: 0 };
+                                  const ruleKey = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
+                                  const custom = trainTaNdaRules[ruleKey] || {};
+                                  const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
+
+                                  const effTaPct = custom.ta_percentage !== undefined ? custom.ta_percentage : defaultData.ta_pct;
+                                  const effTaAmt = custom.ta_amount !== undefined ? custom.ta_amount : Math.round(effTaPct * baseDaRate);
+                                  const effNdaHrs = custom.nda_hours !== undefined ? custom.nda_hours : defaultData.nda_hrs;
+                                  const effNdaAmt = custom.nda_amount !== undefined ? custom.nda_amount : Math.round(effNdaHrs * baseNdaRate);
+                                  const isCustomTa = custom.ta_percentage !== undefined || custom.ta_amount !== undefined;
+                                  const isCustomNda = custom.nda_hours !== undefined || custom.nda_amount !== undefined;
+
+                                  return (
+                                    <tr key={`${item.trainNumber}_${item.categoryId}_${item.linkNumber}_${idx}`}>
+                                      <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <strong style={{ color: 'var(--primary)', fontSize: '1.02rem', letterSpacing: '0.5px' }}>{item.trainNumber}</strong>
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span className="badge" style={{ 
+                                          background: item.categoryId === 1 ? 'rgba(59, 130, 246, 0.15)' : item.categoryId === 2 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                                          color: item.categoryId === 1 ? '#60a5fa' : item.categoryId === 2 ? '#34d399' : '#f472b6',
+                                          fontSize: '0.78rem'
+                                        }}>
+                                          {item.categoryName}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div>
+                                          <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
+                                            {getLinkDisplayLabel(item.categoryId, item.linkNumber)}
+                                          </span>
+                                          <div style={{ fontSize: '0.68rem', color: '#fbbf24', marginTop: '4px', fontWeight: 600 }}>
+                                            Link Total: ₹{linkTotal.totalTaAmount} TA • {linkTotal.totalNdaHours}h NDA
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div style={{ fontSize: '0.84rem' }}>
+                                          {item.from_station && item.to_station ? `${item.from_station} ➔ ${item.to_station}` : '-'}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span style={{ fontSize: '0.82rem' }}>{item.coaches}</span>
+                                      </td>
+
+                                      {/* TA CALCULATOR COLUMN */}
+                                      <td style={{ minWidth: '230px', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.02)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                          {/* Input space to define how much TA can be claimed for each train movement */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            <select
+                                              className="form-input"
+                                              style={{
+                                                padding: '4px 8px',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 700,
+                                                background: effTaPct > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.05)',
+                                                color: effTaPct > 0 ? '#34d399' : 'var(--color-text-muted)',
+                                                border: '1px solid ' + (effTaPct > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-glass)'),
+                                                borderRadius: '6px',
+                                                cursor: 'pointer'
+                                              }}
+                                              value={effTaPct}
+                                              onChange={(e) => {
+                                                const newPct = parseFloat(e.target.value);
+                                                const newAmt = Math.round(newPct * baseDaRate);
+                                                handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                  ta_percentage: newPct,
+                                                  ta_amount: newAmt
+                                                });
+                                              }}
+                                              title="Define TA percentage for this train movement"
+                                            >
+                                              <option value={1.0}>100% (Full - ₹{baseDaRate})</option>
+                                              <option value={0.7}>70% (&gt;6h Out - ₹{Math.round(baseDaRate * 0.7)})</option>
+                                              <option value={0.3}>30% (&le;6h Short - ₹{Math.round(baseDaRate * 0.3)})</option>
+                                              <option value={0}>0% (Connecting / No TA)</option>
+                                            </select>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', padding: '3px 8px' }}>
+                                              <span style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 700 }}>₹</span>
+                                              <input
+                                                type="number"
+                                                step="10"
+                                                value={effTaAmt}
+                                                onChange={(e) => {
+                                                  const val = parseInt(e.target.value, 10) || 0;
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    ta_amount: val,
+                                                    ta_percentage: Math.round((val / baseDaRate) * 100) / 100
+                                                  });
+                                                }}
+                                                style={{
+                                                  width: '64px',
+                                                  background: 'transparent',
+                                                  border: 'none',
+                                                  color: '#fff',
+                                                  fontSize: '0.84rem',
+                                                  fontWeight: 800,
+                                                  textAlign: 'right',
+                                                  outline: 'none'
+                                                }}
+                                                title="Directly edit TA claim amount in rupees"
+                                              />
+                                            </div>
+                                          </div>
+
+                                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>{custom.remarks || defaultData.desc}</span>
+                                            {isCustomTa && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Custom</span>}
+                                          </div>
+
+                                          {/* Cumulative Total for Entire Train Link */}
+                                          <div style={{
+                                            background: 'rgba(212, 161, 92, 0.14)',
+                                            border: '1px solid rgba(212, 161, 92, 0.4)',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '0.74rem',
+                                            fontWeight: 700,
+                                            color: 'var(--primary)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between'
+                                          }}>
+                                            <span>∑ Link #{item.linkNumber} Total TA:</span>
+                                            <span style={{ color: '#fbbf24', fontSize: '0.82rem', fontWeight: 800 }}>₹{linkTotal.totalTaAmount} ({Math.round(linkTotal.totalTaPercentage * 100)}%)</span>
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* NDA CALCULATOR COLUMN */}
+                                      <td style={{ minWidth: '230px', padding: '10px 12px', background: 'rgba(139, 92, 246, 0.02)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                          {/* Stepper / input for NDA hours */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '6px', overflow: 'hidden' }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const newHrs = Math.max(0, effNdaHrs - 1);
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    nda_hours: newHrs,
+                                                    nda_amount: Math.round(newHrs * baseNdaRate)
+                                                  });
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '3px 8px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}
+                                                title="Decrease NDA hours"
+                                              >
+                                                -
+                                              </button>
+                                              <input
+                                                type="number"
+                                                step="0.5"
+                                                min="0"
+                                                max="8"
+                                                value={effNdaHrs}
+                                                onChange={(e) => {
+                                                  const val = parseFloat(e.target.value) || 0;
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    nda_hours: val,
+                                                    nda_amount: Math.round(val * baseNdaRate)
+                                                  });
+                                                }}
+                                                style={{
+                                                  width: '46px',
+                                                  background: 'transparent',
+                                                  border: 'none',
+                                                  color: '#c4b5fd',
+                                                  fontSize: '0.84rem',
+                                                  fontWeight: 800,
+                                                  textAlign: 'center',
+                                                  outline: 'none'
+                                                }}
+                                                title="Define NDA hours (0 to 8 hrs per night)"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const newHrs = Math.min(8, effNdaHrs + 1);
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    nda_hours: newHrs,
+                                                    nda_amount: Math.round(newHrs * baseNdaRate)
+                                                  });
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '3px 8px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}
+                                                title="Increase NDA hours"
+                                              >
+                                                +
+                                              </button>
+                                            </div>
+
+                                            <span style={{ fontSize: '0.8rem', color: '#a78bfa', fontWeight: 700 }}>
+                                              hrs = <strong style={{ color: '#fff' }}>₹{effNdaAmt}</strong>
+                                            </span>
+                                          </div>
+
+                                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>{effNdaHrs > 0 ? `${effNdaHrs}h Night Duty (22:00–06:00)` : 'No Night Duty'}</span>
+                                            {isCustomNda && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(196, 181, 253, 0.15)', color: '#c4b5fd' }}>Custom</span>}
+                                          </div>
+
+                                          {/* Cumulative Total for Entire Train Link */}
+                                          <div style={{
+                                            background: 'rgba(139, 92, 246, 0.14)',
+                                            border: '1px solid rgba(139, 92, 246, 0.4)',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '0.74rem',
+                                            fontWeight: 700,
+                                            color: '#c4b5fd',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between'
+                                          }}>
+                                            <span>∑ Link #{item.linkNumber} Total NDA:</span>
+                                            <span style={{ color: '#a78bfa', fontSize: '0.82rem', fontWeight: 800 }}>{linkTotal.totalNdaHours} hrs (₹{linkTotal.totalNdaAmount})</span>
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {isAdmin && (
+                                        <td>
+                                          <button 
+                                            className="btn btn-secondary" 
+                                            style={{ padding: '6px 12px', fontSize: '0.8rem', marginRight: '8px' }}
+                                            onClick={() => {
+                                              setEditingLink(item.linkObj);
+                                              setLinkForm({
+                                                category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
+                                                link_number: item.linkObj.link_number,
+                                                train_numbers: item.linkObj.train_numbers || '',
+                                                from_station: item.linkObj.from_station || '',
+                                                to_station: item.linkObj.to_station || '',
+                                                coaches: item.linkObj.coaches || '',
+                                                is_rest: !!item.linkObj.is_rest,
+                                                effective_from: item.linkObj.effective_from || '2026-07-01',
+                                                set_type: item.linkObj.set_type || '2-Day Set'
+                                              });
+                                              setLinkSubTab('list');
+                                            }}
+                                          >
+                                            ✏️ Edit
+                                          </button>
+                                          <button 
+                                            className="btn btn-danger" 
+                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                            onClick={() => deleteLink(item.linkId)}
+                                          >
+                                            🗑️ Delete
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                                {searchedDailyTrains.length === 0 && (
+                                  <tr>
+                                    <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '28px' }}>
+                                      No daily train links found for this filter.
+                                    </td>
+                                  </tr>
                                 )}
-                              </tr>
-                            ));
-                          })()}
-                          {trainRosterItems.length === 0 && (
-                            <tr>
-                              <td colSpan={isAdmin ? 6 : 5} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '24px' }}>
-                                No daily train links found for this filter.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                              </tbody>
+                              {searchedDailyTrains.length > 0 && (
+                                <tfoot>
+                                  <tr style={{ background: 'rgba(212, 161, 92, 0.08)', borderTop: '2px solid var(--border-gold)', fontWeight: 800 }}>
+                                    <td colSpan="5" style={{ padding: '14px 16px', color: 'var(--primary)', fontSize: '0.92rem' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>📊</span>
+                                        <div>
+                                          <strong>CUMULATIVE TOTALS FOR ENTIRE TRAIN ROSTER</strong>
+                                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontWeight: 500, marginTop: '2px' }}>
+                                            Aggregated across {searchedDailyTrains.length} train movements &amp; {Object.keys(linkTotals).length} seniority links
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '14px 12px', background: 'rgba(16, 185, 129, 0.12)', borderLeft: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Cumulative TA (All Links)</span>
+                                        <strong style={{ fontSize: '1.15rem', color: '#34d399' }}>₹{grandTotalTa.toLocaleString('en-IN')}</strong>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '14px 12px', background: 'rgba(139, 92, 246, 0.12)', borderLeft: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Cumulative NDA (All Links)</span>
+                                        <strong style={{ fontSize: '1.15rem', color: '#c4b5fd' }}>{grandTotalNda} hrs (₹{grandTotalNdaAmt.toLocaleString('en-IN')})</strong>
+                                      </div>
+                                    </td>
+                                    {isAdmin && (
+                                      <td style={{ textAlign: 'center', padding: '14px 8px' }}>
+                                        <button
+                                          type="button"
+                                          className="btn btn-secondary"
+                                          onClick={() => handleResetTrainTaNda(trainCategoryFilter === 'ALL' ? null : trainCategoryFilter)}
+                                          style={{ fontSize: '0.76rem', padding: '6px 10px', borderRadius: '6px' }}
+                                          title="Reset all calculations to standard Railway baseline formula"
+                                        >
+                                          🔄 Reset Baseline
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
