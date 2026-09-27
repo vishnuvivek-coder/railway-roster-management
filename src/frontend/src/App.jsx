@@ -4179,9 +4179,18 @@ export default function App() {
               
               <label className="form-label" style={{ marginBottom: 0 }}>Month:</label>
               <select className="select-input" value={month} onChange={(e) => setMonth(e.target.value)}>
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
                 <option value="7">July</option>
                 <option value="8">August</option>
                 <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
               </select>
 
               {/* Roster Search Input */}
@@ -4233,7 +4242,34 @@ export default function App() {
           )}
 
           {activeTab === 'roster' && (
-            <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto', flexWrap: 'wrap', alignItems: 'center' }}>
+              {isAdmin && linkSetsList.some(s => s.status === 'draft') && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const targetDraft = linkSetsList.find(s => s.status === 'draft' && (currentActiveCatId === 'ALL' || String(s.category_id) === String(currentActiveCatId)))
+                      || linkSetsList.find(s => s.status === 'draft');
+                    if (targetDraft) {
+                      setPublishDateInput(targetDraft.effective_from || `${year}-${String(month).padStart(2, '0')}-01`);
+                      setPublishModal({ set: targetDraft });
+                    }
+                  }}
+                  style={{
+                    background: 'rgba(234, 179, 8, 0.15)',
+                    border: '1px solid rgba(234, 179, 8, 0.45)',
+                    color: '#facc15',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Specify the publish date for a draft schedule and make it active on the roster grid"
+                >
+                  <span>🚀</span> Publish Draft
+                </button>
+              )}
               <button className="btn btn-secondary" onClick={exportToCSV}>
                 📥 Export CSV
               </button>
@@ -8619,6 +8655,87 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Draft Schedule Notice & Direct Publish Date Control in Roster Grid */}
+                {(() => {
+                  const draftSets = linkSetsList.filter(s => s.status === 'draft' && (currentActiveCatId === 'ALL' || String(s.category_id) === String(currentActiveCatId)));
+                  if (draftSets.length === 0) return null;
+                  return (
+                    <div style={{
+                      margin: '10px 0 14px 0',
+                      padding: '12px 16px',
+                      background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12) 0%, rgba(217, 119, 6, 0.08) 100%)',
+                      border: '1px solid rgba(234, 179, 8, 0.4)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      width: '100%',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '1.4rem' }}>🟡</span>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 800, color: '#facc15', fontSize: '0.92rem' }}>Draft Schedule Available:</span>
+                            <strong style={{ color: 'var(--color-text-primary)', fontSize: '0.92rem' }}>"{draftSets[0].name}"</strong>
+                            <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#fde047', fontSize: '0.72rem', fontWeight: 700 }}>
+                              {draftSets[0].link_count || 0} links • ID #{draftSets[0].id}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)', marginTop: '3px' }}>
+                            This draft is currently inactive. You can set its <strong>Publish Date (Effective Date)</strong> here to activate it on the live roster grid.
+                          </div>
+                        </div>
+                      </div>
+
+                      {isAdmin && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => {
+                              setPublishDateInput(draftSets[0].effective_from || `${year}-${String(month).padStart(2, '0')}-01`);
+                              setPublishModal({ set: draftSets[0] });
+                            }}
+                            style={{
+                              padding: '7px 16px',
+                              fontSize: '0.84rem',
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '7px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
+                              cursor: 'pointer'
+                            }}
+                            title="Specify the effective publish date for this draft schedule and make it live on the roster"
+                          >
+                            <span>📅</span> Set Publish Date &amp; Publish
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              setSelectedLinkSetId(draftSets[0].id);
+                              setActiveTab('links');
+                              setLinkSubTab('list');
+                            }}
+                            style={{ padding: '7px 12px', fontSize: '0.8rem', borderRadius: '7px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            title="Open Table Editor to inspect or edit links in this draft"
+                          >
+                            <span>✏️</span> Edit Draft Links
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="roster-grid-container">
                   <table className="roster-table">

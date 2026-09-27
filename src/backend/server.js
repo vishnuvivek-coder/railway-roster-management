@@ -93,7 +93,8 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
        WHERE category_id = ? AND link_number = ? 
          AND (status = 'published' OR status IS NULL OR status = '')
          AND date(effective_from) <= date(?) 
-         AND date(effective_to) >= date(?)`,
+         AND date(effective_to) >= date(?)
+       ORDER BY date(effective_from) DESC LIMIT 1`,
       [catId, linkNumber, dateStr, dateStr]
     );
   }
@@ -105,7 +106,7 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
          AND (status = 'published' OR status IS NULL OR status = '')
          AND date(effective_from) <= date(?) 
          AND date(effective_to) >= date(?)
-       ORDER BY category_id ASC LIMIT 1`,
+       ORDER BY date(effective_from) DESC, category_id ASC LIMIT 1`,
       [linkNumber, dateStr, dateStr]
     );
   }
@@ -2278,28 +2279,54 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
     if (!origSet) return res.status(404).json({ error: 'Link set not found' });
 
     const effDate = (effective_from && effective_from.trim()) ? effective_from.trim() : (origSet.effective_from || new Date().toISOString().split('T')[0]);
+    const prevEnd = new Date(new Date(effDate) - 86400000).toISOString().split('T')[0];
 
-    // Update set to published
+    // 1. Update set to published with effective_from and effective_to '9999-12-31'
     await run(
       `UPDATE link_sets 
        SET status = 'published',
            effective_from = ?,
+           effective_to = '9999-12-31',
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [effDate, id]
     );
 
-    // Update all member links to published and set their effective_from
+    // 2. Update all member links to published and set their effective_from
     await run(
       `UPDATE links 
        SET status = 'published',
-           effective_from = ?
+           effective_from = ?,
+           effective_to = '9999-12-31'
        WHERE link_set_id = ?`,
       [effDate, id]
     );
 
+    // 3. For previous published link sets in the same category, cap effective_to to prevEnd
+    if (origSet.category_id) {
+      await run(
+        `UPDATE link_sets 
+         SET effective_to = ? 
+         WHERE category_id = ? AND id != ? AND status = 'published' AND date(effective_from) < date(?)`,
+        [prevEnd, origSet.category_id, id, effDate]
+      );
+
+      await run(
+        `UPDATE links 
+         SET effective_to = ? 
+         WHERE category_id = ? AND link_set_id != ? AND (status = 'published' OR status IS NULL OR status = '') AND date(effective_from) < date(?)`,
+        [prevEnd, origSet.category_id, id, effDate]
+      );
+
+      // Check member count in newly published set and update category cycle_length if needed
+      const memberCount = await get('SELECT count(*) as c FROM links WHERE link_set_id = ?', [id]);
+      if (memberCount && memberCount.c > 0) {
+        await run('UPDATE categories SET cycle_length = ? WHERE id = ?', [memberCount.c, origSet.category_id]);
+      }
+    }
+
     await logAudit('Admin', 'PUBLISH_LINK_SET', `Published Link Set #${id} "${origSet.name}" with effective date ${effDate}`);
-    res.json({ success: true, message: `Link set "${origSet.name}" published successfully!` });
+    res.json({ success: true, message: `Link set "${origSet.name}" published successfully with effective date ${effDate}!` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
