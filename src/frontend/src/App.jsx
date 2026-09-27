@@ -9679,7 +9679,7 @@ export default function App() {
                   <div>
                     {/* DAILY TRAINS MASTER CHART WITH TA & NDA CALCULATOR */}
                     {(() => {
-                      const { linkTotals, grandTotalTa, grandTotalNda, grandTotalNdaAmt } = calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules, baseDaRate, baseNdaRate);
+                      const { linkTotals, grandTotalTaUnits, grandTotalNda } = calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules);
 
                       const searchedDailyTrains = trainRosterItems.filter(item => {
                         if (!dailyTrainSearch.trim()) return true;
@@ -9703,7 +9703,7 @@ export default function App() {
                                 </span>
                               </div>
                               <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', marginTop: '4px', marginBottom: 0 }}>
-                                Interactive TA &amp; NDA Calculator. Define claimable TA percentage/amount and Night Duty Allowance for each train movement with cumulative link aggregation.
+                                Interactive TA &amp; NDA Calculator. Define claimable TA (1, 0.7, 0.3, 0) and Night Duty Allowance hours for each train movement with cumulative link aggregation.
                               </p>
                             </div>
 
@@ -9737,36 +9737,16 @@ export default function App() {
                             flexWrap: 'wrap',
                             gap: '14px'
                           }}>
-                            {/* Rate Configuration Selectors */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                            {/* Rules Description */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#34d399' }}>💰 Base DA Rate:</span>
-                                <select
-                                  className="form-input"
-                                  style={{ padding: '4px 10px', fontSize: '0.82rem', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px' }}
-                                  value={baseDaRate}
-                                  onChange={(e) => setBaseDaRate(parseInt(e.target.value, 10))}
-                                  title="Select standard Daily Allowance (DA) daily rate"
-                                >
-                                  <option value={800}>₹800 / day (Level 6–8: CTI / TTI)</option>
-                                  <option value={500}>₹500 / day (Level 5: TE / Jr)</option>
-                                  <option value={1000}>₹1,000 / day (Spl / Officer)</option>
-                                </select>
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c4b5fd' }}>🌙 Base NDA Rate:</span>
-                                <select
-                                  className="form-input"
-                                  style={{ padding: '4px 10px', fontSize: '0.82rem', fontWeight: 700, background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px' }}
-                                  value={baseNdaRate}
-                                  onChange={(e) => setBaseNdaRate(parseInt(e.target.value, 10))}
-                                  title="Select Night Duty Allowance (NDA) hourly rate"
-                                >
-                                  <option value={168}>₹168 / hr (Standard Level 6)</option>
-                                  <option value={140}>₹140 / hr (Level 5)</option>
-                                  <option value={196}>₹196 / hr (Level 7+)</option>
-                                </select>
+                                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--primary)' }}>📋 Master TA &amp; NDA Rules</span>
+                                <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontSize: '0.74rem', fontWeight: 700 }}>
+                                  TA: 1 • 0.7 • 0.3 • 0
+                                </span>
+                                <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', fontSize: '0.74rem', fontWeight: 700 }}>
+                                  NDA: Hours Only
+                                </span>
                               </div>
                             </div>
 
@@ -9776,34 +9756,34 @@ export default function App() {
                                 background: 'rgba(16, 185, 129, 0.12)',
                                 border: '1px solid rgba(16, 185, 129, 0.3)',
                                 borderRadius: '8px',
-                                padding: '4px 12px',
+                                padding: '5px 14px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '6px'
                               }}>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Cumulative TA:</span>
-                                <strong style={{ color: '#34d399', fontSize: '0.92rem' }}>₹{grandTotalTa.toLocaleString('en-IN')}</strong>
+                                <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>Cumulative TA:</span>
+                                <strong style={{ color: '#34d399', fontSize: '0.95rem' }}>{grandTotalTaUnits} TA</strong>
                               </div>
 
                               <div style={{
                                 background: 'rgba(139, 92, 246, 0.12)',
                                 border: '1px solid rgba(139, 92, 246, 0.3)',
                                 borderRadius: '8px',
-                                padding: '4px 12px',
+                                padding: '5px 14px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '6px'
                               }}>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Cumulative NDA:</span>
-                                <strong style={{ color: '#c4b5fd', fontSize: '0.92rem' }}>{grandTotalNda} hrs (₹{grandTotalNdaAmt.toLocaleString('en-IN')})</strong>
+                                <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>Cumulative NDA:</span>
+                                <strong style={{ color: '#c4b5fd', fontSize: '0.95rem' }}>{grandTotalNda} hrs</strong>
                               </div>
 
                               <button
                                 type="button"
                                 className="btn btn-secondary"
-                                onClick={() => exportTaNdaMasterCsv(searchedDailyTrains, trainTaNdaRules, baseDaRate, baseNdaRate)}
+                                onClick={() => exportTaNdaMasterCsv(searchedDailyTrains, trainTaNdaRules)}
                                 style={{ padding: '5px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
-                                title="Download complete TA & NDA rates breakdown as CSV"
+                                title="Download complete TA & NDA breakdown as CSV"
                               >
                                 <span>📥</span> Export CSV
                               </button>
@@ -9893,19 +9873,19 @@ export default function App() {
                                   <th>Seniority Link</th>
                                   <th>Route</th>
                                   <th>Coaches</th>
-                                  <th style={{ minWidth: '230px', background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', borderBottom: '2px solid #10b981' }}>
+                                  <th style={{ minWidth: '220px', background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', borderBottom: '2px solid #10b981' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                      <span>💰</span>
+                                      <span>📊</span>
                                       <span style={{ fontWeight: 800 }}>TA Calculator</span>
                                     </div>
-                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Claim / Train Movement &amp; Cumulative Link</div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Claim: 1, 0.7, 0.3, 0 • Cumulative Link Total</div>
                                   </th>
-                                  <th style={{ minWidth: '230px', background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', borderBottom: '2px solid #8b5cf6' }}>
+                                  <th style={{ minWidth: '220px', background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', borderBottom: '2px solid #8b5cf6' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                       <span>🌙</span>
                                       <span style={{ fontWeight: 800 }}>NDA Calculator</span>
                                     </div>
-                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Window (22–06h) &amp; Cumulative Link</div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Hours (22–06h) • Cumulative Link Total</div>
                                   </th>
                                   {isAdmin && <th>Actions</th>}
                                 </tr>
@@ -9913,17 +9893,15 @@ export default function App() {
                               <tbody>
                                 {searchedDailyTrains.map((item, idx) => {
                                   const linkKey = `${item.categoryId}_${item.linkNumber}`;
-                                  const linkTotal = linkTotals[linkKey] || { totalTaAmount: 0, totalTaPercentage: 0, totalNdaHours: 0, totalNdaAmount: 0 };
+                                  const linkTotal = linkTotals[linkKey] || { totalTaUnits: 0, totalNdaHours: 0 };
                                   const ruleKey = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
                                   const custom = trainTaNdaRules[ruleKey] || {};
                                   const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
 
-                                  const effTaPct = custom.ta_percentage !== undefined ? custom.ta_percentage : defaultData.ta_pct;
-                                  const effTaAmt = custom.ta_amount !== undefined ? custom.ta_amount : Math.round(effTaPct * baseDaRate);
-                                  const effNdaHrs = custom.nda_hours !== undefined ? custom.nda_hours : defaultData.nda_hrs;
-                                  const effNdaAmt = custom.nda_amount !== undefined ? custom.nda_amount : Math.round(effNdaHrs * baseNdaRate);
-                                  const isCustomTa = custom.ta_percentage !== undefined || custom.ta_amount !== undefined;
-                                  const isCustomNda = custom.nda_hours !== undefined || custom.nda_amount !== undefined;
+                                  const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
+                                  const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
+                                  const isCustomTa = custom.ta_percentage !== undefined;
+                                  const isCustomNda = custom.nda_hours !== undefined;
 
                                   return (
                                     <tr key={`${item.trainNumber}_${item.categoryId}_${item.linkNumber}_${idx}`}>
@@ -9947,7 +9925,7 @@ export default function App() {
                                             {getLinkDisplayLabel(item.categoryId, item.linkNumber)}
                                           </span>
                                           <div style={{ fontSize: '0.68rem', color: '#fbbf24', marginTop: '4px', fontWeight: 600 }}>
-                                            Link Total: ₹{linkTotal.totalTaAmount} TA • {linkTotal.totalNdaHours}h NDA
+                                            Link Total: {linkTotal.totalTaUnits} TA • {linkTotal.totalNdaHours}h NDA
                                           </div>
                                         </div>
                                       </td>
@@ -9961,64 +9939,50 @@ export default function App() {
                                       </td>
 
                                       {/* TA CALCULATOR COLUMN */}
-                                      <td style={{ minWidth: '230px', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.02)' }}>
+                                      <td style={{ minWidth: '220px', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.02)' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                          {/* Input space to define how much TA can be claimed for each train movement */}
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                            <select
-                                              className="form-input"
-                                              style={{
-                                                padding: '4px 8px',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 700,
-                                                background: effTaPct > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.05)',
-                                                color: effTaPct > 0 ? '#34d399' : 'var(--color-text-muted)',
-                                                border: '1px solid ' + (effTaPct > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-glass)'),
-                                                borderRadius: '6px',
-                                                cursor: 'pointer'
-                                              }}
-                                              value={effTaPct}
-                                              onChange={(e) => {
-                                                const newPct = parseFloat(e.target.value);
-                                                const newAmt = Math.round(newPct * baseDaRate);
-                                                handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                  ta_percentage: newPct,
-                                                  ta_amount: newAmt
-                                                });
-                                              }}
-                                              title="Define TA percentage for this train movement"
-                                            >
-                                              <option value={1.0}>100% (Full - ₹{baseDaRate})</option>
-                                              <option value={0.7}>70% (&gt;6h Out - ₹{Math.round(baseDaRate * 0.7)})</option>
-                                              <option value={0.3}>30% (&le;6h Short - ₹{Math.round(baseDaRate * 0.3)})</option>
-                                              <option value={0}>0% (Connecting / No TA)</option>
-                                            </select>
+                                          {/* Space to define how much TA can be claimed: 1, 0.7, 0.3, 0 only */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                            {[
+                                              { val: 1.0, label: '1' },
+                                              { val: 0.7, label: '0.7' },
+                                              { val: 0.3, label: '0.3' },
+                                              { val: 0, label: '0' }
+                                            ].map(opt => {
+                                              const isSelected = Math.abs(effTaPct - opt.val) < 0.01;
+                                              return (
+                                                <button
+                                                  key={opt.val}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                      ta_percentage: opt.val
+                                                    });
+                                                  }}
+                                                  style={{
+                                                    padding: '4px 10px',
+                                                    fontSize: '0.82rem',
+                                                    fontWeight: 800,
+                                                    borderRadius: '6px',
+                                                    border: isSelected ? '1px solid #10b981' : '1px solid var(--border-glass)',
+                                                    background: isSelected ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.06)',
+                                                    color: isSelected ? '#ffffff' : 'var(--color-text-secondary)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.15s ease',
+                                                    minWidth: '38px',
+                                                    textAlign: 'center'
+                                                  }}
+                                                  title={`Set TA Claim to ${opt.label}`}
+                                                >
+                                                  {opt.label}
+                                                </button>
+                                              );
+                                            })}
 
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', padding: '3px 8px' }}>
-                                              <span style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 700 }}>₹</span>
-                                              <input
-                                                type="number"
-                                                step="10"
-                                                value={effTaAmt}
-                                                onChange={(e) => {
-                                                  const val = parseInt(e.target.value, 10) || 0;
-                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                    ta_amount: val,
-                                                    ta_percentage: Math.round((val / baseDaRate) * 100) / 100
-                                                  });
-                                                }}
-                                                style={{
-                                                  width: '64px',
-                                                  background: 'transparent',
-                                                  border: 'none',
-                                                  color: '#fff',
-                                                  fontSize: '0.84rem',
-                                                  fontWeight: 800,
-                                                  textAlign: 'right',
-                                                  outline: 'none'
-                                                }}
-                                                title="Directly edit TA claim amount in rupees"
-                                              />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginLeft: 'auto' }}>
+                                              <span style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 800 }}>
+                                                TA: <strong>{effTaPct}</strong>
+                                              </span>
                                             </div>
                                           </div>
 
@@ -10041,27 +10005,26 @@ export default function App() {
                                             justifyContent: 'space-between'
                                           }}>
                                             <span>∑ Link #{item.linkNumber} Total TA:</span>
-                                            <span style={{ color: '#fbbf24', fontSize: '0.82rem', fontWeight: 800 }}>₹{linkTotal.totalTaAmount} ({Math.round(linkTotal.totalTaPercentage * 100)}%)</span>
+                                            <span style={{ color: '#fbbf24', fontSize: '0.86rem', fontWeight: 800 }}>{linkTotal.totalTaUnits}</span>
                                           </div>
                                         </div>
                                       </td>
 
                                       {/* NDA CALCULATOR COLUMN */}
-                                      <td style={{ minWidth: '230px', padding: '10px 12px', background: 'rgba(139, 92, 246, 0.02)' }}>
+                                      <td style={{ minWidth: '220px', padding: '10px 12px', background: 'rgba(139, 92, 246, 0.02)' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                          {/* Stepper / input for NDA hours */}
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          {/* Stepper / input for NDA hours only */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '6px', overflow: 'hidden' }}>
                                               <button
                                                 type="button"
                                                 onClick={() => {
                                                   const newHrs = Math.max(0, effNdaHrs - 1);
                                                   handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                    nda_hours: newHrs,
-                                                    nda_amount: Math.round(newHrs * baseNdaRate)
+                                                    nda_hours: newHrs
                                                   });
                                                 }}
-                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '3px 8px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}
+                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '4px 10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem' }}
                                                 title="Decrease NDA hours"
                                               >
                                                 -
@@ -10075,8 +10038,7 @@ export default function App() {
                                                 onChange={(e) => {
                                                   const val = parseFloat(e.target.value) || 0;
                                                   handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                    nda_hours: val,
-                                                    nda_amount: Math.round(val * baseNdaRate)
+                                                    nda_hours: val
                                                   });
                                                 }}
                                                 style={{
@@ -10084,36 +10046,35 @@ export default function App() {
                                                   background: 'transparent',
                                                   border: 'none',
                                                   color: '#c4b5fd',
-                                                  fontSize: '0.84rem',
+                                                  fontSize: '0.88rem',
                                                   fontWeight: 800,
                                                   textAlign: 'center',
                                                   outline: 'none'
                                                 }}
-                                                title="Define NDA hours (0 to 8 hrs per night)"
+                                                title="Define NDA hours (0 to 8 hrs)"
                                               />
                                               <button
                                                 type="button"
                                                 onClick={() => {
                                                   const newHrs = Math.min(8, effNdaHrs + 1);
                                                   handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                    nda_hours: newHrs,
-                                                    nda_amount: Math.round(newHrs * baseNdaRate)
+                                                    nda_hours: newHrs
                                                   });
                                                 }}
-                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '3px 8px', cursor: 'pointer', fontWeight: 800, fontSize: '0.85rem' }}
+                                                style={{ background: 'transparent', border: 'none', color: '#c4b5fd', padding: '4px 10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem' }}
                                                 title="Increase NDA hours"
                                               >
                                                 +
                                               </button>
                                             </div>
 
-                                            <span style={{ fontSize: '0.8rem', color: '#a78bfa', fontWeight: 700 }}>
-                                              hrs = <strong style={{ color: '#fff' }}>₹{effNdaAmt}</strong>
+                                            <span style={{ fontSize: '0.84rem', color: '#c4b5fd', fontWeight: 700 }}>
+                                              hrs
                                             </span>
                                           </div>
 
                                           <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span>{effNdaHrs > 0 ? `${effNdaHrs}h Night Duty (22:00–06:00)` : 'No Night Duty'}</span>
+                                            <span>{effNdaHrs > 0 ? `${effNdaHrs} hrs Night Duty (22:00–06:00)` : 'No Night Duty'}</span>
                                             {isCustomNda && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(196, 181, 253, 0.15)', color: '#c4b5fd' }}>Custom</span>}
                                           </div>
 
@@ -10131,7 +10092,7 @@ export default function App() {
                                             justifyContent: 'space-between'
                                           }}>
                                             <span>∑ Link #{item.linkNumber} Total NDA:</span>
-                                            <span style={{ color: '#a78bfa', fontSize: '0.82rem', fontWeight: 800 }}>{linkTotal.totalNdaHours} hrs (₹{linkTotal.totalNdaAmount})</span>
+                                            <span style={{ color: '#a78bfa', fontSize: '0.86rem', fontWeight: 800 }}>{linkTotal.totalNdaHours} hrs</span>
                                           </div>
                                         </div>
                                       </td>
@@ -10196,13 +10157,13 @@ export default function App() {
                                     <td style={{ padding: '14px 12px', background: 'rgba(16, 185, 129, 0.12)', borderLeft: '1px solid rgba(16, 185, 129, 0.3)' }}>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Cumulative TA (All Links)</span>
-                                        <strong style={{ fontSize: '1.15rem', color: '#34d399' }}>₹{grandTotalTa.toLocaleString('en-IN')}</strong>
+                                        <strong style={{ fontSize: '1.15rem', color: '#34d399' }}>{grandTotalTaUnits} TA</strong>
                                       </div>
                                     </td>
                                     <td style={{ padding: '14px 12px', background: 'rgba(139, 92, 246, 0.12)', borderLeft: '1px solid rgba(139, 92, 246, 0.3)' }}>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Cumulative NDA (All Links)</span>
-                                        <strong style={{ fontSize: '1.15rem', color: '#c4b5fd' }}>{grandTotalNda} hrs (₹{grandTotalNdaAmt.toLocaleString('en-IN')})</strong>
+                                        <strong style={{ fontSize: '1.15rem', color: '#c4b5fd' }}>{grandTotalNda} hrs</strong>
                                       </div>
                                     </td>
                                     {isAdmin && (

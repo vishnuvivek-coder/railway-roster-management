@@ -174,13 +174,12 @@ export function getDefaultTaNdaForTrain(categoryId, linkNumber, trainNumber) {
 }
 
 /**
- * Calculates cumulative TA and NDA totals for every Seniority Link
+ * Calculates cumulative TA and NDA totals for every Seniority Link (Pure TA units and NDA hours, no money/currency)
  */
-export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules = {}, baseDaRate = DEFAULT_DA_RATE, baseNdaRate = DEFAULT_NDA_HOURLY_RATE) {
+export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules = {}) {
   const linkTotals = {};
-  let grandTotalTa = 0;
+  let grandTotalTaUnits = 0;
   let grandTotalNda = 0;
-  let grandTotalNdaAmt = 0;
 
   trainRosterItems.forEach(item => {
     const linkKey = `${item.categoryId}_${item.linkNumber}`;
@@ -189,10 +188,8 @@ export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules 
         categoryId: item.categoryId,
         linkNumber: item.linkNumber,
         categoryName: item.categoryName,
-        totalTaAmount: 0,
-        totalTaPercentage: 0,
+        totalTaUnits: 0,
         totalNdaHours: 0,
-        totalNdaAmount: 0,
         trainCount: 0,
         trains: []
       };
@@ -202,36 +199,30 @@ export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules 
     const custom = trainTaNdaRules[ruleKey] || {};
     const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
 
-    const effTaPct = custom.ta_percentage !== undefined ? custom.ta_percentage : defaultData.ta_pct;
-    const effTaAmt = custom.ta_amount !== undefined ? custom.ta_amount : Math.round(effTaPct * baseDaRate);
-    const effNdaHrs = custom.nda_hours !== undefined ? custom.nda_hours : defaultData.nda_hrs;
-    const effNdaAmt = custom.nda_amount !== undefined ? custom.nda_amount : Math.round(effNdaHrs * baseNdaRate);
+    const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
+    const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
 
-    linkTotals[linkKey].totalTaAmount += effTaAmt;
-    linkTotals[linkKey].totalTaPercentage += effTaPct;
-    linkTotals[linkKey].totalNdaHours += effNdaHrs;
-    linkTotals[linkKey].totalNdaAmount += effNdaAmt;
+    linkTotals[linkKey].totalTaUnits = Math.round((linkTotals[linkKey].totalTaUnits + effTaPct) * 100) / 100;
+    linkTotals[linkKey].totalNdaHours = Math.round((linkTotals[linkKey].totalNdaHours + effNdaHrs) * 10) / 10;
     linkTotals[linkKey].trainCount += 1;
     linkTotals[linkKey].trains.push(item.trainNumber);
 
-    grandTotalTa += effTaAmt;
+    grandTotalTaUnits += effTaPct;
     grandTotalNda += effNdaHrs;
-    grandTotalNdaAmt += effNdaAmt;
   });
 
   return {
     linkTotals,
-    grandTotalTa,
-    grandTotalNda,
-    grandTotalNdaAmt
+    grandTotalTaUnits: Math.round(grandTotalTaUnits * 100) / 100,
+    grandTotalNda: Math.round(grandTotalNda * 10) / 10
   };
 }
 
 /**
- * Export TA & NDA Master Rates to CSV file
+ * Export TA & NDA Master Rates to CSV file (TA Units & NDA Hours)
  */
-export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}, baseDaRate = DEFAULT_DA_RATE, baseNdaRate = DEFAULT_NDA_HOURLY_RATE) {
-  const { linkTotals } = calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules, baseDaRate, baseNdaRate);
+export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}) {
+  const { linkTotals } = calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules);
 
   const headers = [
     'Train Number',
@@ -239,13 +230,10 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}, bas
     'Seniority Link',
     'Route',
     'Coaches',
-    'TA Claim Percentage',
-    'TA Claim Amount (INR)',
-    'Cumulative TA for Entire Link (INR)',
-    'NDA Hours (22-06h)',
-    'NDA Claim Amount (INR)',
-    'Cumulative NDA Hours for Entire Link',
-    'Cumulative NDA Amount for Entire Link (INR)',
+    'TA Claim (1 / 0.7 / 0.3 / 0)',
+    'Cumulative Link TA Total',
+    'NDA Hours (22:00-06:00)',
+    'Cumulative Link NDA Hours',
     'Remarks / Rule'
   ];
 
@@ -256,10 +244,8 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}, bas
     const custom = trainTaNdaRules[ruleKey] || {};
     const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
 
-    const effTaPct = custom.ta_percentage !== undefined ? custom.ta_percentage : defaultData.ta_pct;
-    const effTaAmt = custom.ta_amount !== undefined ? custom.ta_amount : Math.round(effTaPct * baseDaRate);
-    const effNdaHrs = custom.nda_hours !== undefined ? custom.nda_hours : defaultData.nda_hrs;
-    const effNdaAmt = custom.nda_amount !== undefined ? custom.nda_amount : Math.round(effNdaHrs * baseNdaRate);
+    const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
+    const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
 
     return [
       item.trainNumber,
@@ -267,13 +253,10 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}, bas
       `"Link #${item.linkNumber}"`,
       `"${item.from_station || ''} to ${item.to_station || ''}"`,
       `"${item.coaches || ''}"`,
-      `${Math.round(effTaPct * 100)}%`,
-      effTaAmt,
-      linkTotal.totalTaAmount || 0,
+      effTaPct,
+      linkTotal.totalTaUnits || 0,
       effNdaHrs,
-      effNdaAmt,
       linkTotal.totalNdaHours || 0,
-      linkTotal.totalNdaAmount || 0,
       `"${custom.remarks || defaultData.desc || ''}"`
     ];
   });
