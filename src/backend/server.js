@@ -2646,13 +2646,44 @@ app.post('/api/train-ta-nda', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
     `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
 
+    let repeatedSyncedCount = 0;
+    if (req.body.sync_repeated) {
+      // Find all other links in the same category that contain cleanTrain
+      const allLinks = await all('SELECT link_number, train_numbers FROM links WHERE category_id = ? AND is_rest = 0', [cleanCat]);
+      for (const l of allLinks) {
+        const tNums = String(l.train_numbers || '').split(/[\s,+/]+/).map(s => s.trim());
+        if (tNums.includes(cleanTrain) && l.link_number !== cleanLink) {
+          await run(`
+            INSERT INTO train_ta_nda_rules (
+              category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
+              actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
+              ta_percentage = excluded.ta_percentage,
+              ta_amount = excluded.ta_amount,
+              nda_hours = excluded.nda_hours,
+              nda_amount = excluded.nda_amount,
+              absence_hours = excluded.absence_hours,
+              remarks = excluded.remarks,
+              actual_arr_time = excluded.actual_arr_time,
+              sched_arr_time = excluded.sched_arr_time,
+              extra_next_day_ta = excluded.extra_next_day_ta,
+              ntes_status = excluded.ntes_status,
+              updated_by = excluded.updated_by,
+              updated_at = CURRENT_TIMESTAMP
+          `, [cleanCat, l.link_number, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
+          repeatedSyncedCount++;
+        }
+      }
+    }
+
     const updated = await get(
       'SELECT * FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ? AND train_number = ?',
       [cleanCat, cleanLink, cleanTrain]
     );
 
-    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${cleanTaPct}, extra ${extraNextDayTa}, NDA ${cleanNdaHours}h`);
-    res.json({ success: true, rule: updated });
+    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${cleanTaPct}, extra ${extraNextDayTa}, NDA ${cleanNdaHours}h${repeatedSyncedCount > 0 ? ` (synced to ${repeatedSyncedCount} repeated links)` : ''}`);
+    res.json({ success: true, rule: updated, repeated_synced_count: repeatedSyncedCount });
   } catch (err) {
     console.error('Error saving train TA/NDA rule:', err);
     res.status(500).json({ error: err.message });

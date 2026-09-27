@@ -122,6 +122,17 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         badgeText: `⚡ NTES: Arrived ${actStr} (>00:00) ➔ +0.3 Extra Next Day Account`,
         explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr} past midnight (00:00). Next day calendar duty (00:00–${actStr} ≤ 6 hrs) qualifies for +0.3 Extra TA on next day account.`
       };
+    } else {
+      return {
+        isDelayed: false,
+        boundaryType: 'midnight',
+        schedArr: sched || '23:50',
+        actualArr: actStr,
+        extraNextDayTa: 0,
+        autoAdjustedTa: null,
+        badgeText: `✓ NTES: Arrived earlier / on-time (${actStr}) ➔ TA Updated as Earlier (No Next Day Claim)`,
+        explanation: `Train ${tNum} arrived before midnight at ${actStr}. No extra next-day TA applicable.`
+      };
     }
   }
 
@@ -139,6 +150,17 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         autoAdjustedTa: 0.7,
         badgeText: `⚡ NTES: Arrived ${actStr} (≥06:00) ➔ TA Auto-Changed to 0.7 (>6h Absence)`,
         explanation: `Train ${tNum} scheduled at ${sched || '05:50'} arrived delayed at ${actStr}. Absence from midnight exceeds 6 hours, automatically elevating TA claim to 0.7 (>6h absence).`
+      };
+    } else {
+      return {
+        isDelayed: false,
+        boundaryType: 'morning',
+        schedArr: sched || '05:50',
+        actualArr: actStr,
+        extraNextDayTa: 0,
+        autoAdjustedTa: 0.3,
+        badgeText: `✓ NTES: Arrived earlier / on-time (${actStr}) ➔ TA Updated as Earlier (0.3)`,
+        explanation: `Train ${tNum} arrived before 06:00 at ${actStr}. Absence ≤ 6 hours qualifies for baseline 0.3 TA.`
       };
     }
   }
@@ -319,8 +341,154 @@ export function getDefaultTaNdaForTrain(categoryId, linkNumber, trainNumber) {
 }
 
 /**
+ * Finds all link numbers where a train number appears in a category
+ */
+export function findRepeatedTrainLinks(trainNumber, categoryId, linksList = []) {
+  const tNum = String(trainNumber || '').trim();
+  const cId = parseInt(categoryId, 10);
+  if (!tNum || !Array.isArray(linksList)) return [];
+
+  const matchedLinks = [];
+  linksList.forEach(link => {
+    if (link.is_rest || !link.train_numbers) return;
+    if (cId && parseInt(link.category_id, 10) !== cId) return;
+    const nums = String(link.train_numbers).split(/[\s,+/]+/).map(s => s.trim()).filter(Boolean);
+    if (nums.includes(tNum)) {
+      matchedLinks.push(parseInt(link.link_number, 10));
+    }
+  });
+
+  return Array.from(new Set(matchedLinks)).sort((a, b) => a - b);
+}
+
+/**
+ * Resolves the effective TA and NDA rule for a train movement:
+ * When a repeated train appears (e.g. same train in later links 15, 29, etc.),
+ * if it doesn't have an explicit custom override, it automatically inherits/updates
+ * the TA and NDA from the EARLIER occurrence of that train ("Update TA as earlier").
+ */
+export function resolveEffectiveTrainRule(categoryId, linkNumber, trainNumber, trainTaNdaRules = {}) {
+  const cId = parseInt(categoryId, 10);
+  const lNum = parseInt(linkNumber, 10);
+  const tNum = String(trainNumber || '').trim();
+  const exactKey = `${cId}_${lNum}_${tNum}`;
+  const exactRule = trainTaNdaRules[exactKey];
+
+  // 1. Direct explicit rule saved for this exact link & train
+  if (exactRule && (exactRule.ta_percentage !== undefined || exactRule.nda_hours !== undefined)) {
+    const taPct = exactRule.ta_percentage !== undefined ? parseFloat(exactRule.ta_percentage) : 0.7;
+    const ndaHrs = exactRule.nda_hours !== undefined ? parseFloat(exactRule.nda_hours) : 0;
+    const extraDay = exactRule.extra_next_day_ta !== undefined ? parseFloat(exactRule.extra_next_day_ta) : 0;
+    return {
+      ...exactRule,
+      isCustom: true,
+      isInherited: false,
+      sourceLink: lNum,
+      effectiveTa: taPct,
+      effectiveNda: ndaHrs,
+      extraNextDay: extraDay
+    };
+  }
+
+  // 2. Look for EARLIER occurrence of this train number in the SAME category:
+  const keys = Object.keys(trainTaNdaRules);
+  const matchingEarlier = [];
+  for (const k of keys) {
+    const parts = k.split('_');
+    if (parts.length === 3) {
+      const [rCat, rLink, rTrain] = parts;
+      if (parseInt(rCat, 10) === cId && String(rTrain).trim() === tNum) {
+        const rule = trainTaNdaRules[k];
+        const otherLNum = parseInt(rLink, 10);
+        if (otherLNum < lNum && (rule.ta_percentage !== undefined || rule.nda_hours !== undefined)) {
+          matchingEarlier.push({ linkNum: otherLNum, rule, key: k });
+        }
+      }
+    }
+  }
+
+  if (matchingEarlier.length > 0) {
+    // Pick the earliest customized link (e.g. Link 1) or closest earlier link
+    matchingEarlier.sort((a, b) => a.linkNum - b.linkNum);
+    const earliest = matchingEarlier[0];
+    const taPct = earliest.rule.ta_percentage !== undefined ? parseFloat(earliest.rule.ta_percentage) : 0.7;
+    const ndaHrs = earliest.rule.nda_hours !== undefined ? parseFloat(earliest.rule.nda_hours) : 0;
+    const extraDay = earliest.rule.extra_next_day_ta !== undefined ? parseFloat(earliest.rule.extra_next_day_ta) : 0;
+
+    return {
+      ...earliest.rule,
+      category_id: cId,
+      link_number: lNum,
+      train_number: tNum,
+      isCustom: false,
+      isInherited: true,
+      sourceLink: earliest.linkNum,
+      sourceKey: earliest.key,
+      effectiveTa: taPct,
+      effectiveNda: ndaHrs,
+      extraNextDay: extraDay
+    };
+  }
+
+  // 3. Fallback: Any other customized link for this train in the same category
+  const matchingAny = [];
+  for (const k of keys) {
+    const parts = k.split('_');
+    if (parts.length === 3) {
+      const [rCat, rLink, rTrain] = parts;
+      if (parseInt(rCat, 10) === cId && String(rTrain).trim() === tNum) {
+        const rule = trainTaNdaRules[k];
+        if (rule.ta_percentage !== undefined || rule.nda_hours !== undefined) {
+          matchingAny.push({ linkNum: parseInt(rLink, 10), rule, key: k });
+        }
+      }
+    }
+  }
+  if (matchingAny.length > 0) {
+    matchingAny.sort((a, b) => a.linkNum - b.linkNum);
+    const earliest = matchingAny[0];
+    const taPct = earliest.rule.ta_percentage !== undefined ? parseFloat(earliest.rule.ta_percentage) : 0.7;
+    const ndaHrs = earliest.rule.nda_hours !== undefined ? parseFloat(earliest.rule.nda_hours) : 0;
+    const extraDay = earliest.rule.extra_next_day_ta !== undefined ? parseFloat(earliest.rule.extra_next_day_ta) : 0;
+
+    return {
+      ...earliest.rule,
+      category_id: cId,
+      link_number: lNum,
+      train_number: tNum,
+      isCustom: false,
+      isInherited: true,
+      sourceLink: earliest.linkNum,
+      sourceKey: earliest.key,
+      effectiveTa: taPct,
+      effectiveNda: ndaHrs,
+      extraNextDay: extraDay
+    };
+  }
+
+  // 4. Baseline default
+  const defaultData = getDefaultTaNdaForTrain(cId, lNum, tNum);
+  return {
+    category_id: cId,
+    link_number: lNum,
+    train_number: tNum,
+    ta_percentage: defaultData.ta_pct,
+    nda_hours: defaultData.nda_hrs,
+    extra_next_day_ta: 0,
+    remarks: defaultData.desc,
+    isCustom: false,
+    isInherited: false,
+    sourceLink: null,
+    effectiveTa: defaultData.ta_pct,
+    effectiveNda: defaultData.nda_hrs,
+    extraNextDay: 0
+  };
+}
+
+/**
  * Calculates cumulative TA and NDA totals for every Seniority Link (Pure TA units and NDA hours, no money/currency)
  * Includes extra next day TA (+0.3) for trains delayed past midnight (e.g. 12603)
+ * Automatically incorporates earlier TA for repeated trains!
  */
 export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules = {}) {
   const linkTotals = {};
@@ -343,13 +511,10 @@ export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules 
       };
     }
 
-    const ruleKey = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
-    const custom = trainTaNdaRules[ruleKey] || {};
-    const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
-
-    const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
-    const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
-    const extraNextDay = custom.extra_next_day_ta !== undefined ? parseFloat(custom.extra_next_day_ta) : 0;
+    const resolved = resolveEffectiveTrainRule(item.categoryId, item.linkNumber, item.trainNumber, trainTaNdaRules);
+    const effTaPct = resolved.effectiveTa;
+    const effNdaHrs = resolved.effectiveNda;
+    const extraNextDay = resolved.extraNextDay;
 
     const rowTotalTa = effTaPct + extraNextDay;
 
@@ -398,18 +563,16 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}) {
   const rows = trainRosterItems.map(item => {
     const linkKey = `${item.categoryId}_${item.linkNumber}`;
     const linkTotal = linkTotals[linkKey] || {};
-    const ruleKey = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
-    const custom = trainTaNdaRules[ruleKey] || {};
-    const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
+    const resolved = resolveEffectiveTrainRule(item.categoryId, item.linkNumber, item.trainNumber, trainTaNdaRules);
 
-    const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
-    const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
-    const extraNextDay = custom.extra_next_day_ta !== undefined ? parseFloat(custom.extra_next_day_ta) : 0;
+    const effTaPct = resolved.effectiveTa;
+    const effNdaHrs = resolved.effectiveNda;
+    const extraNextDay = resolved.extraNextDay;
     const rowTotalTa = Math.round((effTaPct + extraNextDay) * 100) / 100;
 
-    const sched = custom.sched_arr_time || STANDARD_TRAIN_SCHEDULES[item.trainNumber]?.schedArr || '-';
-    const actual = custom.actual_arr_time || '-';
-    const remarks = custom.ntes_status || custom.remarks || defaultData.desc || '';
+    const sched = resolved.sched_arr_time || STANDARD_TRAIN_SCHEDULES[item.trainNumber]?.schedArr || '-';
+    const actual = resolved.actual_arr_time || '-';
+    const remarks = resolved.ntes_status || resolved.remarks || (resolved.isInherited ? `Repeated train (Inherited from Link #${resolved.sourceLink})` : '');
 
     return [
       item.trainNumber,
