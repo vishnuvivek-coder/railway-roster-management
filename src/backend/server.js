@@ -2607,6 +2607,10 @@ app.post('/api/train-ta-nda', async (req, res) => {
     const ndaAmtRaw = req.body.nda_amount !== undefined ? req.body.nda_amount : req.body.ndaAmount;
     const absenceRaw = req.body.absence_hours !== undefined ? req.body.absence_hours : req.body.absenceHours;
     const remarks = req.body.remarks || null;
+    const actualArrTime = req.body.actual_arr_time || req.body.actualArrTime || null;
+    const schedArrTime = req.body.sched_arr_time || req.body.schedArrTime || null;
+    const extraNextDayTa = req.body.extra_next_day_ta !== undefined ? parseFloat(req.body.extra_next_day_ta) : (req.body.extraNextDayTa !== undefined ? parseFloat(req.body.extraNextDayTa) : 0);
+    const ntesStatus = req.body.ntes_status || req.body.ntesStatus || null;
 
     if (!catId || !linkNum || !trainNum) {
       return res.status(400).json({ error: 'category_id, link_number, and train_number are required' });
@@ -2624,8 +2628,9 @@ app.post('/api/train-ta-nda', async (req, res) => {
 
     await run(`
       INSERT INTO train_ta_nda_rules (
-        category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks, updated_by, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
+        actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
         ta_percentage = excluded.ta_percentage,
         ta_amount = excluded.ta_amount,
@@ -2633,16 +2638,20 @@ app.post('/api/train-ta-nda', async (req, res) => {
         nda_amount = excluded.nda_amount,
         absence_hours = excluded.absence_hours,
         remarks = excluded.remarks,
+        actual_arr_time = excluded.actual_arr_time,
+        sched_arr_time = excluded.sched_arr_time,
+        extra_next_day_ta = excluded.extra_next_day_ta,
+        ntes_status = excluded.ntes_status,
         updated_by = excluded.updated_by,
         updated_at = CURRENT_TIMESTAMP
-    `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, updatedBy]);
+    `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
 
     const updated = await get(
       'SELECT * FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ? AND train_number = ?',
       [cleanCat, cleanLink, cleanTrain]
     );
 
-    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${Math.round(cleanTaPct * 100)}% (₹${cleanTaAmt}), NDA ${cleanNdaHours}h (₹${cleanNdaAmt})`);
+    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${cleanTaPct}, extra ${extraNextDayTa}, NDA ${cleanNdaHours}h`);
     res.json({ success: true, rule: updated });
   } catch (err) {
     console.error('Error saving train TA/NDA rule:', err);
@@ -2676,6 +2685,10 @@ app.post('/api/train-ta-nda/batch', async (req, res) => {
       const ndaHoursRaw = r.nda_hours !== undefined ? r.nda_hours : r.ndaHours;
       const ndaAmtRaw = r.nda_amount !== undefined ? r.nda_amount : r.ndaAmount;
       const absenceRaw = r.absence_hours !== undefined ? r.absence_hours : r.absenceHours;
+      const actualArrTime = r.actual_arr_time || r.actualArrTime || null;
+      const schedArrTime = r.sched_arr_time || r.schedArrTime || null;
+      const extraNextDayTa = r.extra_next_day_ta !== undefined ? parseFloat(r.extra_next_day_ta) : (r.extraNextDayTa !== undefined ? parseFloat(r.extraNextDayTa) : 0);
+      const ntesStatus = r.ntes_status || r.ntesStatus || null;
 
       const cleanTaPct = taPctRaw !== undefined && taPctRaw !== null ? parseFloat(taPctRaw) : 0.7;
       const cleanTaAmt = taAmtRaw !== undefined && taAmtRaw !== null ? parseInt(taAmtRaw, 10) : Math.round(cleanTaPct * 800);
@@ -2685,8 +2698,9 @@ app.post('/api/train-ta-nda/batch', async (req, res) => {
 
       await run(`
         INSERT INTO train_ta_nda_rules (
-          category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks, updated_by, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
+          actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
           ta_percentage = excluded.ta_percentage,
           ta_amount = excluded.ta_amount,
@@ -2694,9 +2708,13 @@ app.post('/api/train-ta-nda/batch', async (req, res) => {
           nda_amount = excluded.nda_amount,
           absence_hours = excluded.absence_hours,
           remarks = excluded.remarks,
+          actual_arr_time = excluded.actual_arr_time,
+          sched_arr_time = excluded.sched_arr_time,
+          extra_next_day_ta = excluded.extra_next_day_ta,
+          ntes_status = excluded.ntes_status,
           updated_by = excluded.updated_by,
           updated_at = CURRENT_TIMESTAMP
-      `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, r.remarks || null, updatedBy]);
+      `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, r.remarks || null, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
     }
     await run('COMMIT');
 
@@ -2705,6 +2723,28 @@ app.post('/api/train-ta-nda/batch', async (req, res) => {
   } catch (err) {
     await run('ROLLBACK');
     console.error('Error batch updating train TA/NDA rules:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/train-ta-nda/ntes-timings - Fetch latest actual train arrivals for auto-change calculations
+app.get('/api/train-ta-nda/ntes-timings', async (req, res) => {
+  try {
+    const runs = await all(`
+      SELECT train_no, run_date, station_code, sched_arr, sched_dep, act_arr, act_dep, delay_arr_mins, source, updated_at
+      FROM actual_train_runs
+      WHERE station_code IN ('GNT', 'BZA', 'TPTY', 'MAS')
+      ORDER BY run_date DESC, id DESC
+    `);
+    const latestByTrain = {};
+    for (const r of runs) {
+      if (!latestByTrain[r.train_no]) {
+        latestByTrain[r.train_no] = r;
+      }
+    }
+    res.json({ success: true, latest: latestByTrain });
+  } catch (err) {
+    console.error('Error fetching NTES timings:', err);
     res.status(500).json({ error: err.message });
   }
 });

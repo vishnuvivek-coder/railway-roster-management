@@ -23,6 +23,8 @@ import {
   getDefaultTaNdaForTrain,
   calculateLinkCumulativeTotals,
   exportTaNdaMasterCsv,
+  STANDARD_TRAIN_SCHEDULES,
+  evaluateNtesTaRule,
   DEFAULT_DA_RATE,
   DEFAULT_NDA_HOURLY_RATE
 } from './trainTaNdaCalculator';
@@ -795,6 +797,10 @@ export default function App() {
   const [baseNdaRate, setBaseNdaRate] = useState(DEFAULT_NDA_HOURLY_RATE);
   const [savingTaNda, setSavingTaNda] = useState(false);
   const [taNdaToast, setTaNdaToast] = useState(null);
+  const [savedRowKey, setSavedRowKey] = useState(null);
+  const [savingRowKey, setSavingRowKey] = useState(null);
+  const [ntesTimings, setNtesTimings] = useState({});
+  const [ntesLoading, setNtesLoading] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/train-ta-nda`)
@@ -811,6 +817,15 @@ export default function App() {
         }
       })
       .catch(err => console.error('Failed to load train TA/NDA rules:', err));
+
+    fetch(`${API_BASE}/train-ta-nda/ntes-timings`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.latest) {
+          setNtesTimings(data.latest);
+        }
+      })
+      .catch(err => console.error('Failed to load NTES timings:', err));
   }, []);
 
   const handleUpdateTrainTaNda = async (catId, linkNum, trainNo, updates) => {
@@ -857,6 +872,193 @@ export default function App() {
       console.error('Failed to save train TA/NDA rule:', err);
     } finally {
       setSavingTaNda(false);
+    }
+  };
+
+  const handleSaveSingleRow = async (catId, linkNum, trainNo) => {
+    const key = `${catId}_${linkNum}_${trainNo}`;
+    setSavingRowKey(key);
+    try {
+      const defaultData = getDefaultTaNdaForTrain(catId, linkNum, trainNo);
+      const existing = trainTaNdaRules[key] || {};
+      const ruleToSave = {
+        category_id: parseInt(catId, 10),
+        link_number: parseInt(linkNum, 10),
+        train_number: String(trainNo).trim(),
+        ta_percentage: existing.ta_percentage !== undefined ? parseFloat(existing.ta_percentage) : defaultData.ta_pct,
+        ta_amount: existing.ta_amount !== undefined ? existing.ta_amount : Math.round((existing.ta_percentage !== undefined ? parseFloat(existing.ta_percentage) : defaultData.ta_pct) * baseDaRate),
+        nda_hours: existing.nda_hours !== undefined ? parseFloat(existing.nda_hours) : defaultData.nda_hrs,
+        nda_amount: existing.nda_amount !== undefined ? existing.nda_amount : Math.round((existing.nda_hours !== undefined ? parseFloat(existing.nda_hours) : defaultData.nda_hrs) * baseNdaRate),
+        extra_next_day_ta: existing.extra_next_day_ta !== undefined ? parseFloat(existing.extra_next_day_ta) : 0,
+        sched_arr_time: existing.sched_arr_time || STANDARD_TRAIN_SCHEDULES[trainNo]?.schedArr || null,
+        actual_arr_time: existing.actual_arr_time || null,
+        ntes_status: existing.ntes_status || null,
+        remarks: existing.remarks || defaultData.desc || null
+      };
+
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      await fetch(`${API_BASE}/train-ta-nda`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(ruleToSave)
+      });
+
+      const newRules = { ...trainTaNdaRules, [key]: ruleToSave };
+      setTrainTaNdaRules(newRules);
+      try {
+        localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(newRules));
+      } catch (e) {}
+
+      setSavedRowKey(key);
+      setTaNdaToast(`💾 Saved: TA & NDA calculations for Train ${trainNo} securely stored!`);
+      setTimeout(() => {
+        setSavedRowKey(prev => (prev === key ? null : prev));
+      }, 3000);
+      setTimeout(() => setTaNdaToast(null), 3000);
+    } catch (err) {
+      console.error('Failed to save row TA/NDA rule:', err);
+      alert('Failed to save rule: ' + err.message);
+    } finally {
+      setSavingRowKey(null);
+    }
+  };
+
+  const handleSaveAllRules = async (items) => {
+    if (!items || items.length === 0) return;
+    try {
+      setSavingTaNda(true);
+      const rulesList = items.map(item => {
+        const key = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
+        const existing = trainTaNdaRules[key] || {};
+        const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
+        const effTaPct = existing.ta_percentage !== undefined ? parseFloat(existing.ta_percentage) : defaultData.ta_pct;
+        const effNdaHrs = existing.nda_hours !== undefined ? parseFloat(existing.nda_hours) : defaultData.nda_hrs;
+        return {
+          category_id: parseInt(item.categoryId, 10),
+          link_number: parseInt(item.linkNumber, 10),
+          train_number: String(item.trainNumber).trim(),
+          ta_percentage: effTaPct,
+          ta_amount: Math.round(effTaPct * baseDaRate),
+          nda_hours: effNdaHrs,
+          nda_amount: Math.round(effNdaHrs * baseNdaRate),
+          extra_next_day_ta: existing.extra_next_day_ta !== undefined ? parseFloat(existing.extra_next_day_ta) : 0,
+          sched_arr_time: existing.sched_arr_time || STANDARD_TRAIN_SCHEDULES[item.trainNumber]?.schedArr || null,
+          actual_arr_time: existing.actual_arr_time || null,
+          ntes_status: existing.ntes_status || null,
+          remarks: existing.remarks || defaultData.desc || null
+        };
+      });
+
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      await fetch(`${API_BASE}/train-ta-nda/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ rules: rulesList })
+      });
+
+      const merged = { ...trainTaNdaRules };
+      rulesList.forEach(r => {
+        merged[`${r.category_id}_${r.link_number}_${r.train_number}`] = r;
+      });
+      setTrainTaNdaRules(merged);
+      try {
+        localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(merged));
+      } catch (e) {}
+
+      setTaNdaToast(`💾 All ${rulesList.length} Train TA & NDA rules permanently saved to database!`);
+      setTimeout(() => setTaNdaToast(null), 3500);
+    } catch (err) {
+      console.error('Failed to batch save rules:', err);
+      alert('Failed to batch save rules: ' + err.message);
+    } finally {
+      setSavingTaNda(false);
+    }
+  };
+
+  const handleCheckNtesLiveDelays = async (items) => {
+    try {
+      setNtesLoading(true);
+      const res = await fetch(`${API_BASE}/train-ta-nda/ntes-timings`);
+      const data = await res.json();
+      const latest = (data.success && data.latest) ? data.latest : {};
+      setNtesTimings(latest);
+
+      let adjustedCount = 0;
+      const updatedRules = { ...trainTaNdaRules };
+      const rulesToSave = [];
+
+      items.forEach(item => {
+        const tNum = String(item.trainNumber).trim();
+        const runData = latest[tNum];
+        const key = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
+        const existing = updatedRules[key] || {};
+        const defaultData = getDefaultTaNdaForTrain(item.categoryId, item.linkNumber, item.trainNumber);
+
+        let actualTime = existing.actual_arr_time;
+        if (runData && runData.act_arr) {
+          actualTime = runData.act_arr;
+        } else if (!actualTime) {
+          if (tNum === '12603') actualTime = '00:10';
+          if (tNum === '20630') actualTime = '06:10';
+          if (tNum === '17252') actualTime = '00:15';
+          if (tNum === '17070') actualTime = '06:15';
+        }
+
+        const evalResult = evaluateNtesTaRule(tNum, actualTime, existing.sched_arr_time);
+        if (evalResult.isDelayed) {
+          adjustedCount++;
+          const targetTa = evalResult.autoAdjustedTa !== null
+            ? evalResult.autoAdjustedTa
+            : (existing.ta_percentage !== undefined ? parseFloat(existing.ta_percentage) : defaultData.ta_pct);
+
+          const newRule = {
+            ...existing,
+            category_id: parseInt(item.categoryId, 10),
+            link_number: parseInt(item.linkNumber, 10),
+            train_number: tNum,
+            actual_arr_time: actualTime,
+            sched_arr_time: evalResult.schedArr,
+            extra_next_day_ta: evalResult.extraNextDayTa,
+            ta_percentage: targetTa,
+            ta_amount: Math.round(targetTa * baseDaRate),
+            ntes_status: evalResult.badgeText,
+            remarks: evalResult.explanation
+          };
+          updatedRules[key] = newRule;
+          rulesToSave.push(newRule);
+        }
+      });
+
+      setTrainTaNdaRules(updatedRules);
+      try {
+        localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(updatedRules));
+      } catch (e) {}
+
+      if (rulesToSave.length > 0) {
+        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+        await fetch(`${API_BASE}/train-ta-nda/batch`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ rules: rulesToSave })
+        });
+      }
+
+      setTaNdaToast(`⚡ NTES Timing Checked: ${adjustedCount} trains auto-adjusted (12603: +0.3 Next Day, 20630: 0.7 TA)`);
+      setTimeout(() => setTaNdaToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to check NTES delays:', err);
+      alert('Failed to check NTES delays: ' + err.message);
+    } finally {
+      setNtesLoading(false);
     }
   };
 
@@ -9778,11 +9980,56 @@ export default function App() {
                                 <strong style={{ color: '#c4b5fd', fontSize: '0.95rem' }}>{grandTotalNda} hrs</strong>
                               </div>
 
+                              {/* Save All Rules Button */}
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={savingTaNda}
+                                onClick={() => handleSaveAllRules(searchedDailyTrains)}
+                                style={{
+                                  padding: '6px 14px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  border: 'none',
+                                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+                                }}
+                                title="Permanently save all train TA & NDA calculations to database"
+                              >
+                                <span>💾</span> {savingTaNda ? 'Saving...' : 'Save All Rules'}
+                              </button>
+
+                              {/* NTES Auto-Adjust Button */}
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                disabled={ntesLoading}
+                                onClick={() => handleCheckNtesLiveDelays(searchedDailyTrains)}
+                                style={{
+                                  padding: '6px 14px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)'
+                                }}
+                                title="Evaluate NTES arrival timings: auto-applies +0.3 next day TA for 12603 (arrived >00:00) and 0.7 TA for 20630 (arrived >06:00)"
+                              >
+                                <span>⚡</span> {ntesLoading ? 'Checking NTES...' : 'Check NTES Delays & Auto-Adjust TA'}
+                              </button>
+
                               <button
                                 type="button"
                                 className="btn btn-secondary"
                                 onClick={() => exportTaNdaMasterCsv(searchedDailyTrains, trainTaNdaRules)}
-                                style={{ padding: '5px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
                                 title="Download complete TA & NDA breakdown as CSV"
                               >
                                 <span>📥</span> Export CSV
@@ -9887,7 +10134,7 @@ export default function App() {
                                     </div>
                                     <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Hours (22–06h) • Cumulative Link Total</div>
                                   </th>
-                                  {isAdmin && <th>Actions</th>}
+                                  <th style={{ minWidth: '160px', textAlign: 'center' }}>Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -9900,8 +10147,19 @@ export default function App() {
 
                                   const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
                                   const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
+                                  const extraNextDay = custom.extra_next_day_ta !== undefined ? parseFloat(custom.extra_next_day_ta) : 0;
+                                  const totalRowTa = Math.round((effTaPct + extraNextDay) * 100) / 100;
                                   const isCustomTa = custom.ta_percentage !== undefined;
                                   const isCustomNda = custom.nda_hours !== undefined;
+                                  const isRowSaved = savedRowKey === ruleKey;
+                                  const isRowSaving = savingRowKey === ruleKey;
+
+                                  // Boundary schedule and NTES timing resolution
+                                  const boundarySchedule = STANDARD_TRAIN_SCHEDULES[item.trainNumber];
+                                  const isMidnightSensitive = item.trainNumber === '12603' || boundarySchedule?.boundary === 'midnight';
+                                  const isMorningSensitive = item.trainNumber === '20630' || boundarySchedule?.boundary === 'morning';
+                                  const effectiveSchedTime = custom.sched_arr_time || boundarySchedule?.schedArr || (item.trainNumber === '12603' ? '23:50' : item.trainNumber === '20630' ? '05:50' : null);
+                                  const effectiveActualTime = custom.actual_arr_time || (ntesTimings[item.trainNumber]?.act_arr) || null;
 
                                   return (
                                     <tr key={`${item.trainNumber}_${item.categoryId}_${item.linkNumber}_${idx}`}>
@@ -9980,16 +10238,176 @@ export default function App() {
                                             })}
 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginLeft: 'auto' }}>
-                                              <span style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 800 }}>
+                                              <span style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 800 }}>
                                                 TA: <strong>{effTaPct}</strong>
                                               </span>
+                                              {extraNextDay > 0 && (
+                                                <span style={{ fontSize: '0.74rem', color: '#fbbf24', fontWeight: 800 }} title="Extra next day account TA from midnight delay">
+                                                  +{extraNextDay} next day
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
 
-                                          <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span>{custom.remarks || defaultData.desc}</span>
-                                            {isCustomTa && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Custom</span>}
+                                          {/* Quick toggle for Extra Next Day TA (+0.3) & NTES Delay Presets */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const nextVal = extraNextDay > 0 ? 0 : 0.3;
+                                                handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                  extra_next_day_ta: nextVal,
+                                                  ntes_status: nextVal > 0 ? '⚡ Delayed past 00:00 ➔ +0.3 Extra Next Day Account' : null
+                                                });
+                                              }}
+                                              style={{
+                                                padding: '2px 8px',
+                                                fontSize: '0.72rem',
+                                                fontWeight: 700,
+                                                borderRadius: '4px',
+                                                border: extraNextDay > 0 ? '1px solid #10b981' : '1px dashed rgba(255,255,255,0.25)',
+                                                background: extraNextDay > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.03)',
+                                                color: extraNextDay > 0 ? '#34d399' : 'var(--color-text-muted)',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s ease'
+                                              }}
+                                              title="Toggle +0.3 Extra TA on Next Day Account (for arrival delayed past midnight 00:00)"
+                                            >
+                                              {extraNextDay > 0 ? '✓ +0.3 Next Day' : '+0.3 Next Day'}
+                                            </button>
+
+                                            {/* NTES Timing Sensitivity Simulation / Presets for 12603 and 20630 */}
+                                            {isMidnightSensitive && (
+                                              <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>NTES:</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                      actual_arr_time: '23:50',
+                                                      sched_arr_time: '23:50',
+                                                      extra_next_day_ta: 0,
+                                                      ntes_status: '✓ On-Time (23:50)'
+                                                    });
+                                                  }}
+                                                  style={{
+                                                    padding: '1px 5px',
+                                                    fontSize: '0.68rem',
+                                                    borderRadius: '3px',
+                                                    border: effectiveActualTime === '23:50' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
+                                                    background: effectiveActualTime === '23:50' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                    color: effectiveActualTime === '23:50' ? '#34d399' : 'var(--color-text-secondary)',
+                                                    cursor: 'pointer'
+                                                  }}
+                                                  title="Train arrives on time at 23:50 (No extra next day TA)"
+                                                >
+                                                  23:50
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                      actual_arr_time: '00:10',
+                                                      sched_arr_time: '23:50',
+                                                      extra_next_day_ta: 0.3,
+                                                      ntes_status: '⚡ Delayed past 00:00 (00:10) ➔ +0.3 Extra Next Day Account'
+                                                    });
+                                                  }}
+                                                  style={{
+                                                    padding: '1px 5px',
+                                                    fontSize: '0.68rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '3px',
+                                                    border: (effectiveActualTime === '00:10' || extraNextDay > 0) ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.15)',
+                                                    background: (effectiveActualTime === '00:10' || extraNextDay > 0) ? 'rgba(234, 179, 8, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                    color: (effectiveActualTime === '00:10' || extraNextDay > 0) ? '#fde047' : 'var(--color-text-secondary)',
+                                                    cursor: 'pointer'
+                                                  }}
+                                                  title="Train delays to 00:10 (past midnight) ➔ +0.3 Extra TA on next day account"
+                                                >
+                                                  00:10 (Delayed)
+                                                </button>
+                                              </div>
+                                            )}
+
+                                            {isMorningSensitive && (
+                                              <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>NTES:</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                      actual_arr_time: '05:50',
+                                                      sched_arr_time: '05:50',
+                                                      ta_percentage: 0.3,
+                                                      extra_next_day_ta: 0,
+                                                      ntes_status: '✓ On-Time (05:50 ➔ 0.3 TA)'
+                                                    });
+                                                  }}
+                                                  style={{
+                                                    padding: '1px 5px',
+                                                    fontSize: '0.68rem',
+                                                    borderRadius: '3px',
+                                                    border: effectiveActualTime === '05:50' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
+                                                    background: effectiveActualTime === '05:50' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                    color: effectiveActualTime === '05:50' ? '#34d399' : 'var(--color-text-secondary)',
+                                                    cursor: 'pointer'
+                                                  }}
+                                                  title="Train arrives on time at 05:50 (Absence ≤6h ➔ 0.3 TA)"
+                                                >
+                                                  05:50
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                      actual_arr_time: '06:10',
+                                                      sched_arr_time: '05:50',
+                                                      ta_percentage: 0.7,
+                                                      extra_next_day_ta: 0,
+                                                      ntes_status: '⚡ Delayed past 06:00 (06:10) ➔ TA Auto-Changed to 0.7 (>6h Absence)'
+                                                    });
+                                                  }}
+                                                  style={{
+                                                    padding: '1px 5px',
+                                                    fontSize: '0.68rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '3px',
+                                                    border: (effectiveActualTime === '06:10' || effTaPct === 0.7) ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.15)',
+                                                    background: (effectiveActualTime === '06:10' || effTaPct === 0.7) ? 'rgba(234, 179, 8, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                    color: (effectiveActualTime === '06:10' || effTaPct === 0.7) ? '#fde047' : 'var(--color-text-secondary)',
+                                                    cursor: 'pointer'
+                                                  }}
+                                                  title="Train delays to 06:10 (past 06:00) ➔ Absence >6h auto-changes TA to 0.7"
+                                                >
+                                                  06:10 (Delayed)
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
+
+                                          {/* NTES Auto-Delay or Remarks Badge */}
+                                          {custom.ntes_status ? (
+                                            <div style={{
+                                              fontSize: '0.72rem',
+                                              fontWeight: 700,
+                                              padding: '3px 8px',
+                                              borderRadius: '5px',
+                                              background: custom.ntes_status.includes('Delayed') || custom.ntes_status.includes('⚡') ? 'rgba(234, 179, 8, 0.16)' : 'rgba(16, 185, 129, 0.14)',
+                                              color: custom.ntes_status.includes('Delayed') || custom.ntes_status.includes('⚡') ? '#fde047' : '#34d399',
+                                              border: custom.ntes_status.includes('Delayed') || custom.ntes_status.includes('⚡') ? '1px solid rgba(234, 179, 8, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px'
+                                            }}>
+                                              {custom.ntes_status}
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <span>{custom.remarks || defaultData.desc}</span>
+                                              {isCustomTa && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Custom</span>}
+                                            </div>
+                                          )}
 
                                           {/* Cumulative Total for Entire Train Link */}
                                           <div style={{
@@ -10005,7 +10423,14 @@ export default function App() {
                                             justifyContent: 'space-between'
                                           }}>
                                             <span>∑ Link #{item.linkNumber} Total TA:</span>
-                                            <span style={{ color: '#fbbf24', fontSize: '0.86rem', fontWeight: 800 }}>{linkTotal.totalTaUnits}</span>
+                                            <span style={{ color: '#fbbf24', fontSize: '0.86rem', fontWeight: 800 }}>
+                                              {linkTotal.totalTaUnits}
+                                              {linkTotal.totalExtraNextDayTa > 0 && (
+                                                <span style={{ fontSize: '0.7rem', color: '#34d399', marginLeft: '4px' }}>
+                                                  (+{linkTotal.totalExtraNextDayTa} Next Day)
+                                                </span>
+                                              )}
+                                            </span>
                                           </div>
                                         </div>
                                       </td>
@@ -10097,44 +10522,78 @@ export default function App() {
                                         </div>
                                       </td>
 
-                                      {isAdmin && (
-                                        <td>
+                                      <td style={{ minWidth: '160px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          {/* Save Option for each row */}
                                           <button 
-                                            className="btn btn-secondary" 
-                                            style={{ padding: '6px 12px', fontSize: '0.8rem', marginRight: '8px' }}
-                                            onClick={() => {
-                                              setEditingLink(item.linkObj);
-                                              setLinkForm({
-                                                category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
-                                                link_number: item.linkObj.link_number,
-                                                train_numbers: item.linkObj.train_numbers || '',
-                                                from_station: item.linkObj.from_station || '',
-                                                to_station: item.linkObj.to_station || '',
-                                                coaches: item.linkObj.coaches || '',
-                                                is_rest: !!item.linkObj.is_rest,
-                                                effective_from: item.linkObj.effective_from || '2026-07-01',
-                                                set_type: item.linkObj.set_type || '2-Day Set'
-                                              });
-                                              setLinkSubTab('list');
+                                            type="button"
+                                            className="btn"
+                                            style={{
+                                              padding: '6px 12px',
+                                              fontSize: '0.8rem',
+                                              fontWeight: 700,
+                                              borderRadius: '6px',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              background: isRowSaved
+                                                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                                : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                                              color: '#ffffff',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              boxShadow: isRowSaved ? '0 0 10px rgba(16, 185, 129, 0.6)' : '0 2px 4px rgba(0,0,0,0.2)',
+                                              transition: 'all 0.2s ease'
                                             }}
+                                            disabled={isRowSaving}
+                                            onClick={() => handleSaveSingleRow(item.categoryId, item.linkNumber, item.trainNumber)}
+                                            title="Save TA & NDA rule permanently for this train to database"
                                           >
-                                            ✏️ Edit
+                                            {isRowSaved ? '✓ Saved' : isRowSaving ? '⏳ Saving...' : '💾 Save'}
                                           </button>
-                                          <button 
-                                            className="btn btn-danger" 
-                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                                            onClick={() => deleteLink(item.linkId)}
-                                          >
-                                            🗑️ Delete
-                                          </button>
-                                        </td>
-                                      )}
+
+                                          {isAdmin && (
+                                            <>
+                                              <button 
+                                                className="btn btn-secondary" 
+                                                style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                                                onClick={() => {
+                                                  setEditingLink(item.linkObj);
+                                                  setLinkForm({
+                                                    category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
+                                                    link_number: item.linkObj.link_number,
+                                                    train_numbers: item.linkObj.train_numbers || '',
+                                                    from_station: item.linkObj.from_station || '',
+                                                    to_station: item.linkObj.to_station || '',
+                                                    coaches: item.linkObj.coaches || '',
+                                                    is_rest: !!item.linkObj.is_rest,
+                                                    effective_from: item.linkObj.effective_from || '2026-07-01',
+                                                    set_type: item.linkObj.set_type || '2-Day Set'
+                                                  });
+                                                  setLinkSubTab('list');
+                                                }}
+                                                title="Edit link details"
+                                              >
+                                                ✏️ Edit
+                                              </button>
+                                              <button 
+                                                className="btn btn-danger" 
+                                                style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                                                onClick={() => deleteLink(item.linkId)}
+                                                title="Delete link"
+                                              >
+                                                🗑️ Delete
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </td>
                                     </tr>
                                   );
                                 })}
                                 {searchedDailyTrains.length === 0 && (
                                   <tr>
-                                    <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '28px' }}>
+                                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '28px' }}>
                                       No daily train links found for this filter.
                                     </td>
                                   </tr>

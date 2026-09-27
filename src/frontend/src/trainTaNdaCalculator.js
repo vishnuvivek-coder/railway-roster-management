@@ -2,13 +2,158 @@
  * Railway Duty Roster Manager - Train Movement TA & NDA Calculator Utility
  * 
  * Provides official Railway baseline rates, timings, and cumulative link formulas:
- * - TA Calculator: 100% (Full Day), 70% (>6h Outstation), 30% (<=6h Short Run), 0% (Connecting / Local)
+ * - TA Calculator: 100% (1.0), 70% (0.7 >6h Outstation), 30% (0.3 <=6h Short Run), 0% (Connecting / Local)
+ * - Extra Next Day TA (+0.3): For trains delayed past 00:00 midnight into next day account
+ * - Morning Boundary Auto-Change (0.3 -> 0.7): For trains delayed past 06:00 morning (>6h absence)
  * - NDA Calculator: Night Window 22:00 to 06:00 IST (1 hr = 1 NDA point)
  * - Cumulative Total for Entire Train Link: Aggregates all legs/movements for each Seniority Link
  */
 
 export const DEFAULT_DA_RATE = 800; // Level 6-8 default (CTI / TTI)
 export const DEFAULT_NDA_HOURLY_RATE = 168; // Standard Railway NDA hourly rate
+
+/**
+ * Standard Railway Schedules with sensitive midnight (00:00) and morning (06:00) boundaries
+ */
+export const STANDARD_TRAIN_SCHEDULES = {
+  '12603': {
+    trainNo: '12603',
+    name: 'Chennai – Hyderabad Express',
+    route: 'MAS ➔ GNT',
+    schedArr: '23:50',
+    boundary: 'midnight',
+    boundaryThreshold: '00:00',
+    defaultTa: 1.0,
+    boundaryDesc: 'Arrival near 00:00 Midnight. If delayed on/after 00:10, spills into next calendar day granting +0.3 Extra TA on next day account.',
+    nextDayTaOnDelay: 0.3
+  },
+  '20630': {
+    trainNo: '20630',
+    name: 'Vande Bharat / Tirupati Express',
+    route: 'TPTY ➔ GNT',
+    schedArr: '05:50',
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.3,
+    delayedTa: 0.7,
+    boundaryDesc: 'Arrival near 06:00 Morning. Sched arrival ≤6h gives 0.3 TA. If delayed on/after 06:10, absence exceeds 6 hrs, auto-upgrading to 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '17252': {
+    trainNo: '17252',
+    name: 'Guntur – Dhone Express (Return)',
+    route: 'DHNE ➔ GNT',
+    schedArr: '23:10',
+    boundary: 'midnight',
+    boundaryThreshold: '00:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Arrival near 23:10. If delayed past 00:00, spills into next calendar day granting +0.3 Extra TA.',
+    nextDayTaOnDelay: 0.3
+  },
+  '17070': {
+    trainNo: '17070',
+    name: 'Bhadrachalam – Guntur Express',
+    route: 'BDCR ➔ GNT',
+    schedArr: '05:15',
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.3,
+    delayedTa: 0.7,
+    boundaryDesc: 'Arrival near 05:15. If delayed past 06:00, absence exceeds 6 hrs, upgrading TA to 0.7.',
+    nextDayTaOnDelay: 0
+  },
+  '12733': {
+    trainNo: '12733',
+    name: 'Narayanadri Express',
+    route: 'TPTY ➔ GNT',
+    schedArr: '05:35',
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.3,
+    delayedTa: 0.7,
+    boundaryDesc: 'Early morning arrival. If delayed past 06:00, absence exceeds 6 hrs, upgrading TA to 0.7.',
+    nextDayTaOnDelay: 0
+  }
+};
+
+/**
+ * Evaluates NTES Arrival timing for automatic TA adjustments based on Railway boundaries:
+ * 1. Midnight Boundary (00:00): Train scheduled before 00:00 (e.g. 12603 at 23:50).
+ *    If actual arrival >= 00:00 / 00:10 (between 00:00 and 06:00), it spills into next calendar day.
+ *    Duty on next day <= 6 hours awards +0.3 Extra TA on next day account!
+ * 2. Morning Boundary (06:00): Train scheduled before 06:00 (e.g. 20630 at 05:50).
+ *    If actual arrival >= 06:00 / 06:10, absence from midnight exceeds 6 hours (>6h),
+ *    so TA claim automatically jumps from 0.3 to 0.7!
+ */
+export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = null) {
+  const tNum = String(trainNumber || '').trim();
+  const std = STANDARD_TRAIN_SCHEDULES[tNum] || null;
+  const sched = schedArrTime || std?.schedArr || null;
+
+  if (!actualArrTime) {
+    return {
+      isDelayed: false,
+      boundaryType: std?.boundary || null,
+      schedArr: sched,
+      actualArr: null,
+      extraNextDayTa: 0,
+      autoAdjustedTa: null,
+      badgeText: null,
+      explanation: null
+    };
+  }
+
+  const actStr = String(actualArrTime).trim();
+  const [aH, aM] = actStr.split(':').map(v => parseInt(v, 10) || 0);
+  const actMinsFromMidnight = aH * 60 + aM;
+
+  // 1. Midnight Boundary Check (e.g. 12603 sched 23:50 or 17252 sched 23:10)
+  const isMidnightBoundaryTrain = std?.boundary === 'midnight' || (sched && sched >= '22:00' && sched <= '23:59');
+  if (isMidnightBoundaryTrain) {
+    // If actual arrival is between 00:00 and 06:00 (i.e. morning after midnight)
+    if (aH >= 0 && aH < 6) {
+      return {
+        isDelayed: true,
+        boundaryType: 'midnight',
+        schedArr: sched || '23:50',
+        actualArr: actStr,
+        extraNextDayTa: 0.3,
+        autoAdjustedTa: null,
+        badgeText: `⚡ NTES: Arrived ${actStr} (>00:00) ➔ +0.3 Extra Next Day Account`,
+        explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr} past midnight (00:00). Next day calendar duty (00:00–${actStr} ≤ 6 hrs) qualifies for +0.3 Extra TA on next day account.`
+      };
+    }
+  }
+
+  // 2. Morning Boundary Check (e.g. 20630 sched 05:50, 17070 sched 05:15)
+  const isMorningBoundaryTrain = std?.boundary === 'morning' || (sched && sched >= '04:00' && sched < '06:00');
+  if (isMorningBoundaryTrain) {
+    // If actual arrival is on or after 06:00 (e.g. 06:10) and before 12:00
+    if (actMinsFromMidnight >= 360 && actMinsFromMidnight < 720) { // 360 mins = 06:00
+      return {
+        isDelayed: true,
+        boundaryType: 'morning',
+        schedArr: sched || '05:50',
+        actualArr: actStr,
+        extraNextDayTa: 0,
+        autoAdjustedTa: 0.7,
+        badgeText: `⚡ NTES: Arrived ${actStr} (≥06:00) ➔ TA Auto-Changed to 0.7 (>6h Absence)`,
+        explanation: `Train ${tNum} scheduled at ${sched || '05:50'} arrived delayed at ${actStr}. Absence from midnight exceeds 6 hours, automatically elevating TA claim to 0.7 (>6h absence).`
+      };
+    }
+  }
+
+  return {
+    isDelayed: false,
+    boundaryType: std?.boundary || null,
+    schedArr: sched,
+    actualArr: actStr,
+    extraNextDayTa: 0,
+    autoAdjustedTa: null,
+    badgeText: `✓ NTES: On-Time (${actStr})`,
+    explanation: `Train ${tNum} arrived on schedule at ${actStr}.`
+  };
+}
 
 /**
  * Standard Railway Baseline TA % and NDA hours for every train in each category & seniority link
@@ -175,11 +320,13 @@ export function getDefaultTaNdaForTrain(categoryId, linkNumber, trainNumber) {
 
 /**
  * Calculates cumulative TA and NDA totals for every Seniority Link (Pure TA units and NDA hours, no money/currency)
+ * Includes extra next day TA (+0.3) for trains delayed past midnight (e.g. 12603)
  */
 export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules = {}) {
   const linkTotals = {};
   let grandTotalTaUnits = 0;
   let grandTotalNda = 0;
+  let grandTotalExtraNextDayTa = 0;
 
   trainRosterItems.forEach(item => {
     const linkKey = `${item.categoryId}_${item.linkNumber}`;
@@ -189,6 +336,7 @@ export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules 
         linkNumber: item.linkNumber,
         categoryName: item.categoryName,
         totalTaUnits: 0,
+        totalExtraNextDayTa: 0,
         totalNdaHours: 0,
         trainCount: 0,
         trains: []
@@ -201,19 +349,25 @@ export function calculateLinkCumulativeTotals(trainRosterItems, trainTaNdaRules 
 
     const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
     const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
+    const extraNextDay = custom.extra_next_day_ta !== undefined ? parseFloat(custom.extra_next_day_ta) : 0;
 
-    linkTotals[linkKey].totalTaUnits = Math.round((linkTotals[linkKey].totalTaUnits + effTaPct) * 100) / 100;
+    const rowTotalTa = effTaPct + extraNextDay;
+
+    linkTotals[linkKey].totalTaUnits = Math.round((linkTotals[linkKey].totalTaUnits + rowTotalTa) * 100) / 100;
+    linkTotals[linkKey].totalExtraNextDayTa = Math.round(((linkTotals[linkKey].totalExtraNextDayTa || 0) + extraNextDay) * 100) / 100;
     linkTotals[linkKey].totalNdaHours = Math.round((linkTotals[linkKey].totalNdaHours + effNdaHrs) * 10) / 10;
     linkTotals[linkKey].trainCount += 1;
     linkTotals[linkKey].trains.push(item.trainNumber);
 
-    grandTotalTaUnits += effTaPct;
+    grandTotalTaUnits += rowTotalTa;
+    grandTotalExtraNextDayTa += extraNextDay;
     grandTotalNda += effNdaHrs;
   });
 
   return {
     linkTotals,
     grandTotalTaUnits: Math.round(grandTotalTaUnits * 100) / 100,
+    grandTotalExtraNextDayTa: Math.round(grandTotalExtraNextDayTa * 100) / 100,
     grandTotalNda: Math.round(grandTotalNda * 10) / 10
   };
 }
@@ -230,11 +384,15 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}) {
     'Seniority Link',
     'Route',
     'Coaches',
-    'TA Claim (1 / 0.7 / 0.3 / 0)',
+    'Sched Arr',
+    'Actual Arr (NTES)',
+    'Base TA Claim (1 / 0.7 / 0.3 / 0)',
+    'Extra Next Day TA (+0.3)',
+    'Total Train TA',
     'Cumulative Link TA Total',
     'NDA Hours (22:00-06:00)',
     'Cumulative Link NDA Hours',
-    'Remarks / Rule'
+    'NTES Status / Rule Remarks'
   ];
 
   const rows = trainRosterItems.map(item => {
@@ -246,6 +404,12 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}) {
 
     const effTaPct = custom.ta_percentage !== undefined ? parseFloat(custom.ta_percentage) : defaultData.ta_pct;
     const effNdaHrs = custom.nda_hours !== undefined ? parseFloat(custom.nda_hours) : defaultData.nda_hrs;
+    const extraNextDay = custom.extra_next_day_ta !== undefined ? parseFloat(custom.extra_next_day_ta) : 0;
+    const rowTotalTa = Math.round((effTaPct + extraNextDay) * 100) / 100;
+
+    const sched = custom.sched_arr_time || STANDARD_TRAIN_SCHEDULES[item.trainNumber]?.schedArr || '-';
+    const actual = custom.actual_arr_time || '-';
+    const remarks = custom.ntes_status || custom.remarks || defaultData.desc || '';
 
     return [
       item.trainNumber,
@@ -253,11 +417,15 @@ export function exportTaNdaMasterCsv(trainRosterItems, trainTaNdaRules = {}) {
       `"Link #${item.linkNumber}"`,
       `"${item.from_station || ''} to ${item.to_station || ''}"`,
       `"${item.coaches || ''}"`,
+      `"${sched}"`,
+      `"${actual}"`,
       effTaPct,
+      extraNextDay,
+      rowTotalTa,
       linkTotal.totalTaUnits || 0,
       effNdaHrs,
       linkTotal.totalNdaHours || 0,
-      `"${custom.remarks || defaultData.desc || ''}"`
+      `"${remarks}"`
     ];
   });
 

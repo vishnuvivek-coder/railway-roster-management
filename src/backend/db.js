@@ -425,11 +425,31 @@ async function initDb() {
       nda_amount INTEGER DEFAULT 0,
       absence_hours REAL DEFAULT 0,
       remarks TEXT,
+      actual_arr_time TEXT,
+      sched_arr_time TEXT,
+      extra_next_day_ta REAL DEFAULT 0,
+      ntes_status TEXT,
       updated_by TEXT DEFAULT 'Admin',
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(category_id, link_number, train_number)
     )
   `);
+
+  // Safe ALTER TABLE migrations for existing installations
+  const existingTaCols = await all('PRAGMA table_info(train_ta_nda_rules)');
+  const colNames = existingTaCols.map(c => c.name);
+  if (!colNames.includes('actual_arr_time')) {
+    await run('ALTER TABLE train_ta_nda_rules ADD COLUMN actual_arr_time TEXT');
+  }
+  if (!colNames.includes('sched_arr_time')) {
+    await run('ALTER TABLE train_ta_nda_rules ADD COLUMN sched_arr_time TEXT');
+  }
+  if (!colNames.includes('extra_next_day_ta')) {
+    await run('ALTER TABLE train_ta_nda_rules ADD COLUMN extra_next_day_ta REAL DEFAULT 0');
+  }
+  if (!colNames.includes('ntes_status')) {
+    await run('ALTER TABLE train_ta_nda_rules ADD COLUMN ntes_status TEXT');
+  }
 
   await run(`
     CREATE TABLE IF NOT EXISTS lr_sheet_records (
