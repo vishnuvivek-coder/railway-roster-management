@@ -2962,9 +2962,14 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to undo action');
       alert(data.message || 'Action undone successfully!');
       fetchAuditLogs();
-      if (activeTab === 'daily-summary' || activeTab === 'daily') fetchDailyDuties();
+      fetchDailyDuties();
+      if (typeof fetchLinks === 'function') fetchLinks();
+      if (typeof fetchLinkSets === 'function') fetchLinkSets();
+      if (typeof fetchSlotCustomizations === 'function') fetchSlotCustomizations();
+      if (typeof fetchRoster === 'function') fetchRoster();
       try {
         window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated'));
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated'));
       } catch (e) {}
     } catch (err) {
       alert(err.message);
@@ -12400,15 +12405,44 @@ export default function App() {
         {activeTab === 'audit' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div className="card-title" style={{ margin: 0 }}>System Audit Trail & History</div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={fetchAuditLogs}
-                style={{ fontSize: '0.82rem', padding: '6px 14px' }}
-              >
-                🔄 Refresh Logs
-              </button>
+              <div>
+                <div className="card-title" style={{ margin: 0 }}>System Audit Trail & History</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                  Track, monitor, and instantly undo any past roster modifications, link edits, or duty assignments.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {isAdmin && auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type)) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      const latestAction = auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type));
+                      if (latestAction) handleUndoAuditLog(latestAction);
+                    }}
+                    style={{
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      fontWeight: 700,
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#f87171',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      cursor: 'pointer'
+                    }}
+                    title="Instantly undo the most recent action"
+                  >
+                    ↩️ Undo Last Action
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={fetchAuditLogs}
+                  style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                >
+                  🔄 Refresh Logs
+                </button>
+              </div>
             </div>
             
             <div className="data-table-container">
@@ -12427,8 +12461,8 @@ export default function App() {
                     const isUndone = log.is_undone === 1;
                     const isReversionLog = log.action_type === 'UNDO';
                     const isEligibleForUndo = !isReversionLog && (
-                      ['CHANGED_LINK', 'EXCHANGE_STAFF', 'STAFF_LEAVE', 'STAFF_SICK', 'STAFF_CR', 'STAFF_ABSENT', 'LEAVE', 'SICK', 'CR', 'ABSENT', 'CANCEL_LEAVE', 'RESET_DUTY', 'MUSTER_CELL_UPDATE', 'MUSTER_CELL_RESET', 'APPROVE_LEAVE', 'APPROVE_SWAP', 'ASSIGN_NON_DAILY_TRAIN', 'UNASSIGN_NON_DAILY_TRAIN', 'DRAG_ASSIGN_DUTY', 'SHIFTED', 'UPGRADE_TO_COR', 'UTILISED_ADVANCE', 'REMOVE_FROM_LINK', 'MANUAL_OVERRIDE'].includes(log.action_type) ||
-                      (log.undo_data !== null && log.undo_data !== undefined)
+                      !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER', 'UNDO'].includes(log.action_type) &&
+                      !/^\d{4}-\d{2}-\d{2}$/.test(log.action_type)
                     );
 
                     return (

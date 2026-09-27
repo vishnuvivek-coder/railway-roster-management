@@ -2218,7 +2218,15 @@ app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
       );
     }
 
-    await logAudit('Admin', 'DUPLICATE_LINK_SET', `Duplicated Link Set "${origSet.name}" (#${origSet.id}) into Draft Set #${newSetId} with ${origLinks.length} links`);
+    await logAudit(
+      'Admin', 
+      'DUPLICATE_LINK_SET', 
+      `Duplicated Link Set "${origSet.name}" (#${origSet.id}) into Draft Set #${newSetId} with ${origLinks.length} links`,
+      {
+        action: 'DUPLICATE_LINK_SET',
+        created_set_id: newSetId
+      }
+    );
     res.json({
       success: true,
       id: newSetId,
@@ -2263,7 +2271,11 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
       await run('UPDATE links SET status = ? WHERE link_set_id = ?', [status, id]);
     }
 
-    await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name})`);
+    await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name})`, {
+      action: 'UPDATE_LINK_SET',
+      link_set_id: id,
+      previous: origSet
+    });
     res.json({ success: true, message: 'Link set updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2325,7 +2337,15 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
       }
     }
 
-    await logAudit('Admin', 'PUBLISH_LINK_SET', `Published Link Set #${id} "${origSet.name}" with effective date ${effDate}`);
+    await logAudit('Admin', 'PUBLISH_LINK_SET', `Published Link Set #${id} "${origSet.name}" with effective date ${effDate}`, {
+      action: 'PUBLISH_LINK_SET',
+      link_set_id: id,
+      previous_status: origSet.status,
+      previous_effective_from: origSet.effective_from,
+      previous_effective_to: origSet.effective_to,
+      category_id: origSet.category_id,
+      prev_end: prevEnd
+    });
     res.json({ success: true, message: `Link set "${origSet.name}" published successfully with effective date ${effDate}!` });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2339,12 +2359,18 @@ app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
     const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
     if (!origSet) return res.status(404).json({ error: 'Link set not found' });
 
+    const origLinks = await all('SELECT * FROM links WHERE link_set_id = ?', [id]);
+
     // Delete all member links
     await run('DELETE FROM links WHERE link_set_id = ?', [id]);
     // Delete the set
     await run('DELETE FROM link_sets WHERE id = ?', [id]);
 
-    await logAudit('Admin', 'DELETE_LINK_SET', `Deleted Link Set #${id} "${origSet.name}" and all its links`);
+    await logAudit('Admin', 'DELETE_LINK_SET', `Deleted Link Set #${id} "${origSet.name}" and all its links`, {
+      action: 'DELETE_LINK_SET',
+      deleted_set: origSet,
+      deleted_links: origLinks
+    });
     res.json({ success: true, message: 'Link set deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2390,10 +2416,15 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Invalid reorders data' });
   }
   try {
+    const ids = reorders.map(r => r.id);
+    const prevRows = await all(`SELECT id, link_number FROM links WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
     for (const item of reorders) {
       await run('UPDATE links SET link_number = ? WHERE id = ?', [item.link_number, item.id]);
     }
-    await logAudit('Admin', 'REORDER_LINKS', 'Reordered train roster / link numbers');
+    await logAudit('Admin', 'REORDER_LINKS', `Reordered ${reorders.length} link numbers in train roster`, {
+      action: 'REORDER_LINKS',
+      previous_reorders: prevRows
+    });
     res.json({ message: 'Links reordered successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2444,7 +2475,17 @@ app.post('/api/links', requireAdmin, async (req, res) => {
       ]
     );
 
-    await logAudit('Admin', 'CREATE_LINK', `Created Link ${link_number} for Category ${category_id}${isDraft ? ' (Draft)' : ''}`);
+    await logAudit(
+      'Admin', 
+      'CREATE_LINK', 
+      `Created Link ${link_number} for Category ${category_id}${isDraft ? ' (Draft)' : ''}`,
+      {
+        action: 'CREATE_LINK',
+        created_link_id: result.lastID,
+        category_id,
+        link_set_id
+      }
+    );
     res.json({ id: result.lastID });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2494,7 +2535,16 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
         id
       ]
     );
-    await logAudit('Admin', 'UPDATE_LINK', `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''} (Link #${link_number})`);
+    await logAudit(
+      'Admin', 
+      'UPDATE_LINK', 
+      `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''} (Link #${link_number})`,
+      {
+        action: 'UPDATE_LINK',
+        link_id: id,
+        previous: existing
+      }
+    );
     const updated = await get('SELECT * FROM links WHERE id = ?', [id]);
     res.json({ message: 'Link updated successfully', link: updated });
   } catch (err) {
@@ -2574,7 +2624,13 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
     await logAudit(
       req.user?.username || 'Admin',
       'DELETE_LINK_AND_SHIFT',
-      `Deleted Link #${deletedLinkNum} (Cat ${catId}). Shifted ${shiftedCount} subsequent links up by 1 with effective date ${effectiveDate}.`
+      `Deleted Link #${deletedLinkNum} (Cat ${catId}). Shifted ${shiftedCount} subsequent links up by 1 with effective date ${effectiveDate}.`,
+      {
+        action: 'DELETE_LINK_AND_SHIFT',
+        deleted_link: target,
+        subsequent_links_shifted: subsequentLinks,
+        effective_date: effectiveDate
+      }
     );
 
     res.json({
@@ -2633,6 +2689,7 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Custom key or slot_id is required' });
     }
     const targetKey = key || `slot_${slot_id}`;
+    const prevCustomization = await get('SELECT * FROM slot_customizations WHERE custom_key = ?', [targetKey]);
     const cleanFirstTrain = first_train !== undefined && first_train !== null ? String(first_train).trim() : null;
     const cleanLastTrain = last_train !== undefined && last_train !== null ? String(last_train).trim() : null;
     const cleanFirstCoach = first_coach !== undefined && first_coach !== null ? String(first_coach).trim() : null;
@@ -2669,7 +2726,16 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
       );
     }
 
-    await logAudit('Admin', 'UPDATE_SLOT_TRAIN_COACH', `Updated train/coaches for ${targetKey} (Train: ${cleanFirstTrain || ''} / ${cleanLastTrain || ''})`);
+    await logAudit(
+      'Admin', 
+      'UPDATE_SLOT_TRAIN_COACH', 
+      `Updated train/coaches for ${targetKey} (Train: ${cleanFirstTrain || ''} / ${cleanLastTrain || ''})`,
+      {
+        action: 'UPDATE_SLOT_TRAIN_COACH',
+        target_key: targetKey,
+        previous_customization: prevCustomization
+      }
+    );
     res.json({ success: true, message: 'Train & Coach customization saved successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2679,14 +2745,18 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
 app.post('/api/slot-customizations/reset', requireAdmin, async (req, res) => {
   try {
     const { keys, key } = req.body;
-    if (Array.isArray(keys) && keys.length > 0) {
-      for (const k of keys) {
+    const keysToReset = Array.isArray(keys) && keys.length > 0 ? keys : (key ? [key] : []);
+    let prevCustomizations = [];
+    if (keysToReset.length > 0) {
+      prevCustomizations = await all(`SELECT * FROM slot_customizations WHERE custom_key IN (${keysToReset.map(() => '?').join(',')})`, keysToReset);
+      for (const k of keysToReset) {
         await run('DELETE FROM slot_customizations WHERE custom_key = ?', [k]);
       }
-    } else if (key) {
-      await run('DELETE FROM slot_customizations WHERE custom_key = ?', [key]);
     }
-    await logAudit('Admin', 'RESET_SLOT_TRAIN_COACH', 'Reset slot train/coach customizations to default');
+    await logAudit('Admin', 'RESET_SLOT_TRAIN_COACH', 'Reset slot train/coach customizations to default', {
+      action: 'RESET_SLOT_TRAIN_COACH',
+      previous_customizations: prevCustomizations
+    });
     res.json({ success: true, message: 'Customizations reset to baseline' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -6276,6 +6346,222 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
         }
         undoneSuccess = true;
         detailsMsg = `Reverted muster cell for staff ID ${staff_id} on ${date}`;
+      } else if (undoData.action === 'UPDATE_LINK') {
+        const { link_id, previous } = undoData;
+        if (previous && link_id) {
+          await run(
+            `UPDATE links 
+             SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, 
+                 effective_from = ?, effective_to = ?, set_type = ?, set_name = ?,
+                 link_number = ?, category_id = ?, link_set_id = ?, status = ?
+             WHERE id = ?`,
+            [
+              previous.train_numbers,
+              previous.from_station,
+              previous.to_station,
+              previous.coaches,
+              previous.is_rest,
+              previous.effective_from,
+              previous.effective_to,
+              previous.set_type,
+              previous.set_name,
+              previous.link_number,
+              previous.category_id,
+              previous.link_set_id,
+              previous.status,
+              link_id
+            ]
+          );
+          undoneSuccess = true;
+          detailsMsg = `Reverted Link #${previous.link_number} (ID ${link_id}) back to train "${previous.train_numbers}"`;
+        }
+      } else if (undoData.action === 'CREATE_LINK') {
+        const { created_link_id } = undoData;
+        if (created_link_id) {
+          await run('DELETE FROM links WHERE id = ?', [created_link_id]);
+          undoneSuccess = true;
+          detailsMsg = `Deleted newly created Link ID ${created_link_id}`;
+        }
+      } else if (undoData.action === 'REORDER_LINKS') {
+        const { previous_reorders } = undoData;
+        if (Array.isArray(previous_reorders)) {
+          for (const item of previous_reorders) {
+            await run('UPDATE links SET link_number = ? WHERE id = ?', [item.link_number, item.id]);
+          }
+          undoneSuccess = true;
+          detailsMsg = `Restored previous order of ${previous_reorders.length} links`;
+        }
+      } else if (undoData.action === 'DUPLICATE_LINK_SET') {
+        const { created_set_id } = undoData;
+        if (created_set_id) {
+          await run('DELETE FROM links WHERE link_set_id = ?', [created_set_id]);
+          await run('DELETE FROM link_sets WHERE id = ?', [created_set_id]);
+          undoneSuccess = true;
+          detailsMsg = `Removed duplicated Draft Link Set #${created_set_id} and its links`;
+        }
+      } else if (undoData.action === 'DELETE_LINK_SET') {
+        const { deleted_set, deleted_links } = undoData;
+        if (deleted_set) {
+          await run(
+            `INSERT INTO link_sets (id, name, category_id, status, effective_from, effective_to, cloned_from_id, link_count, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name, status = excluded.status`,
+            [
+              deleted_set.id,
+              deleted_set.name,
+              deleted_set.category_id,
+              deleted_set.status,
+              deleted_set.effective_from,
+              deleted_set.effective_to,
+              deleted_set.cloned_from_id,
+              deleted_set.link_count,
+              deleted_set.notes
+            ]
+          );
+          if (Array.isArray(deleted_links)) {
+            for (const link of deleted_links) {
+              await run(
+                `INSERT INTO links (id, category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET train_numbers = excluded.train_numbers, link_number = excluded.link_number`,
+                [
+                  link.id,
+                  link.category_id,
+                  link.link_set_id,
+                  link.link_number,
+                  link.train_numbers,
+                  link.from_station,
+                  link.to_station,
+                  link.coaches,
+                  link.is_rest,
+                  link.effective_from,
+                  link.effective_to,
+                  link.set_type,
+                  link.set_name,
+                  link.status
+                ]
+              );
+            }
+          }
+          undoneSuccess = true;
+          detailsMsg = `Restored deleted Link Set #${deleted_set.id} "${deleted_set.name}" and its links`;
+        }
+      } else if (undoData.action === 'DELETE_LINK_AND_SHIFT' || undoData.action === 'DELETE_LINK') {
+        const { deleted_link, subsequent_links_shifted } = undoData;
+        if (deleted_link) {
+          await run(
+            `INSERT INTO links (id, category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET train_numbers = excluded.train_numbers, link_number = excluded.link_number`,
+            [
+              deleted_link.id,
+              deleted_link.category_id,
+              deleted_link.link_set_id,
+              deleted_link.link_number,
+              deleted_link.train_numbers,
+              deleted_link.from_station,
+              deleted_link.to_station,
+              deleted_link.coaches,
+              deleted_link.is_rest,
+              deleted_link.effective_from,
+              deleted_link.effective_to,
+              deleted_link.set_type,
+              deleted_link.set_name,
+              deleted_link.status
+            ]
+          );
+          if (Array.isArray(subsequent_links_shifted)) {
+            for (const link of subsequent_links_shifted) {
+              await run('UPDATE links SET link_number = ?, effective_from = ? WHERE id = ?', [link.link_number, link.effective_from, link.id]);
+            }
+          }
+          if (deleted_link.link_set_id) {
+            const remainingInSet = await get('SELECT count(*) as c FROM links WHERE link_set_id = ?', [deleted_link.link_set_id]);
+            await run('UPDATE link_sets SET link_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [remainingInSet?.c || 0, deleted_link.link_set_id]);
+          }
+          undoneSuccess = true;
+          detailsMsg = `Restored Link #${deleted_link.link_number} and reverted subsequent link shifts`;
+        }
+      } else if (undoData.action === 'UPDATE_SLOT_TRAIN_COACH') {
+        const { target_key, previous_customization } = undoData;
+        if (previous_customization) {
+          await run(
+            `INSERT INTO slot_customizations (custom_key, first_train, last_train, first_coach, last_coach, updated_at)
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(custom_key) DO UPDATE SET
+               first_train = excluded.first_train,
+               last_train = excluded.last_train,
+               first_coach = excluded.first_coach,
+               last_coach = excluded.last_coach,
+               updated_at = CURRENT_TIMESTAMP`,
+            [
+              target_key,
+              previous_customization.first_train,
+              previous_customization.last_train,
+              previous_customization.first_coach,
+              previous_customization.last_coach
+            ]
+          );
+        } else {
+          await run('DELETE FROM slot_customizations WHERE custom_key = ?', [target_key]);
+        }
+        undoneSuccess = true;
+        detailsMsg = `Reverted train/coach customization for ${target_key}`;
+      } else if (undoData.action === 'RESET_SLOT_TRAIN_COACH') {
+        const { previous_customizations } = undoData;
+        if (Array.isArray(previous_customizations) && previous_customizations.length > 0) {
+          for (const pc of previous_customizations) {
+            await run(
+              `INSERT INTO slot_customizations (custom_key, first_train, last_train, first_coach, last_coach, updated_at)
+               VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(custom_key) DO UPDATE SET
+                 first_train = excluded.first_train,
+                 last_train = excluded.last_train,
+                 first_coach = excluded.first_coach,
+                 last_coach = excluded.last_coach,
+                 updated_at = CURRENT_TIMESTAMP`,
+              [pc.custom_key, pc.first_train, pc.last_train, pc.first_coach, pc.last_coach]
+            );
+          }
+        }
+        undoneSuccess = true;
+        detailsMsg = `Restored train/coach slot customizations`;
+      } else if (undoData.action === 'UPDATE_LINK_SET') {
+        const { link_set_id, previous } = undoData;
+        if (previous && link_set_id) {
+          await run(
+            `UPDATE link_sets 
+             SET name = ?, effective_from = ?, effective_to = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [previous.name, previous.effective_from, previous.effective_to, previous.status, link_set_id]
+          );
+          undoneSuccess = true;
+          detailsMsg = `Reverted Link Set #${link_set_id} to "${previous.name}"`;
+        }
+      } else if (undoData.action === 'PUBLISH_LINK_SET') {
+        const { link_set_id, previous_status, previous_effective_from, category_id, prev_end } = undoData;
+        if (link_set_id) {
+          await run(
+            `UPDATE link_sets SET status = ?, effective_from = ? WHERE id = ?`,
+            [previous_status || 'draft', previous_effective_from || '', link_set_id]
+          );
+          await run(
+            `UPDATE links SET status = ?, effective_from = ? WHERE link_set_id = ?`,
+            [previous_status || 'draft', previous_effective_from || '', link_set_id]
+          );
+          if (category_id && prev_end) {
+            await run(
+              `UPDATE link_sets SET effective_to = '9999-12-31' WHERE category_id = ? AND id != ? AND effective_to = ?`,
+              [category_id, link_set_id, prev_end]
+            );
+            await run(
+              `UPDATE links SET effective_to = '9999-12-31' WHERE category_id = ? AND link_set_id != ? AND effective_to = ?`,
+              [category_id, link_set_id, prev_end]
+            );
+          }
+          undoneSuccess = true;
+          detailsMsg = `Reverted publication of Link Set #${link_set_id} back to draft`;
+        }
       }
     }
 
@@ -6441,6 +6727,61 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
         await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [sId, dStr]);
         undoneSuccess = true;
         detailsMsg = `Reverted muster cell for staff ID ${sId} on ${dStr}`;
+      } else if (desc.match(/into Draft Set #(\d+)/i)) {
+        const m = desc.match(/into Draft Set #(\d+)/i);
+        const setId = parseInt(m[1], 10);
+        await run('DELETE FROM links WHERE link_set_id = ?', [setId]);
+        await run('DELETE FROM link_sets WHERE id = ?', [setId]);
+        undoneSuccess = true;
+        detailsMsg = `Removed duplicated Draft Set #${setId} and its links`;
+      } else if (desc.match(/Updated Link ID (\d+)/i)) {
+        const m = desc.match(/Updated Link ID (\d+)/i);
+        const linkId = parseInt(m[1], 10);
+        const prevLog = await get(
+          `SELECT * FROM audit_logs WHERE id < ? AND description LIKE ? AND action_type = 'UPDATE_LINK' ORDER BY id DESC LIMIT 1`,
+          [id, `Updated Link ID ${linkId}%`]
+        );
+        if (prevLog) {
+          const trainM = prevLog.description.match(/Train:\s*([^)]+)/i);
+          const linkM = prevLog.description.match(/Link\s*#(\d+)/i);
+          if (trainM || linkM) {
+            if (trainM && linkM) {
+              await run('UPDATE links SET train_numbers = ?, link_number = ? WHERE id = ?', [trainM[1].trim(), parseInt(linkM[1], 10), linkId]);
+            } else if (trainM) {
+              await run('UPDATE links SET train_numbers = ? WHERE id = ?', [trainM[1].trim(), linkId]);
+            } else if (linkM) {
+              await run('UPDATE links SET link_number = ? WHERE id = ?', [parseInt(linkM[1], 10), linkId]);
+            }
+            undoneSuccess = true;
+            detailsMsg = `Reverted Link ID ${linkId} to previous values (${prevLog.description})`;
+          }
+        }
+        if (!undoneSuccess) {
+          const currLink = await get('SELECT * FROM links WHERE id = ?', [linkId]);
+          if (currLink && currLink.link_set_id) {
+            const setObj = await get('SELECT * FROM link_sets WHERE id = ?', [currLink.link_set_id]);
+            if (setObj && setObj.cloned_from_id) {
+              const origLink = await get(
+                'SELECT * FROM links WHERE link_set_id = ? AND link_number = ?',
+                [setObj.cloned_from_id, currLink.link_number]
+              );
+              if (origLink) {
+                await run(
+                  'UPDATE links SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ? WHERE id = ?',
+                  [origLink.train_numbers, origLink.from_station, origLink.to_station, origLink.coaches, origLink.is_rest, linkId]
+                );
+                undoneSuccess = true;
+                detailsMsg = `Reverted Link ID ${linkId} to master train "${origLink.train_numbers}" from Set #${setObj.cloned_from_id}`;
+              }
+            }
+          }
+        }
+      } else if (desc.match(/Updated train\/coaches for (slot_\w+|day_\w+)/i)) {
+        const m = desc.match(/Updated train\/coaches for (slot_\w+|day_\w+)/i);
+        const targetKey = m[1];
+        await run('DELETE FROM slot_customizations WHERE custom_key = ?', [targetKey]);
+        undoneSuccess = true;
+        detailsMsg = `Reverted train/coach slot customization for ${targetKey}`;
       }
     }
 
