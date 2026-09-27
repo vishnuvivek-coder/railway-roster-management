@@ -10394,14 +10394,14 @@ export default function App() {
                                       <span>📊</span>
                                       <span style={{ fontWeight: 800 }}>TA Calculator</span>
                                     </div>
-                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Claim: 1, 0.7, 0.3, 0 • Cumulative Link Total</div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Claim: 1, 0.7, 0.3, 0</div>
                                   </th>
                                   <th style={{ minWidth: '220px', background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', borderBottom: '2px solid #8b5cf6' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                       <span>🌙</span>
                                       <span style={{ fontWeight: 800 }}>NDA Calculator</span>
                                     </div>
-                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Hours (22–06h) • Cumulative Link Total</div>
+                                    <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Night Hours (22–06h)</div>
                                   </th>
                                   <th style={{ minWidth: '160px', textAlign: 'center' }}>Actions</th>
                                 </tr>
@@ -10775,30 +10775,6 @@ export default function App() {
                                               {isCustomTa && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Custom</span>}
                                             </div>
                                           )}
-
-                                          {/* Cumulative Total for Entire Train Link */}
-                                          <div style={{
-                                            background: 'rgba(212, 161, 92, 0.14)',
-                                            border: '1px solid rgba(212, 161, 92, 0.4)',
-                                            borderRadius: '6px',
-                                            padding: '4px 8px',
-                                            fontSize: '0.74rem',
-                                            fontWeight: 700,
-                                            color: 'var(--primary)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between'
-                                          }}>
-                                            <span>∑ Link #{item.linkNumber} Total TA:</span>
-                                            <span style={{ color: '#fbbf24', fontSize: '0.86rem', fontWeight: 800 }}>
-                                              {linkTotal.totalTaUnits}
-                                              {linkTotal.totalExtraNextDayTa > 0 && (
-                                                <span style={{ fontSize: '0.7rem', color: '#34d399', marginLeft: '4px' }}>
-                                                  (+{linkTotal.totalExtraNextDayTa} Next Day)
-                                                </span>
-                                              )}
-                                            </span>
-                                          </div>
                                         </div>
                                       </td>
 
@@ -10868,23 +10844,6 @@ export default function App() {
                                           <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <span>{effNdaHrs > 0 ? `${effNdaHrs} hrs Night Duty (22:00–06:00)` : 'No Night Duty'}</span>
                                             {isCustomNda && <span className="badge" style={{ fontSize: '0.62rem', background: 'rgba(196, 181, 253, 0.15)', color: '#c4b5fd' }}>Custom</span>}
-                                          </div>
-
-                                          {/* Cumulative Total for Entire Train Link */}
-                                          <div style={{
-                                            background: 'rgba(139, 92, 246, 0.14)',
-                                            border: '1px solid rgba(139, 92, 246, 0.4)',
-                                            borderRadius: '6px',
-                                            padding: '4px 8px',
-                                            fontSize: '0.74rem',
-                                            fontWeight: 700,
-                                            color: '#c4b5fd',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between'
-                                          }}>
-                                            <span>∑ Link #{item.linkNumber} Total NDA:</span>
-                                            <span style={{ color: '#a78bfa', fontSize: '0.86rem', fontWeight: 800 }}>{linkTotal.totalNdaHours} hrs</span>
                                           </div>
                                         </div>
                                       </td>
