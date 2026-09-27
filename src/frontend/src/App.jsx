@@ -805,7 +805,6 @@ export default function App() {
   const [savingRowKey, setSavingRowKey] = useState(null);
   const [ntesTimings, setNtesTimings] = useState({});
   const [ntesLoading, setNtesLoading] = useState(false);
-  const [autoSyncRepeated, setAutoSyncRepeated] = useState(true);
 
   useEffect(() => {
     fetch(`${API_BASE}/train-ta-nda`)
@@ -833,7 +832,7 @@ export default function App() {
       .catch(err => console.error('Failed to load NTES timings:', err));
   }, []);
 
-  const handleUpdateTrainTaNda = async (catId, linkNum, trainNo, updates, forceSyncRepeated = null) => {
+  const handleUpdateTrainTaNda = async (catId, linkNum, trainNo, updates) => {
     const key = `${catId}_${linkNum}_${trainNo}`;
     const existing = trainTaNdaRules[key] || {};
     const updatedRule = {
@@ -851,33 +850,10 @@ export default function App() {
       updatedRule.nda_amount = Math.round(updates.nda_hours * baseNdaRate);
     }
 
-    const shouldSync = forceSyncRepeated !== null ? forceSyncRepeated : autoSyncRepeated;
-    const repeatedLinks = findRepeatedTrainLinks(trainNo, catId, linksList);
-    let newRules = {
+    const newRules = {
       ...trainTaNdaRules,
       [key]: updatedRule
     };
-
-    if (shouldSync && repeatedLinks.length > 1) {
-      repeatedLinks.forEach(rLink => {
-        const rKey = `${catId}_${rLink}_${trainNo}`;
-        newRules[rKey] = {
-          ...(trainTaNdaRules[rKey] || {}),
-          category_id: parseInt(catId, 10),
-          link_number: rLink,
-          train_number: String(trainNo).trim(),
-          ...updates,
-          ta_percentage: updatedRule.ta_percentage,
-          ta_amount: updatedRule.ta_amount,
-          nda_hours: updatedRule.nda_hours,
-          nda_amount: updatedRule.nda_amount,
-          extra_next_day_ta: updatedRule.extra_next_day_ta,
-          sched_arr_time: updatedRule.sched_arr_time,
-          actual_arr_time: updatedRule.actual_arr_time,
-          ntes_status: updatedRule.ntes_status
-        };
-      });
-    }
 
     setTrainTaNdaRules(newRules);
     try {
@@ -893,13 +869,9 @@ export default function App() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': 'Bearer ' + token } : {})
         },
-        body: JSON.stringify({ ...updatedRule, sync_repeated: shouldSync })
+        body: JSON.stringify(updatedRule)
       });
-      if (shouldSync && repeatedLinks.length > 1) {
-        setTaNdaToast(`🔁 Updated TA (${updatedRule.ta_percentage}) for Train ${trainNo} across ${repeatedLinks.length} repeated links (#${repeatedLinks.join(', #')})`);
-      } else {
-        setTaNdaToast(`✓ Defined TA/NDA for Train ${trainNo}`);
-      }
+      setTaNdaToast(`✓ Defined TA/NDA for Train ${trainNo}`);
       setTimeout(() => setTaNdaToast(null), 3000);
     } catch (err) {
       console.error('Failed to save train TA/NDA rule:', err);
@@ -931,8 +903,7 @@ export default function App() {
         sched_arr_time: existing.sched_arr_time || resolved.sched_arr_time || STANDARD_TRAIN_SCHEDULES[trainNo]?.schedArr || null,
         actual_arr_time: existing.actual_arr_time || resolved.actual_arr_time || null,
         ntes_status: existing.ntes_status || resolved.ntes_status || null,
-        remarks: existing.remarks || resolved.remarks || defaultData.desc || null,
-        sync_repeated: autoSyncRepeated
+        remarks: existing.remarks || resolved.remarks || defaultData.desc || null
       };
 
       const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
@@ -945,30 +916,14 @@ export default function App() {
         body: JSON.stringify(ruleToSave)
       });
 
-      const repeatedLinks = findRepeatedTrainLinks(trainNo, catId, linksList);
-      let newRules = { ...trainTaNdaRules, [key]: ruleToSave };
-      if (autoSyncRepeated && repeatedLinks.length > 1) {
-        repeatedLinks.forEach(rLink => {
-          const rKey = `${catId}_${rLink}_${trainNo}`;
-          newRules[rKey] = {
-            ...(trainTaNdaRules[rKey] || {}),
-            ...ruleToSave,
-            link_number: rLink
-          };
-        });
-      }
-
+      const newRules = { ...trainTaNdaRules, [key]: ruleToSave };
       setTrainTaNdaRules(newRules);
       try {
         localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(newRules));
       } catch (e) {}
 
       setSavedRowKey(key);
-      if (autoSyncRepeated && repeatedLinks.length > 1) {
-        setTaNdaToast(`💾 Saved: TA (${effTa}) for Train ${trainNo} saved across ${repeatedLinks.length} repeated links (#${repeatedLinks.join(', #')})!`);
-      } else {
-        setTaNdaToast(`💾 Saved: TA & NDA calculations for Train ${trainNo} securely stored!`);
-      }
+      setTaNdaToast(`💾 Saved: TA & NDA calculations for Train ${trainNo} securely stored!`);
       setTimeout(() => {
         setSavedRowKey(prev => (prev === key ? null : prev));
       }, 3000);
@@ -978,67 +933,6 @@ export default function App() {
       alert('Failed to save rule: ' + err.message);
     } finally {
       setSavingRowKey(null);
-    }
-  };
-
-  const handleSyncAllRepeatedTrains = async (items) => {
-    if (!items || items.length === 0) return;
-    try {
-      setSavingTaNda(true);
-      let syncedCount = 0;
-      const updatedRules = { ...trainTaNdaRules };
-      const rulesToSave = [];
-
-      items.forEach(item => {
-        const key = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
-        const resolved = resolveEffectiveTrainRule(item.categoryId, item.linkNumber, item.trainNumber, updatedRules);
-        
-        if (resolved.isInherited) {
-          syncedCount++;
-          const newRule = {
-            category_id: parseInt(item.categoryId, 10),
-            link_number: parseInt(item.linkNumber, 10),
-            train_number: String(item.trainNumber).trim(),
-            ta_percentage: resolved.effectiveTa,
-            ta_amount: Math.round(resolved.effectiveTa * baseDaRate),
-            nda_hours: resolved.effectiveNda,
-            nda_amount: Math.round(resolved.effectiveNda * baseNdaRate),
-            extra_next_day_ta: resolved.extraNextDay,
-            sched_arr_time: resolved.sched_arr_time || null,
-            actual_arr_time: resolved.actual_arr_time || null,
-            ntes_status: resolved.ntes_status || `Repeated train (Inherited from Link #${resolved.sourceLink})`,
-            remarks: `Repeated train: TA updated as earlier from Link #${resolved.sourceLink}`
-          };
-          updatedRules[key] = newRule;
-          rulesToSave.push(newRule);
-        }
-      });
-
-      if (rulesToSave.length > 0) {
-        setTrainTaNdaRules(updatedRules);
-        try {
-          localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(updatedRules));
-        } catch (e) {}
-
-        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
-        await fetch(`${API_BASE}/train-ta-nda/batch`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-          },
-          body: JSON.stringify({ rules: rulesToSave })
-        });
-        setTaNdaToast(`🔁 Successfully synced ${syncedCount} repeated train movements as earlier!`);
-      } else {
-        setTaNdaToast(`✓ All repeated trains are already updated as earlier.`);
-      }
-      setTimeout(() => setTaNdaToast(null), 3500);
-    } catch (err) {
-      console.error('Failed to sync repeated trains:', err);
-      alert('Failed to sync repeated trains: ' + err.message);
-    } finally {
-      setSavingTaNda(false);
     }
   };
 
@@ -1175,84 +1069,6 @@ export default function App() {
       alert('Failed to check NTES delays: ' + err.message);
     } finally {
       setNtesLoading(false);
-    }
-  };
-
-  const handleAutoUpdateReturnHqTa = async (items = []) => {
-    try {
-      setSavingTaNda(true);
-      let adjustedCount = 0;
-      const updatedRules = { ...trainTaNdaRules };
-      const rulesToSave = [];
-
-      items.forEach(item => {
-        const tNum = String(item.trainNumber).trim();
-        const isReachingHq = isReturnTrainReachingHq(tNum, item.to_station, item.from_station);
-        if (!isReachingHq) return;
-
-        const key = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
-        const existing = updatedRules[key] || {};
-        const runData = ntesTimings[tNum];
-        const std = STANDARD_TRAIN_SCHEDULES[tNum];
-
-        let actualTime = existing.actual_arr_time || (runData && runData.act_arr);
-        let schedTime = existing.sched_arr_time || std?.schedArr;
-
-        if (!actualTime) {
-          if (tNum === '12603') actualTime = '00:10';
-          else if (tNum === '17252') actualTime = '00:15';
-          else if (tNum === '20630') actualTime = '05:50';
-          else if (tNum === '17070') actualTime = '05:10';
-          else if (tNum === '17216') actualTime = '06:15';
-          else if (tNum === '17262') actualTime = '06:55';
-          else actualTime = schedTime;
-        }
-
-        const calc = calculateReturnTrainHqTa(tNum, actualTime, schedTime);
-        if (calc) {
-          adjustedCount++;
-          const newRule = {
-            ...existing,
-            category_id: parseInt(item.categoryId, 10),
-            link_number: parseInt(item.linkNumber, 10),
-            train_number: tNum,
-            actual_arr_time: actualTime,
-            sched_arr_time: schedTime || calc.arrTime,
-            extra_next_day_ta: calc.extraNextDayTa,
-            ta_percentage: calc.taPct,
-            ta_amount: Math.round(calc.taPct * baseDaRate),
-            ntes_status: calc.badgeText,
-            remarks: calc.ruleDesc
-          };
-          updatedRules[key] = newRule;
-          rulesToSave.push(newRule);
-        }
-      });
-
-      setTrainTaNdaRules(updatedRules);
-      try {
-        localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(updatedRules));
-      } catch (e) {}
-
-      if (rulesToSave.length > 0) {
-        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
-        await fetch(`${API_BASE}/train-ta-nda/batch`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-          },
-          body: JSON.stringify({ rules: rulesToSave })
-        });
-      }
-
-      setTaNdaToast(`🏠 Auto-Updated TA for ${adjustedCount} Return Trains Reaching HQ (Absence ≤6h ➔ 0.3 TA, 6h–12h ➔ 0.7 TA, >12h ➔ 1.0 TA)`);
-      setTimeout(() => setTaNdaToast(null), 4500);
-    } catch (err) {
-      console.error('Failed to auto-update return HQ TA:', err);
-      alert('Failed to auto-update return HQ TA: ' + err.message);
-    } finally {
-      setSavingTaNda(false);
     }
   };
 
@@ -2830,24 +2646,63 @@ export default function App() {
     }
   };
 
-  const deleteLink = (id) => {
+  const deleteLink = async (id) => {
     if (!isAdmin) return;
     const target = linksList.find(l => l.id === id);
     const linkDesc = target ? `Link #${target.link_number}${target.train_numbers ? ` (${target.train_numbers})` : ''}` : 'this link';
-    if (confirm(`Are you sure you want to delete ${linkDesc}? This action cannot be undone.`)) {
-      fetch(`${API_BASE}/links/${id}`, {
+    
+    // 1. Confirm deletion and explain subsequent link shift
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${linkDesc}?\n\n` +
+      `The next link numbers will be moved up to the previous numbered link in order.\n` +
+      `Effective date will be updated for all shifted link numbers.`
+    );
+    if (!confirmed) return;
+
+    // 2. Prompt user to specify the effective date (default: 1-10-2026)
+    const inputDate = window.prompt(
+      `Specify the effective date for all updated link numbers (format: 1-10-2026 or 2026-10-01):`,
+      '1-10-2026'
+    );
+    if (inputDate === null) return; // User cancelled
+    const effectiveDate = inputDate.trim() || '1-10-2026';
+
+    try {
+      const res = await fetch(`${API_BASE}/links/${id}?effective_date=${encodeURIComponent(effectiveDate)}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
-      }).then(() => {
-        fetchLinks(selectedCatId, selectedLinkSetId);
-        fetchLinkSets(selectedCatId);
-        const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
-        if (currentSet?.status !== 'draft') {
-          if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-        }
-      }).catch(err => {
-        alert(`Failed to delete link: ${err.message}`);
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete link');
+
+      // Refresh links across tabs
+      await fetchLinks(selectedCatId, selectedLinkSetId);
+      await fetchLinkSets(selectedCatId);
+      if (linkSubTab === 'train-centric') {
+        await fetchLinks(trainCategoryFilter === 'ALL' ? 'ALL' : trainCategoryFilter, '');
+      }
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      fetch(`${API_BASE}/train-ta-nda`)
+        .then(r => r.json())
+        .then(d => {
+          if (d && d.rules) setTrainTaNdaRules(d.rules);
+          else if (d && d.map) setTrainTaNdaRules(d.map);
+        })
+        .catch(() => {});
+
+      const shiftedMsg = data.shifted_count > 0 
+        ? ` Subsequent ${data.shifted_count} links moved up (effective from ${data.effective_from || effectiveDate}).`
+        : '';
+      setTaNdaToast(`✓ ${linkDesc} deleted.${shiftedMsg}`);
+      setTimeout(() => setTaNdaToast(null), 5000);
+
+      const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+      if (currentSet?.status !== 'draft') {
+        fetchDailyDuties();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      }
+    } catch (err) {
+      alert(`Failed to delete link: ${err.message}`);
     }
   };
 
@@ -10181,52 +10036,6 @@ export default function App() {
                                 <strong style={{ color: '#c4b5fd', fontSize: '0.95rem' }}>{grandTotalNda} hrs</strong>
                               </div>
 
-                              {/* Auto-Sync Repeated Trains Toggle */}
-                              <label style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                cursor: 'pointer',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                color: autoSyncRepeated ? '#34d399' : 'var(--color-text-secondary)',
-                                background: autoSyncRepeated ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.04)',
-                                border: autoSyncRepeated ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                padding: '5px 10px',
-                                userSelect: 'none'
-                              }}>
-                                <input
-                                  type="checkbox"
-                                  checked={autoSyncRepeated}
-                                  onChange={(e) => setAutoSyncRepeated(e.target.checked)}
-                                  style={{ accentColor: '#10b981', cursor: 'pointer' }}
-                                />
-                                <span>🔁 Auto-Update Repeated Trains as Earlier</span>
-                              </label>
-
-                              {/* Sync Repeated Trains Button */}
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                disabled={savingTaNda}
-                                onClick={() => handleSyncAllRepeatedTrains(searchedDailyTrains)}
-                                style={{
-                                  padding: '6px 12px',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 700,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  background: 'rgba(56, 189, 248, 0.15)',
-                                  color: '#38bdf8',
-                                  border: '1px solid rgba(56, 189, 248, 0.35)'
-                                }}
-                                title="Scan all repeated train movements in subsequent links and update their TA as earlier configured"
-                              >
-                                <span>🔁</span> Sync Repeated Trains
-                              </button>
-
                               {/* Save All Rules Button */}
                               <button
                                 type="button"
@@ -10250,28 +10059,6 @@ export default function App() {
                               </button>
 
                               {/* NTES Auto-Adjust Button */}
-                              <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={() => handleAutoUpdateReturnHqTa(searchedDailyTrains)}
-                                disabled={savingTaNda}
-                                style={{
-                                  padding: '6px 14px',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 700,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                                  color: '#ffffff',
-                                  border: 'none',
-                                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.4)'
-                                }}
-                                title="Auto-update TA for all return trains reaching HQ based on Railway TA rules (arrival ≤06:00 ➔ 0.3 TA, 06:01–12:00 ➔ 0.7 TA, >12:00 ➔ 1.0 TA, midnight delay ➔ +0.3 next day)"
-                              >
-                                <span>🏠</span> {savingTaNda ? 'Updating...' : 'Auto-Update Return HQ TA'}
-                              </button>
-
                               <button
                                 type="button"
                                 className="btn btn-secondary"
@@ -10425,12 +10212,6 @@ export default function App() {
                                   const isRowSaved = savedRowKey === ruleKey;
                                   const isRowSaving = savingRowKey === ruleKey;
 
-                                  // Repeated train detection across cyclical links
-                                  const repeatedLinks = findRepeatedTrainLinks(item.trainNumber, item.categoryId, linksList);
-                                  const isRepeatedTrain = repeatedLinks.length > 1;
-                                  const isInheritedFromEarlier = resolved.isInherited;
-                                  const isFirstOccurrence = isRepeatedTrain && repeatedLinks[0] === item.linkNumber;
-
                                   // Boundary schedule and NTES timing resolution
                                   const boundarySchedule = STANDARD_TRAIN_SCHEDULES[item.trainNumber];
                                   const isMidnightSensitive = item.trainNumber === '12603' || boundarySchedule?.boundary === 'midnight';
@@ -10446,32 +10227,6 @@ export default function App() {
                                       <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                           <strong style={{ color: 'var(--primary)', fontSize: '1.02rem', letterSpacing: '0.5px' }}>{item.trainNumber}</strong>
-                                          {isInheritedFromEarlier && (
-                                            <span style={{
-                                              fontSize: '0.64rem',
-                                              fontWeight: 700,
-                                              color: '#38bdf8',
-                                              background: 'rgba(56, 189, 248, 0.15)',
-                                              padding: '1px 5px',
-                                              borderRadius: '3px',
-                                              border: '1px solid rgba(56, 189, 248, 0.3)',
-                                              display: 'inline-flex',
-                                              alignItems: 'center',
-                                              gap: '2px',
-                                              width: 'fit-content'
-                                            }} title={`Repeated Train: Inherited earlier TA (${effTaPct}) from Link #${resolved.sourceLink}`}>
-                                              🔁 Link #{resolved.sourceLink}
-                                            </span>
-                                          )}
-                                          {isFirstOccurrence && (
-                                            <span style={{
-                                              fontSize: '0.62rem',
-                                              color: 'var(--color-text-muted)',
-                                              width: 'fit-content'
-                                            }} title={`Train repeats in links: #${repeatedLinks.filter(l => l !== item.linkNumber).join(', #')}`}>
-                                              🔁 Repeats: #{repeatedLinks.filter(l => l !== item.linkNumber).join(', #')}
-                                            </span>
-                                          )}
                                           {isReachingHq && (
                                             <span style={{
                                               fontSize: '0.64rem',
@@ -10739,22 +10494,7 @@ export default function App() {
                                           </div>
 
                                           {/* Repeated Train Auto-Inheritance / NTES Delay / Remarks Badge */}
-                                          {isInheritedFromEarlier ? (
-                                            <div style={{
-                                              fontSize: '0.72rem',
-                                              fontWeight: 700,
-                                              padding: '3px 8px',
-                                              borderRadius: '5px',
-                                              background: 'rgba(56, 189, 248, 0.16)',
-                                              color: '#38bdf8',
-                                              border: '1px solid rgba(56, 189, 248, 0.4)',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '4px'
-                                            }}>
-                                              <span>🔁 Repeated Train: TA Auto-Updated as Earlier (from Link #{resolved.sourceLink} ➔ {effTaPct})</span>
-                                            </div>
-                                          ) : custom.ntes_status ? (
+                                          {custom.ntes_status ? (
                                             <div style={{
                                               fontSize: '0.72rem',
                                               fontWeight: 700,
@@ -10879,27 +10619,6 @@ export default function App() {
                                           </button>
 
                                             {/* Sync to all repeated links if this train appears multiple times */}
-                                            {isRepeatedTrain && (
-                                              <button 
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                style={{
-                                                  padding: '5px 8px',
-                                                  fontSize: '0.74rem',
-                                                  fontWeight: 700,
-                                                  background: 'rgba(56, 189, 248, 0.12)',
-                                                  color: '#38bdf8',
-                                                  border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                  display: 'inline-flex',
-                                                  alignItems: 'center',
-                                                  gap: '3px'
-                                                }}
-                                                onClick={() => handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, { ta_percentage: effTaPct }, true)}
-                                                title={`Sync this TA (${effTaPct}) across all ${repeatedLinks.length} repeated links (#${repeatedLinks.join(', #')})`}
-                                              >
-                                                🔁 Sync ({repeatedLinks.length})
-                                              </button>
-                                            )}
 
                                           {isAdmin && (
                                             <>

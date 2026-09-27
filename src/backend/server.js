@@ -2461,13 +2461,89 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
   }
 });
 
+function normalizeEffectiveDate(dateStr) {
+  if (!dateStr) return '2026-10-01';
+  dateStr = String(dateStr).trim();
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else {
+      const d = parts[0].padStart(2, '0');
+      const m = parts[1].padStart(2, '0');
+      const y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return dateStr;
+}
+
 app.delete('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
+  const rawDate = req.query.effective_date || req.body?.effective_date || '2026-10-01';
+  const effectiveDate = normalizeEffectiveDate(rawDate);
+
   try {
+    const target = await get('SELECT * FROM links WHERE id = ?', [id]);
+    if (!target) {
+      return res.status(404).json({ error: 'Link not found' });
+    }
+
+    const deletedLinkNum = target.link_number;
+    const catId = target.category_id;
+    const linkSetId = target.link_set_id;
+
+    // 1. Delete the link
     await run('DELETE FROM links WHERE id = ?', [id]);
-    await logAudit('Admin', 'DELETE_LINK', `Deleted Link ID ${id}`);
-    res.json({ message: 'Link deleted' });
+
+    // 2. Delete custom TA/NDA rules for this deleted link
+    await run('DELETE FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ?', [catId, deletedLinkNum]);
+
+    // 3. Find subsequent links in the same category ordered by link_number ascending
+    const subsequentLinks = await all(
+      'SELECT id, link_number FROM links WHERE category_id = ? AND link_number > ? ORDER BY link_number ASC',
+      [catId, deletedLinkNum]
+    );
+
+    // 4. Shift subsequent links up by 1 (in order), updating effective_from
+    let shiftedCount = 0;
+    for (const link of subsequentLinks) {
+      const oldNum = link.link_number;
+      const newNum = oldNum - 1;
+
+      await run(
+        'UPDATE links SET link_number = ?, effective_from = ? WHERE id = ?',
+        [newNum, effectiveDate, link.id]
+      );
+
+      await run(
+        'UPDATE train_ta_nda_rules SET link_number = ? WHERE category_id = ? AND link_number = ?',
+        [newNum, catId, oldNum]
+      );
+
+      shiftedCount++;
+    }
+
+    // 5. Update link sets count if applicable
+    if (linkSetId) {
+      const remainingInSet = await get('SELECT count(*) as c FROM links WHERE link_set_id = ?', [linkSetId]);
+      await run('UPDATE link_sets SET link_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [remainingInSet.c, linkSetId]);
+    }
+
+    await logAudit(
+      req.user?.username || 'Admin',
+      'DELETE_LINK_AND_SHIFT',
+      `Deleted Link #${deletedLinkNum} (Cat ${catId}). Shifted ${shiftedCount} subsequent links up by 1 with effective date ${effectiveDate}.`
+    );
+
+    res.json({
+      message: `Link #${deletedLinkNum} deleted. ${shiftedCount} subsequent links moved to previous numbered links in order.`,
+      deleted_link: deletedLinkNum,
+      shifted_count: shiftedCount,
+      effective_from: effectiveDate
+    });
   } catch (err) {
+    console.error('Error deleting and shifting link:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2646,44 +2722,13 @@ app.post('/api/train-ta-nda', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
     `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
 
-    let repeatedSyncedCount = 0;
-    if (req.body.sync_repeated) {
-      // Find all other links in the same category that contain cleanTrain
-      const allLinks = await all('SELECT link_number, train_numbers FROM links WHERE category_id = ? AND is_rest = 0', [cleanCat]);
-      for (const l of allLinks) {
-        const tNums = String(l.train_numbers || '').split(/[\s,+/]+/).map(s => s.trim());
-        if (tNums.includes(cleanTrain) && l.link_number !== cleanLink) {
-          await run(`
-            INSERT INTO train_ta_nda_rules (
-              category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
-              actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
-              ta_percentage = excluded.ta_percentage,
-              ta_amount = excluded.ta_amount,
-              nda_hours = excluded.nda_hours,
-              nda_amount = excluded.nda_amount,
-              absence_hours = excluded.absence_hours,
-              remarks = excluded.remarks,
-              actual_arr_time = excluded.actual_arr_time,
-              sched_arr_time = excluded.sched_arr_time,
-              extra_next_day_ta = excluded.extra_next_day_ta,
-              ntes_status = excluded.ntes_status,
-              updated_by = excluded.updated_by,
-              updated_at = CURRENT_TIMESTAMP
-          `, [cleanCat, l.link_number, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, remarks, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
-          repeatedSyncedCount++;
-        }
-      }
-    }
-
     const updated = await get(
       'SELECT * FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ? AND train_number = ?',
       [cleanCat, cleanLink, cleanTrain]
     );
 
-    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${cleanTaPct}, extra ${extraNextDayTa}, NDA ${cleanNdaHours}h${repeatedSyncedCount > 0 ? ` (synced to ${repeatedSyncedCount} repeated links)` : ''}`);
-    res.json({ success: true, rule: updated, repeated_synced_count: repeatedSyncedCount });
+    await logAudit(updatedBy, 'UPDATE_TRAIN_TA_NDA', `Updated TA/NDA for Train ${cleanTrain} (Cat ${cleanCat} Link #${cleanLink}): TA ${cleanTaPct}, extra ${extraNextDayTa}, NDA ${cleanNdaHours}h`);
+    res.json({ success: true, rule: updated });
   } catch (err) {
     console.error('Error saving train TA/NDA rule:', err);
     res.status(500).json({ error: err.message });
