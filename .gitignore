@@ -6,3 +6,5 @@ yarn-debug.log*
 yarn-error.log*
 .system_generated
 scratch/
+*.bak*
+
