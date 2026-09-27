@@ -10256,14 +10256,9 @@ export default function App() {
                                         </span>
                                       </td>
                                       <td>
-                                        <div>
-                                          <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
-                                            {getLinkDisplayLabel(item.categoryId, item.linkNumber)}
-                                          </span>
-                                          <div style={{ fontSize: '0.68rem', color: '#fbbf24', marginTop: '4px', fontWeight: 600 }}>
-                                            Link Total: {linkTotal.totalTaUnits} TA • {linkTotal.totalNdaHours}h NDA
-                                          </div>
-                                        </div>
+                                        <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
+                                          {getLinkDisplayLabel(item.categoryId, item.linkNumber)}
+                                        </span>
                                       </td>
                                       <td>
                                         <div style={{ fontSize: '0.84rem' }}>
