@@ -10644,9 +10644,9 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
           const resolved = await resolveDutyCodeForLRStaff(staff.id, dateStr, dayOfWeek, staff.rest_day, dataPool);
           if (resolved && resolved.code) {
             const existing = await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
-            // If cell had generic 'NON DAILY', or was not manually edited by Admin, update to resolved train
-            const isNonDailyPlaceholder = existing && String(existing.duty_code).toUpperCase().startsWith('NON DAILY');
-            if (!existing || isNonDailyPlaceholder || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv || hasPrevOv) {
+            // Never overwrite explicit manual Admin entries in LR Sheet unless it was just a non-daily placeholder
+            const isAdminSaved = existing && existing.updated_by === 'Admin' && !isNonDailyPlaceholder;
+            if (!isAdminSaved && (!existing || isNonDailyPlaceholder || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv || hasPrevOv)) {
               await syncLRSheetRecord(staff.id, dateStr, resolved.code, resolved.remarks, 'Daily Duty Management');
               syncedCount++;
             }

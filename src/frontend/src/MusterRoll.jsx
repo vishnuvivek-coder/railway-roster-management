@@ -118,7 +118,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
     // Persist new ordering to backend database
     try {
-      const token = authToken || localStorage.getItem('token');
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
       const staffIds = currentList.map(s => s.id);
       const res = await fetch('/api/muster/reorder', {
         method: 'POST',
@@ -201,7 +201,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const handleUpdateCode = async (staffId, dateStr, newCode, remarks = '') => {
     try {
       setSavingCell(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
       const res = await fetch('/api/muster/update-cell', {
         method: 'POST',
         headers: {
@@ -262,7 +262,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const handleResetCell = async (staffId, dateStr) => {
     try {
       setSavingCell(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
       const res = await fetch('/api/muster/reset-cell', {
         method: 'POST',
         headers: {
@@ -291,7 +291,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const handleSaveStaffField = async (staffId, updates) => {
     try {
       setSavingStaffField(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
       const res = await fetch(`/api/staff/${staffId}`, {
         method: 'PUT',
         headers: {
@@ -546,8 +546,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => {
-                fetchMusterData();
+              onClick={async () => {
+                await fetchMuster(selectedCycleStart);
                 showToast('✅ All attendance codes, remarks, and employee edits are saved permanently in the database.');
               }}
               style={{
