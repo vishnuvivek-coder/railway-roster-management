@@ -27,6 +27,8 @@ import {
   exportTaNdaMasterCsv,
   STANDARD_TRAIN_SCHEDULES,
   evaluateNtesTaRule,
+  isReturnTrainReachingHq,
+  calculateReturnTrainHqTa,
   DEFAULT_DA_RATE,
   DEFAULT_NDA_HOURLY_RATE
 } from './trainTaNdaCalculator';
@@ -1173,6 +1175,84 @@ export default function App() {
       alert('Failed to check NTES delays: ' + err.message);
     } finally {
       setNtesLoading(false);
+    }
+  };
+
+  const handleAutoUpdateReturnHqTa = async (items = []) => {
+    try {
+      setSavingTaNda(true);
+      let adjustedCount = 0;
+      const updatedRules = { ...trainTaNdaRules };
+      const rulesToSave = [];
+
+      items.forEach(item => {
+        const tNum = String(item.trainNumber).trim();
+        const isReachingHq = isReturnTrainReachingHq(tNum, item.to_station, item.from_station);
+        if (!isReachingHq) return;
+
+        const key = `${item.categoryId}_${item.linkNumber}_${item.trainNumber}`;
+        const existing = updatedRules[key] || {};
+        const runData = ntesTimings[tNum];
+        const std = STANDARD_TRAIN_SCHEDULES[tNum];
+
+        let actualTime = existing.actual_arr_time || (runData && runData.act_arr);
+        let schedTime = existing.sched_arr_time || std?.schedArr;
+
+        if (!actualTime) {
+          if (tNum === '12603') actualTime = '00:10';
+          else if (tNum === '17252') actualTime = '00:15';
+          else if (tNum === '20630') actualTime = '05:50';
+          else if (tNum === '17070') actualTime = '05:10';
+          else if (tNum === '17216') actualTime = '06:15';
+          else if (tNum === '17262') actualTime = '06:55';
+          else actualTime = schedTime;
+        }
+
+        const calc = calculateReturnTrainHqTa(tNum, actualTime, schedTime);
+        if (calc) {
+          adjustedCount++;
+          const newRule = {
+            ...existing,
+            category_id: parseInt(item.categoryId, 10),
+            link_number: parseInt(item.linkNumber, 10),
+            train_number: tNum,
+            actual_arr_time: actualTime,
+            sched_arr_time: schedTime || calc.arrTime,
+            extra_next_day_ta: calc.extraNextDayTa,
+            ta_percentage: calc.taPct,
+            ta_amount: Math.round(calc.taPct * baseDaRate),
+            ntes_status: calc.badgeText,
+            remarks: calc.ruleDesc
+          };
+          updatedRules[key] = newRule;
+          rulesToSave.push(newRule);
+        }
+      });
+
+      setTrainTaNdaRules(updatedRules);
+      try {
+        localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(updatedRules));
+      } catch (e) {}
+
+      if (rulesToSave.length > 0) {
+        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+        await fetch(`${API_BASE}/train-ta-nda/batch`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ rules: rulesToSave })
+        });
+      }
+
+      setTaNdaToast(`🏠 Auto-Updated TA for ${adjustedCount} Return Trains Reaching HQ (Absence ≤6h ➔ 0.3 TA, 6h–12h ➔ 0.7 TA, >12h ➔ 1.0 TA)`);
+      setTimeout(() => setTaNdaToast(null), 4500);
+    } catch (err) {
+      console.error('Failed to auto-update return HQ TA:', err);
+      alert('Failed to auto-update return HQ TA: ' + err.message);
+    } finally {
+      setSavingTaNda(false);
     }
   };
 
@@ -10165,6 +10245,28 @@ export default function App() {
                               {/* NTES Auto-Adjust Button */}
                               <button
                                 type="button"
+                                className="btn btn-primary"
+                                onClick={() => handleAutoUpdateReturnHqTa(searchedDailyTrains)}
+                                disabled={savingTaNda}
+                                style={{
+                                  padding: '6px 14px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.4)'
+                                }}
+                                title="Auto-update TA for all return trains reaching HQ based on Railway TA rules (arrival ≤06:00 ➔ 0.3 TA, 06:01–12:00 ➔ 0.7 TA, >12:00 ➔ 1.0 TA, midnight delay ➔ +0.3 next day)"
+                              >
+                                <span>🏠</span> {savingTaNda ? 'Updating...' : 'Auto-Update Return HQ TA'}
+                              </button>
+
+                              <button
+                                type="button"
                                 className="btn btn-secondary"
                                 disabled={ntesLoading}
                                 onClick={() => handleCheckNtesLiveDelays(searchedDailyTrains)}
@@ -10328,6 +10430,9 @@ export default function App() {
                                   const isMorningSensitive = item.trainNumber === '20630' || boundarySchedule?.boundary === 'morning';
                                   const effectiveSchedTime = custom.sched_arr_time || resolved.sched_arr_time || boundarySchedule?.schedArr || (item.trainNumber === '12603' ? '23:50' : item.trainNumber === '20630' ? '05:50' : null);
                                   const effectiveActualTime = custom.actual_arr_time || resolved.actual_arr_time || (ntesTimings[item.trainNumber]?.act_arr) || null;
+                                  const isReachingHq = isReturnTrainReachingHq(item.trainNumber, item.to_station, item.from_station);
+                                  const returnHqCalc = isReachingHq ? calculateReturnTrainHqTa(item.trainNumber, effectiveActualTime, effectiveSchedTime) : null;
+                                  const isMidnightReturnToHq = isReachingHq && (isMidnightSensitive || boundarySchedule?.boundary === 'midnight' || (effectiveSchedTime && effectiveSchedTime >= '22:00'));
 
                                   return (
                                     <tr key={`${item.trainNumber}_${item.categoryId}_${item.linkNumber}_${idx}`}>
@@ -10358,6 +10463,23 @@ export default function App() {
                                               width: 'fit-content'
                                             }} title={`Train repeats in links: #${repeatedLinks.filter(l => l !== item.linkNumber).join(', #')}`}>
                                               🔁 Repeats: #{repeatedLinks.filter(l => l !== item.linkNumber).join(', #')}
+                                            </span>
+                                          )}
+                                          {isReachingHq && (
+                                            <span style={{
+                                              fontSize: '0.64rem',
+                                              fontWeight: 700,
+                                              color: '#10b981',
+                                              background: 'rgba(16, 185, 129, 0.14)',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              width: 'fit-content'
+                                            }} title={`Reaching HQ: Governed by Railway Return Day TA Rules (Arr: ${effectiveSchedTime || 'HQ'})`}>
+                                              🏠 Reaching HQ {effectiveSchedTime ? `(${effectiveSchedTime})` : ''}
                                             </span>
                                           )}
                                         </div>
@@ -10443,32 +10565,61 @@ export default function App() {
                                             </div>
                                           </div>
 
-                                          {/* Quick toggle for Extra Next Day TA (+0.3) & NTES Delay Presets */}
+                                          {/* Quick toggle for Extra Next Day TA (+0.3) - ONLY shown for Return Trains Reaching HQ near midnight! */}
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const nextVal = extraNextDay > 0 ? 0 : 0.3;
-                                                handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
-                                                  extra_next_day_ta: nextVal,
-                                                  ntes_status: nextVal > 0 ? '⚡ Delayed past 00:00 ➔ +0.3 Extra Next Day Account' : null
-                                                });
-                                              }}
-                                              style={{
-                                                padding: '2px 8px',
-                                                fontSize: '0.72rem',
-                                                fontWeight: 700,
-                                                borderRadius: '4px',
-                                                border: extraNextDay > 0 ? '1px solid #10b981' : '1px dashed rgba(255,255,255,0.25)',
-                                                background: extraNextDay > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.03)',
-                                                color: extraNextDay > 0 ? '#34d399' : 'var(--color-text-muted)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.15s ease'
-                                              }}
-                                              title="Toggle +0.3 Extra TA on Next Day Account (for arrival delayed past midnight 00:00)"
-                                            >
-                                              {extraNextDay > 0 ? '✓ +0.3 Next Day' : '+0.3 Next Day'}
-                                            </button>
+                                            {isMidnightReturnToHq && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const nextVal = extraNextDay > 0 ? 0 : 0.3;
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    extra_next_day_ta: nextVal,
+                                                    ntes_status: nextVal > 0 ? '⚡ Delayed past 00:00 ➔ +0.3 Extra Next Day Account' : null
+                                                  });
+                                                }}
+                                                style={{
+                                                  padding: '2px 8px',
+                                                  fontSize: '0.72rem',
+                                                  fontWeight: 700,
+                                                  borderRadius: '4px',
+                                                  border: extraNextDay > 0 ? '1px solid #10b981' : '1px dashed rgba(255,255,255,0.25)',
+                                                  background: extraNextDay > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.03)',
+                                                  color: extraNextDay > 0 ? '#34d399' : 'var(--color-text-muted)',
+                                                  cursor: 'pointer',
+                                                  transition: 'all 0.15s ease'
+                                                }}
+                                                title="Toggle +0.3 Extra TA on Next Day Account (for arrival delayed past midnight 00:00 into HQ)"
+                                              >
+                                                {extraNextDay > 0 ? '✓ +0.3 Next Day' : '+0.3 Next Day'}
+                                              </button>
+                                            )}
+
+                                            {isReachingHq && returnHqCalc && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  handleUpdateTrainTaNda(item.categoryId, item.linkNumber, item.trainNumber, {
+                                                    ta_percentage: returnHqCalc.taPct,
+                                                    extra_next_day_ta: returnHqCalc.extraNextDayTa,
+                                                    ntes_status: returnHqCalc.badgeText,
+                                                    remarks: returnHqCalc.ruleDesc
+                                                  });
+                                                }}
+                                                style={{
+                                                  padding: '2px 7px',
+                                                  fontSize: '0.68rem',
+                                                  fontWeight: 700,
+                                                  borderRadius: '4px',
+                                                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                                                  background: 'rgba(16, 185, 129, 0.12)',
+                                                  color: '#34d399',
+                                                  cursor: 'pointer'
+                                                }}
+                                                title={`Railway Rule: Return Arrival at HQ ${returnHqCalc.arrTime ? `(${returnHqCalc.arrTime})` : ''} ➔ ${returnHqCalc.ruleDesc}`}
+                                              >
+                                                ⚡ Apply HQ Rule ({returnHqCalc.taPct} TA{returnHqCalc.extraNextDayTa > 0 ? ` +${returnHqCalc.extraNextDayTa}` : ''})
+                                              </button>
+                                            )}
 
                                             {/* NTES Timing Sensitivity Simulation / Presets for 12603 and 20630 */}
                                             {isMidnightSensitive && (

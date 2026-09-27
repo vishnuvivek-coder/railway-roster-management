@@ -21,6 +21,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
     name: 'Chennai – Hyderabad Express',
     route: 'MAS ➔ GNT',
     schedArr: '23:50',
+    isReturnToHq: true,
     boundary: 'midnight',
     boundaryThreshold: '00:00',
     defaultTa: 1.0,
@@ -32,6 +33,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
     name: 'Vande Bharat / Tirupati Express',
     route: 'TPTY ➔ GNT',
     schedArr: '05:50',
+    isReturnToHq: true,
     boundary: 'morning',
     boundaryThreshold: '06:00',
     defaultTa: 0.3,
@@ -44,6 +46,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
     name: 'Guntur – Dhone Express (Return)',
     route: 'DHNE ➔ GNT',
     schedArr: '23:10',
+    isReturnToHq: true,
     boundary: 'midnight',
     boundaryThreshold: '00:00',
     defaultTa: 0.7,
@@ -55,6 +58,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
     name: 'Bhadrachalam – Guntur Express',
     route: 'BDCR ➔ GNT',
     schedArr: '05:15',
+    isReturnToHq: true,
     boundary: 'morning',
     boundaryThreshold: '06:00',
     defaultTa: 0.3,
@@ -67,24 +71,292 @@ export const STANDARD_TRAIN_SCHEDULES = {
     name: 'Narayanadri Express',
     route: 'TPTY ➔ GNT',
     schedArr: '05:35',
+    isReturnToHq: true,
     boundary: 'morning',
     boundaryThreshold: '06:00',
     defaultTa: 0.3,
     delayedTa: 0.7,
     boundaryDesc: 'Early morning arrival. If delayed past 06:00, absence exceeds 6 hrs, upgrading TA to 0.7.',
     nextDayTaOnDelay: 0
+  },
+  '17216': {
+    trainNo: '17216',
+    name: 'Dharmavaram – Guntur Express',
+    route: 'DMM ➔ GNT',
+    schedArr: '06:15',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Morning arrival at 06:15. Absence from midnight exceeds 6 hours, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '17262': {
+    trainNo: '17262',
+    name: 'Tirupati – Guntur Express',
+    route: 'TPTY ➔ GNT',
+    schedArr: '06:55',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Morning arrival at 06:55. Absence exceeds 6 hours, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '57210': {
+    trainNo: '57210',
+    name: 'BZA – GNT Passenger',
+    route: 'BZA ➔ GNT',
+    schedArr: '07:35',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Morning arrival at 07:35. Absence exceeds 6 hours, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '57201': {
+    trainNo: '57201',
+    name: 'BZA – GNT Passenger',
+    route: 'BZA ➔ GNT',
+    schedArr: '07:35',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Morning arrival at 07:35. Absence exceeds 6 hours, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '17244': {
+    trainNo: '17244',
+    name: 'Rayagada – Guntur Express',
+    route: 'VSKP ➔ GNT',
+    schedArr: '07:45',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Morning arrival at 07:45. Absence exceeds 6 hours, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '17282': {
+    trainNo: '17282',
+    name: 'Narsapur – Guntur Express',
+    route: 'NS ➔ GNT',
+    schedArr: '11:50',
+    isReturnToHq: true,
+    boundary: 'morning',
+    boundaryThreshold: '06:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Day arrival before noon. Absence 6h to 12h, granting 0.7 TA.',
+    nextDayTaOnDelay: 0
+  },
+  '17227': {
+    trainNo: '17227',
+    name: 'Dhone – Guntur Express',
+    route: 'DHNE ➔ GNT',
+    schedArr: '14:00',
+    isReturnToHq: true,
+    boundary: 'daytime',
+    boundaryThreshold: '12:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Afternoon arrival. Outstation return run.',
+    nextDayTaOnDelay: 0
+  },
+  '17254': {
+    trainNo: '17254',
+    name: 'Dhone – Guntur Express (Night)',
+    route: 'DHNE ➔ GNT',
+    schedArr: '20:00',
+    isReturnToHq: true,
+    boundary: 'daytime',
+    boundaryThreshold: '12:00',
+    defaultTa: 1.0,
+    boundaryDesc: 'Night return arrival. Outstation stay >12h grants 100% TA (1.0).',
+    nextDayTaOnDelay: 0
+  },
+  '12748': {
+    trainNo: '12748',
+    name: 'Palnadu Express (Return)',
+    route: 'VKB ➔ GNT',
+    schedArr: '21:10',
+    isReturnToHq: true,
+    boundary: 'daytime',
+    boundaryThreshold: '12:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Evening return arrival at HQ.',
+    nextDayTaOnDelay: 0
+  },
+  '17202': {
+    trainNo: '17202',
+    name: 'Golconda Express (Return)',
+    route: 'KZJ ➔ GNT',
+    schedArr: '21:30',
+    isReturnToHq: true,
+    boundary: 'daytime',
+    boundaryThreshold: '12:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Night return arrival at HQ.',
+    nextDayTaOnDelay: 0
+  },
+  '17645': {
+    trainNo: '17645',
+    name: 'Secunderabad – Guntur Express',
+    route: 'SC ➔ GNT',
+    schedArr: '22:30',
+    isReturnToHq: true,
+    boundary: 'daytime',
+    boundaryThreshold: '12:00',
+    defaultTa: 0.7,
+    boundaryDesc: 'Late night return arrival at HQ.',
+    nextDayTaOnDelay: 0
   }
 };
 
 /**
- * Evaluates NTES Arrival timing for automatic TA adjustments based on Railway boundaries:
- * 1. Midnight Boundary (00:00): Train scheduled before 00:00 (e.g. 12603 at 23:50).
- *    If actual arrival >= 00:00 / 00:10 (between 00:00 and 06:00), it spills into next calendar day.
- *    Duty on next day <= 6 hours awards +0.3 Extra TA on next day account!
- * 2. Morning Boundary (06:00): Train scheduled before 06:00 (e.g. 20630 at 05:50).
- *    If actual arrival >= 06:00 / 06:10, absence from midnight exceeds 6 hours (>6h),
- *    so TA claim automatically jumps from 0.3 to 0.7!
+ * Detects whether a train movement represents staff reaching Headquarters (HQ - GNT) on a return run
  */
+export function isReturnTrainReachingHq(trainNumber, toStation = '', fromStation = '') {
+  const tNum = String(trainNumber || '').trim();
+  const to = String(toStation || '').toUpperCase().trim();
+  
+  if (to.includes('GNT') || to === 'HEADQUARTERS' || to.endsWith('/GNT') || to.endsWith(', GNT')) {
+    return true;
+  }
+  
+  const std = STANDARD_TRAIN_SCHEDULES[tNum];
+  if (std && std.isReturnToHq) {
+    return true;
+  }
+  
+  const gntReturnTrains = [
+    '12603', '17252', '20630', '12733', '17070', '17216', '17262', '57210', '57201',
+    '17244', '17282', '17227', '17254', '12748', '17202', '17645', '07610', '17426',
+    '17042', '18064', '12703', '22881'
+  ];
+  return gntReturnTrains.includes(tNum);
+}
+
+/**
+ * Official Railway TA Rules for Reaching Headquarters (HQ - GNT) by Return Train:
+ * 
+ * TA Claim is governed by total absence on the return calendar day from midnight (00:00) to HQ arrival:
+ * 1. Early Morning Arrival (00:00 to 06:00, absence <= 6 hrs):
+ *    -> Awards 0.3 TA (30%).
+ * 2. Late Morning Arrival (06:01 to 12:00, absence > 6 hrs and <= 12 hrs):
+ *    -> Awards 0.7 TA (70%).
+ * 3. Afternoon / Evening Arrival (After 12:00, absence > 12 hrs):
+ *    -> Awards 1.0 TA (100%).
+ * 4. Midnight Boundary Trains (e.g. 12603 sched 23:50, 17252 sched 23:10):
+ *    -> If arrives on-time before 00:00: Main tour TA on departure day, Next Day TA = 0.
+ *    -> If delayed past 00:00 (e.g. 00:10): Duty spills into next calendar day <= 6 hrs -> +0.3 Extra Next Day TA!
+ *    -> If delayed past 06:00 (e.g. 06:10): Duty spills into next calendar day > 6 hrs -> +0.7 Extra Next Day TA!
+ */
+export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, schedArrTime = null) {
+  const tNum = String(trainNumber || '').trim();
+  const std = STANDARD_TRAIN_SCHEDULES[tNum] || null;
+  const sched = schedArrTime || std?.schedArr || null;
+  const arrStr = String(actualOrSchedArrTime || sched || '').trim();
+
+  if (!arrStr || !arrStr.includes(':')) {
+    return {
+      isReturnToHq: true,
+      arrTime: null,
+      taPct: std?.defaultTa !== undefined ? std.defaultTa : 0.7,
+      extraNextDayTa: 0,
+      badgeText: null,
+      ruleDesc: 'Standard Return Run'
+    };
+  }
+
+  const [aH, aM] = arrStr.split(':').map(v => parseInt(v, 10) || 0);
+  const arrMinsFromMidnight = aH * 60 + aM;
+
+  // 1. Midnight Boundary Return Trains (scheduled near midnight, e.g. 12603 at 23:50 or 17252 at 23:10)
+  if (std?.boundary === 'midnight' || (sched && sched >= '22:00' && sched <= '23:59')) {
+    if (aH >= 0 && aH < 6) {
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
+        extraNextDayTa: 0.3,
+        isDelayed: true,
+        badgeText: `🏠 Reached HQ at ${arrStr} (Past Midnight 00:00) ➔ +0.3 Extra Next Day TA`,
+        ruleDesc: `Return Train ${tNum} arrived at HQ after 00:00 at ${arrStr}. Next day absence ≤6h qualifies for +0.3 TA on Next Day Account.`
+      };
+    } else if (aH >= 6 && aH < 12) {
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
+        extraNextDayTa: 0.7,
+        isDelayed: true,
+        badgeText: `🏠 Reached HQ at ${arrStr} (Past 06:00) ➔ +0.7 Extra Next Day TA`,
+        ruleDesc: `Return Train ${tNum} arrived at HQ heavily delayed at ${arrStr}. Next day absence >6h qualifies for +0.7 TA on Next Day Account.`
+      };
+    } else {
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
+        extraNextDayTa: 0,
+        isDelayed: false,
+        badgeText: `🏠 Reached HQ on-time at ${arrStr} (No Next Day Claim)`,
+        ruleDesc: `Return Train ${tNum} reached HQ before midnight at ${arrStr}. Duty completed on same calendar day.`
+      };
+    }
+  }
+
+  // 2. Overnight Return Trains arriving early morning / morning (e.g. 20630, 12733, 17070, 17216, 17262, 57210)
+  if (std?.boundary === 'morning' || (sched && sched >= '04:00' && sched <= '11:59') || (aH >= 0 && aH < 12)) {
+    if (arrMinsFromMidnight <= 360) { // 360 mins = 06:00
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: 0.3,
+        extraNextDayTa: 0,
+        isDelayed: false,
+        badgeText: `🏠 Reached HQ at ${arrStr} (≤06:00) ➔ 0.3 TA (≤6h Return Absence)`,
+        ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Total absence from midnight is ≤ 6 hours, granting 0.3 TA (30%).`
+      };
+    } else if (arrMinsFromMidnight > 360 && arrMinsFromMidnight <= 720) { // 06:01 to 12:00
+      const isDelayTriggered = std?.boundaryThreshold === '06:00' && sched <= '06:00';
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: 0.7,
+        extraNextDayTa: 0,
+        isDelayed: isDelayTriggered,
+        badgeText: isDelayTriggered
+          ? `⚡ Reached HQ at ${arrStr} (Delayed past 06:00) ➔ Auto-Changed to 0.7 TA (>6h Absence)`
+          : `🏠 Reached HQ at ${arrStr} (06:00–12:00) ➔ 0.7 TA (6h–12h Absence)`,
+        ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Absence from midnight exceeds 6 hours, qualifying for 0.7 TA (70%).`
+      };
+    } else {
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: 1.0,
+        extraNextDayTa: 0,
+        isDelayed: true,
+        badgeText: `🏠 Reached HQ at ${arrStr} (>12:00) ➔ 1.0 TA (>12h Absence)`,
+        ruleDesc: `Return Train ${tNum} reached HQ after 12:00 at ${arrStr}. Absence exceeds 12 hours, granting 1.0 TA (100%).`
+      };
+    }
+  }
+
+  // 3. Daytime / Evening Return Trains (e.g. 17227, 17254, 12748, 17202, 17645)
+  return {
+    isReturnToHq: true,
+    arrTime: arrStr,
+    taPct: std?.defaultTa !== undefined ? std.defaultTa : (arrMinsFromMidnight > 720 ? 1.0 : 0.7),
+    extraNextDayTa: 0,
+    isDelayed: false,
+    badgeText: `🏠 Reached HQ at ${arrStr} (Return Run)`,
+    ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}.`
+  };
+}
+
 export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = null) {
   const tNum = String(trainNumber || '').trim();
   const std = STANDARD_TRAIN_SCHEDULES[tNum] || null;
@@ -334,6 +606,16 @@ export function getDefaultTaNdaForTrain(categoryId, linkNumber, trainNumber) {
   if (cId === 4) {
     if (tNum === '17281') return { ta_pct: 0, nda_hrs: 0, desc: 'Connecting to BZA' };
     if (tNum === '17225') return { ta_pct: 0.7, nda_hrs: 7.0, desc: 'Outstation Night Run (70% TA)' };
+  }
+
+  // Standard Railway Train Schedule lookup (including return trains reaching HQ)
+  if (STANDARD_TRAIN_SCHEDULES[tNum]) {
+    const std = STANDARD_TRAIN_SCHEDULES[tNum];
+    return {
+      ta_pct: std.defaultTa !== undefined ? std.defaultTa : 0.7,
+      nda_hrs: std.defaultNda || 0,
+      desc: std.boundaryDesc || (std.isReturnToHq ? `Return Arrival at HQ (${std.schedArr})` : 'Standard Duty Leg (70% TA)')
+    };
   }
 
   // Generic fallback default
