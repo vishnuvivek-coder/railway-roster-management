@@ -1508,13 +1508,17 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'links') {
       fetchLinkSets(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter);
-      fetchLinks(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter, selectedLinkSetId);
+      if (linkSubTab === 'train-centric') {
+        fetchLinks(trainCategoryFilter === 'ALL' ? 'ALL' : trainCategoryFilter, '');
+      } else {
+        fetchLinks(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter, selectedLinkSetId);
+      }
       fetchNonDailyTrains();
     }
     if (activeTab === 'staff' && selectedCatId) fetchStaff();
     if (activeTab === 'leaves' || activeTab === 'daily-summary') fetchLeaveRequests();
     if (activeTab === 'audit') fetchAuditLogs();
-  }, [activeTab, selectedCatId, trainCategoryFilter, selectedLinkSetId]);
+  }, [activeTab, selectedCatId, trainCategoryFilter, selectedLinkSetId, linkSubTab]);
 
   // Automatically sync staff list for dropdowns
   useEffect(() => {
@@ -1586,7 +1590,7 @@ export default function App() {
 
   const fetchLinks = (catFilter = selectedCatId, targetLinkSetId = null) => {
     let url = `${API_BASE}/links`;
-    const setId = targetLinkSetId !== null ? targetLinkSetId : selectedLinkSetId;
+    const setId = targetLinkSetId !== null ? targetLinkSetId : (catFilter === 'ALL' ? null : selectedLinkSetId);
     if (setId) {
       url += `?link_set_id=${setId}`;
     } else if (catFilter && catFilter !== 'ALL') {
@@ -9053,7 +9057,10 @@ export default function App() {
               </button>
               <button 
                 className={`btn ${linkSubTab === 'train-centric' ? 'btn-primary' : 'btn-secondary'}`} 
-                onClick={() => setLinkSubTab('train-centric')}
+                onClick={() => {
+                  setLinkSubTab('train-centric');
+                  fetchLinks(trainCategoryFilter === 'ALL' ? 'ALL' : trainCategoryFilter, '');
+                }}
                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem' }}
               >
                 🚆 Train-Centric Roster
@@ -10315,7 +10322,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     setTrainCategoryFilter(cat.id);
-                                    fetchLinks(cat.id);
+                                    fetchLinks(cat.id === 'ALL' ? 'ALL' : cat.id, '');
                                   }}
                                   style={{
                                     padding: '5px 14px',
