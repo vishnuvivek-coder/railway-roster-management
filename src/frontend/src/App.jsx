@@ -364,6 +364,319 @@ function EditTrainCoachModalDialog({ data, onClose, onSave, onReset }) {
   );
 }
 
+// ====================================================
+// EDIT LINK DETAILS MODAL DIALOG (SAME AS DAILY SUMMARY)
+// ====================================================
+function EditLinkDetailsModalDialog({ data, onClose, onSave }) {
+  const link = data.link || {};
+  const [linkNumber, setLinkNumber] = useState(link.link_number !== undefined && link.link_number !== null ? String(link.link_number) : '');
+  const [trainNumbers, setTrainNumbers] = useState(link.train_numbers || '');
+  const [fromStation, setFromStation] = useState(link.from_station || '');
+  const [toStation, setToStation] = useState(link.to_station || '');
+  const [coaches, setCoaches] = useState(link.coaches || '');
+  const [setType, setSetType] = useState(link.set_type || '2-Day Set');
+  const [isRest, setIsRest] = useState(!!link.is_rest);
+  const [saving, setSaving] = useState(false);
+
+  const initialFocus = data.initialFocus || 'link_number';
+
+  const linkNumInputRef = useRef(null);
+  const trainNumInputRef = useRef(null);
+  const coachesInputRef = useRef(null);
+  const fromStnInputRef = useRef(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (initialFocus === 'train_numbers' && trainNumInputRef.current) {
+        trainNumInputRef.current.focus();
+        trainNumInputRef.current.select();
+      } else if (initialFocus === 'coaches' && coachesInputRef.current) {
+        coachesInputRef.current.focus();
+        coachesInputRef.current.select();
+      } else if (initialFocus === 'route' && fromStnInputRef.current) {
+        fromStnInputRef.current.focus();
+        fromStnInputRef.current.select();
+      } else if (linkNumInputRef.current) {
+        linkNumInputRef.current.focus();
+        linkNumInputRef.current.select();
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [initialFocus]);
+
+  const coachPresets = [
+    'AC+SL', 'SL', 'AC+2S', '2S', 'AC', '3AC',
+    'H1,H2,A1,A2,A3', 'B1,B2,B3,B4',
+    'COR-1', 'COR-2', 'S1-S4', 'S5-S8', 'CC+2S', '-'
+  ];
+
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!linkNumber.trim()) {
+      alert('Please enter a valid Link Number');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        id: link.id,
+        link_number: parseInt(linkNumber, 10),
+        train_numbers: trainNumbers.trim(),
+        from_station: fromStation.trim().toUpperCase(),
+        to_station: toStation.trim().toUpperCase(),
+        coaches: coaches.trim(),
+        set_type: setType,
+        is_rest: isRest,
+        category_id: link.category_id,
+        link_set_id: link.link_set_id,
+        status: link.status
+      });
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const catLabel = link.category_id === 1 ? 'Conductors (COR)' : link.category_id === 2 ? 'TTI / Sleeper Staff' : link.category_id === 3 ? 'Ladies Staff' : 'Duty Staff';
+
+  return (
+    <div 
+      className="modal-overlay" 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        backgroundColor: 'rgba(0,0,0,0.82)', 
+        backdropFilter: 'blur(6px)',
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        zIndex: 99999,
+        padding: '16px'
+      }}
+      onClick={onClose}
+    >
+      <div 
+        className="card" 
+        style={{ 
+          maxWidth: '560px', 
+          width: '100%', 
+          background: 'var(--bg-secondary)', 
+          border: '1px solid var(--border-gold)', 
+          borderRadius: '16px',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.85)',
+          padding: '24px',
+          color: 'var(--color-text-primary)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🚆 Edit Link & Train Numbers
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{catLabel}</span>
+              <span>•</span>
+              <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
+                Link #{link.link_number}
+              </span>
+            </p>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', fontSize: '1.2rem', cursor: 'pointer', padding: '4px 8px' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          {/* Link Number & REST Toggle */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'center' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
+                  🔢 Link Number (Auto-sorted Ascending)
+                </label>
+                <input 
+                  ref={linkNumInputRef}
+                  type="number"
+                  min="1"
+                  className="form-input"
+                  value={linkNumber}
+                  onChange={(e) => setLinkNumber(e.target.value)}
+                  placeholder="e.g. 1"
+                  required
+                  style={{ width: '100%', fontWeight: 800, fontSize: '1.05rem', color: 'var(--primary)' }}
+                />
+              </div>
+
+              <div style={{ paddingTop: '16px' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
+                  <input 
+                    type="checkbox"
+                    checked={isRest}
+                    onChange={(e) => setIsRest(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span>😴 Is REST Link (No duty)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {!isRest && (
+            <>
+              {/* Train Numbers & Coaches */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🚆</span> Train & Coach Details
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Train Number(s)
+                    </label>
+                    <input 
+                      ref={trainNumInputRef}
+                      type="text"
+                      className="form-input"
+                      value={trainNumbers}
+                      onChange={(e) => setTrainNumbers(e.target.value)}
+                      placeholder="e.g. 17253, 17252"
+                      style={{ width: '100%', fontWeight: 700 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Coaches
+                    </label>
+                    <input 
+                      ref={coachesInputRef}
+                      type="text"
+                      className="form-input"
+                      value={coaches}
+                      onChange={(e) => setCoaches(e.target.value)}
+                      placeholder="e.g. AC+SL, S1-S5"
+                      style={{ width: '100%', fontWeight: 600 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Coach Presets */}
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginRight: '6px' }}>Quick Coach Presets:</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                    {coachPresets.map((preset) => (
+                      <button
+                        key={`preset-${preset}`}
+                        type="button"
+                        onClick={() => setCoaches(preset)}
+                        style={{
+                          padding: '2px 7px',
+                          fontSize: '0.72rem',
+                          borderRadius: '4px',
+                          background: coaches === preset ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                          color: coaches === preset ? '#000' : 'var(--color-text-primary)',
+                          border: '1px solid var(--border-glass)',
+                          cursor: 'pointer',
+                          fontWeight: 600
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Route: From & To Stations */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🗺️</span> Route & Set Type
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      From Station
+                    </label>
+                    <input 
+                      ref={fromStnInputRef}
+                      type="text"
+                      className="form-input"
+                      value={fromStation}
+                      onChange={(e) => setFromStation(e.target.value.toUpperCase())}
+                      placeholder="e.g. GNT"
+                      style={{ width: '100%', textTransform: 'uppercase', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      To Station
+                    </label>
+                    <input 
+                      type="text"
+                      className="form-input"
+                      value={toStation}
+                      onChange={(e) => setToStation(e.target.value.toUpperCase())}
+                      placeholder="e.g. DHNE"
+                      style={{ width: '100%', textTransform: 'uppercase', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Set Type
+                    </label>
+                    <select
+                      className="form-select"
+                      value={setType}
+                      onChange={(e) => setSetType(e.target.value)}
+                      style={{ width: '100%', padding: '8px' }}
+                    >
+                      <option value="2-Day Set">2-Day Set</option>
+                      <option value="Single Day">Single Day</option>
+                      <option value="3-Day Set">3-Day Set</option>
+                      <option value="4-Day Set">4-Day Set</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+              disabled={saving}
+              style={{ padding: '8px 16px', borderRadius: '8px' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving}
+              style={{ padding: '8px 20px', borderRadius: '8px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {saving ? '⏳ Saving...' : '💾 Save & Arrange in Ascending Order'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const MASTER_DAILY_SLOTS = [
   // 1. Train 17253 / 17252 (GNT - DHNE - GNT)
   {
@@ -1416,7 +1729,13 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
-          setLinksList(data);
+          const sorted = [...data].sort((a, b) => {
+            const catA = parseInt(a.category_id, 10) || 0;
+            const catB = parseInt(b.category_id, 10) || 0;
+            if (catA !== catB && catFilter === 'ALL') return catA - catB;
+            return (parseInt(a.link_number, 10) || 0) - (parseInt(b.link_number, 10) || 0);
+          });
+          setLinksList(sorted);
           const uniqueSets = [];
           const seen = new Set();
           data.forEach(l => {
@@ -1653,6 +1972,65 @@ export default function App() {
     }
   });
   const [editTrainCoachModal, setEditTrainCoachModal] = useState(null);
+  const [editLinkDetailsModal, setEditLinkDetailsModal] = useState(null);
+  const [inlineEditState, setInlineEditState] = useState(null); // { linkId, field, value }
+
+  const handleSaveLinkDetailsModal = async (updatedData) => {
+    try {
+      const res = await fetch(`${API_BASE}/links/${updatedData.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(updatedData)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update link');
+
+      // Sort helper to ensure strict ascending numerical order
+      const sortAscending = (list) => [...list].sort((a, b) => {
+        const catA = parseInt(a.category_id, 10) || 0;
+        const catB = parseInt(b.category_id, 10) || 0;
+        if (catA !== catB && selectedCatId === 'ALL') return catA - catB;
+        return (parseInt(a.link_number, 10) || 0) - (parseInt(b.link_number, 10) || 0);
+      });
+
+      // Optimistically update and arrange in ascending order immediately
+      setLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+      setAllLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+
+      setTaNdaToast(`✓ Link #${updatedData.link_number} saved & arranged in ascending order!`);
+      setTimeout(() => setTaNdaToast(null), 3500);
+
+      // Re-fetch in background to ensure all views, duties, and sets stay completely synchronized
+      fetchLinks(selectedCatId, selectedLinkSetId);
+      fetchLinkSets(selectedCatId);
+      fetchDailyDuties();
+      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      try {
+        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+      } catch (e) {}
+    } catch (err) {
+      alert(`Error updating link: ${err.message}`);
+      throw err;
+    }
+  };
+
+  const handleSaveInlineLink = async (link, field, value) => {
+    if (!isAdmin) return;
+    const trimmed = String(value).trim();
+    if (!trimmed) return;
+    if (field === 'link_number' && parseInt(trimmed, 10) === link.link_number) return;
+    if (field === 'train_numbers' && trimmed === (link.train_numbers || '')) return;
+
+    const payload = {
+      ...link,
+      [field]: field === 'link_number' ? parseInt(trimmed, 10) : trimmed
+    };
+    await handleSaveLinkDetailsModal(payload);
+  };
+
 
   const handleSaveTrainCoachCustomization = async (customData) => {
     const isSlotOnly = customData.isSlotLevel || (!customData.dutyKey && customData.slotId);
@@ -9311,6 +9689,13 @@ export default function App() {
                 const toStn = String(l.to_station || '').toLowerCase();
                 const setT = String(l.set_type || '').toLowerCase();
                 return linkNum.includes(q) || trains.includes(q) || fromStn.includes(q) || toStn.includes(q) || setT.includes(q);
+              }).sort((a, b) => {
+                if (currentActiveCatId === 'ALL') {
+                  const catA = parseInt(a.category_id, 10) || 0;
+                  const catB = parseInt(b.category_id, 10) || 0;
+                  if (catA !== catB) return catA - catB;
+                }
+                return (parseInt(a.link_number, 10) || 0) - (parseInt(b.link_number, 10) || 0);
               });
 
               const handleOpenAddLink = (catId = currentActiveCatId) => {
@@ -9804,10 +10189,58 @@ export default function App() {
                             const catLabel = catObj ? catObj.name : (link.category_id === 1 ? 'COR' : link.category_id === 2 ? 'TTI / Sleeper' : link.category_id === 3 ? 'Ladies' : 'LR Staff');
                             return (
                               <tr key={link.id}>
-                                <td>
-                                  <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
-                                    #{link.link_number}
-                                  </span>
+                                <td
+                                  className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                  title={isAdmin ? `Click to edit Link #${link.link_number} (Arranges in ascending order) • Double-click to inline edit` : undefined}
+                                  style={{ cursor: isAdmin ? 'pointer' : 'default', verticalAlign: 'middle', userSelect: 'none' }}
+                                  onClick={() => {
+                                    if (isAdmin && !inlineEditState) {
+                                      setEditLinkDetailsModal({
+                                        link,
+                                        initialFocus: 'link_number'
+                                      });
+                                    }
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    if (isAdmin) {
+                                      e.stopPropagation();
+                                      setInlineEditState({ linkId: link.id, field: 'link_number', value: String(link.link_number) });
+                                    }
+                                  }}
+                                >
+                                  {inlineEditState?.linkId === link.id && inlineEditState?.field === 'link_number' ? (
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      autoFocus
+                                      className="form-input"
+                                      style={{ width: '60px', padding: '2px 4px', fontSize: '0.85rem', fontWeight: 800, textAlign: 'center', color: 'var(--primary)' }}
+                                      value={inlineEditState.value}
+                                      onChange={(e) => setInlineEditState({ ...inlineEditState, value: e.target.value })}
+                                      onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                          e.stopPropagation();
+                                          await handleSaveInlineLink(link, 'link_number', inlineEditState.value);
+                                          setInlineEditState(null);
+                                        } else if (e.key === 'Escape') {
+                                          e.stopPropagation();
+                                          setInlineEditState(null);
+                                        }
+                                      }}
+                                      onBlur={async () => {
+                                        if (inlineEditState) {
+                                          await handleSaveInlineLink(link, 'link_number', inlineEditState.value);
+                                          setInlineEditState(null);
+                                        }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  ) : (
+                                    <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                                      #{link.link_number}
+                                      {isAdmin && <span className="train-coach-edit-icon" style={{ marginLeft: '4px' }}>✏️</span>}
+                                    </span>
+                                  )}
                                 </td>
                                 {currentActiveCatId === 'ALL' && (
                                   <td>
@@ -9816,9 +10249,94 @@ export default function App() {
                                     </span>
                                   </td>
                                 )}
-                                <td><strong>{link.is_rest ? '-' : link.train_numbers || '-'}</strong></td>
-                                <td>{link.is_rest ? '-' : `${link.from_station || '-'} ➔ ${link.to_station || '-'}`}</td>
-                                <td>{link.is_rest ? '-' : link.coaches || '-'}</td>
+                                <td
+                                  className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                  title={isAdmin ? `Click to edit Train Numbers for Link #${link.link_number} • Double-click to inline edit` : undefined}
+                                  style={{ cursor: isAdmin ? 'pointer' : 'default', verticalAlign: 'middle' }}
+                                  onClick={() => {
+                                    if (isAdmin && !inlineEditState) {
+                                      setEditLinkDetailsModal({
+                                        link,
+                                        initialFocus: 'train_numbers'
+                                      });
+                                    }
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    if (isAdmin && !link.is_rest) {
+                                      e.stopPropagation();
+                                      setInlineEditState({ linkId: link.id, field: 'train_numbers', value: link.train_numbers || '' });
+                                    }
+                                  }}
+                                >
+                                  {inlineEditState?.linkId === link.id && inlineEditState?.field === 'train_numbers' ? (
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      className="form-input"
+                                      style={{ width: '130px', padding: '2px 6px', fontSize: '0.85rem', fontWeight: 700 }}
+                                      value={inlineEditState.value}
+                                      onChange={(e) => setInlineEditState({ ...inlineEditState, value: e.target.value })}
+                                      onKeyDown={async (e) => {
+                                        if (e.key === 'Enter') {
+                                          e.stopPropagation();
+                                          await handleSaveInlineLink(link, 'train_numbers', inlineEditState.value);
+                                          setInlineEditState(null);
+                                        } else if (e.key === 'Escape') {
+                                          e.stopPropagation();
+                                          setInlineEditState(null);
+                                        }
+                                      }}
+                                      onBlur={async () => {
+                                        if (inlineEditState) {
+                                          await handleSaveInlineLink(link, 'train_numbers', inlineEditState.value);
+                                          setInlineEditState(null);
+                                        }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  ) : (
+                                    <strong style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                      {link.is_rest ? '-' : (link.train_numbers || '-')}
+                                      {isAdmin && <span className="train-coach-edit-icon" style={{ marginLeft: '4px' }}>✏️</span>}
+                                    </strong>
+                                  )}
+                                </td>
+                                <td
+                                  className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                  title={isAdmin ? `Click to edit Route for Link #${link.link_number}` : undefined}
+                                  style={{ cursor: isAdmin ? 'pointer' : 'default', verticalAlign: 'middle' }}
+                                  onClick={() => {
+                                    if (isAdmin) {
+                                      setEditLinkDetailsModal({
+                                        link,
+                                        initialFocus: 'route'
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    {link.is_rest ? '-' : `${link.from_station || '-'} ➔ ${link.to_station || '-'}`}
+                                    {isAdmin && <span className="train-coach-edit-icon" style={{ marginLeft: '4px' }}>✏️</span>}
+                                  </span>
+                                </td>
+                                <td
+                                  className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                  title={isAdmin ? `Click to edit Coaches for Link #${link.link_number}` : undefined}
+                                  style={{ cursor: isAdmin ? 'pointer' : 'default', verticalAlign: 'middle' }}
+                                  onClick={() => {
+                                    if (isAdmin) {
+                                      setEditLinkDetailsModal({
+                                        link,
+                                        initialFocus: 'coaches'
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    {link.is_rest ? '-' : (link.coaches || '-')}
+                                    {isAdmin && <span className="train-coach-edit-icon" style={{ marginLeft: '4px' }}>✏️</span>}
+                                  </span>
+                                </td>
                                 <td>
                                   <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--color-text)' }}>
                                     {link.set_type || (link.is_rest ? 'REST' : '2-Day Set')}
@@ -9856,21 +10374,12 @@ export default function App() {
                                         className="btn btn-secondary" 
                                         style={{ padding: '4px 8px', fontSize: '0.75rem' }}
                                         onClick={() => {
-                                          setEditingLink(link);
-                                          setIsLeftPanelCollapsed(false);
-                                          setLinkForm({
-                                            category_id: String(link.category_id),
-                                            link_number: link.link_number.toString(),
-                                            train_numbers: link.train_numbers || '',
-                                            from_station: link.from_station || '',
-                                            to_station: link.to_station || '',
-                                            coaches: link.coaches || '',
-                                            is_rest: !!link.is_rest,
-                                            effective_from: link.effective_from || (currentSet?.effective_from || '2026-07-01'),
-                                            set_type: link.set_type || '2-Day Set'
+                                          setEditLinkDetailsModal({
+                                            link,
+                                            initialFocus: 'link_number'
                                           });
                                         }}
-                                        title={`Edit Link #${link.link_number}`}
+                                        title={`Quick Edit Link #${link.link_number}`}
                                       >
                                         ✏️ Edit
                                       </button>
@@ -10738,21 +11247,12 @@ export default function App() {
                                                 className="btn btn-secondary" 
                                                 style={{ padding: '6px 10px', fontSize: '0.78rem' }}
                                                 onClick={() => {
-                                                  setEditingLink(item.linkObj);
-                                                  setLinkForm({
-                                                    category_id: String(item.linkObj.category_id || item.categoryId || currentActiveCatId || '1'),
-                                                    link_number: item.linkObj.link_number,
-                                                    train_numbers: item.linkObj.train_numbers || '',
-                                                    from_station: item.linkObj.from_station || '',
-                                                    to_station: item.linkObj.to_station || '',
-                                                    coaches: item.linkObj.coaches || '',
-                                                    is_rest: !!item.linkObj.is_rest,
-                                                    effective_from: item.linkObj.effective_from || '2026-07-01',
-                                                    set_type: item.linkObj.set_type || '2-Day Set'
+                                                  setEditLinkDetailsModal({
+                                                    link: item.linkObj,
+                                                    initialFocus: 'train_numbers'
                                                   });
-                                                  setLinkSubTab('list');
                                                 }}
-                                                title="Edit link details"
+                                                title={`Edit Link #${item.linkNumber} & Train ${item.trainNumber}`}
                                               >
                                                 ✏️ Edit
                                               </button>
@@ -13626,6 +14126,15 @@ export default function App() {
           onClose={() => setEditTrainCoachModal(null)}
           onSave={handleSaveTrainCoachCustomization}
           onReset={handleResetTrainCoachCustomization}
+        />
+      )}
+
+      {/* Link & Train Numbers Customization Modal (Identical to Daily Summary) */}
+      {editLinkDetailsModal && (
+        <EditLinkDetailsModalDialog
+          data={editLinkDetailsModal}
+          onClose={() => setEditLinkDetailsModal(null)}
+          onSave={handleSaveLinkDetailsModal}
         />
       )}
   

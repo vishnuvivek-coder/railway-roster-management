@@ -2376,7 +2376,7 @@ app.get('/api/links', async (req, res) => {
         params.push(category_id);
       }
     }
-    sql += ' ORDER BY category_id, link_number, effective_from';
+    sql += ' ORDER BY category_id, CAST(link_number AS INTEGER) ASC, link_number ASC, effective_from ASC';
     const links = await all(sql, params);
     res.json(links);
   } catch (err) {
@@ -2453,36 +2453,50 @@ app.post('/api/links', requireAdmin, async (req, res) => {
 
 app.put('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, link_number, category_id, link_set_id, status } = req.body;
   try {
+    const existing = await get('SELECT * FROM links WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Link not found' });
+
+    const train_numbers = req.body.train_numbers !== undefined ? req.body.train_numbers : existing.train_numbers;
+    const from_station = req.body.from_station !== undefined ? req.body.from_station : existing.from_station;
+    const to_station = req.body.to_station !== undefined ? req.body.to_station : existing.to_station;
+    const coaches = req.body.coaches !== undefined ? req.body.coaches : existing.coaches;
+    const is_rest = req.body.is_rest !== undefined ? (req.body.is_rest ? 1 : 0) : existing.is_rest;
+    const effective_from = req.body.effective_from !== undefined ? req.body.effective_from : existing.effective_from;
+    const effective_to = req.body.effective_to !== undefined ? req.body.effective_to : existing.effective_to;
+    const set_type = req.body.set_type !== undefined ? req.body.set_type : existing.set_type;
+    const set_name = req.body.set_name !== undefined ? req.body.set_name : existing.set_name;
+    const link_number = req.body.link_number !== undefined ? (parseInt(req.body.link_number, 10) || null) : existing.link_number;
+    const category_id = req.body.category_id !== undefined ? (parseInt(req.body.category_id, 10) || null) : existing.category_id;
+    const link_set_id = req.body.link_set_id !== undefined ? req.body.link_set_id : existing.link_set_id;
+    const status = req.body.status !== undefined ? req.body.status : existing.status;
+
     await run(
       `UPDATE links 
        SET train_numbers = ?, from_station = ?, to_station = ?, coaches = ?, is_rest = ?, 
            effective_from = ?, effective_to = ?, set_type = ?, set_name = ?,
-           link_number = COALESCE(?, link_number),
-           category_id = COALESCE(?, category_id),
-           link_set_id = COALESCE(?, link_set_id),
-           status = COALESCE(?, status)
+           link_number = ?, category_id = ?, link_set_id = ?, status = ?
        WHERE id = ?`,
       [
         train_numbers, 
         from_station, 
         to_station, 
         coaches, 
-        is_rest ? 1 : 0, 
-        effective_from !== undefined ? effective_from : '', 
-        effective_to || '9999-12-31', 
-        set_type || '2-Day Set', 
-        set_name !== undefined ? set_name : null,
-        link_number ? parseInt(link_number, 10) : null,
-        category_id ? parseInt(category_id, 10) : null,
-        link_set_id !== undefined ? link_set_id : null,
-        status !== undefined ? status : null,
+        is_rest, 
+        effective_from, 
+        effective_to, 
+        set_type, 
+        set_name,
+        link_number,
+        category_id,
+        link_set_id,
+        status,
         id
       ]
     );
-    await logAudit('Admin', 'UPDATE_LINK', `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''}`);
-    res.json({ message: 'Link updated successfully' });
+    await logAudit('Admin', 'UPDATE_LINK', `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''} (Link #${link_number})`);
+    const updated = await get('SELECT * FROM links WHERE id = ?', [id]);
+    res.json({ message: 'Link updated successfully', link: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
