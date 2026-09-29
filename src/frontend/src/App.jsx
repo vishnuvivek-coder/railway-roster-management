@@ -1996,21 +1996,32 @@ export default function App() {
         return (parseInt(a.link_number, 10) || 0) - (parseInt(b.link_number, 10) || 0);
       });
 
-      // Optimistically update and arrange in ascending order immediately
-      setLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
-      setAllLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+      // Check if this link belongs to a draft set
+      const currentSet = linkSetsList.find(s => s.id === (updatedData.link_set_id || selectedLinkSetId));
+      const isDraft = updatedData.status === 'draft' || currentSet?.status === 'draft';
 
-      setTaNdaToast(`✓ Link #${updatedData.link_number} saved & arranged in ascending order!`);
+      // Optimistically update and arrange in ascending order immediately in current view
+      setLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+      if (!isDraft) {
+        setAllLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+      }
+
+      setTaNdaToast(`✓ Link #${updatedData.link_number} ${isDraft ? '(Draft) ' : ''}saved & arranged in ascending order!`);
       setTimeout(() => setTaNdaToast(null), 3500);
 
-      // Re-fetch in background to ensure all views, duties, and sets stay completely synchronized
+      // Re-fetch in background to ensure link table and sets stay completely synchronized
       fetchLinks(selectedCatId, selectedLinkSetId);
       fetchLinkSets(selectedCatId);
-      fetchDailyDuties();
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-      try {
-        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
-      } catch (e) {}
+
+      // CRITICAL: Only refresh daily duties and live roster if the link is published!
+      // Draft link edits must NEVER affect the live roster until published!
+      if (!isDraft) {
+        fetchDailyDuties();
+        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        try {
+          window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
+        } catch (e) {}
+      }
     } catch (err) {
       alert(`Error updating link: ${err.message}`);
       throw err;
@@ -10419,7 +10430,12 @@ export default function App() {
 
           {linkSubTab === 'train-centric' && (() => {
             const trainRosterItems = [];
-            linksList.forEach(link => {
+            // Master Train Roster must ONLY display live published links - drafts must never reflect until published!
+            const publishedLinksSource = (allLinksList && allLinksList.length > 0)
+              ? allLinksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => s.id === l.link_set_id)?.status !== 'draft'))
+              : linksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => s.id === l.link_set_id)?.status !== 'draft'));
+
+            publishedLinksSource.forEach(link => {
               if (link.is_rest || !link.train_numbers) return;
               if (trainCategoryFilter !== 'ALL' && String(link.category_id) !== String(trainCategoryFilter)) return;
               const nums = parseTrainNumbers(link.train_numbers);
@@ -10526,7 +10542,7 @@ export default function App() {
                           className="btn btn-primary"
                           onClick={() => {
                             const targetCat = (trainCategoryFilter && trainCategoryFilter !== 'ALL') ? trainCategoryFilter : (selectedCatId && selectedCatId !== 'ALL' ? selectedCatId : '1');
-                            const catLinks = linksList.filter(l => String(l.category_id) === String(targetCat));
+                            const catLinks = publishedLinksSource.filter(l => String(l.category_id) === String(targetCat));
                             const maxNum = catLinks.length > 0 ? Math.max(...catLinks.map(l => parseInt(l.link_number, 10) || 0)) : 0;
                             setEditingLink(null);
                             setIsLeftPanelCollapsed(false);

@@ -1912,7 +1912,7 @@ app.get('/api/staff/cor-links-summary', async (req, res) => {
     }
 
     const corLinks = await all(
-      `SELECT * FROM links WHERE category_id = 1 ORDER BY link_number ASC`
+      `SELECT * FROM links WHERE category_id = 1 AND (status = 'published' OR status IS NULL OR status = '') ORDER BY link_number ASC`
     );
     const corStaff = await all(
       `SELECT * FROM staff WHERE category_id = 1 ORDER BY row_position ASC`
@@ -2713,7 +2713,7 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
         if (l.category_id && l.link_num && cleanFirstTrain) {
           const formattedTrain = cleanLastTrain ? `${cleanFirstTrain}, ${cleanLastTrain}` : cleanFirstTrain;
           await run(
-            `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ?`,
+            `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ? AND (status = 'published' OR status IS NULL OR status = '')`,
             [formattedTrain, l.category_id, l.link_num]
           );
         }
@@ -2721,7 +2721,7 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
     } else if (category_id && link_num && cleanFirstTrain) {
       const formattedTrain = cleanLastTrain ? `${cleanFirstTrain}, ${cleanLastTrain}` : cleanFirstTrain;
       await run(
-        `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ?`,
+        `UPDATE links SET train_numbers = ? WHERE category_id = ? AND link_number = ? AND (status = 'published' OR status IS NULL OR status = '')`,
         [formattedTrain, category_id, link_num]
       );
     }
@@ -3959,11 +3959,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       // Resolve target_category_id
       let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
       if (!resolvedTargetCat && targetLink !== null) {
-        const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ?', [staff.category_id, targetLink]);
+        const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staff.category_id, targetLink]);
         if (ownLink) {
           resolvedTargetCat = staff.category_id;
         } else {
-          const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? ORDER BY category_id ASC LIMIT 1', [targetLink]);
+          const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY category_id ASC LIMIT 1', [targetLink]);
           if (anyLink) resolvedTargetCat = anyLink.category_id;
         }
       }
@@ -4805,7 +4805,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           }
           dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : 'Duty')));
         } else {
-          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffA.category_id, origLinkA]);
+          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffA.category_id, origLinkA]);
           if (staffA.category_id === 4) {
             dutyProfileA.desc = 'LR Standby Pool';
             dutyProfileA.status = 'AVAILABLE_FOR_BOOKING';
@@ -4845,7 +4845,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           }
           dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : 'Duty')));
         } else {
-          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffB.category_id, origLinkB]) : null;
+          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffB.category_id, origLinkB]) : null;
           if (staffB.category_id === 4) {
             dutyProfileB.desc = 'LR Standby Pool';
             dutyProfileB.status = 'AVAILABLE_FOR_BOOKING';
@@ -5247,7 +5247,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       }
     } else {
       currentDutyA = origLinkA;
-      const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffA.category_id, origLinkA]);
+      const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffA.category_id, origLinkA]);
       if (!linkDefA || linkDefA.is_rest) currentDutyA = null;
     }
 
@@ -5268,7 +5268,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       }
     } else {
       currentDutyB = origLinkB;
-      const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ?', [staffB.category_id, origLinkB]);
+      const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffB.category_id, origLinkB]);
       if (!linkDefB || linkDefB.is_rest) currentDutyB = null;
     }
 
@@ -5277,7 +5277,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
     let newCatA = targetCatB;
     if (newDutyA !== null) {
       const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? ORDER BY (category_id = ?) DESC LIMIT 1',
+        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY (category_id = ?) DESC LIMIT 1',
         [newDutyA, targetCatB || staffB.category_id]
       );
       if (linkDef) newCatA = linkDef.category_id;
@@ -5289,7 +5289,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
     let newCatB = targetCatA;
     if (newDutyB !== null) {
       const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? ORDER BY (category_id = ?) DESC LIMIT 1',
+        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY (category_id = ?) DESC LIMIT 1',
         [newDutyB, targetCatA || staffA.category_id]
       );
       if (linkDef) newCatB = linkDef.category_id;
@@ -8151,11 +8151,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
           overrideReason = override.reason;
           let resolvedTargetCat = override.target_category_id || (override.status === 'SUBSTITUTE' ? 1 : null);
           if (!resolvedTargetCat && activeLink !== null) {
-            const ownLink = await get('SELECT 1 FROM links WHERE category_id = ? AND link_number = ?', [cat.id, activeLink]);
+            const ownLink = await get('SELECT 1 FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [cat.id, activeLink]);
             if (ownLink) {
               resolvedTargetCat = cat.id;
             } else {
-              const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? ORDER BY category_id ASC LIMIT 1', [activeLink]);
+              const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY category_id ASC LIMIT 1', [activeLink]);
               resolvedTargetCat = anyLink ? anyLink.category_id : cat.id;
             }
           }
