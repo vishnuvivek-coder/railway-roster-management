@@ -9138,7 +9138,6 @@ export default function App() {
                         <th className="freeze-col freeze-col-slno" style={{ top: 0 }}>SL NO</th>
                         <th className="freeze-col freeze-col-name" style={{ top: 0 }}>NAME</th>
                         <th className="freeze-col freeze-col-desg" style={{ top: 0 }}>DESG</th>
-                        <th className="freeze-col freeze-col-cr" style={{ top: 0, textAlign: 'center' }}>CR Available</th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOfWeek}</th>
                         ))}
@@ -9147,7 +9146,6 @@ export default function App() {
                         <th className="freeze-col freeze-col-slno"></th>
                         <th className="freeze-col freeze-col-name"></th>
                         <th className="freeze-col freeze-col-desg"></th>
-                        <th className="freeze-col freeze-col-cr"></th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOfMonth}</th>
                         ))}
@@ -9156,7 +9154,6 @@ export default function App() {
                         <th className="freeze-col freeze-col-slno" style={{ fontSize: '0.74rem' }}>Day Offset</th>
                         <th className="freeze-col freeze-col-name"></th>
                         <th className="freeze-col freeze-col-desg"></th>
-                        <th className="freeze-col freeze-col-cr"></th>
                         {rosterData.dates.map((d, i) => (
                           <th key={i}>{d.dayOffset}</th>
                         ))}
@@ -9208,7 +9205,7 @@ export default function App() {
                           return (
                             <tr>
                               <td 
-                                colSpan={4 + rosterData.dates.length}
+                                colSpan={3 + rosterData.dates.length}
                                 style={{
                                   textAlign: 'center',
                                   padding: '40px 16px',
@@ -9251,23 +9248,6 @@ export default function App() {
                               </td>
                               <td className="freeze-col freeze-col-desg" style={{ color: isDesgMatched ? 'var(--primary)' : 'var(--color-text-secondary)', fontWeight: isDesgMatched ? 700 : 400 }}>
                                 {row.designation || '-'}
-                              </td>
-                              <td className="freeze-col freeze-col-cr" style={{ textAlign: 'center' }}>
-                                {row.cr_available ? (
-                                  <span className="badge" style={{ 
-                                    background: 'rgba(139, 92, 246, 0.18)', 
-                                    color: '#c4b5fd', 
-                                    border: '1px solid rgba(139, 92, 246, 0.4)', 
-                                    fontWeight: 800, 
-                                    fontSize: '0.74rem', 
-                                    padding: '2px 8px',
-                                    whiteSpace: 'nowrap'
-                                  }} title={row.cr_available}>
-                                    💤 {row.cr_available}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: 'var(--color-text-secondary)', opacity: 0.35 }}>-</span>
-                                )}
                               </td>
                               {row.cells.map((cell, cIdx) => {
                                 const key = `${row.staffId}_${cIdx}`;

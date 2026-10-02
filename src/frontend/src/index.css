@@ -640,15 +640,6 @@ p, span, label, input, select, button, td, th {
   min-width: 70px;
   max-width: 70px;
   text-align: center;
-  border-right: 1px solid var(--border-subtle);
-}
-
-.roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
-  left: 270px;
-  width: 105px;
-  min-width: 105px;
-  max-width: 105px;
-  text-align: center;
   border-right: 2px solid var(--border-gold);
 }
 
@@ -1496,27 +1487,17 @@ html, body {
     text-overflow: ellipsis !important;
   }
 
-  .roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg,
-  .roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
+  .roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg {
     position: static !important;
     left: auto !important;
     border-right: 1px solid var(--border-glass) !important;
     box-shadow: none !important;
     z-index: 1 !important;
-  }
-  .roster-table th.freeze-col-desg, .roster-table td.freeze-col-desg {
     width: 58px !important;
     min-width: 58px !important;
     max-width: 58px !important;
     padding: 6px 4px !important;
     font-size: 0.76rem !important;
-  }
-  .roster-table th.freeze-col-cr, .roster-table td.freeze-col-cr {
-    width: 80px !important;
-    min-width: 80px !important;
-    max-width: 80px !important;
-    padding: 6px 4px !important;
-    font-size: 0.74rem !important;
   }
 
   .roster-table tr.header-days th,
