@@ -2283,32 +2283,41 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
       newStatus = status;
     }
 
+    const newFrom = effective_from !== undefined ? (effective_from && effective_from.trim() ? effective_from.trim() : null) : origSet.effective_from;
+    const newTo = effective_to !== undefined ? (effective_to && effective_to.trim() ? effective_to.trim() : '9999-12-31') : origSet.effective_to;
+
     await run(
       `UPDATE link_sets 
        SET name = COALESCE(?, name),
-           effective_from = COALESCE(?, effective_from),
-           effective_to = COALESCE(?, effective_to),
+           effective_from = ?,
+           effective_to = ?,
            status = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [name, effective_from, effective_to, newStatus, id]
+      [name, newFrom, newTo, newStatus, id]
     );
 
     // If effective_from is changed, sync it to member links
     if (effective_from !== undefined) {
-      await run('UPDATE links SET effective_from = ? WHERE link_set_id = ?', [effective_from, id]);
+      await run('UPDATE links SET effective_from = ? WHERE link_set_id = ?', [newFrom || '', id]);
+    }
+    // If effective_to is changed, sync it to member links
+    if (effective_to !== undefined) {
+      await run('UPDATE links SET effective_to = ? WHERE link_set_id = ?', [newTo || '9999-12-31', id]);
     }
     // Keep member links strictly in sync with newStatus
     if (newStatus !== origSet.status || origSet.status === 'draft') {
       await run('UPDATE links SET status = ? WHERE link_set_id = ?', [newStatus, id]);
     }
 
-    await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name})`, {
+    await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name}) [Effective: ${newFrom} to ${newTo}]`, {
       action: 'UPDATE_LINK_SET',
       link_set_id: id,
-      previous: origSet
+      previous: origSet,
+      effective_from: newFrom,
+      effective_to: newTo
     });
-    res.json({ success: true, message: 'Link set updated successfully' });
+    res.json({ success: true, message: 'Link set updated successfully', effective_from: newFrom, effective_to: newTo });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2317,33 +2326,34 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
 // 5. POST publish draft link set
 app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { effective_from } = req.body || {};
+  const { effective_from, effective_to } = req.body || {};
   try {
     const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
     if (!origSet) return res.status(404).json({ error: 'Link set not found' });
 
     const effDate = (effective_from && effective_from.trim()) ? effective_from.trim() : (origSet.effective_from || new Date().toISOString().split('T')[0]);
+    const effTo = (effective_to && effective_to.trim()) ? effective_to.trim() : (origSet.effective_to || '9999-12-31');
     const prevEnd = new Date(new Date(effDate) - 86400000).toISOString().split('T')[0];
 
-    // 1. Update set to published with effective_from and effective_to '9999-12-31'
+    // 1. Update set to published with effective_from and effective_to
     await run(
       `UPDATE link_sets 
        SET status = 'published',
            effective_from = ?,
-           effective_to = '9999-12-31',
+           effective_to = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [effDate, id]
+      [effDate, effTo, id]
     );
 
-    // 2. Update all member links to published and set their effective_from
+    // 2. Update all member links to published and set their effective_from and effective_to
     await run(
       `UPDATE links 
        SET status = 'published',
            effective_from = ?,
-           effective_to = '9999-12-31'
+           effective_to = ?
        WHERE link_set_id = ?`,
-      [effDate, id]
+      [effDate, effTo, id]
     );
 
     // 3. For previous published link sets in the same category, cap effective_to to prevEnd
@@ -2351,15 +2361,15 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
       await run(
         `UPDATE link_sets 
          SET effective_to = ? 
-         WHERE category_id = ? AND id != ? AND status = 'published' AND date(effective_from) < date(?)`,
-        [prevEnd, origSet.category_id, id, effDate]
+         WHERE category_id = ? AND id != ? AND status = 'published' AND date(effective_from) < date(?) AND (effective_to = '9999-12-31' OR date(effective_to) >= date(?))`,
+        [prevEnd, origSet.category_id, id, effDate, effDate]
       );
 
       await run(
         `UPDATE links 
          SET effective_to = ? 
-         WHERE category_id = ? AND (link_set_id != ? OR link_set_id IS NULL) AND (status = 'published' OR status IS NULL OR status = '') AND date(effective_from) < date(?)`,
-        [prevEnd, origSet.category_id, id, effDate]
+         WHERE category_id = ? AND (link_set_id != ? OR link_set_id IS NULL) AND (status = 'published' OR status IS NULL OR status = '') AND date(effective_from) < date(?) AND (effective_to = '9999-12-31' OR date(effective_to) >= date(?))`,
+        [prevEnd, origSet.category_id, id, effDate, effDate]
       );
 
 
@@ -2410,9 +2420,9 @@ app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// 7. GET links (supports category_id, link_set_id, status)
+// 7. GET links (supports category_id, link_set_id, status, date)
 app.get('/api/links', async (req, res) => {
-  const { category_id, link_set_id, status } = req.query;
+  const { category_id, link_set_id, status, date } = req.query;
   try {
     let sql = 'SELECT * FROM links WHERE 1=1';
     let params = [];
@@ -2424,6 +2434,10 @@ app.get('/api/links', async (req, res) => {
         params.push(status);
       }
     } else {
+      if (date) {
+        sql += ' AND (effective_from IS NULL OR date(effective_from) <= date(?)) AND (effective_to IS NULL OR date(?) <= date(effective_to))';
+        params.push(date, date);
+      }
       if (status) {
         sql += ' AND status = ?';
         params.push(status);
@@ -2439,7 +2453,7 @@ app.get('/api/links', async (req, res) => {
         params.push(category_id);
       }
     }
-    sql += ' ORDER BY category_id, CAST(link_number AS INTEGER) ASC, link_number ASC, effective_from ASC';
+    sql += ' ORDER BY category_id, CAST(link_number AS INTEGER) ASC, link_number ASC, date(effective_from) DESC';
     const links = await all(sql, params);
     res.json(links);
   } catch (err) {

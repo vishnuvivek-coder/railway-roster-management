@@ -1029,9 +1029,11 @@ export default function App() {
   const [duplicateNameInput, setDuplicateNameInput] = useState('');
   const [publishModal, setPublishModal] = useState(null); // { set } or null
   const [publishDateInput, setPublishDateInput] = useState('');
+  const [publishDateToInput, setPublishDateToInput] = useState('');
   const [editLinkSetModal, setEditLinkSetModal] = useState(null); // { set } or null
   const [editSetNameInput, setEditSetNameInput] = useState('');
   const [editSetDateInput, setEditSetDateInput] = useState('');
+  const [editSetDateToInput, setEditSetDateToInput] = useState('');
   const [trainCategoryFilter, setTrainCategoryFilter] = useState('ALL'); // 'ALL' or cat.id
   const [customSets, setCustomSets] = useState([]);
   const [newSetName, setNewSetName] = useState('');
@@ -3018,6 +3020,7 @@ export default function App() {
           ...linkForm,
           status: isSetDraft ? 'draft' : (editingLink?.status || 'published'),
           effective_from: linkForm.effective_from || (currentSet?.effective_from || ''),
+          effective_to: currentSet?.effective_to || '9999-12-31',
           link_number: parseInt(linkForm.link_number, 10)
         })
       });
@@ -3255,11 +3258,12 @@ export default function App() {
     }
   };
 
-  const publishLinkSet = async (setId, effDate) => {
+  const publishLinkSet = async (setId, effDate, effToDate) => {
     if (!isAdmin) return;
     const target = linkSetsList.find(s => s.id === setId);
     if (!target) return;
     const finalDate = effDate || target.effective_from || new Date().toISOString().split('T')[0];
+    const finalToDate = (effToDate && effToDate.trim()) ? effToDate.trim() : (target.effective_to || '9999-12-31');
 
     try {
       const res = await fetch(`${API_BASE}/link-sets/${setId}/publish`, {
@@ -3268,7 +3272,7 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({ effective_from: finalDate })
+        body: JSON.stringify({ effective_from: finalDate, effective_to: finalToDate })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to publish link set');
@@ -3285,7 +3289,7 @@ export default function App() {
     }
   };
 
-  const updateLinkSetMeta = async (setId, name, effectiveFrom) => {
+  const updateLinkSetMeta = async (setId, name, effectiveFrom, effectiveTo) => {
     if (!isAdmin) return;
     try {
       const res = await fetch(`${API_BASE}/link-sets/${setId}`, {
@@ -3294,7 +3298,11 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({ name, effective_from: effectiveFrom })
+        body: JSON.stringify({
+          name,
+          effective_from: effectiveFrom,
+          effective_to: effectiveTo && effectiveTo.trim() ? effectiveTo.trim() : '9999-12-31'
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update link set');
@@ -4675,6 +4683,7 @@ export default function App() {
                       || linkSetsList.find(s => s.status === 'draft');
                     if (targetDraft) {
                       setPublishDateInput(targetDraft.effective_from || `${year}-${String(month).padStart(2, '0')}-01`);
+                      setPublishDateToInput(targetDraft.effective_to === '9999-12-31' ? '' : (targetDraft.effective_to || ''));
                       setPublishModal({ set: targetDraft });
                     }
                   }}
@@ -9168,6 +9177,7 @@ export default function App() {
                             className="btn btn-primary"
                             onClick={() => {
                               setPublishDateInput(draftSets[0].effective_from || `${year}-${String(month).padStart(2, '0')}-01`);
+                              setPublishDateToInput(draftSets[0].effective_to === '9999-12-31' ? '' : (draftSets[0].effective_to || ''));
                               setPublishModal({ set: draftSets[0] });
                             }}
                             style={{
@@ -9593,7 +9603,7 @@ export default function App() {
                           <th>Link Set Name</th>
                           <th>Category</th>
                           <th>Status</th>
-                          <th>Effective Date</th>
+                          <th>Effective Period</th>
                           <th>Total Links</th>
                           <th>Cloned From</th>
                           <th style={{ textAlign: 'center' }}>Actions</th>
@@ -9625,11 +9635,16 @@ export default function App() {
                                 </span>
                               </td>
                               <td>
-                                {s.effective_from ? (
-                                  <span style={{ fontSize: '0.85rem', fontFamily: 'monospace' }}>📅 {s.effective_from}</span>
-                                ) : (
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>⚠️ Blank / Unset</span>
-                                )}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.82rem', fontFamily: 'monospace' }}>
+                                  {s.effective_from ? (
+                                    <span>📅 From: <strong>{s.effective_from}</strong></span>
+                                  ) : (
+                                    <span style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>From: Blank</span>
+                                  )}
+                                  <span style={{ color: s.effective_to && s.effective_to !== '9999-12-31' ? '#38bdf8' : 'var(--color-text-secondary)' }}>
+                                    🏁 Upto: <strong>{s.effective_to && s.effective_to !== '9999-12-31' ? s.effective_to : 'Indefinite (Open)'}</strong>
+                                  </span>
+                                </div>
                               </td>
                               <td>
                                 <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700 }}>
@@ -9637,13 +9652,9 @@ export default function App() {
                                 </span>
                               </td>
                               <td>
-                                {s.cloned_from_name ? (
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                                    ↳ {s.cloned_from_name}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>—</span>
-                                )}
+                                <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
+                                  {s.cloned_from_name ? `↳ ${s.cloned_from_name}` : '—'}
+                                </span>
                               </td>
                               <td style={{ textAlign: 'center' }}>
                                 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -9690,9 +9701,10 @@ export default function App() {
                                       onClick={() => {
                                         setEditSetNameInput(s.name);
                                         setEditSetDateInput(s.effective_from || '');
+                                        setEditSetDateToInput(s.effective_to === '9999-12-31' ? '' : (s.effective_to || ''));
                                         setEditLinkSetModal({ set: s });
                                       }}
-                                      title="Edit name and effective date"
+                                      title="Edit name and effective dates (From / Upto)"
                                     >
                                       ⚙️
                                     </button>
@@ -9706,6 +9718,7 @@ export default function App() {
                                       style={{ padding: '4px 10px', fontSize: '0.75rem', background: '#22c55e', color: '#000', fontWeight: 700 }}
                                       onClick={() => {
                                         setPublishDateInput(s.effective_from || new Date().toISOString().split('T')[0]);
+                                        setPublishDateToInput(s.effective_to === '9999-12-31' ? '' : (s.effective_to || ''));
                                         setPublishModal({ set: s });
                                       }}
                                       title="Publish this draft set to make it active on the live roster"
@@ -9908,7 +9921,7 @@ export default function App() {
 
                       {currentSet?.effective_from ? (
                         <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
-                          📅 Effective: {currentSet.effective_from}
+                          📅 Effective: <strong>{currentSet.effective_from}</strong> ➔ <strong>{currentSet.effective_to && currentSet.effective_to !== '9999-12-31' ? currentSet.effective_to : 'Indefinite (Open)'}</strong>
                         </span>
                       ) : (
                         <span style={{ fontSize: '0.8rem', color: '#facc15', fontStyle: 'italic' }}>
@@ -9941,6 +9954,7 @@ export default function App() {
                           className="btn btn-primary"
                           onClick={() => {
                             setPublishDateInput(currentSet.effective_from || new Date().toISOString().split('T')[0]);
+                            setPublishDateToInput(currentSet.effective_to === '9999-12-31' ? '' : (currentSet.effective_to || ''));
                             setPublishModal({ set: currentSet });
                           }}
                           style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '6px 14px', borderRadius: '8px', background: '#22c55e', color: '#000', fontWeight: 700 }}
@@ -9993,6 +10007,7 @@ export default function App() {
                           className="btn btn-primary"
                           onClick={() => {
                             setPublishDateInput(currentSet.effective_from || new Date().toISOString().split('T')[0]);
+                            setPublishDateToInput(currentSet.effective_to === '9999-12-31' ? '' : (currentSet.effective_to || ''));
                             setPublishModal({ set: currentSet });
                           }}
                           style={{ padding: '6px 14px', fontSize: '0.82rem', borderRadius: '8px', whiteSpace: 'nowrap', background: '#22c55e', color: '#000', fontWeight: 700 }}
@@ -14395,7 +14410,7 @@ export default function App() {
 
             <form onSubmit={(e) => {
               e.preventDefault();
-              publishLinkSet(publishModal.set.id, publishDateInput);
+              publishLinkSet(publishModal.set.id, publishDateInput, publishDateToInput);
             }}>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label className="form-label" style={{ fontWeight: 600 }}>Effective Start Date (YYYY-MM-DD):</label>
@@ -14407,6 +14422,21 @@ export default function App() {
                   value={publishDateInput}
                   onChange={(e) => setPublishDateInput(e.target.value)}
                 />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Effective Upto Date (YYYY-MM-DD):</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={publishDateToInput}
+                  onChange={(e) => setPublishDateToInput(e.target.value)}
+                  placeholder="Leave blank for Indefinite (9999-12-31)"
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                  Leave blank for ongoing / current schedule. Historical data prior to this start date remains safely preserved in earlier schedules.
+                </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
@@ -14458,7 +14488,7 @@ export default function App() {
 
             <form onSubmit={(e) => {
               e.preventDefault();
-              updateLinkSetMeta(editLinkSetModal.set.id, editSetNameInput, editSetDateInput);
+              updateLinkSetMeta(editLinkSetModal.set.id, editSetNameInput, editSetDateInput, editSetDateToInput);
             }}>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label className="form-label" style={{ fontWeight: 600 }}>Link Set Name:</label>
@@ -14473,7 +14503,7 @@ export default function App() {
               </div>
 
               <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Effective Date (YYYY-MM-DD):</label>
+                <label className="form-label" style={{ fontWeight: 600 }}>Effective From Date (YYYY-MM-DD):</label>
                 <input
                   type="date"
                   className="form-input"
@@ -14482,6 +14512,21 @@ export default function App() {
                   onChange={(e) => setEditSetDateInput(e.target.value)}
                   placeholder="Optional for draft"
                 />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Effective Upto Date (YYYY-MM-DD):</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={editSetDateToInput}
+                  onChange={(e) => setEditSetDateToInput(e.target.value)}
+                  placeholder="Leave blank for Indefinite (9999-12-31)"
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                  Leave blank for current active schedule. Historical link schedules (e.g. before Oct 2026) use this date boundary so data is stored accurately before and after.
+                </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
