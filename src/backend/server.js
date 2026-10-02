@@ -83,7 +83,7 @@ function requireAdmin(req, res, next) {
 
 app.use(authenticateToken);
 
-// Helper: Get active link definition for a link number on a given date
+// Helper: Get active link definition for a link number on a given date (strictly published only)
 async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
   const catId = parseInt(categoryId, 10);
   let link = null;
@@ -92,6 +92,8 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
       `SELECT * FROM links 
        WHERE category_id = ? AND link_number = ? 
          AND (status = 'published' OR status IS NULL OR status = '')
+         AND (status != 'draft')
+         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
          AND date(effective_from) <= date(?) 
          AND date(effective_to) >= date(?)
        ORDER BY date(effective_from) DESC LIMIT 1`,
@@ -104,6 +106,8 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
        WHERE link_number = ? 
          AND category_id != 4
          AND (status = 'published' OR status IS NULL OR status = '')
+         AND (status != 'draft')
+         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
          AND date(effective_from) <= date(?) 
          AND date(effective_to) >= date(?)
        ORDER BY date(effective_from) DESC, category_id ASC LIMIT 1`,
@@ -112,6 +116,7 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
   }
   return link || { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
 }
+
 
 
 // Link Set definitions for Indian Railways cyclic links
@@ -883,7 +888,12 @@ async function calculateStaffCrBalances() {
   const catMap = {};
   categories.forEach(c => catMap[c.id] = c);
 
-  const links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+  const links = await all(`
+    SELECT * FROM links 
+    WHERE (status = 'published' OR status IS NULL OR status = '') 
+      AND (status != 'draft')
+      AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+  `);
   const linkRestMap = {};
   links.forEach(l => {
     linkRestMap[l.category_id + '_' + l.link_number] = l.is_rest;
@@ -1529,7 +1539,13 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const allLinks = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = '' ORDER BY category_id ASC, link_number ASC");
+    const allLinks = await all(`
+      SELECT * FROM links 
+      WHERE (status = 'published' OR status IS NULL OR status = '') 
+        AND (status != 'draft')
+        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+      ORDER BY category_id ASC, link_number ASC
+    `);
     
     const results = [];
     const curr = new Date(beforeDateStr + 'T12:00:00');
@@ -1912,8 +1928,14 @@ app.get('/api/staff/cor-links-summary', async (req, res) => {
     }
 
     const corLinks = await all(
-      `SELECT * FROM links WHERE category_id = 1 AND (status = 'published' OR status IS NULL OR status = '') ORDER BY link_number ASC`
+      `SELECT * FROM links 
+       WHERE category_id = 1 
+         AND (status = 'published' OR status IS NULL OR status = '')
+         AND (status != 'draft')
+         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+       ORDER BY link_number ASC`
     );
+
     const corStaff = await all(
       `SELECT * FROM staff WHERE category_id = 1 ORDER BY row_position ASC`
     );
@@ -2252,23 +2274,32 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
     const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
     if (!origSet) return res.status(404).json({ error: 'Link set not found' });
 
+    // Draft sets must NEVER be converted to published via PUT - they must go through /publish
+    let newStatus = origSet.status;
+    if (origSet.status === 'draft') {
+      newStatus = 'draft';
+    } else if (status !== undefined) {
+      newStatus = status;
+    }
+
     await run(
       `UPDATE link_sets 
        SET name = COALESCE(?, name),
            effective_from = COALESCE(?, effective_from),
            effective_to = COALESCE(?, effective_to),
-           status = COALESCE(?, status),
+           status = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [name, effective_from, effective_to, status, id]
+      [name, effective_from, effective_to, newStatus, id]
     );
 
     // If effective_from is changed, sync it to member links
     if (effective_from !== undefined) {
       await run('UPDATE links SET effective_from = ? WHERE link_set_id = ?', [effective_from, id]);
     }
-    if (status !== undefined) {
-      await run('UPDATE links SET status = ? WHERE link_set_id = ?', [status, id]);
+    // Keep member links strictly in sync with newStatus
+    if (newStatus !== origSet.status || origSet.status === 'draft') {
+      await run('UPDATE links SET status = ? WHERE link_set_id = ?', [newStatus, id]);
     }
 
     await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name})`, {
@@ -2326,9 +2357,10 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
       await run(
         `UPDATE links 
          SET effective_to = ? 
-         WHERE category_id = ? AND link_set_id != ? AND (status = 'published' OR status IS NULL OR status = '') AND date(effective_from) < date(?)`,
+         WHERE category_id = ? AND (link_set_id != ? OR link_set_id IS NULL) AND (status = 'published' OR status IS NULL OR status = '') AND date(effective_from) < date(?)`,
         [prevEnd, origSet.category_id, id, effDate]
       );
+
 
       // Check member count in newly published set and update category cycle_length if needed
       const memberCount = await get('SELECT count(*) as c FROM links WHERE link_set_id = ?', [id]);
@@ -2394,8 +2426,12 @@ app.get('/api/links', async (req, res) => {
       if (status) {
         sql += ' AND status = ?';
         params.push(status);
+        if (status === 'published') {
+          sql += ' AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = "published" OR status IS NULL))';
+        }
       } else {
-        sql += " AND (status = 'published' OR status IS NULL OR status = '')";
+        // Exclude all draft links and any links belonging to draft link sets
+        sql += " AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))";
       }
       if (category_id && category_id !== 'ALL') {
         sql += ' AND category_id = ?';
@@ -2433,7 +2469,15 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
 
 app.post('/api/links', requireAdmin, async (req, res) => {
   const { category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name, status } = req.body;
-  const isDraft = status === 'draft';
+  
+  let isDraft = status === 'draft';
+  if (link_set_id) {
+    const parentSet = await get('SELECT status FROM link_sets WHERE id = ?', [link_set_id]);
+    if (parentSet && parentSet.status === 'draft') {
+      isDraft = true;
+    }
+  }
+
   if (!category_id || !link_number) {
     return res.status(400).json({ error: 'Category ID and Link Number are required' });
   }
@@ -2446,7 +2490,8 @@ app.post('/api/links', requireAdmin, async (req, res) => {
       const previous = await get(
         `SELECT * FROM links 
          WHERE category_id = ? AND link_number = ? AND (status = 'published' OR status IS NULL) AND effective_to = '9999-12-31' 
-           AND date(effective_from) < date(?)`,
+           AND date(effective_from) < date(?)
+           AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))`,
         [category_id, link_number, effective_from]
       );
       if (previous) {
@@ -2471,7 +2516,7 @@ app.post('/api/links', requireAdmin, async (req, res) => {
         '9999-12-31', 
         set_type || '2-Day Set', 
         set_name || null, 
-        status || 'published'
+        isDraft ? 'draft' : (status || 'published')
       ]
     );
 
@@ -2498,6 +2543,15 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
     const existing = await get('SELECT * FROM links WHERE id = ?', [id]);
     if (!existing) return res.status(404).json({ error: 'Link not found' });
 
+    const link_set_id = req.body.link_set_id !== undefined ? req.body.link_set_id : existing.link_set_id;
+    let status = req.body.status !== undefined ? req.body.status : existing.status;
+    if (link_set_id) {
+      const parentSet = await get('SELECT status FROM link_sets WHERE id = ?', [link_set_id]);
+      if (parentSet && parentSet.status === 'draft') {
+        status = 'draft';
+      }
+    }
+
     const train_numbers = req.body.train_numbers !== undefined ? req.body.train_numbers : existing.train_numbers;
     const from_station = req.body.from_station !== undefined ? req.body.from_station : existing.from_station;
     const to_station = req.body.to_station !== undefined ? req.body.to_station : existing.to_station;
@@ -2509,8 +2563,6 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
     const set_name = req.body.set_name !== undefined ? req.body.set_name : existing.set_name;
     const link_number = req.body.link_number !== undefined ? (parseInt(req.body.link_number, 10) || null) : existing.link_number;
     const category_id = req.body.category_id !== undefined ? (parseInt(req.body.category_id, 10) || null) : existing.category_id;
-    const link_set_id = req.body.link_set_id !== undefined ? req.body.link_set_id : existing.link_set_id;
-    const status = req.body.status !== undefined ? req.body.status : existing.status;
 
     await run(
       `UPDATE links 
@@ -2584,33 +2636,60 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
     const catId = target.category_id;
     const linkSetId = target.link_set_id;
 
+    // Determine if this is a draft link
+    let isDraftLink = target.status === 'draft';
+    if (linkSetId) {
+      const parentSet = await get('SELECT status FROM link_sets WHERE id = ?', [linkSetId]);
+      if (parentSet && parentSet.status === 'draft') {
+        isDraftLink = true;
+      }
+    }
+
     // 1. Delete the link
     await run('DELETE FROM links WHERE id = ?', [id]);
 
-    // 2. Delete custom TA/NDA rules for this deleted link
-    await run('DELETE FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ?', [catId, deletedLinkNum]);
+    // 2. Only delete custom TA/NDA rules if this is a live published link
+    if (!isDraftLink) {
+      await run('DELETE FROM train_ta_nda_rules WHERE category_id = ? AND link_number = ?', [catId, deletedLinkNum]);
+    }
 
-    // 3. Find subsequent links in the same category ordered by link_number ascending
-    const subsequentLinks = await all(
-      'SELECT id, link_number FROM links WHERE category_id = ? AND link_number > ? ORDER BY link_number ASC',
-      [catId, deletedLinkNum]
-    );
+    // 3. Find subsequent links to shift:
+    // CRITICAL FIX: Only shift subsequent links within the EXACT same link set or scope!
+    let subsequentLinks = [];
+    if (linkSetId) {
+      subsequentLinks = await all(
+        'SELECT id, link_number FROM links WHERE link_set_id = ? AND link_number > ? ORDER BY link_number ASC',
+        [linkSetId, deletedLinkNum]
+      );
+    } else {
+      subsequentLinks = await all(
+        `SELECT id, link_number FROM links 
+         WHERE category_id = ? AND link_set_id IS NULL AND link_number > ? 
+           AND (status = ? OR (status IS NULL AND ? = 'published'))
+         ORDER BY link_number ASC`,
+        [catId, deletedLinkNum, isDraftLink ? 'draft' : 'published', isDraftLink ? 'draft' : 'published']
+      );
+    }
 
-    // 4. Shift subsequent links up by 1 (in order), updating effective_from
+    // 4. Shift subsequent links up by 1 (in order)
     let shiftedCount = 0;
     for (const link of subsequentLinks) {
       const oldNum = link.link_number;
       const newNum = oldNum - 1;
 
-      await run(
-        'UPDATE links SET link_number = ?, effective_from = ? WHERE id = ?',
-        [newNum, effectiveDate, link.id]
-      );
-
-      await run(
-        'UPDATE train_ta_nda_rules SET link_number = ? WHERE category_id = ? AND link_number = ?',
-        [newNum, catId, oldNum]
-      );
+      if (isDraftLink) {
+        // Draft links do NOT alter effective_from of the live schedule
+        await run('UPDATE links SET link_number = ? WHERE id = ?', [newNum, link.id]);
+      } else {
+        await run(
+          'UPDATE links SET link_number = ?, effective_from = ? WHERE id = ?',
+          [newNum, effectiveDate, link.id]
+        );
+        await run(
+          'UPDATE train_ta_nda_rules SET link_number = ? WHERE category_id = ? AND link_number = ?',
+          [newNum, catId, oldNum]
+        );
+      }
 
       shiftedCount++;
     }
@@ -2618,8 +2697,9 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
     // 5. Update link sets count if applicable
     if (linkSetId) {
       const remainingInSet = await get('SELECT count(*) as c FROM links WHERE link_set_id = ?', [linkSetId]);
-      await run('UPDATE link_sets SET link_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [remainingInSet.c, linkSetId]);
+      await run('UPDATE link_sets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [linkSetId]);
     }
+
 
     await logAudit(
       req.user?.username || 'Admin',
@@ -3959,13 +4039,14 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       // Resolve target_category_id
       let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
       if (!resolvedTargetCat && targetLink !== null) {
-        const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staff.category_id, targetLink]);
+        const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staff.category_id, targetLink]);
         if (ownLink) {
           resolvedTargetCat = staff.category_id;
         } else {
-          const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY category_id ASC LIMIT 1', [targetLink]);
+          const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [targetLink]);
           if (anyLink) resolvedTargetCat = anyLink.category_id;
         }
+
       }
       if (!resolvedTargetCat) resolvedTargetCat = staff.category_id;
 
@@ -4805,7 +4886,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           }
           dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : 'Duty')));
         } else {
-          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffA.category_id, origLinkA]);
+          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
           if (staffA.category_id === 4) {
             dutyProfileA.desc = 'LR Standby Pool';
             dutyProfileA.status = 'AVAILABLE_FOR_BOOKING';
@@ -4845,7 +4926,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           }
           dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : 'Duty')));
         } else {
-          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffB.category_id, origLinkB]) : null;
+          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]) : null;
+
           if (staffB.category_id === 4) {
             dutyProfileB.desc = 'LR Standby Pool';
             dutyProfileB.status = 'AVAILABLE_FOR_BOOKING';
@@ -5247,7 +5329,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       }
     } else {
       currentDutyA = origLinkA;
-      const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffA.category_id, origLinkA]);
+      const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
       if (!linkDefA || linkDefA.is_rest) currentDutyA = null;
     }
 
@@ -5268,7 +5350,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       }
     } else {
       currentDutyB = origLinkB;
-      const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [staffB.category_id, origLinkB]);
+      const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]);
       if (!linkDefB || linkDefB.is_rest) currentDutyB = null;
     }
 
@@ -5277,7 +5359,7 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
     let newCatA = targetCatB;
     if (newDutyA !== null) {
       const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY (category_id = ?) DESC LIMIT 1',
+        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
         [newDutyA, targetCatB || staffB.category_id]
       );
       if (linkDef) newCatA = linkDef.category_id;
@@ -5289,11 +5371,12 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
     let newCatB = targetCatA;
     if (newDutyB !== null) {
       const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY (category_id = ?) DESC LIMIT 1',
+        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
         [newDutyB, targetCatA || staffA.category_id]
       );
       if (linkDef) newCatB = linkDef.category_id;
     }
+
     const newStatusB = newDutyB === null ? 'REST' : 'CHANGED_LINK';
     const reasonB = reason ? `Exchange with ${staffA.name}: ${reason}` : `Exchanged duty with ${staffA.name}`;
 
@@ -7062,7 +7145,13 @@ app.get('/api/roster', async (req, res) => {
     let allLinks = [];
 
     if (staffMembers.length > 0) {
-      allLinks = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+      allLinks = await all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+      `);
+
       
       // Load direct overrides AND substitute overrides
       overrides = await all(
@@ -7813,7 +7902,7 @@ app.get('/api/roster/preview-rest-change', async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '')", [category.id]);
+    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))", [category.id]);
     const restLinkNums = restLinks.map(l => l.link_number);
 
     const scheduledRestDate = findScheduledRestDate(
@@ -7859,7 +7948,8 @@ app.post('/api/roster/change-rest-day', requireAdmin, async (req, res) => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '')", [category.id]);
+    const restLinks = await all("SELECT link_number FROM links WHERE category_id = ? AND is_rest = 1 AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))", [category.id]);
+
     const restLinkNums = restLinks.map(l => l.link_number);
 
     const scheduledRestDate = findScheduledRestDate(
@@ -8151,13 +8241,14 @@ app.get('/api/reports/daily-view', async (req, res) => {
           overrideReason = override.reason;
           let resolvedTargetCat = override.target_category_id || (override.status === 'SUBSTITUTE' ? 1 : null);
           if (!resolvedTargetCat && activeLink !== null) {
-            const ownLink = await get('SELECT 1 FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\')', [cat.id, activeLink]);
+            const ownLink = await get('SELECT 1 FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [cat.id, activeLink]);
             if (ownLink) {
               resolvedTargetCat = cat.id;
             } else {
-              const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') ORDER BY category_id ASC LIMIT 1', [activeLink]);
+              const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [activeLink]);
               resolvedTargetCat = anyLink ? anyLink.category_id : cat.id;
             }
+
           }
           targetCategoryId = resolvedTargetCat || cat.id;
           leaveType = override.leave_type;
@@ -8595,8 +8686,9 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           const targetCatId = override?.target_category_id || cat.id;
           dutyDetails = await getActiveLinkDef(targetCatId, activeLink, targetDate);
           if (!dutyDetails) {
-            dutyDetails = await get("SELECT * FROM links WHERE link_number = ? AND (status = 'published' OR status IS NULL OR status = '')", [activeLink]);
+            dutyDetails = await get("SELECT * FROM links WHERE link_number = ? AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))", [activeLink]);
           }
+
         }
 
         const isRest = isCat4RestDay || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING';
@@ -10528,8 +10620,13 @@ app.get('/api/muster', async (req, res) => {
         s.row_position
     `;
 
-    const staffMembers = await all(staffSql, staffParams);
-    const links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+    const links = await all(`
+      SELECT * FROM links 
+      WHERE (status = 'published' OR status IS NULL OR status = '') 
+        AND (status != 'draft')
+        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+    `);
+
     const linkMap = {};
     links.forEach(l => {
       linkMap[`${l.category_id}_${l.link_number}`] = l;
@@ -10997,7 +11094,12 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [dMinus2Start, dateStr]);
-    links = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+    links = await all(`
+      SELECT * FROM links 
+      WHERE (status = 'published' OR status IS NULL OR status = '') 
+        AND (status != 'draft')
+        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+    `);
     nonDaily = await all('SELECT * FROM non_daily_trains');
     dutyRegister = await all(`
       SELECT dre.*, drs.staff_id
@@ -11245,7 +11347,12 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [startDateStr, endDateStr]);
-    const linksList = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+    const linksList = await all(`
+      SELECT * FROM links 
+      WHERE (status = 'published' OR status IS NULL OR status = '') 
+        AND (status != 'draft')
+        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+    `);
     const nonDailyList = await all('SELECT * FROM non_daily_trains');
     const dutyRegisterEntries = await all(`
       SELECT dre.*, drs.staff_id
@@ -11440,7 +11547,12 @@ app.get('/api/lr-sheet', async (req, res) => {
       JOIN staff s1 ON o.staff_id = s1.id
       WHERE o.date >= ? AND o.date <= ?
     `, [startDateStr, endDateStr]);
-    const linksList = await all("SELECT * FROM links WHERE status = 'published' OR status IS NULL OR status = ''");
+    const linksList = await all(`
+      SELECT * FROM links 
+      WHERE (status = 'published' OR status IS NULL OR status = '') 
+        AND (status != 'draft')
+        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+    `);
     const nonDailyList = await all('SELECT * FROM non_daily_trains');
     const dutyRegisterEntries = await all(`
       SELECT dre.*, drs.staff_id

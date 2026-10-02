@@ -1917,7 +1917,9 @@ export default function App() {
     if (catId) {
       if (row.train_out) {
         const outMatch = allLinksList.some(link => 
-          link.category_id === catId && 
+          link.status !== 'draft' &&
+          (!link.link_set_id || linkSetsList.find(s => String(s.id) === String(link.link_set_id))?.status !== 'draft') &&
+          String(link.category_id) === String(catId) && 
           link.train_numbers && 
           link.train_numbers.includes(row.train_out) &&
           (!row.coach_out || (link.coaches && link.coaches.includes(row.coach_out)))
@@ -1936,7 +1938,9 @@ export default function App() {
 
       if (row.train_return) {
         const returnMatch = allLinksList.some(link => 
-          link.category_id === catId && 
+          link.status !== 'draft' &&
+          (!link.link_set_id || linkSetsList.find(s => String(s.id) === String(link.link_set_id))?.status !== 'draft') &&
+          String(link.category_id) === String(catId) && 
           link.train_numbers && 
           link.train_numbers.includes(row.train_return) &&
           (!row.coach_return || (link.coaches && link.coaches.includes(row.coach_return)))
@@ -1977,13 +1981,21 @@ export default function App() {
 
   const handleSaveLinkDetailsModal = async (updatedData) => {
     try {
+      // Check if this link belongs to a draft set
+      const currentSet = linkSetsList.find(s => String(s.id) === String(updatedData.link_set_id || selectedLinkSetId));
+      const isDraft = updatedData.status === 'draft' || currentSet?.status === 'draft';
+      const payload = {
+        ...updatedData,
+        ...(isDraft ? { status: 'draft' } : {})
+      };
+
       const res = await fetch(`${API_BASE}/links/${updatedData.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify(updatedData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update link');
@@ -1996,14 +2008,10 @@ export default function App() {
         return (parseInt(a.link_number, 10) || 0) - (parseInt(b.link_number, 10) || 0);
       });
 
-      // Check if this link belongs to a draft set
-      const currentSet = linkSetsList.find(s => s.id === (updatedData.link_set_id || selectedLinkSetId));
-      const isDraft = updatedData.status === 'draft' || currentSet?.status === 'draft';
-
       // Optimistically update and arrange in ascending order immediately in current view
-      setLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+      setLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...payload } : l)));
       if (!isDraft) {
-        setAllLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...updatedData } : l)));
+        setAllLinksList(prev => sortAscending(prev.map(l => l.id === updatedData.id ? { ...l, ...payload } : l)));
       }
 
       setTaNdaToast(`✓ Link #${updatedData.link_number} ${isDraft ? '(Draft) ' : ''}saved & arranged in ascending order!`);
@@ -2994,8 +3002,9 @@ export default function App() {
     e.preventDefault();
     if (!isAdmin) return;
     const catId = linkForm.category_id || (selectedCatId === 'ALL' ? '1' : selectedCatId) || '1';
-    const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
-    const isSetDraft = currentSet?.status === 'draft';
+    const targetSetId = selectedLinkSetId || editingLink?.link_set_id;
+    const currentSet = linkSetsList.find(s => String(s.id) === String(targetSetId));
+    const isSetDraft = currentSet?.status === 'draft' || editingLink?.status === 'draft';
     const url = editingLink ? `${API_BASE}/links/${editingLink.id}` : `${API_BASE}/links`;
     const method = editingLink ? 'PUT' : 'POST';
     try {
@@ -3007,9 +3016,9 @@ export default function App() {
         },
         body: JSON.stringify({
           category_id: parseInt(catId, 10),
-          link_set_id: selectedLinkSetId || null,
-          status: isSetDraft ? 'draft' : (editingLink?.status || 'published'),
+          link_set_id: targetSetId || null,
           ...linkForm,
+          status: isSetDraft ? 'draft' : (editingLink?.status || 'published'),
           effective_from: linkForm.effective_from || (currentSet?.effective_from || ''),
           link_number: parseInt(linkForm.link_number, 10)
         })
@@ -3044,25 +3053,33 @@ export default function App() {
     if (!isAdmin) return;
     const target = linksList.find(l => l.id === id);
     const linkDesc = target ? `Link #${target.link_number}${target.train_numbers ? ` (${target.train_numbers})` : ''}` : 'this link';
+    const targetSetId = target?.link_set_id || selectedLinkSetId;
+    const currentSet = linkSetsList.find(s => String(s.id) === String(targetSetId));
+    const isSetDraft = currentSet?.status === 'draft' || target?.status === 'draft';
     
-    // 1. Confirm deletion and explain subsequent link shift
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${linkDesc}?\n\n` +
-      `The next link numbers will be moved up to the previous numbered link in order.\n` +
-      `Effective date will be updated for all shifted link numbers.`
-    );
+    // 1. Confirm deletion
+    const confirmMsg = isSetDraft
+      ? `Are you sure you want to delete ${linkDesc} from draft set "${currentSet?.name || 'Draft'}"?`
+      : `Are you sure you want to delete ${linkDesc}?\n\n` +
+        `The next link numbers will be moved up to the previous numbered link in order.\n` +
+        `Effective date will be updated for all shifted link numbers.`;
+    const confirmed = window.confirm(confirmMsg);
     if (!confirmed) return;
 
-    // 2. Prompt user to specify the effective date (default: 1-10-2026)
-    const inputDate = window.prompt(
-      `Specify the effective date for all updated link numbers (format: 1-10-2026 or 2026-10-01):`,
-      '1-10-2026'
-    );
-    if (inputDate === null) return; // User cancelled
-    const effectiveDate = inputDate.trim() || '1-10-2026';
+    let effectiveDate = '1-10-2026';
+    // 2. Prompt user to specify effective date only if published!
+    if (!isSetDraft) {
+      const inputDate = window.prompt(
+        `Specify the effective date for all updated link numbers (format: 1-10-2026 or 2026-10-01):`,
+        '1-10-2026'
+      );
+      if (inputDate === null) return; // User cancelled
+      effectiveDate = inputDate.trim() || '1-10-2026';
+    }
 
     try {
-      const res = await fetch(`${API_BASE}/links/${id}?effective_date=${encodeURIComponent(effectiveDate)}`, {
+      const queryParam = isSetDraft ? '' : `?effective_date=${encodeURIComponent(effectiveDate)}`;
+      const res = await fetch(`${API_BASE}/links/${id}${queryParam}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
@@ -3075,26 +3092,27 @@ export default function App() {
       if (linkSubTab === 'train-centric') {
         await fetchLinks(trainCategoryFilter === 'ALL' ? 'ALL' : trainCategoryFilter, '');
       }
-      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
-      fetch(`${API_BASE}/train-ta-nda`)
-        .then(r => r.json())
-        .then(d => {
-          if (d && d.rules) setTrainTaNdaRules(d.rules);
-          else if (d && d.map) setTrainTaNdaRules(d.map);
-        })
-        .catch(() => {});
 
-      const shiftedMsg = data.shifted_count > 0 
-        ? ` Subsequent ${data.shifted_count} links moved up (effective from ${data.effective_from || effectiveDate}).`
-        : '';
-      setTaNdaToast(`✓ ${linkDesc} deleted.${shiftedMsg}`);
-      setTimeout(() => setTaNdaToast(null), 5000);
+      // CRITICAL: Only touch live roster, TA/NDA, and allLinksList if NOT draft!
+      if (!isSetDraft) {
+        fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+        fetch(`${API_BASE}/train-ta-nda`)
+          .then(r => r.json())
+          .then(d => {
+            if (d && d.rules) setTrainTaNdaRules(d.rules);
+            else if (d && d.map) setTrainTaNdaRules(d.map);
+          })
+          .catch(() => {});
 
-      const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
-      if (currentSet?.status !== 'draft') {
         fetchDailyDuties();
         if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
       }
+
+      const shiftedMsg = data.shifted_count > 0 
+        ? ` Subsequent ${data.shifted_count} links moved up${isSetDraft ? '' : ` (effective from ${data.effective_from || effectiveDate})`}.`
+        : '';
+      setTaNdaToast(`✓ ${linkDesc} deleted.${shiftedMsg}`);
+      setTimeout(() => setTaNdaToast(null), 5000);
     } catch (err) {
       alert(`Failed to delete link: ${err.message}`);
     }
@@ -3102,7 +3120,7 @@ export default function App() {
 
   const clearAllLinks = () => {
     if (!isAdmin) return;
-    const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+    const currentSet = linkSetsList.find(s => String(s.id) === String(selectedLinkSetId));
     const isSetDraft = currentSet?.status === 'draft';
     const msg = isSetDraft 
       ? `Clear all links in draft set "${currentSet?.name}"?` 
@@ -3129,6 +3147,8 @@ export default function App() {
     if (!isAdmin || !linkId) return;
     const link = linksList.find(l => l.id === linkId);
     if (!link) return;
+    const currentSet = linkSetsList.find(s => String(s.id) === String(selectedLinkSetId || link.link_set_id));
+    const isDraft = link.status === 'draft' || currentSet?.status === 'draft';
 
     fetch(`${API_BASE}/links/${linkId}`, {
       method: 'PUT',
@@ -3143,7 +3163,7 @@ export default function App() {
       })
     }).then(() => {
       fetchLinks(selectedCatId, selectedLinkSetId);
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      if (!isDraft && (activeTab === 'daily' || activeTab === 'roster')) fetchRoster();
     });
   };
 
@@ -3151,6 +3171,8 @@ export default function App() {
     if (!isAdmin) return;
     if (confirm(`Are you sure you want to delete set "${setName}"? All assigned trains will become unassigned.`)) {
       const linksInSet = linksList.filter(l => l.set_name === setName && l.category_id === parseInt(selectedCatId, 10));
+      const currentSet = linkSetsList.find(s => String(s.id) === String(selectedLinkSetId));
+      const isDraft = currentSet?.status === 'draft';
       const promises = linksInSet.map(link => {
         return fetch(`${API_BASE}/links/${link.id}`, {
           method: 'PUT',
@@ -3168,7 +3190,7 @@ export default function App() {
       Promise.all(promises).then(() => {
         setCustomSets(prev => prev.filter(s => !(s.name === setName && s.category_id === parseInt(selectedCatId, 10))));
         fetchLinks(selectedCatId, selectedLinkSetId);
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        if (!isDraft && (activeTab === 'daily' || activeTab === 'roster')) fetchRoster();
       });
     }
   };
@@ -3197,7 +3219,7 @@ export default function App() {
       body: JSON.stringify({ reorders })
     }).then(() => {
       fetchLinks(selectedCatId, selectedLinkSetId);
-      const currentSet = linkSetsList.find(s => s.id === selectedLinkSetId);
+      const currentSet = linkSetsList.find(s => String(s.id) === String(selectedLinkSetId));
       if (currentSet?.status !== 'draft') {
         if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
       }
@@ -5286,6 +5308,8 @@ export default function App() {
                     if (Array.isArray(slot.links)) {
                       for (const lDef of slot.links) {
                         const matched = allLinksList.find(al => 
+                          al.status !== 'draft' &&
+                          (!al.link_set_id || linkSetsList.find(s => String(s.id) === String(al.link_set_id))?.status !== 'draft') &&
                           parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                           parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
                         );
@@ -5309,6 +5333,8 @@ export default function App() {
                       const customDuty = slotCustomizations[dutyKey] || {};
 
                       const matchedLink = allLinksList.find(al => 
+                        al.status !== 'draft' &&
+                        (!al.link_set_id || linkSetsList.find(s => String(s.id) === String(al.link_set_id))?.status !== 'draft') &&
                         parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                         parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
                       );
@@ -10412,8 +10438,8 @@ export default function App() {
             const trainRosterItems = [];
             // Master Train Roster must ONLY display live published links - drafts must never reflect until published!
             const publishedLinksSource = (allLinksList && allLinksList.length > 0)
-              ? allLinksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => s.id === l.link_set_id)?.status !== 'draft'))
-              : linksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => s.id === l.link_set_id)?.status !== 'draft'));
+              ? allLinksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => String(s.id) === String(l.link_set_id))?.status !== 'draft'))
+              : linksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => String(s.id) === String(l.link_set_id))?.status !== 'draft'));
 
             publishedLinksSource.forEach(link => {
               if (link.is_rest || !link.train_numbers) return;
