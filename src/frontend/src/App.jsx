@@ -1025,6 +1025,7 @@ export default function App() {
   const [linkSubTab, setLinkSubTab] = useState('sets'); // 'sets' (All Link Sets), 'list' (Table Editor), 'train-centric'
   const [linkSetsList, setLinkSetsList] = useState([]);
   const [selectedLinkSetId, setSelectedLinkSetId] = useState(null);
+  const [trainRosterDate, setTrainRosterDate] = useState(() => `${getLocalYearString()}-${getLocalMonthString().padStart(2, '0')}-01`);
   const [duplicateModal, setDuplicateModal] = useState(null); // { set } or null
   const [duplicateNameInput, setDuplicateNameInput] = useState('');
   const [publishModal, setPublishModal] = useState(null); // { set } or null
@@ -4623,6 +4624,52 @@ export default function App() {
                 <option value="11">November</option>
                 <option value="12">December</option>
               </select>
+
+              {/* Quick Schedule Selector Buttons */}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setYear('2026');
+                    setMonth('10');
+                    setTrainRosterDate('2026-10-01');
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: (year === '2026' && String(month) === '10') ? 700 : 500,
+                    background: (year === '2026' && String(month) === '10') ? '#10b981' : 'rgba(255,255,255,0.06)',
+                    color: (year === '2026' && String(month) === '10') ? '#fff' : 'var(--color-text-secondary)',
+                    border: (year === '2026' && String(month) === '10') ? '1px solid #10b981' : '1px solid var(--border-glass)',
+                    cursor: 'pointer'
+                  }}
+                  title="Switch to October 2026 Schedule (56 Links)"
+                >
+                  🍁 Oct 2026 (56 Links)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setYear('2026');
+                    setMonth('9');
+                    setTrainRosterDate('2026-09-15');
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: (year === '2026' && String(month) === '9') ? 700 : 500,
+                    background: (year === '2026' && String(month) === '9') ? '#f59e0b' : 'rgba(255,255,255,0.06)',
+                    color: (year === '2026' && String(month) === '9') ? '#000' : 'var(--color-text-secondary)',
+                    border: (year === '2026' && String(month) === '9') ? '1px solid #f59e0b' : '1px solid var(--border-glass)',
+                    cursor: 'pointer'
+                  }}
+                  title="Switch to September 2026 Schedule (63 Links • Image 3 Order)"
+                >
+                  🍂 Sept 2026 (63 Links)
+                </button>
+              </div>
 
               {/* Roster Search Input */}
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginLeft: '6px' }}>
@@ -9116,6 +9163,20 @@ export default function App() {
                     <span>📅</span> 
                     Anchor date: <strong>{rosterData.category.anchor_date}</strong> | 
                     Cycle Length: <strong>{rosterData.category.cycle_length} links</strong>.
+                    {(rosterData.category.id === 2 || rosterData.category.code === 'TTI_SLEEPER') && (
+                      <span style={{
+                        marginLeft: '10px',
+                        padding: '3px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        background: (rosterData.startDate >= '2026-10-01' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'),
+                        color: (rosterData.startDate >= '2026-10-01' ? '#10b981' : '#f59e0b'),
+                        border: (rosterData.startDate >= '2026-10-01' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)')
+                      }}>
+                        {rosterData.startDate >= '2026-10-01' ? '🍁 October 2026 Schedule (Set #7 • 56 Links)' : '🍂 September 2026 Schedule (Set #2 • 63 Links • Image 3 Order)'}
+                      </span>
+                    )}
                     {isAdmin ? ' Click any cell to manually override it.' : ' 🔒 View-Only Mode: Logged in as Staff/Viewer (Editing is restricted to Master Admin).'}
                   </div>
                   {rosterSearchQuery.trim() && (
@@ -9470,6 +9531,212 @@ export default function App() {
                 <span><strong>Read-Only Mode:</strong> Logged in as Staff/Viewer. Only Master Administrators can configure or modify train links and sets.</span>
               </div>
             )}
+
+            {/* Train Schedule & Published Period Selector Toolbar */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(212,161,92,0.06) 100%)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              marginBottom: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.3rem' }}>🗓️</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--color-text-primary)' }}>
+                      Train Roster Schedule & Published Period Selector
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                      Switch between October (56 Links) and September (63 Links) or choose any date to view published train links
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Schedule Toggle Buttons */}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setTrainRosterDate('2026-10-01');
+                      setYear('2026');
+                      setMonth('10');
+                      setSelectedLinkSetId(7);
+                      if (linkSubTab === 'list') fetchLinks(selectedCatId, 7);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      fontSize: '0.86rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      background: (trainRosterDate >= '2026-10-01')
+                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                        : 'rgba(255,255,255,0.06)',
+                      color: (trainRosterDate >= '2026-10-01') ? '#fff' : 'var(--color-text-secondary)',
+                      border: (trainRosterDate >= '2026-10-01') ? '1px solid #10b981' : '1px solid var(--border-glass)',
+                      boxShadow: (trainRosterDate >= '2026-10-01') ? '0 2px 8px rgba(16, 185, 129, 0.3)' : 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="October 2026 Schedule (Set #7 • 56 Links)"
+                  >
+                    <span>🍁</span>
+                    <span>October 2026 Schedule</span>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(0,0,0,0.25)',
+                      fontWeight: 600
+                    }}>
+                      56 Links
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setTrainRosterDate('2026-09-15');
+                      setYear('2026');
+                      setMonth('9');
+                      setSelectedLinkSetId(2);
+                      if (linkSubTab === 'list') fetchLinks(selectedCatId, 2);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      fontSize: '0.86rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      background: (trainRosterDate < '2026-10-01' && trainRosterDate >= '2026-07-01')
+                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                        : 'rgba(255,255,255,0.06)',
+                      color: (trainRosterDate < '2026-10-01' && trainRosterDate >= '2026-07-01') ? '#000' : 'var(--color-text-secondary)',
+                      border: (trainRosterDate < '2026-10-01' && trainRosterDate >= '2026-07-01') ? '1px solid #f59e0b' : '1px solid var(--border-glass)',
+                      boxShadow: (trainRosterDate < '2026-10-01' && trainRosterDate >= '2026-07-01') ? '0 2px 8px rgba(245, 158, 11, 0.3)' : 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="September 2026 Schedule (Set #2 • 63 Links • Order of Image 3)"
+                  >
+                    <span>🍂</span>
+                    <span>September 2026 Schedule</span>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(0,0,0,0.2)',
+                      fontWeight: 600
+                    }}>
+                      63 Links
+                    </span>
+                  </button>
+
+                  {/* Target Date Picker */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Target Date:</span>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={trainRosterDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        setTrainRosterDate(val);
+                        const parts = val.split('-');
+                        if (parts.length === 3) {
+                          setYear(parts[0]);
+                          setMonth(String(parseInt(parts[1], 10)));
+                        }
+                        if (val >= '2026-10-01') {
+                          setSelectedLinkSetId(7);
+                          if (linkSubTab === 'list') fetchLinks(selectedCatId, 7);
+                        } else {
+                          setSelectedLinkSetId(2);
+                          if (linkSubTab === 'list') fetchLinks(selectedCatId, 2);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.84rem',
+                        borderRadius: '6px',
+                        width: '145px',
+                        background: 'var(--bg-secondary)',
+                        color: 'var(--color-text-primary)',
+                        border: '1px solid var(--border-glass)'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status and Active Boundary Indicator */}
+              {(() => {
+                const activeSet = (trainRosterDate >= '2026-10-01')
+                  ? linkSetsList.find(s => s.id === 7 || (s.category_id === 2 && s.status === 'published' && s.effective_from >= '2026-10-01'))
+                  : linkSetsList.find(s => s.id === 2 || (s.category_id === 2 && s.status === 'published' && s.effective_to <= '2026-09-30'));
+                
+                const isOct = trainRosterDate >= '2026-10-01';
+                const effectiveFrom = activeSet?.effective_from || (isOct ? '2026-10-01' : '2026-07-01');
+                const effectiveTo = activeSet?.effective_to || (isOct ? '9999-12-31' : '2026-09-30');
+                const isInside = (!effectiveFrom || effectiveFrom <= trainRosterDate) && (!effectiveTo || effectiveTo >= trainRosterDate);
+                const displayTo = (!effectiveTo || effectiveTo === '9999-12-31') ? 'Indefinite (Open)' : effectiveTo;
+
+                return (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: isInside ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: isInside ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                    fontSize: '0.82rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: isInside ? '#10b981' : '#ef4444'
+                      }}></span>
+                      <span>
+                        <strong>Active Sleeper Schedule:</strong> {activeSet ? activeSet.name : (isOct ? 'TTI / Sleeper Staff (Current Link Schedule • 56 Links)' : 'TTI / Sleeper Staff (July 2026 – Sept 2026 • 63 Links)')}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span>
+                        <strong>Published Window:</strong> {effectiveFrom} &nbsp;➔&nbsp; {displayTo}
+                      </span>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        background: isInside ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: isInside ? '#10b981' : '#ef4444'
+                      }}>
+                        {isInside ? `✓ Date ${trainRosterDate} is inside published period` : `⚠ Date ${trainRosterDate} is OUTSIDE published period`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* Sub-tabs navigation */}
             <div className="subtabs-nav" style={{ marginBottom: '20px', display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '8px' }}>
@@ -10501,10 +10768,19 @@ export default function App() {
 
           {linkSubTab === 'train-centric' && (() => {
             const trainRosterItems = [];
-            // Master Train Roster must ONLY display live published links - drafts must never reflect until published!
-            const publishedLinksSource = (allLinksList && allLinksList.length > 0)
-              ? allLinksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => String(s.id) === String(l.link_set_id))?.status !== 'draft'))
-              : linksList.filter(l => l.status !== 'draft' && (!l.link_set_id || linkSetsList.find(s => String(s.id) === String(l.link_set_id))?.status !== 'draft'));
+            const activeDate = trainRosterDate || `${year}-${String(month).padStart(2, '0')}-01`;
+            // Master Train Roster must ONLY display live published links matching activeDate
+            const publishedLinksSource = (allLinksList && allLinksList.length > 0 ? allLinksList : linksList)
+              .filter(l => {
+                if (l.status === 'draft') return false;
+                const parentSet = linkSetsList.find(s => String(s.id) === String(l.link_set_id));
+                if (parentSet && parentSet.status === 'draft') return false;
+                const effFrom = l.effective_from || parentSet?.effective_from;
+                const effTo = l.effective_to || parentSet?.effective_to;
+                if (effFrom && effFrom > activeDate) return false;
+                if (effTo && effTo < activeDate) return false;
+                return true;
+              });
 
             publishedLinksSource.forEach(link => {
               if (link.is_rest || !link.train_numbers) return;
@@ -10543,6 +10819,31 @@ export default function App() {
 
             return (
               <div className="card">
+                {/* Active Schedule Banner for Train-Centric Roster */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(212, 161, 92, 0.08)',
+                  border: '1px solid rgba(212, 161, 92, 0.25)',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  fontSize: '0.84rem'
+                }}>
+                  <div>
+                    <span>📌</span>
+                    <strong> Displaying Published Train Links for:</strong> {activeDate} &nbsp;|&nbsp;
+                    <strong> Sleeper Schedule:</strong> {activeDate >= '2026-10-01' ? '🍁 October 2026 (Set #7 • 56 Links)' : '🍂 September 2026 (Set #2 • 63 Links • Image 3 Order)'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span className="badge" style={{ background: 'var(--primary)', color: '#000', fontWeight: 700 }}>
+                      {trainRosterItems.length} Trains Covered
+                    </span>
+                  </div>
+                </div>
                 {/* 2 Main Categories in Train Roster */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-glass)' }}>
