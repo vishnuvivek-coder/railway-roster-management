@@ -10662,6 +10662,7 @@ app.get('/api/muster', async (req, res) => {
         s.category_id, 
         s.row_position
     `;
+    const staffMembers = await all(staffSql, staffParams);
 
     const links = await all(`
       SELECT * FROM links 
