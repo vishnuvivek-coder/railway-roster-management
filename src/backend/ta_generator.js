@@ -15,20 +15,18 @@ const KNOWN_LINK_SETS = {
     [8, 9, 10],
     [11, 12, 13],
     [15, 16],
-    [17, 18],
-    [19, 20],
+    [17],
+    [18, 19, 20],
     [22, 23, 24],
     [25, 26, 27],
-    [29, 30],
-    [31, 32],
-    [33, 34],
-    [36, 37, 38],
-    [39, 40, 41],
-    [43, 44, 45, 46],
-    [47, 48],
-    [50, 51, 52],
-    [53, 54, 55],
-    [57, 58, 59]
+    [29, 30, 31],
+    [32, 33, 34],
+    [36, 37],
+    [38, 39],
+    [40, 41],
+    [43, 44, 45],
+    [46, 47, 48],
+    [50, 51, 52]
   ],
   3: [
     [1, 2, 3],
@@ -37,10 +35,10 @@ const KNOWN_LINK_SETS = {
 };
 
 const NON_DAILY_LINK_TRAINS = {
-  60: '22882',
-  61: '17221',
-  62: '17069',
-  63: 'R'
+  53: '22882',
+  54: '17221',
+  55: '17069',
+  56: 'R'
 };
 
 const NON_DAILY_PAIRS_MAP = {
@@ -630,128 +628,154 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
     }
   }
 
-  // Category 2: TTI / Sleeper Staff - 63-day cycle
+  // Category 2: TTI / Sleeper Staff - 56-day cycle (October 2026 onwards)
   if (categoryId === 2) {
+    if (linkNumber % 7 === 0) {
+      return []; // REST (7, 14, 21, 28, 35, 42, 49, 56)
+    }
     switch (linkNumber) {
       case 1:
-      case 15:
-        return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7 }];
+        return [{ train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '16:30', ta: 0.7 }];
       case 2:
-      case 16:
-        return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7 }];
+        return [{ train_no: '17240', from: 'VSKP', to: 'GNT', dep: '07:10', arr: '15:40', ta: 0.7 }];
       case 3:
         return [{ train_no: '12604', from: 'GNT', to: '---', dep: '22:40', arr: '---', ta: 0.3 }];
       case 4:
-      case 46:
         return [
-          { train_no: '12604', from: '---', to: 'MAS', dep: '---', arr: '5:45', ta: null },
+          { train_no: '12604', from: '---', to: 'MAS', dep: '---', arr: '05:45', ta: null },
           { train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '23:50', ta: 1.0 }
         ];
       case 5:
-      case 47:
         return [{ train_no: '17251', from: 'GNT', to: '---', dep: '16:30', arr: '---', ta: 0.7 }];
       case 6:
         return [
           { train_no: '17251', from: '---', to: 'DHNE', dep: '---', arr: '05:00', ta: null },
-          { train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 1.0 }
+          { train_no: '17254', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 1.0 }
         ];
-      case 7:
-      case 14:
-      case 21:
-      case 28:
-      case 35:
-      case 42:
-      case 49:
-      case 56:
-      case 63:
-        return []; // REST
       case 8:
-      case 22:
-        return [
-          { train_no: '17215', from: 'GNT', to: '---', dep: '22:35', arr: '---', ta: 0.3 }
-        ];
+        return [{ train_no: '12734', from: 'GNT', to: '---', dep: '22:50', arr: '---', ta: 0.3 }];
       case 9:
-      case 23:
         return [
-          { train_no: '17215', from: '---', to: 'DMM', dep: '---', arr: '08:30', ta: null },
-          { train_no: '17216', from: 'DMM', to: '---', dep: '17:30', arr: '---', ta: 1.0 }
+          { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:05', ta: null },
+          { train_no: '20630', from: 'TPTY', to: '---', dep: '23:15', arr: '---', ta: 1.0 }
         ];
       case 10:
-      case 24:
-        return [
-          { train_no: '17216', from: '---', to: 'GNT', dep: '---', arr: '06:15', ta: 0.3 }
-        ];
+        return [{ train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 }];
       case 11:
       case 25:
-      case 39:
-      case 53:
         return [
-          { train_no: '12747', from: 'GNT', to: 'VKB', dep: '05:45', arr: '12:00', ta: null },
-          { train_no: '12748', from: 'VKB', to: 'GNT', dep: '14:40', arr: '21:10', ta: 0.7 }
+          { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+          { train_no: '17225', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
         ];
       case 12:
       case 26:
         return [
-          { train_no: '17201', from: 'GNT', to: 'KZJ', dep: '06:00', arr: '12:00', ta: null },
-          { train_no: '17202', from: 'KZJ', to: 'GNT', dep: '15:45', arr: '21:30', ta: 0.7 }
+          { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null },
+          { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
         ];
       case 13:
       case 27:
-        return [{ train_no: '17255', from: 'GNT', to: 'KCG', dep: '23:20', arr: '05:40', ta: 0.7 }];
-      case 17:
-      case 31:
         return [
-          { train_no: '17228', from: 'GNT', to: 'DHNE', dep: '13:00', arr: '20:30', ta: 0.7 }
+          { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:50', ta: null },
+          { train_no: '12703', from: 'BZA', to: 'GNT', dep: '06:20', arr: '07:15', ta: 0.7 }
+        ];
+      case 15:
+        return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7 }];
+      case 16:
+        return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7 }];
+      case 17:
+        return [
+          { train_no: '17646', from: 'GNT', to: 'SC', dep: '07:45', arr: '14:30', ta: null },
+          { train_no: '12796', from: 'SC', to: 'BZA', dep: '17:30', arr: '23:20', ta: 1.0 }
         ];
       case 18:
-      case 32:
-        return [
-          { train_no: '17227', from: 'DHNE', to: 'GNT', dep: '06:00', arr: '14:00', ta: 0.7 }
-        ];
+        return [{ train_no: '12805', from: 'BZA', to: 'GNT', dep: '06:00', arr: '07:00', ta: 0.3 }];
       case 19:
-      case 33:
-        return [
-          { train_no: '12734', from: 'GNT', to: '---', dep: '22:50', arr: '---', ta: 0.3 }
-        ];
+        return [{ train_no: '12805', from: 'GNT', to: 'SC', dep: '07:05', arr: '14:00', ta: 0.7 }];
       case 20:
-      case 34:
         return [
-          { train_no: '12734', from: '---', to: 'TPTY', dep: '---', arr: '06:05', ta: null },
-          { train_no: '17262', from: 'TPTY', to: '---', dep: '19:30', arr: '---', ta: 1.0 }
+          { train_no: '12806', from: 'SC', to: 'BZA', dep: '07:00', arr: '13:40', ta: null },
+          { train_no: '17240', from: 'BZA', to: 'GNT', dep: '15:00', arr: '15:40', ta: 0.7 }
         ];
-      case 29:
-        return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7 }];
-      case 30:
-        return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7 }];
-      case 36:
-      case 50:
-        return [{ train_no: '17645', from: 'GNT', to: 'RAL', dep: '07:30', arr: '08:45', ta: null }, { train_no: '17626', from: 'RAL', to: '---', dep: '22:40', arr: '---', ta: 0.3 }];
-      case 37:
-      case 51:
-        return [{ train_no: '17626', from: '---', to: 'KCG', dep: '---', arr: '07:15', ta: null }, { train_no: '17625', from: 'KCG', to: '---', dep: '22:10', arr: '---', ta: 1.0 }];
-      case 38:
-      case 52:
-        return [{ train_no: '17625', from: '---', to: 'RAL', dep: '---', arr: '04:10', ta: null }, { train_no: '17646', from: 'RAL', to: 'GNT', dep: '05:55', arr: '07:00', ta: 1.0 }];
-      case 40:
-      case 54:
-        return [{ train_no: '17243', from: 'GNT', to: '---', dep: '23:20', arr: '---', ta: 0.3 }];
-      case 41:
-      case 55:
-        return [{ train_no: '17243', from: '---', to: 'VSKP', dep: '---', arr: '09:30', ta: null }, { train_no: '17244', from: 'VSKP', to: '---', dep: '15:30', arr: '---', ta: 1.0 }];
-      case 43:
+      case 22:
         return [{ train_no: '20629', from: 'GNT', to: '---', dep: '19:10', arr: '---', ta: 0.3 }];
+      case 23:
+        return [
+          { train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null },
+          { train_no: '20630', from: 'TPTY', to: '---', dep: '23:15', arr: '---', ta: 1.0 }
+        ];
+      case 24:
+        return [{ train_no: '20630', from: '---', to: 'GNT', dep: '---', arr: '05:55', ta: 0.3 }];
+      case 29:
+      case 43:
+        return [
+          { train_no: '17645', from: 'GNT', to: 'RAL', dep: '07:30', arr: '08:45', ta: null },
+          { train_no: '17626', from: 'RAL', to: '---', dep: '22:40', arr: '---', ta: 0.3 }
+        ];
+      case 30:
       case 44:
-        return [{ train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null }, { train_no: '12733', from: 'TPTY', to: '---', dep: '18:20', arr: '---', ta: 1.0 }];
+        return [
+          { train_no: '17626', from: '---', to: 'KCG', dep: '---', arr: '07:15', ta: null },
+          { train_no: '17625', from: 'KCG', to: '---', dep: '22:10', arr: '---', ta: 1.0 }
+        ];
+      case 31:
       case 45:
-        return [{ train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 }, { train_no: '17281', from: 'GNT', to: '---', dep: '23:30', arr: '---', ta: 0.3 }];
+        return [
+          { train_no: '17625', from: '---', to: 'RAL', dep: '---', arr: '04:10', ta: null },
+          { train_no: '17646', from: 'RAL', to: 'GNT', dep: '05:55', arr: '07:00', ta: 1.0 }
+        ];
+      case 32:
+      case 46:
+        return [{ train_no: '17243', from: 'GNT', to: '---', dep: '23:20', arr: '---', ta: 0.3 }];
+      case 33:
+      case 47:
+        return [
+          { train_no: '17243', from: '---', to: 'VSKP', dep: '---', arr: '09:30', ta: null },
+          { train_no: '17244', from: 'VSKP', to: '---', dep: '15:30', arr: '---', ta: 1.0 }
+        ];
+      case 34:
       case 48:
-        return [{ train_no: '17646', from: '---', to: 'GNT', dep: '---', arr: '07:00', ta: 1.0 }];
-      case 57:
-        return [{ train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null }, { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }];
-      case 58:
-        return [{ train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null }, { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }];
-      case 59:
-        return [{ train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null }, { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }];
+        return [{ train_no: '17244', from: '---', to: 'GNT', dep: '---', arr: '00:35', ta: 0.3 }];
+      case 36:
+        return [{ train_no: '20629', from: 'GNT', to: '---', dep: '19:10', arr: '---', ta: 0.3 }];
+      case 37:
+        return [
+          { train_no: '20629', from: '---', to: 'TPTY', dep: '---', arr: '01:50', ta: null },
+          { train_no: '12733', from: 'TPTY', to: '---', dep: '18:20', arr: '---', ta: 1.0 }
+        ];
+      case 38:
+        return [
+          { train_no: '12733', from: '---', to: 'GNT', dep: '---', arr: '00:50', ta: 0.3 },
+          { train_no: '17281', from: 'GNT', to: 'NS', dep: '17:45', arr: '22:30', ta: 0.7 }
+        ];
+      case 39:
+        return [{ train_no: '17282', from: 'NS', to: 'GNT', dep: '06:05', arr: '10:50', ta: 0.7 }];
+      case 40:
+        return [{ train_no: '12705', from: 'GNT', to: 'BZA', dep: '15:30', arr: '16:30', ta: 0.3 }];
+      case 41:
+        return [
+          { train_no: '12795', from: 'BZA', to: 'SC', dep: '17:30', arr: '23:20', ta: null },
+          { train_no: '17645', from: 'SC', to: 'GNT', dep: '07:45', arr: '14:30', ta: 1.0 }
+        ];
+      case 50:
+        return [
+          { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+          { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }
+        ];
+      case 51:
+        return [
+          { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
+          { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
+        ];
+      case 52:
+        return [
+          { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null },
+          { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
+        ];
+      case 53:
+      case 54:
+      case 55:
+        return []; // Non daily links
       default:
         if (link && link.train_numbers && link.train_numbers !== 'REST' && link.train_numbers !== 'OFF') {
           return [

@@ -105,13 +105,11 @@ const getLocalMonthString = () => {
 const getLinkDisplayLabel = (catId, linkNum) => {
   if (!linkNum) return '';
   const num = parseInt(linkNum, 10);
-  if (parseInt(catId, 10) === 1) {
-    if (num === 7) return 'R/7';
-    if (num === 14) return 'R/14';
-    if (num === 21) return 'R/21';
-    return String(num);
+  if (!num) return String(linkNum);
+  if (num % 7 === 0) {
+    return `R/${num}`;
   }
-  return `#${linkNum}`;
+  return String(num);
 };
 
 
@@ -3588,7 +3586,12 @@ export default function App() {
       const cellValues = row.cells.map(c => {
         if (isVacantRow) return "";
         if (c.status === 'AVAILABLE_FOR_BOOKING') return "AVL(HQ)";
-        return c.isRest ? "REST" : c.actualLinkNumber;
+        if (c.isRest) {
+          const num = parseInt(c.actualLinkNumber || c.calculatedLinkNumber, 10);
+          if (num && num % 7 === 0) return `R/${num}`;
+          return "REST";
+        }
+        return c.actualLinkNumber;
       });
       csvContent += `${row.slNo},"${row.staffName || '(VACANT)'}","${row.designation || ''}",${cellValues.join(",")}\n`;
     });
@@ -3625,7 +3628,11 @@ export default function App() {
         return cell.train_numbers.length > 8 ? cell.train_numbers.substring(0, 8) + '…' : cell.train_numbers;
       }
     }
-    if (cell.isRest) return 'REST';
+    if (cell.isRest) {
+      const num = parseInt(cell.actualLinkNumber || cell.calculatedLinkNumber, 10);
+      if (num && num % 7 === 0) return `R/${num}`;
+      return 'REST';
+    }
     return getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
   };
 
