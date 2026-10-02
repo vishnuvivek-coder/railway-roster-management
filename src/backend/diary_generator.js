@@ -1,5 +1,6 @@
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
+const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
 
 /**
  * Generate complete DIARY / E.F.T Earnings Statement for a staff member for a given month/year or date range
@@ -254,13 +255,44 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
 
     const muster = musterMap[dateStrIso];
     const musterCode = muster ? muster.code.toUpperCase() : null;
-    const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
-
     const override = overrideMap[dateStrIso];
 
-    if (isMusterLeave || (override && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(override.status) || override.leave_type))) {
+    let origLinkNum = null;
+    let origTrain = null;
+    let origIsRest = false;
+
+    if (category.id !== 4) {
+      origLinkNum = getLinkNumForDate(dateStrIso);
+      const link = linkMap[origLinkNum];
+      origIsRest = !link || link.is_rest === 1 || isRestString(link.train_numbers);
+      origTrain = origIsRest ? 'REST' : (link.train_numbers || 'REST');
+    } else {
+      origIsRest = isRestString(override ? override.status : null) || isRestString(musterCode);
+      origTrain = origIsRest ? 'REST' : 'SPARE (HQ)';
+    }
+
+    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || '';
+
+    const cmp = compareDutyAndResolve({
+      origTrain,
+      origIsRest,
+      remarks: remarksStr,
+      overrideDuty: override,
+      muster,
+      allLinks: Object.values(linkMap)
+    });
+
+    // Condition 3: If employee rest day and both columns declared rest -> Skip in DIARY!
+    if (cmp.action === 'SKIP' || cmp.isRest) {
+      continue;
+    }
+
+    if (cmp.action === 'STANDBY') {
+      continue;
+    }
+
+    if (cmp.action === 'LEAVE') {
       rowOrder++;
-      const effCode = musterCode || (override ? (override.leave_type || override.status) : 'LEAVE');
       rows.push({
         id: null,
         row_order: rowOrder,
@@ -285,29 +317,21 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
         remit_mr_no: '',
         remit_date: '',
         remit_amount: null,
-        remarks: `ON LEAVE / REST (${effCode})`
+        remarks: `ON LEAVE (${cmp.leaveCode})`
       });
       continue;
     }
 
-    let duties = [];
-    let linkNum = null;
-
-    if (override && (override.status === 'CHANGED_LINK' || override.status === 'SUBSTITUTE')) {
-      const targetCatId = override.target_category_id || category.id;
-      linkNum = override.overridden_link_number;
-      duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
-    } else if (override && (override.status === 'EXTRA_CREW' || override.is_extra === 1 || override.extra_train_no)) {
-      const trNo = override.extra_train_no || 'EXTRA';
-      duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---' }];
-    } else if (override && (override.status === 'UTILISED_ADVANCE' || override.advance_train_no)) {
-      const trNo = override.advance_train_no || 'ADVANCE';
-      duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---' }];
-    } else {
-      linkNum = getLinkNumForDate(dateStrIso);
-      const link = linkMap[linkNum];
-      duties = getDutyRowsForLinkNumber(category.id, linkNum, link);
+    let duties = cmp.duty_rows;
+    if (!duties || duties.length === 0) {
+      if (cmp.train_no) {
+        duties = [{ train_no: cmp.train_no, from: 'GNT', to: '---', dep: '17:45', arr: '---' }];
+      } else {
+        continue;
+      }
     }
+
+    const effectiveLinkNum = (override && override.overridden_link_number) ? override.overridden_link_number : origLinkNum;
 
     for (const duty of duties) {
       rowOrder++;
@@ -338,7 +362,7 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       rows.push({
         id: null,
         row_order: rowOrder,
-        link_number: linkNum,
+        link_number: effectiveLinkNum,
         date_str: dateStrDisplay,
         date_iso: dateStrIso,
         is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === dateStrDisplay,

@@ -1230,166 +1230,108 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         const earnEntry = earningsMap[dateStrIso];
 
         const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(directOverride.status) || directOverride.leave_type);
-        const isEffectiveLeave = isMusterLeave || isDirectLeave;
+        let isEffectiveLeave = isMusterLeave || isDirectLeave;
+
+        const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
+
+        let origLinkNum = null;
+        let origTrain = null;
+        let origIsRest = false;
+
+        if (category.id !== 4) {
+          const offset = getDayOffset(category.anchor_date, dateStrIso);
+          origLinkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+          const origLink = linkMap[`${category.id}_${origLinkNum}`] || linkMap[origLinkNum];
+          origIsRest = !origLink || origLink.is_rest === 1 || isRestString(origLink.train_numbers);
+          origTrain = origIsRest ? 'REST' : (origLink.train_numbers || 'REST');
+        } else {
+          const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
+          origIsRest = isRestString(dutyCode);
+          origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
+        }
+
+        const overrideDuty = directOverride || subOverride;
+        const remarksStr = (overrideDuty && overrideDuty.reason) || (muster ? muster.remarks : '') || '';
+
+        const cmp = compareDutyAndResolve({
+          origTrain,
+          origIsRest,
+          remarks: remarksStr,
+          overrideDuty,
+          muster,
+          allLinks: Object.values(linkMap)
+        });
+
+        if (cmp.action === 'SKIP') {
+          // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
+          lastAssignedLink = null;
+          lastAssignedNonDaily = null;
+          continue;
+        }
+
+        if (cmp.action === 'STANDBY') {
+          isStandbyHq = true;
+          lastAssignedLink = null;
+          lastAssignedNonDaily = null;
+          continue;
+        }
 
         let duties = [];
         let linkNum = null;
         let isStandbyHq = false;
 
-        if (isEffectiveLeave) {
+        if (cmp.action === 'LEAVE') {
+          isEffectiveLeave = true;
           duties = [];
           lastAssignedLink = null;
           lastAssignedNonDaily = null;
-        } else if (directOverride && (directOverride.status === 'AVAILABLE_FOR_BOOKING' || (directOverride.reason && (directOverride.reason.toLowerCase().includes('available for booking') || directOverride.reason.toLowerCase().includes('available for other duty') || directOverride.reason.toLowerCase().includes('removed from link') || directOverride.reason.toLowerCase().includes('relieved to hq'))))) {
-          // Standby / Available at HQ -> 0 TA
-          isStandbyHq = true;
-          duties = [];
-          lastAssignedLink = null;
-          lastAssignedNonDaily = null;
-        } else if (directOverride && (directOverride.overridden_link_number !== null && directOverride.overridden_link_number !== undefined)) {
-          linkNum = directOverride.overridden_link_number;
-          let targetCatId = directOverride.target_category_id || (linkNum > 21 ? 2 : category.id);
-          if (targetCatId === 1 && linkNum > 21) targetCatId = 2;
-          duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
-          if (duties.length === 0 && linkNum > 100) {
-            duties = resolveDutyCodeToRows(String(linkNum));
-          }
-          
-          const derivedRemark = directOverride.reason || `Assigned to Link #${linkNum}`;
-          duties.forEach(d => { d.remarks = derivedRemark; });
-          
-          lastAssignedLink = linkNum;
-          lastTargetCat = targetCatId;
-          lastAssignedNonDaily = null;
-        } else if (directOverride && (directOverride.status === 'EXTRA_CREW' || directOverride.is_extra === 1 || directOverride.extra_train_no)) {
-          const trNo = directOverride.extra_train_no || directOverride.reason || 'EXTRA';
-          const ndMatch = getMultiDayNonDailyMatch(trNo);
-          if (ndMatch) {
-            duties = resolveDutyCodeToRows(ndMatch.outTrain);
-            lastAssignedNonDaily = { service: ndMatch, dayIndex: 1, totalDays: ndMatch.totalDays };
-            lastAssignedLink = null;
-          } else {
-            duties = resolveDutyCodeToRows(trNo);
-            if (duties.length === 0) duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
-            lastAssignedNonDaily = null;
-            lastAssignedLink = null;
-          }
-          const derivedRemark = directOverride.reason || `Working as EXTRA on ${trNo}`;
-          duties.forEach(d => { d.remarks = derivedRemark; });
-        } else if (directOverride && (directOverride.status === 'UTILISED_ADVANCE' || directOverride.advance_train_no)) {
-          const trNo = directOverride.advance_train_no || 'ADVANCE';
-          duties = resolveDutyCodeToRows(trNo);
-          if (duties.length === 0) duties = [{ train_no: trNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
-          const derivedRemark = directOverride.reason || `Utilised in Advance on ${trNo}`;
-          duties.forEach(d => { d.remarks = derivedRemark; });
-          lastAssignedNonDaily = null;
-          lastAssignedLink = null;
-        } else if (subOverride && subOverride.status !== 'AVAILABLE_FOR_BOOKING') {
-          // Staff worked as substitute for another employee
-          const assignedLink = subOverride.overridden_link_number !== null && subOverride.overridden_link_number !== undefined
-            ? subOverride.overridden_link_number
-            : subOverride.original_link_number;
-          if (assignedLink) {
-            linkNum = assignedLink;
-            let targetCatId = subOverride.target_category_id || subOverride.regular_staff_category || (linkNum > 21 ? 2 : 1);
-            if (targetCatId === 1 && linkNum > 21) targetCatId = 2;
-            duties = getDutyRowsForLinkNumber(targetCatId, linkNum, linkMap[`${targetCatId}_${linkNum}`] || linkMap[linkNum]);
-            if (duties.length === 0 && linkNum > 100) {
-              duties = resolveDutyCodeToRows(String(linkNum));
-            }
-            
-            const derivedRemark = subOverride.reason || `Substitute for ${subOverride.regular_staff_name || 'Staff'}`;
-            duties.forEach(d => { d.remarks = derivedRemark; });
-            
-            lastAssignedLink = linkNum;
-            lastTargetCat = targetCatId;
-            lastAssignedNonDaily = null;
-          }
-        } else if (lastAssignedNonDaily) {
-          if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
-            const nd = lastAssignedNonDaily.service;
-            duties = resolveDutyCodeToRows(nd.returnTrain);
-            const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily)`;
-            duties.forEach(d => { d.remarks = derivedRemark; });
-            lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
-            lastAssignedLink = null;
-          } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
-            duties = [];
-            lastAssignedNonDaily = null;
-            lastAssignedLink = null;
-          } else {
-            lastAssignedNonDaily = null;
-          }
-        } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0) {
-          const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
-          const nextLink = setDetails.remainingLinks[0];
-          linkNum = nextLink;
-          const targetCatId = lastTargetCat || category.id;
-          duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
-          
-          const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
-          const derivedRemark = `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
-          duties.forEach(d => { d.remarks = derivedRemark; });
-          
-          lastAssignedLink = nextLink;
-        } else if (category.id === 4) {
-          lastAssignedLink = null;
-          // Category 4: LR Staff
-          const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
-          if (!dutyCode || ['AVL', 'OFF', 'REST', 'R', 'REST_HQ', 'SPARE', 'CL', 'LAP', 'LHAP', 'SICK', 'CR', 'OD', 'CCL', 'SCL', 'NH', '---', '-'].includes(dutyCode.trim().toUpperCase()) || isEffectiveLeave) {
-            duties = [];
-            lastAssignedLink = null;
-            lastAssignedNonDaily = null;
-          } else if (/^\d+$/.test(dutyCode.trim())) {
-            const ln = parseInt(dutyCode.trim(), 10);
-            if (ln <= 63) {
-              const targetCat = (ln > 21 ? 2 : 1);
-              duties = getDutyRowsForLinkNumber(targetCat, ln, linkMap[`${targetCat}_${ln}`] || linkMap[ln]);
-              lastAssignedLink = ln;
-              lastTargetCat = targetCat;
-            } else {
-              duties = resolveDutyCodeToRows(dutyCode);
+        } else if (cmp.action === 'DISPLAY') {
+          isEffectiveLeave = false;
+          if (lastAssignedNonDaily) {
+            if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
+              const nd = lastAssignedNonDaily.service;
+              duties = resolveDutyCodeToRows(nd.returnTrain);
+              const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily)`;
+              duties.forEach(d => { d.remarks = derivedRemark; });
+              lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
               lastAssignedLink = null;
+            } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
+              duties = [];
+              lastAssignedNonDaily = null;
+              lastAssignedLink = null;
+              continue;
+            } else {
+              lastAssignedNonDaily = null;
             }
+          } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0 && !overrideDuty) {
+            const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
+            const nextLink = setDetails.remainingLinks[0];
+            linkNum = nextLink;
+            const targetCatId = lastTargetCat || category.id;
+            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
+            const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
+            const derivedRemark = `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
+            duties.forEach(d => { d.remarks = derivedRemark; });
+            lastAssignedLink = nextLink;
           } else {
-            const ndMatch = getMultiDayNonDailyMatch(dutyCode);
-            if (ndMatch) {
-              if (ndMatch.isReturn) {
-                duties = resolveDutyCodeToRows(ndMatch.returnTrain);
-                lastAssignedNonDaily = null;
-              } else {
-                duties = resolveDutyCodeToRows(ndMatch.outTrain);
+            // Apply Condition 1, 2, or 4 from cmp
+            linkNum = overrideDuty?.overridden_link_number || origLinkNum;
+            duties = cmp.duty_rows;
+            duties.forEach(d => {
+              d.train_no = d.train_no || cmp.train_no;
+              d.remarks = cmp.remarks || d.remarks;
+            });
+            if (overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) {
+              const trNo = overrideDuty.extra_train_no || overrideDuty.reason || 'EXTRA';
+              const ndMatch = getMultiDayNonDailyMatch(trNo);
+              if (ndMatch) {
                 lastAssignedNonDaily = { service: ndMatch, dayIndex: 1, totalDays: ndMatch.totalDays };
               }
             } else {
-              duties = resolveDutyCodeToRows(dutyCode);
               lastAssignedNonDaily = null;
             }
-            lastAssignedLink = null;
-          }
-        } else {
-          lastAssignedLink = null;
-          // Regular staff: check multi-day leave return
-          const multiDayLeaveReturn = checkMultiDayLeaveReturnSync(
-            staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dateStrIso, musterMap, directOverrideMap
-          );
-          if (multiDayLeaveReturn) {
-            isStandbyHq = true;
-            duties = [];
-            lastAssignedLink = null;
-            lastAssignedNonDaily = null;
-          } else {
-            const offset = getDayOffset(category.anchor_date, dateStrIso);
-            linkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
-            const link = linkMap[`${category.id}_${linkNum}`];
-            duties = getDutyRowsForLinkNumber(category.id, linkNum, link);
-            
-            const isRest = link && link.is_rest;
-            const derivedRemark = isRest ? 'Weekly Rest Day' : `Assigned to Link #${linkNum}`;
-            duties.forEach(d => { d.remarks = derivedRemark; });
-            
-            lastAssignedLink = linkNum;
-            lastTargetCat = category.id;
+            lastAssignedLink = overrideDuty?.overridden_link_number || origLinkNum;
+            lastTargetCat = overrideDuty?.target_category_id || category.id;
           }
         }
 
@@ -1743,7 +1685,14 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       natureOfLeave: formatNatureOfLeave(item.remarks.match(/\(([A-Z]+)\)/) ? item.remarks.match(/\(([A-Z]+)\)/)[1] : 'LEAVE', item.remarks)
     } : null);
 
-    if (leaveInfo) {
+    const hasWorkedTrain = item.train_no && !['---', '-', 'REST', 'OFF', 'SPARE (HQ)'].includes(item.train_no) && !item.is_leave;
+
+    // Condition 3: If employee rest day and both columns declared rest -> Skip day in TA document!
+    if (!hasWorkedTrain && (item.train_no === 'REST' || item.is_rest || (leaveInfo && (leaveInfo.code === 'R' || leaveInfo.code === 'REST')))) {
+      continue;
+    }
+
+    if (leaveInfo && !hasWorkedTrain) {
       if (seenLeaveDates.has(dIso)) {
         continue; // Suppress duplicate rows on same leave date
       }

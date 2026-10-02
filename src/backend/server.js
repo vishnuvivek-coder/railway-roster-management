@@ -9,6 +9,7 @@ const { initDb, run, all, get } = require('./db');
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 const { findScheduledRestDate, computeRestAdjustment, getWeekday, getWeeklyRestWeekday } = require('./restAdjustment');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
+const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -7613,6 +7614,19 @@ app.get('/api/roster', async (req, res) => {
             lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, d.dateString);
           }
 
+          let origIsRest = status === 'REST' || musterCode === 'R' || (directOv && directOv.status === 'REST');
+          let origTrain = origIsRest ? 'REST' : 'SPARE (HQ)';
+          let actualTrain = customTrainNo || (dutyDetails ? dutyDetails.train_numbers : (status === 'REST' ? 'REST' : (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (leaveType || status))));
+
+          const cmp = compareDutyAndResolve({
+            origTrain,
+            origIsRest,
+            remarks: overrideReason || (muster ? muster.remarks : null),
+            overrideDuty: directOv || subOv,
+            muster,
+            allLinks
+          });
+
           rowCells.push({
             date: d.dateString,
             dayOffset: d.dayOffset,
@@ -7631,6 +7645,11 @@ app.get('/api/roster', async (req, res) => {
             substituteName,
             overrideReason,
             leave_type: leaveType,
+            original_train_numbers: origTrain,
+            original_is_rest: origIsRest,
+            actual_train_numbers: actualTrain,
+            effective_train_numbers: cmp.train_no,
+            condition_applied: cmp.condition,
             train_numbers: customTrainNo || (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST'))),
             from_station: customFrom || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : '')),
             to_station: customTo || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : '')),
@@ -7831,10 +7850,29 @@ app.get('/api/roster', async (req, res) => {
             lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, d.dateString);
           }
 
+          const origBaseLink = getBaseLinkNumber(staff.row_position, staffDayOffset, staffCycleLength);
+          let origDutyDef = null;
+          if (origBaseLink !== null && origBaseLink !== undefined) {
+            origDutyDef = allLinks.find(l => (l.category_id === (staff.category_id || currentCatId)) && l.link_number === origBaseLink)
+                       || allLinks.find(l => l.link_number === origBaseLink && l.category_id !== 4);
+          }
+          const origIsRest = !origDutyDef || origDutyDef.is_rest === 1 || isRestString(origDutyDef.train_numbers);
+          const origTrain = origIsRest ? 'REST' : (origDutyDef.train_numbers || 'REST');
+          const actualTrain = customTrainNo || (dutyDetails ? dutyDetails.train_numbers : (status === 'REST' ? 'REST' : (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (leaveType || status))));
+
+          const cmp = compareDutyAndResolve({
+            origTrain,
+            origIsRest,
+            remarks: overrideReason || (muster ? muster.remarks : null),
+            overrideDuty: directOv || subOv,
+            muster,
+            allLinks
+          });
+
           rowCells.push({
             date: d.dateString,
             dayOffset: staffDayOffset,
-            calculatedLinkNumber: getBaseLinkNumber(staff.row_position, staffDayOffset, staffCycleLength),
+            calculatedLinkNumber: origBaseLink,
             actualLinkNumber: linkNum,
             target_category_id: targetCatId || currentCatId,
             isRest: (linkNum === null && !customTrainNo) || (dutyDetails && dutyDetails.is_rest === 1) || (status === 'AVAILABLE_FOR_BOOKING' && !customTrainNo) || status === 'REST',
@@ -7849,6 +7887,11 @@ app.get('/api/roster', async (req, res) => {
             substituteName,
             overrideReason,
             leave_type: leaveType,
+            original_train_numbers: origTrain,
+            original_is_rest: origIsRest,
+            actual_train_numbers: actualTrain,
+            effective_train_numbers: cmp.train_no,
+            condition_applied: cmp.condition,
             train_numbers: customTrainNo || (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST'))),
             from_station: customFrom || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : '')),
             to_station: customTo || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : '')),

@@ -4890,7 +4890,8 @@ export default function App() {
                             const isMusterAbsent = cell.muster_code === 'O';
 
                             const isWorkingTrain = (cell.status === 'DUTY' || cell.status === 'SUBSTITUTE' || cell.status === 'CHANGED_LINK' || cell.status === 'EXTRA_CREW') &&
-                              cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers);
+                              (cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers) &&
+                              !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers);
 
                             const isSick = cell.status === 'SICK' || isMusterSick;
                             const isLeave = (cell.status === 'LEAVE' || cell.isLeave || isMusterLeave) && !isMusterOd;
@@ -4901,13 +4902,19 @@ export default function App() {
                             const lrInfo = cell.lr_rest_info;
                             const isRest = !isWorkingTrain && (isMusterRest || (!isAvailableForBooking && !isMusterOd && (cell.isRest || (cell.actualLinkNumber === null && !cell.train_numbers) || cell.status === 'REST')));
                             const isOverridden = cell.isOverridden;
-                            
+
+                            const isCondition4 = (cell.condition_applied === 4) || (cell.original_is_rest && isWorkingTrain);
+                            const isCondition2 = (cell.condition_applied === 2) || (!cell.original_is_rest && isWorkingTrain && cell.actual_train_numbers && cell.original_train_numbers && cell.actual_train_numbers !== cell.original_train_numbers);
+
                             let linkLabel = cell.actualLinkNumber 
                               ? (isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber))
                               : (cell.set_type && cell.set_type !== 'Other / REST' ? cell.set_type : (isWorkingTrain ? 'Non-Daily' : ''));
                             let cellBg = 'transparent';
                             let badgeStyle = { fontWeight: 700, borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' };
-                            let trainNoDisplay = cell.train_numbers || '-';
+                            let trainNoDisplay = cell.original_train_numbers || (cell.original_is_rest ? 'REST' : (cell.isRest ? 'REST' : (cell.train_numbers || '-')));
+                            if (cell.original_is_rest || isRest) {
+                              trainNoDisplay = 'REST';
+                            }
                             let routeDisplay = (cell.from_station || '-') + ' ➔ ' + (cell.to_station || '-');
                             let coachDisplay = cell.coaches || '-';
                             let remarksElement = null;
@@ -5031,7 +5038,7 @@ export default function App() {
                               linkLabel = '😴 REST';
                               badgeStyle.background = 'rgba(107, 114, 128, 0.15)';
                               badgeStyle.color = '#9ca3af';
-                              trainNoDisplay = '-';
+                              trainNoDisplay = 'REST';
                               routeDisplay = '-';
                               coachDisplay = '-';
                               remarksElement = (
@@ -5047,7 +5054,13 @@ export default function App() {
                                 </div>
                               );
                             } else if (isWorkingTrain) {
-                              if (cell.actualLinkNumber) {
+                              if (isCondition4) {
+                                linkLabel = cell.actualLinkNumber ? `#${cell.actualLinkNumber} (Rest Duty)` : (cell.set_type || 'Rest Day Duty');
+                                badgeStyle.background = 'rgba(245, 158, 11, 0.18)';
+                                badgeStyle.color = '#f59e0b';
+                                badgeStyle.border = '1px solid #f59e0b';
+                                trainNoDisplay = 'REST';
+                              } else if (cell.actualLinkNumber) {
                                 linkLabel = isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
                                 badgeStyle.background = 'rgba(59, 130, 246, 0.15)';
                                 badgeStyle.color = '#60a5fa';
@@ -5058,22 +5071,52 @@ export default function App() {
                                 badgeStyle.color = '#10b981';
                                 badgeStyle.border = '1px solid rgba(16, 185, 129, 0.4)';
                               }
-                              trainNoDisplay = cell.train_numbers || '-';
                               routeDisplay = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
                               coachDisplay = cell.coaches || '-';
                               cellBg = isOverridden ? 'rgba(59, 130, 246, 0.02)' : 'transparent';
-                              remarksElement = (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {cell.muster_code && (
-                                    <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                      📋 Muster: {cell.muster_code}
+                              
+                              if (isCondition4) {
+                                const actualTrainName = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
+                                remarksElement = (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {cell.muster_code && (
+                                      <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                        📋 Muster: {cell.muster_code}
+                                      </span>
+                                    )}
+                                    <span style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.85rem' }}>
+                                      ⚡ Working Train {actualTrainName} (Rest Day Duty) {cell.overrideReason ? `• ${cell.overrideReason}` : ''}
                                     </span>
-                                  )}
-                                  <span style={{ color: isOverridden ? '#60a5fa' : 'var(--color-text-primary)', fontSize: '0.85rem' }}>
-                                    {cell.overrideReason || (cell.actualLinkNumber ? `Assigned to Link #${cell.actualLinkNumber}` : `Working Train ${cell.train_numbers}`)}
-                                  </span>
-                                </div>
-                              );
+                                  </div>
+                                );
+                              } else if (isCondition2) {
+                                const actualTrainName = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
+                                remarksElement = (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {cell.muster_code && (
+                                      <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #60a5fa', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                        📋 Muster: {cell.muster_code}
+                                      </span>
+                                    )}
+                                    <span style={{ color: '#60a5fa', fontWeight: 600, fontSize: '0.85rem' }}>
+                                      🔄 Working Train {actualTrainName} {cell.overrideReason ? `• ${cell.overrideReason}` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              } else {
+                                remarksElement = (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {cell.muster_code && (
+                                      <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                        📋 Muster: {cell.muster_code}
+                                      </span>
+                                    )}
+                                    <span style={{ color: isOverridden ? '#60a5fa' : 'var(--color-text-primary)', fontSize: '0.85rem' }}>
+                                      {cell.overrideReason || (cell.actualLinkNumber ? `Assigned to Link #${cell.actualLinkNumber}` : `Working Train ${cell.train_numbers}`)}
+                                    </span>
+                                  </div>
+                                );
+                              }
                             } else if (isCat4 && lrInfo && !isOverridden) {
                               if (lrInfo.restStatus === 'IN_HQ_REST') {
                                 linkLabel = '⏳ In HQ Rest';
