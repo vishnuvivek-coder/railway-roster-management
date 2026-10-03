@@ -10800,15 +10800,23 @@ app.get('/api/muster', async (req, res) => {
         } else {
           // Cyclic baseline
           let isRest = false;
-          if (staff.category_id && staff.anchor_date && staff.cycle_length && staff.row_position) {
-            const dayOffset = getDayOffset(staff.anchor_date, d.dateStr);
-            const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, staff.cycle_length);
+          if (staff.category_id && staff.row_position) {
+            const catParams = (staff.category_id === 2 || staff.category_code === 'TTI_SLEEPER')
+              ? getCategoryParamsForDate(staff, d.dateStr)
+              : { anchor_date: staff.anchor_date, cycle_length: staff.cycle_length };
+            const dayOffset = getDayOffset(catParams.anchor_date, d.dateStr);
+            const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
             
             if (staff.category_id === 4) {
               if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) isRest = true;
               else if (staff.name.toUpperCase().includes(`${d.dayOfWeek} REST`)) isRest = true;
             } else {
-              const lDef = linkNum !== null ? linkMap[`${staff.category_id}_${linkNum}`] : null;
+              const lDef = linkNum !== null ? links.find(l => 
+                l.category_id === staff.category_id && 
+                l.link_number === linkNum &&
+                (!l.effective_from || l.effective_from <= d.dateStr) &&
+                (!l.effective_to || l.effective_to >= d.dateStr)
+              ) : null;
               if (linkNum === null || (lDef && lDef.is_rest === 1)) isRest = true;
             }
           } else {
