@@ -1234,6 +1234,7 @@ export default function NdaDocument({
                     const isDitto = row.date_str === '"' || row.is_same_date_as_prev;
                     const displayDate = isDitto ? '"' : (row.date_str || '');
                     const displayHours = row.night_hours && Number(row.night_hours) > 0 ? row.night_hours : '';
+                    const clean = (val) => (!val || val === '---' || val === '--') ? '' : val;
 
                     return (
                       <tr key={idx} style={{ height: '24px' }}>
@@ -1251,7 +1252,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.train_no || ''}
+                            value={clean(row.train_no)}
                             onChange={(e) => handleCellChange(idx, 'train_no', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1261,7 +1262,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.sched_dep || ''}
+                            value={clean(row.sched_dep)}
                             onChange={(e) => handleCellChange(idx, 'sched_dep', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1271,7 +1272,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.sched_arr || ''}
+                            value={clean(row.sched_arr)}
                             onChange={(e) => handleCellChange(idx, 'sched_arr', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1281,7 +1282,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.act_dep || ''}
+                            value={clean(row.act_dep)}
                             onChange={(e) => handleCellChange(idx, 'act_dep', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1291,7 +1292,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.act_arr || ''}
+                            value={clean(row.act_arr)}
                             onChange={(e) => handleCellChange(idx, 'act_arr', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1301,7 +1302,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.from_station || ''}
+                            value={clean(row.from_station)}
                             onChange={(e) => handleCellChange(idx, 'from_station', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1311,7 +1312,7 @@ export default function NdaDocument({
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
                           <input
                             type="text"
-                            value={row.to_station || ''}
+                            value={clean(row.to_station)}
                             onChange={(e) => handleCellChange(idx, 'to_station', e.target.value)}
                             style={cellInputStyle}
                           />
@@ -1335,7 +1336,7 @@ export default function NdaDocument({
                 <tfoot>
                   <tr style={{ background: '#ffffff', fontWeight: 'bold', borderTop: '1.5px solid #000', height: '26px' }}>
                     <td colSpan="8" style={{ border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>
-                      TOTAL NO. OF HOURS :
+                      TOTAL NO OF HOURS:
                     </td>
                     <td style={{ border: '1px solid #000', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
                       {totalNightHours}
@@ -1359,12 +1360,12 @@ export default function NdaDocument({
             }}>
               <div>
                 <div style={{ height: '24px' }}></div>
-                <span>Controlling Officer</span>
+                <span>Controlling Office</span>
               </div>
 
               <div>
                 <div style={{ height: '24px' }}></div>
-                <span>Head of the Office</span>
+                <span>Head of the office</span>
               </div>
 
               <div style={{ textAlign: 'center' }}>

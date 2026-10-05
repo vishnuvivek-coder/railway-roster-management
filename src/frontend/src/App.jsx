@@ -675,7 +675,219 @@ function EditLinkDetailsModalDialog({ data, onClose, onSave }) {
   );
 }
 
-const MASTER_DAILY_SLOTS = [
+// Current Link Schedule (Effective 01-10-2026 onwards - Set 7 Link Schedule)
+// Exact 1-to-1 match with official 56-link rotation chart
+export const OCT_2026_MASTER_DAILY_SLOTS = [
+  // 1. Train 17253 / 17252 (Guntur – Dhone Express: GNT - DHNE - GNT) [Page 48/50/52 Row 1]
+  {
+    slotId: 1,
+    page: 172,
+    firstTrain: '17253',
+    lastTrain: '17252',
+    title: '17253 / 17252 (Guntur – Dhone Express: GNT ➔ DHNE)',
+    links: [
+      { categoryId: 2, linkNum: 15, firstCoach: 'AC + SL', lastTrain: '17252', lastCoach: 'AC + SL' }
+    ]
+  },
+  // 2. Train 17239 / 17240 (Simhadri Express: GNT - VSKP - GNT) [Page 48/50/52 Row 2]
+  {
+    slotId: 2,
+    page: 172,
+    firstTrain: '17239',
+    lastTrain: '17240',
+    title: '17239 / 17240 (Simhadri Express: GNT ➔ VSKP)',
+    links: [
+      { categoryId: 2, linkNum: 1, firstCoach: 'AC + 2S', lastTrain: '17240', lastCoach: 'AC + 2S' }
+    ]
+  },
+  // 3. Train 17646 / 12796 (GNT - SC - BZA) [Page 48/50/52 Row 3]
+  {
+    slotId: 3,
+    page: 172,
+    firstTrain: '17646',
+    lastTrain: '12796',
+    title: '17646 / 12796 (GNT ➔ SC ➔ BZA)',
+    links: [
+      { categoryId: 2, linkNum: 17, firstCoach: 'AC + SL', lastTrain: '12796', lastCoach: 'AC + 2S' }
+    ]
+  },
+  // 4. Train 12805 / 12806 (Janmabhoomi Express: GNT - SC) [Page 48/50/52 Row 4]
+  {
+    slotId: 4,
+    page: 172,
+    firstTrain: '12805',
+    lastTrain: '12806',
+    title: '12805 / 12806 (Janmabhoomi Express: GNT ➔ SC)',
+    links: [
+      { categoryId: 2, linkNum: 19, firstCoach: 'AC + 2S', lastTrain: '12806', lastCoach: 'AC + 2S' }
+    ]
+  },
+  // 5. Train 12795 / 17645 (Intercity Express: BZA - SC - GNT) [Page 48/50/52 Row 5]
+  {
+    slotId: 5,
+    page: 173,
+    firstTrain: '12795',
+    lastTrain: '17645',
+    title: '12705/12795 / 17645 (Intercity Express: GNT ➔ BZA ➔ SC)',
+    links: [
+      { categoryId: 2, linkNum: 40, firstCoach: 'AC + 2S', lastTrain: '17645', lastCoach: 'AC + SL' }
+    ]
+  },
+  // 6. Train 17251 / 17254 (Dhone Express: GNT - DHNE - GNT) [Page 48/50/52 Row 6]
+  {
+    slotId: 6,
+    page: 172,
+    firstTrain: '17251',
+    lastTrain: '17254',
+    title: '17251 / 17254 (Dhone Express: GNT ➔ DHNE)',
+    links: [
+      { categoryId: 2, linkNum: 5, firstCoach: 'AC + SL', lastTrain: '17254', lastCoach: 'AC + SL' }
+    ]
+  },
+  // 7. Train 17281 / 17282 (GNT - NS Express) [Page 48/50/52 Row 7]
+  {
+    slotId: 7,
+    page: 173,
+    firstTrain: '17281',
+    lastTrain: '17282',
+    title: '17281 / 17282 (GNT ➔ NS Express)',
+    links: [
+      { categoryId: 2, linkNum: 38, firstCoach: '2S', lastTrain: '17282', lastCoach: '2S' }
+    ]
+  },
+  // 8. Train 17261 / 12733 / 17262 (GNT - TPTY - GNT) [Page 48/50/52 Row 8]
+  {
+    slotId: 8,
+    page: 172,
+    firstTrain: '17261',
+    lastTrain: '12733',
+    title: '17261 / 12733 / 17262 (GNT ➔ TPTY)',
+    links: [
+      { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
+      { categoryId: 3, linkNum: 1, firstCoach: 'S1-S5', lastTrain: '17262', lastCoach: 'S1-S5' },
+      { categoryId: 3, linkNum: 4, firstCoach: 'S10-S14', lastTrain: '17262', lastCoach: 'S10-S14' }
+    ]
+  },
+  // 9. Train 20629 / 12733 / 20630 (Tirupati Express: GNT - TPTY - GNT) [Page 48/50/52 Row 9]
+  {
+    slotId: 9,
+    page: 172,
+    firstTrain: '20629',
+    lastTrain: '12733',
+    title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
+    links: [
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' },
+      { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' }
+    ]
+  },
+  // 10. Train 17225 / 17226 (Amaravati Express: BZA - GTL - BZA) [Page 48/50/52 Row 10]
+  {
+    slotId: 10,
+    page: 172,
+    firstTrain: '17225',
+    lastTrain: '17226',
+    title: '17225 / 17226 (Amaravati Express: BZA ➔ GTL)',
+    links: [
+      { categoryId: 1, linkNum: 1, firstCoach: 'AC', lastTrain: '17226', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 11, firstCoach: 'S1-S5', lastTrain: '17226', lastCoach: 'S1-S5' },
+      { categoryId: 2, linkNum: 25, firstCoach: 'S6-S10', lastTrain: '17226', lastCoach: 'S6-S10' }
+    ]
+  },
+  // 11. Train 18047 / 18048 (Amaravati Express: BZA - GTL - BZA) [Page 48/50/52 Row 11]
+  {
+    slotId: 11,
+    page: 172,
+    firstTrain: '18047',
+    lastTrain: '18048',
+    title: '18047 / 18048 (Amaravati Express: BZA ➔ GTL)',
+    links: [
+      { categoryId: 1, linkNum: 15, firstCoach: 'AC', lastTrain: '18048', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 50, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
+    ]
+  },
+  // 12. Train 17645, 17626 / 17625, 17646 (Circar & KCG Express: GNT - RAL - SC) [Page 48/50/52 Row 12]
+  {
+    slotId: 12,
+    page: 172,
+    firstTrain: '17645',
+    lastTrain: '17646',
+    title: '17645 / 17626 / 17625 / 17646 (Circar & KCG Express: GNT ➔ RAL ➔ SC)',
+    links: [
+      { categoryId: 2, linkNum: 29, firstCoach: 'AC + SL', lastTrain: '17646', lastCoach: 'AC + SL' },
+      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S5', lastTrain: '17646', lastCoach: 'S1-S5' }
+    ]
+  },
+  // 13. Train 12604 / 12603 (Chennai Express: GNT - MAS - GNT) [Page 49/51/53 Row 1]
+  {
+    slotId: 13,
+    page: 172,
+    firstTrain: '12604',
+    lastTrain: '12603',
+    title: '12604 / 12603 (Chennai Express: GNT ➔ MAS)',
+    links: [
+      { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
+    ]
+  },
+  // 14. Train 12734 / 20630 / 17262 (Narayanadri Express: GNT - TPTY - GNT) [Page 49/51/53 Rows 2 & 3]
+  {
+    slotId: 14,
+    page: 173,
+    firstTrain: '12734',
+    lastTrain: '20630',
+    title: '12734 / 20630 / 17262 (Narayanadri Express: GNT ➔ TPTY)',
+    links: [
+      { categoryId: 1, linkNum: 11, firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 18, firstCoach: 'COR-2', lastTrain: '17262', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' }
+    ]
+  },
+  // 15. Train 17243 / 17244 (Rayagada Express: GNT - VSKP - GNT) [Page 49/51/53 Row 4]
+  {
+    slotId: 15,
+    page: 173,
+    firstTrain: '17243',
+    lastTrain: '17244',
+    title: '17243 / 17244 (Rayagada Express: GNT ➔ VSKP)',
+    links: [
+      { categoryId: 2, linkNum: 32, firstCoach: 'AC + SL', lastTrain: '17244', lastCoach: 'AC + SL' },
+      { categoryId: 2, linkNum: 46, firstCoach: 'SL', lastTrain: '17244', lastCoach: 'SL' }
+    ]
+  }
+];
+
+export const OCT_2026_NON_DAILY_SLOTS = [
+  {
+    slotId: 53,
+    page: 174,
+    firstTrain: 'NON-DAILY-1',
+    lastTrain: 'NON-DAILY-1',
+    links: [
+      { categoryId: 2, linkNum: 53, firstCoach: 'SL', lastCoach: 'SL' }
+    ]
+  },
+  {
+    slotId: 54,
+    page: 174,
+    firstTrain: 'NON-DAILY-2',
+    lastTrain: 'NON-DAILY-2',
+    links: [
+      { categoryId: 2, linkNum: 54, firstCoach: 'SL', lastCoach: 'SL' }
+    ]
+  },
+  {
+    slotId: 55,
+    page: 174,
+    firstTrain: 'NON-DAILY-3',
+    lastTrain: 'NON-DAILY-3',
+    links: [
+      { categoryId: 2, linkNum: 55, firstCoach: 'SL', lastCoach: 'SL' }
+    ]
+  }
+];
+
+// Legacy Master Daily Slots for July - September 2026
+export const LEGACY_MASTER_DAILY_SLOTS = [
   // 1. Train 17253 / 17252 (GNT - DHNE - GNT)
   {
     slotId: 1,
@@ -815,8 +1027,7 @@ const MASTER_DAILY_SLOTS = [
   }
 ];
 
-// Dedicated Non-Daily Cyclic Links (Links #60, #61, #62)
-const NON_DAILY_LINK_SLOTS = [
+export const LEGACY_NON_DAILY_SLOTS = [
   {
     slotId: 60,
     page: 174,
@@ -846,7 +1057,28 @@ const NON_DAILY_LINK_SLOTS = [
   }
 ];
 
-const ALL_MASTER_SLOTS = [...MASTER_DAILY_SLOTS, ...NON_DAILY_LINK_SLOTS];
+export function getMasterDailySlots(dateStr) {
+  if (dateStr && dateStr < '2026-10-01') {
+    return LEGACY_MASTER_DAILY_SLOTS;
+  }
+  return OCT_2026_MASTER_DAILY_SLOTS;
+}
+
+export function getNonDailySlots(dateStr) {
+  if (dateStr && dateStr < '2026-10-01') {
+    return LEGACY_NON_DAILY_SLOTS;
+  }
+  return OCT_2026_NON_DAILY_SLOTS;
+}
+
+const MASTER_DAILY_SLOTS = OCT_2026_MASTER_DAILY_SLOTS;
+const NON_DAILY_LINK_SLOTS = OCT_2026_NON_DAILY_SLOTS;
+const ALL_MASTER_SLOTS = [
+  ...OCT_2026_MASTER_DAILY_SLOTS,
+  ...OCT_2026_NON_DAILY_SLOTS,
+  ...LEGACY_MASTER_DAILY_SLOTS,
+  ...LEGACY_NON_DAILY_SLOTS
+];
 
 export default function App() {
   // Authentication & Session State
@@ -5405,6 +5637,19 @@ export default function App() {
 
                 const resolveSlotDuties = (slotsList) => {
                   const resolvedRows = [];
+                  const targetCat2SetId = (selectedDate && selectedDate >= '2026-10-01') ? 7 : 2;
+                  const matchesLinkSet = (al) => {
+                    if (!al || al.status === 'draft') return false;
+                    if (al.link_set_id) {
+                      const parentSet = linkSetsList.find(s => String(s.id) === String(al.link_set_id));
+                      if (parentSet && parentSet.status === 'draft') return false;
+                      if (parseInt(al.category_id, 10) === 2 && parseInt(al.link_set_id, 10) !== targetCat2SetId) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  };
+
                   slotsList.forEach(slot => {
                     const customSlot = slotCustomizations[`slot_${slot.slotId}`] || {};
 
@@ -5414,8 +5659,7 @@ export default function App() {
                     if (Array.isArray(slot.links)) {
                       for (const lDef of slot.links) {
                         const matched = allLinksList.find(al => 
-                          al.status !== 'draft' &&
-                          (!al.link_set_id || linkSetsList.find(s => String(s.id) === String(al.link_set_id))?.status !== 'draft') &&
+                          matchesLinkSet(al) &&
                           parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                           parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
                         );
@@ -5427,8 +5671,8 @@ export default function App() {
                       }
                     }
 
-                    const baselineSlotFirst = dynamicSlotFirst || slot.firstTrain;
-                    const baselineSlotLast = dynamicSlotLast || slot.lastTrain;
+                    const baselineSlotFirst = slot.firstTrain || dynamicSlotFirst;
+                    const baselineSlotLast = slot.lastTrain || dynamicSlotLast;
 
                     const effectiveSlotFirstTrain = (customSlot.firstTrain !== undefined && customSlot.firstTrain !== '') ? customSlot.firstTrain : baselineSlotFirst;
                     const effectiveSlotLastTrain = (customSlot.lastTrain !== undefined && customSlot.lastTrain !== '') ? customSlot.lastTrain : baselineSlotLast;
@@ -5439,8 +5683,7 @@ export default function App() {
                       const customDuty = slotCustomizations[dutyKey] || {};
 
                       const matchedLink = allLinksList.find(al => 
-                        al.status !== 'draft' &&
-                        (!al.link_set_id || linkSetsList.find(s => String(s.id) === String(al.link_set_id))?.status !== 'draft') &&
+                        matchesLinkSet(al) &&
                         parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                         parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
                       );
@@ -5457,10 +5700,10 @@ export default function App() {
                         linkCoach = matchedLink.coaches.trim();
                       }
 
-                      const baselineFirstTrain = linkFirstTrain || effectiveSlotFirstTrain;
-                      const baselineLastTrain = linkLastTrain || lDef.lastTrain || effectiveSlotLastTrain;
-                      const baselineFirstCoach = linkCoach || lDef.firstCoach;
-                      const baselineLastCoach = linkCoach || lDef.lastCoach || slot.lastCoach || '-';
+                      const baselineFirstTrain = lDef.firstTrain || slot.firstTrain || linkFirstTrain || effectiveSlotFirstTrain;
+                      const baselineLastTrain = lDef.lastTrain || slot.lastTrain || effectiveSlotLastTrain || linkLastTrain;
+                      const baselineFirstCoach = lDef.firstCoach || linkCoach || slot.firstCoach;
+                      const baselineLastCoach = lDef.lastCoach || slot.lastCoach || linkCoach || '-';
 
                       const effectiveFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : baselineFirstTrain;
                       const effectiveFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : baselineFirstCoach;
@@ -5794,8 +6037,8 @@ export default function App() {
                   return resolvedRows;
                 };
 
-                const activeSlotRows = resolveSlotDuties(MASTER_DAILY_SLOTS);
-                const nonDailySlotRows = resolveSlotDuties(NON_DAILY_LINK_SLOTS);
+                const activeSlotRows = resolveSlotDuties(getMasterDailySlots(selectedDate));
+                const nonDailySlotRows = resolveSlotDuties(getNonDailySlots(selectedDate));
 
                 // Off duties: staff on REST or SICK / LEAVE / CR or not actively working a train slot
                 const offDuties = staffDuties.filter(d => {
@@ -6268,15 +6511,15 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Daily Train Slots (12 Services) Table */}
+                    {/* Daily Train Slots Table */}
                     <div className="table-responsive" style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-glass)', marginBottom: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            🚆 Daily Train Slots (12 Services)
+                            🚆 Daily Train Slots ({activeSlotRows.length} Services)
                           </h3>
                           <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.78rem' }}>
-                            12 Daily Services
+                            {activeSlotRows.length} Daily Services
                           </span>
                         </div>
                         <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem' }}>
@@ -6321,378 +6564,55 @@ export default function App() {
                                 });
 
                             return filteredActiveSlotRows.map((group, groupIndex) => {
+                              const duties = group.duties || [];
+                              const hasExtraRow = isAdmin;
+                              const isSlotHighlighted = (dragOverSlotId === group.slotId || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId}-`)));
+
+                              if (duties.length === 0) {
+                                return (
+                                  <tr key={group.slotId || groupIndex} style={{ borderBottom: '2px solid var(--border-glass)' }}>
+                                    <td style={{ textAlign: 'center', verticalAlign: 'middle', color: 'var(--color-text-secondary)' }}>
+                                      {groupIndex + 1}
+                                    </td>
+                                    <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '12px' }}>
+                                      No duties defined for this slot.
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
                               return (
-                              <tr 
-                                key={groupIndex} 
-                                onDragEnter={(e) => {
-                                  e.preventDefault();
-                                  setDragOverSlotId(group.slotId);
-                                }}
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                  e.dataTransfer.dropEffect = 'move';
-                                  if (dragOverSlotId !== group.slotId && !String(dragOverSlotId).startsWith(`${group.slotId}-`)) {
-                                    setDragOverSlotId(group.slotId);
-                                  }
-                                }}
-                                onDragLeave={(e) => {
-                                  if (e.currentTarget.contains(e.relatedTarget)) return;
-                                  if (dragOverSlotId === group.slotId || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId}-`))) {
-                                    setDragOverSlotId(null);
-                                  }
-                                }}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setDragOverSlotId(null);
-                                  let dragData = null;
-                                  try {
-                                    const raw = e.dataTransfer.getData('text/plain');
-                                    if (raw) dragData = JSON.parse(raw);
-                                  } catch (err) {}
-                                  if (!dragData && draggedStaff) {
-                                    dragData = draggedStaff;
-                                  }
-                                  if (!dragData) return;
-                                  handleDragDropOnTrain(dragData, group);
-                                }}
-                                style={{ 
-                                  borderBottom: '2px solid var(--border-glass)',
-                                  backgroundColor: (dragOverSlotId === group.slotId || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId}-`))) ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
-                                  outline: dragOverSlotId === group.slotId ? '2px dashed #10b981' : (draggedStaff ? '1px dashed rgba(16, 185, 129, 0.35)' : 'none'),
-                                  transition: 'all 0.15s ease'
-                                }}
-                              >
-                                  <td style={{ textAlign: 'center', verticalAlign: 'middle', color: 'var(--color-text-secondary)' }}>
-                                    {groupIndex + 1}
-                                  </td>
-                                  <td style={{ padding: '0px' }}>
-                                    {group.duties.map((d, dIdx) => {
-                                      const isSick = d.status === 'SICK' || d.isSick;
-                                      const isLeave = d.status === 'LEAVE' || d.isLeave;
-                                      const isCr = d.status === 'CR' || d.isCr;
-                                      const hasSub = d.originalStaffName || d.substituteName;
-                                      const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
-                                      const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
-                                      const isVacantOver = dragOverSlotId === `${group.slotId}-vacant-${dIdx}`;
-                                      const isStaffOver = dragOverStaffDutyKey === `${group.slotId}-${d.staffId || dIdx}`;
-                                      
-                                      return (
-                                        <div key={`${d.staffId || 'd'}-${dIdx}`} style={{ 
-                                          padding: '10px 14px', 
-                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                          minHeight: '46px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'space-between',
-                                          gap: '8px'
-                                        }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                            {isStaffDraggable ? (
-                                              <div
-                                                draggable
-                                                onDragStart={(e) => {
-                                                  const payload = {
-                                                    staffId: d.staffId,
-                                                    staffName: d.name,
-                                                    sourceLink: d.link_number || d.original_link_number,
-                                                    sourceCategoryId: d.categoryId,
-                                                    sourceTrain: group.firstTrain
-                                                  };
-                                                  e.dataTransfer.setData('text/plain', JSON.stringify(payload));
-                                                  e.dataTransfer.effectAllowed = 'move';
-                                                  setDraggedStaff(payload);
-                                                }}
-                                                onDragEnd={() => setDraggedStaff(null)}
-                                                onDragOver={(e) => {
-                                                  if (draggedStaff && draggedStaff.staffId !== d.staffId) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    e.dataTransfer.dropEffect = 'move';
-                                                    const key = `${group.slotId}-${d.staffId || dIdx}`;
-                                                    if (dragOverStaffDutyKey !== key) setDragOverStaffDutyKey(key);
-                                                  }
-                                                }}
-                                                onDragLeave={(e) => {
-                                                  if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                  const key = `${group.slotId}-${d.staffId || dIdx}`;
-                                                  if (dragOverStaffDutyKey === key) setDragOverStaffDutyKey(null);
-                                                }}
-                                                onDrop={(e) => {
-                                                  if (draggedStaff && draggedStaff.staffId !== d.staffId) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setDragOverStaffDutyKey(null);
-                                                    let dragData = null;
-                                                    try {
-                                                      const raw = e.dataTransfer.getData('text/plain');
-                                                      if (raw) dragData = JSON.parse(raw);
-                                                    } catch (err) {}
-                                                    if (!dragData && draggedStaff) dragData = draggedStaff;
-                                                    if (!dragData) return;
-                                                    handleDropOnOccupiedStaff(dragData, d, group);
-                                                  }
-                                                }}
-                                                style={{
-                                                  display: 'inline-flex',
-                                                  alignItems: 'center',
-                                                  gap: '6px',
-                                                  cursor: 'grab',
-                                                  userSelect: 'none',
-                                                  padding: '4px 10px',
-                                                  borderRadius: '6px',
-                                                  background: isStaffOver ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.06)',
-                                                  border: isStaffOver ? '2px dashed #06b6d4' : (draggedStaff && draggedStaff.staffId !== d.staffId ? '1.5px dashed rgba(6, 182, 212, 0.45)' : '1px solid rgba(255,255,255,0.12)'),
-                                                  opacity: (draggedStaff && draggedStaff.staffId === d.staffId) ? 0.4 : 1,
-                                                  boxShadow: isStaffOver ? '0 0 12px rgba(6, 182, 212, 0.5)' : '0 1px 3px rgba(0,0,0,0.15)',
-                                                  transition: 'all 0.15s ease'
-                                                }}
-                                                title={draggedStaff && draggedStaff.staffId !== d.staffId ? `Drop here to Swap duties with ${d.name} or Replace` : `Drag ${d.name} to reassign to another train`}
-                                              >
-                                                <span
-                                                  style={{
-                                                    fontSize: '1.15rem',
-                                                    color: 'var(--primary)',
-                                                    lineHeight: 1,
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center'
-                                                  }}
-                                                  className="no-print"
-                                                >
-                                                  ⠿
-                                                </span>
-                                                <strong style={{ 
-                                                  color: hasSub ? 'var(--primary)' : 'inherit',
-                                                  fontStyle: 'normal'
-                                                }}>
-                                                  {d.name}
-                                                </strong>
-                                                {isStaffOver && (
-                                                  <span className="badge no-print" style={{ background: '#06b6d4', color: '#000', fontSize: '0.68rem', fontWeight: 800 }}>
-                                                    🔀 Release to Swap / Replace
-                                                  </span>
-                                                )}
-                                                {draggedStaff && draggedStaff.staffId !== d.staffId && !isStaffOver && (
-                                                  <span className="badge no-print" style={{ background: 'rgba(6, 182, 212, 0.18)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.35)', fontSize: '0.66rem', fontWeight: 600 }}>
-                                                    🔀 Drop to Swap
-                                                  </span>
-                                                )}
-                                              </div>
-                                            ) : isSlotVacant ? (
-                                              <div
-                                                onDragOver={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  e.dataTransfer.dropEffect = 'move';
-                                                  if (dragOverSlotId !== `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(`${group.slotId}-vacant-${dIdx}`);
-                                                }}
-                                                onDragLeave={(e) => {
-                                                  if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                  if (dragOverSlotId === `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(null);
-                                                }}
-                                                onDrop={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  setDragOverSlotId(null);
-                                                  let dragData = null;
-                                                  try {
-                                                    const raw = e.dataTransfer.getData('text/plain');
-                                                    if (raw) dragData = JSON.parse(raw);
-                                                  } catch (err) {}
-                                                  if (!dragData && draggedStaff) dragData = draggedStaff;
-                                                  if (!dragData) return;
-                                                  handleDragDropOnTrain(dragData, group, d, false);
-                                                }}
-                                                style={{
-                                                  display: 'inline-flex',
-                                                  alignItems: 'center',
-                                                  gap: '6px',
-                                                  padding: '4px 10px',
-                                                  borderRadius: '6px',
-                                                  background: isVacantOver ? 'rgba(16, 185, 129, 0.3)' : (draggedStaff ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.08)'),
-                                                  border: isVacantOver ? '2px dashed #10b981' : (draggedStaff ? '2px dashed #10b981' : '1px dashed rgba(239, 68, 68, 0.3)'),
-                                                  boxShadow: isVacantOver ? '0 0 12px rgba(16, 185, 129, 0.5)' : (draggedStaff ? '0 0 8px rgba(16, 185, 129, 0.25)' : 'none'),
-                                                  transition: 'all 0.15s ease',
-                                                  cursor: draggedStaff ? 'copy' : 'default'
-                                                }}
-                                                title={draggedStaff ? `Drop here to assign ${draggedStaff.staffName} to fill Link #${d.link_number}` : ''}
-                                              >
-                                                <strong style={{ color: isVacantOver ? '#10b981' : '#ef4444', fontStyle: 'italic' }}>
-                                                  {d.name}
-                                                </strong>
-                                                {draggedStaff && (
-                                                  <span className="badge no-print" style={{ background: '#10b981', color: '#000', fontSize: '0.7rem', fontWeight: 800 }}>
-                                                    📥 Drop to fill Link #{d.link_number}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            ) : (
-                                              <strong style={{ 
-                                                color: hasSub ? 'var(--primary)' : 'inherit',
-                                                fontStyle: 'normal'
-                                              }}>
-                                                {d.name}
-                                              </strong>
-                                            )}
-                                            <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
-                                              ({d.designation || '-'})
-                                            </span>
-                                            {activeMovingStaff && isStaffDraggable && activeMovingStaff.staffId !== d.staffId && (
-                                              <button
-                                                type="button"
-                                                className="btn no-print"
-                                                onClick={() => handleDropOnOccupiedStaff(activeMovingStaff, d, group)}
-                                                style={{
-                                                  padding: '2px 8px',
-                                                  fontSize: '0.72rem',
-                                                  background: '#06b6d4',
-                                                  color: '#000',
-                                                  fontWeight: 700,
-                                                  borderRadius: '4px',
-                                                  border: 'none',
-                                                  cursor: 'pointer',
-                                                  marginLeft: '4px'
-                                                }}
-                                              >
-                                                🎯 Swap/Replace
-                                              </button>
-                                            )}
-                                            {activeMovingStaff && isSlotVacant && (
-                                              <button
-                                                type="button"
-                                                className="btn no-print"
-                                                onClick={() => handleDragDropOnTrain(activeMovingStaff, group, d, false)}
-                                                style={{
-                                                  padding: '2px 9px',
-                                                  fontSize: '0.72rem',
-                                                  background: '#10b981',
-                                                  color: '#000',
-                                                  fontWeight: 800,
-                                                  borderRadius: '4px',
-                                                  border: 'none',
-                                                  cursor: 'pointer',
-                                                  marginLeft: '4px'
-                                                }}
-                                              >
-                                                📥 Fill Link #{d.link_number}
-                                              </button>
-                                            )}
-                                            {(d.seniorityBadge || (d.seniorityRank && d.seniorityRank !== 999)) && (
-                                              <span 
-                                                className="badge no-print" 
-                                                title={d.seniorityShiftReason || `Seniority: ${d.seniorityBadge || ('#' + d.seniorityRank)} (List SL #${d.seniorityRank || '-'}) | Priority: 1.CTI > 2.TTI > 3.SRTE > 4.Sr.CCTC > 5.CCTC`}
-                                                style={{ 
-                                                  background: d.shiftedBySeniority ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)', 
-                                                  color: d.shiftedBySeniority ? '#f59e0b' : 'var(--color-text-secondary)', 
-                                                  border: d.shiftedBySeniority ? '1px solid #f59e0b' : '1px solid var(--border-glass)', 
-                                                  fontSize: '0.68rem', 
-                                                  padding: '1px 6px', 
-                                                  fontWeight: 700 
-                                                }}
-                                              >
-                                                🏅 {d.seniorityBadge || (`#${d.seniorityRank}`)}{d.shiftedBySeniority ? ' ⚡' : ''}
-                                              </span>
-                                            )}
-                                            {d.isExtraStaff && (
-                                              <span className="badge no-print" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #60a5fa', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
-                                                ➕ Extra Crew (Down Below)
-                                              </span>
-                                            )}
-                                            {d.isVacantAdvance && (
-                                              <span 
-                                                className="blink-advance no-print" 
-                                                title={`Staff ${d.originalStaffName || ''} utilised in advance by Train No ${d.advanceTrainNo || ''}. Link slot vacant until original rotation.`}
-                                              >
-                                                ⚡ UTILISED ADVANCE BY TRAIN NO {d.advanceTrainNo || '---'}
-                                              </span>
-                                            )}
-                                            {d.isVacantAvailableReturn && (
-                                              <span className="badge no-print" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
-                                                ⚡ VACANT ({d.originalStaffName || 'STAFF'} AVL AT HQ)
-                                              </span>
-                                            )}
-                                            {d.isVacantUpgrade && (
-                                              <span className="badge no-print" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid #ef4444', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
-                                                ⚠️ VACANT (UPGRADED)
-                                              </span>
-                                            )}
-                                            {d.isVacantShifted && (
-                                              <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
-                                                ⚠️ VACANT (SHIFTED)
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && d.isUpgraded && (
-                                              <span className="badge no-print" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#eab308', border: '1px solid #eab308', fontSize: '0.7rem', padding: '2px 8px', fontWeight: 700 }}>
-                                                ⭐ Upgraded (COR{d.originalStaffName ? ` - Sub for ${d.originalStaffName}` : ''})
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && d.originalStaffName && (
-                                              <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--primary)', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                Sub for {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
-                                              </span>
-                                            )}
-                                            {d.muster_code && (
-                                              <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.2)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.7rem', padding: '1px 7px', fontWeight: 700 }}>
-                                                📋 Muster: {d.muster_code}
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isSick && (
-                                              <span className="badge no-print" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                🤒 SICK
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isLeave && (
-                                              <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                🏖️ LEAVE
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isCr && (
-                                              <span className="badge no-print" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                💤 CR
-                                              </span>
-                                            )}
-                                            {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && !isSick && !isLeave && !isCr && d.isOverridden && (
-                                              <span className="badge no-print" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                🔄 OVR
-                                              </span>
-                                            )}
-                                          </div>
-                                          {isAdmin && (
-                                            <button
-                                              type="button"
-                                              className="btn btn-secondary no-print"
-                                              onClick={() => openDutyEditModal(d, selectedDate)}
-                                              style={{
-                                                padding: '3px 8px',
-                                                fontSize: '0.72rem',
-                                                fontWeight: 600,
-                                                borderRadius: '6px',
-                                                background: 'rgba(255,255,255,0.06)',
-                                                border: '1px solid var(--border-glass)',
-                                                cursor: 'pointer',
-                                                whiteSpace: 'nowrap',
-                                                flexShrink: 0
-                                              }}
-                                              title="Edit Employee Duty / Sick / Leave / Changed Link"
-                                            >
-                                              ✏️ Edit
-                                            </button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                    {isAdmin && (
-                                      <div
-                                        className="no-print"
+                                <React.Fragment key={group.slotId || groupIndex}>
+                                  {duties.map((d, dIdx) => {
+                                    const isSick = d.status === 'SICK' || d.isSick;
+                                    const isLeave = d.status === 'LEAVE' || d.isLeave;
+                                    const isCr = d.status === 'CR' || d.isCr;
+                                    const hasSub = d.originalStaffName || d.substituteName;
+                                    const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
+                                    const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
+                                    const isVacantOver = dragOverSlotId === `${group.slotId}-vacant-${dIdx}`;
+                                    const isStaffOver = dragOverStaffDutyKey === `${group.slotId}-${d.staffId || dIdx}`;
+                                    const isLastDuty = dIdx === duties.length - 1;
+
+                                    return (
+                                      <tr
+                                        key={`${group.slotId || groupIndex}-${d.staffId || dIdx}`}
+                                        onDragEnter={(e) => {
+                                          e.preventDefault();
+                                          setDragOverSlotId(group.slotId);
+                                        }}
                                         onDragOver={(e) => {
                                           e.preventDefault();
-                                          e.stopPropagation();
                                           e.dataTransfer.dropEffect = 'move';
-                                          if (dragOverSlotId !== `${group.slotId}-extra`) setDragOverSlotId(`${group.slotId}-extra`);
+                                          if (dragOverSlotId !== group.slotId && !String(dragOverSlotId).startsWith(`${group.slotId}-`)) {
+                                            setDragOverSlotId(group.slotId);
+                                          }
                                         }}
                                         onDragLeave={(e) => {
                                           if (e.currentTarget.contains(e.relatedTarget)) return;
-                                          if (dragOverSlotId === `${group.slotId}-extra`) setDragOverSlotId(null);
+                                          if (dragOverSlotId === group.slotId || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId}-`))) {
+                                            setDragOverSlotId(null);
+                                          }
                                         }}
                                         onDrop={(e) => {
                                           e.preventDefault();
@@ -6703,66 +6623,340 @@ export default function App() {
                                             const raw = e.dataTransfer.getData('text/plain');
                                             if (raw) dragData = JSON.parse(raw);
                                           } catch (err) {}
-                                          if (!dragData && draggedStaff) dragData = draggedStaff;
+                                          if (!dragData && draggedStaff) {
+                                            dragData = draggedStaff;
+                                          }
                                           if (!dragData) return;
-                                          handleDragDropOnTrain(dragData, group, null, true);
+                                          handleDragDropOnTrain(dragData, group);
                                         }}
                                         style={{
-                                          padding: '5px 10px',
-                                          margin: '6px 10px 6px 10px',
-                                          border: dragOverSlotId === `${group.slotId}-extra` ? '2px dashed #10b981' : (draggedStaff ? '1.5px dashed rgba(59, 130, 246, 0.6)' : '1px dashed rgba(255,255,255,0.12)'),
-                                          borderRadius: '6px',
-                                          textAlign: 'center',
-                                          fontSize: '0.73rem',
-                                          fontWeight: 600,
-                                          color: dragOverSlotId === `${group.slotId}-extra` ? '#10b981' : (draggedStaff ? '#60a5fa' : 'var(--color-text-secondary)'),
-                                          background: dragOverSlotId === `${group.slotId}-extra` ? 'rgba(16, 185, 129, 0.18)' : (draggedStaff ? 'rgba(59, 130, 246, 0.08)' : 'transparent'),
-                                          cursor: draggedStaff ? 'copy' : 'default',
+                                          borderBottom: (isLastDuty && !hasExtraRow) ? '2px solid var(--border-glass)' : '1px solid rgba(255, 255, 255, 0.05)',
+                                          backgroundColor: isSlotHighlighted ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
+                                          outline: dragOverSlotId === group.slotId ? '2px dashed #10b981' : (draggedStaff ? '1px dashed rgba(16, 185, 129, 0.35)' : 'none'),
                                           transition: 'all 0.15s ease'
                                         }}
                                       >
-                                        {dragOverSlotId === `${group.slotId}-extra`
-                                          ? '🟢 Release to add down below as Extra Crew!'
-                                          : (draggedStaff
-                                            ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
-                                            : '➕ Drag & drop employee here (adds down below as extra crew)')}
-                                        {activeMovingStaff && (
-                                          <button
-                                            type="button"
-                                            className="btn no-print"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDragDropOnTrain(activeMovingStaff, group, null, true);
-                                            }}
+                                        {/* S.No spans all duty rows of this slot */}
+                                        {dIdx === 0 && (
+                                          <td
+                                            rowSpan={duties.length}
                                             style={{
-                                              marginLeft: '8px',
-                                              padding: '2px 8px',
-                                              fontSize: '0.72rem',
-                                              background: '#3b82f6',
-                                              color: '#fff',
+                                              textAlign: 'center',
+                                              verticalAlign: 'middle',
+                                              color: 'var(--color-text-secondary)',
                                               fontWeight: 700,
-                                              borderRadius: '4px',
-                                              border: 'none',
-                                              cursor: 'pointer'
+                                              borderRight: '1px solid var(--border-glass)',
+                                              borderBottom: !hasExtraRow ? '2px solid var(--border-glass)' : '1px solid var(--border-glass)'
                                             }}
                                           >
-                                            ➕ Add {activeMovingStaff.staffName} as Extra Crew
-                                          </button>
+                                            {groupIndex + 1}
+                                          </td>
                                         )}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
-                                    {group.duties.map((d, dIdx) => {
-                                      return (
-                                        <div key={`${d.staffId || 'd'}-${dIdx}`} style={{ 
-                                          padding: '10px 8px', 
-                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                          minHeight: '46px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center'
-                                        }}>
+
+                                        {/* Name of Employee */}
+                                        <td style={{ padding: '8px 14px', verticalAlign: 'middle' }}>
+                                          <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '8px'
+                                          }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                              {isStaffDraggable ? (
+                                                <div
+                                                  draggable
+                                                  onDragStart={(e) => {
+                                                    const payload = {
+                                                      staffId: d.staffId,
+                                                      staffName: d.name,
+                                                      sourceLink: d.link_number || d.original_link_number,
+                                                      sourceCategoryId: d.categoryId,
+                                                      sourceTrain: group.firstTrain
+                                                    };
+                                                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                                                    e.dataTransfer.effectAllowed = 'move';
+                                                    setDraggedStaff(payload);
+                                                  }}
+                                                  onDragEnd={() => setDraggedStaff(null)}
+                                                  onDragOver={(e) => {
+                                                    if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      e.dataTransfer.dropEffect = 'move';
+                                                      const key = `${group.slotId}-${d.staffId || dIdx}`;
+                                                      if (dragOverStaffDutyKey !== key) setDragOverStaffDutyKey(key);
+                                                    }
+                                                  }}
+                                                  onDragLeave={(e) => {
+                                                    if (e.currentTarget.contains(e.relatedTarget)) return;
+                                                    const key = `${group.slotId}-${d.staffId || dIdx}`;
+                                                    if (dragOverStaffDutyKey === key) setDragOverStaffDutyKey(null);
+                                                  }}
+                                                  onDrop={(e) => {
+                                                    if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setDragOverStaffDutyKey(null);
+                                                      let dragData = null;
+                                                      try {
+                                                        const raw = e.dataTransfer.getData('text/plain');
+                                                        if (raw) dragData = JSON.parse(raw);
+                                                      } catch (err) {}
+                                                      if (!dragData && draggedStaff) dragData = draggedStaff;
+                                                      if (!dragData) return;
+                                                      handleDropOnOccupiedStaff(dragData, d, group);
+                                                    }
+                                                  }}
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    cursor: 'grab',
+                                                    userSelect: 'none',
+                                                    padding: '4px 10px',
+                                                    borderRadius: '6px',
+                                                    background: isStaffOver ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.06)',
+                                                    border: isStaffOver ? '2px dashed #06b6d4' : (draggedStaff && draggedStaff.staffId !== d.staffId ? '1.5px dashed rgba(6, 182, 212, 0.45)' : '1px solid rgba(255,255,255,0.12)'),
+                                                    opacity: (draggedStaff && draggedStaff.staffId === d.staffId) ? 0.4 : 1,
+                                                    boxShadow: isStaffOver ? '0 0 12px rgba(6, 182, 212, 0.5)' : '0 1px 3px rgba(0,0,0,0.15)',
+                                                    transition: 'all 0.15s ease'
+                                                  }}
+                                                  title={draggedStaff && draggedStaff.staffId !== d.staffId ? `Drop here to Swap duties with ${d.name} or Replace` : `Drag ${d.name} to reassign to another train`}
+                                                >
+                                                  <span
+                                                    style={{
+                                                      fontSize: '1.15rem',
+                                                      color: 'var(--primary)',
+                                                      lineHeight: 1,
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center'
+                                                    }}
+                                                    className="no-print"
+                                                  >
+                                                    ⠿
+                                                  </span>
+                                                  <strong style={{ 
+                                                    color: hasSub ? 'var(--primary)' : 'inherit',
+                                                    fontStyle: 'normal'
+                                                  }}>
+                                                    {d.name}
+                                                  </strong>
+                                                  {isStaffOver && (
+                                                    <span className="badge no-print" style={{ background: '#06b6d4', color: '#000', fontSize: '0.68rem', fontWeight: 800 }}>
+                                                      🔀 Release to Swap / Replace
+                                                    </span>
+                                                  )}
+                                                  {draggedStaff && draggedStaff.staffId !== d.staffId && !isStaffOver && (
+                                                    <span className="badge no-print" style={{ background: 'rgba(6, 182, 212, 0.18)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.35)', fontSize: '0.66rem', fontWeight: 600 }}>
+                                                      🔀 Drop to Swap
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              ) : isSlotVacant ? (
+                                                <div
+                                                  onDragOver={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    e.dataTransfer.dropEffect = 'move';
+                                                    if (dragOverSlotId !== `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(`${group.slotId}-vacant-${dIdx}`);
+                                                  }}
+                                                  onDragLeave={(e) => {
+                                                    if (e.currentTarget.contains(e.relatedTarget)) return;
+                                                    if (dragOverSlotId === `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(null);
+                                                  }}
+                                                  onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setDragOverSlotId(null);
+                                                    let dragData = null;
+                                                    try {
+                                                      const raw = e.dataTransfer.getData('text/plain');
+                                                      if (raw) dragData = JSON.parse(raw);
+                                                    } catch (err) {}
+                                                    if (!dragData && draggedStaff) dragData = draggedStaff;
+                                                    if (!dragData) return;
+                                                    handleDragDropOnTrain(dragData, group, d, false);
+                                                  }}
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    padding: '4px 10px',
+                                                    borderRadius: '6px',
+                                                    background: isVacantOver ? 'rgba(16, 185, 129, 0.3)' : (draggedStaff ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.08)'),
+                                                    border: isVacantOver ? '2px dashed #10b981' : (draggedStaff ? '2px dashed #10b981' : '1px dashed rgba(239, 68, 68, 0.3)'),
+                                                    boxShadow: isVacantOver ? '0 0 12px rgba(16, 185, 129, 0.5)' : (draggedStaff ? '0 0 8px rgba(16, 185, 129, 0.25)' : 'none'),
+                                                    transition: 'all 0.15s ease',
+                                                    cursor: draggedStaff ? 'copy' : 'default'
+                                                  }}
+                                                  title={draggedStaff ? `Drop here to assign ${draggedStaff.staffName} to fill Link #${d.link_number}` : ''}
+                                                >
+                                                  <strong style={{ color: isVacantOver ? '#10b981' : '#ef4444', fontStyle: 'italic' }}>
+                                                    {d.name}
+                                                  </strong>
+                                                  {draggedStaff && (
+                                                    <span className="badge no-print" style={{ background: '#10b981', color: '#000', fontSize: '0.7rem', fontWeight: 800 }}>
+                                                      📥 Drop to fill Link #{d.link_number}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              ) : (
+                                                <strong style={{ 
+                                                  color: hasSub ? 'var(--primary)' : 'inherit',
+                                                  fontStyle: 'normal'
+                                                }}>
+                                                  {d.name}
+                                                </strong>
+                                              )}
+                                              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
+                                                ({d.designation || '-'})
+                                              </span>
+                                              {activeMovingStaff && isStaffDraggable && activeMovingStaff.staffId !== d.staffId && (
+                                                <button
+                                                  type="button"
+                                                  className="btn no-print"
+                                                  onClick={() => handleDropOnOccupiedStaff(activeMovingStaff, d, group)}
+                                                  style={{
+                                                    padding: '2px 8px',
+                                                    fontSize: '0.72rem',
+                                                    background: '#06b6d4',
+                                                    color: '#000',
+                                                    fontWeight: 700,
+                                                    borderRadius: '4px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    marginLeft: '4px'
+                                                  }}
+                                                >
+                                                  🎯 Swap/Replace
+                                                </button>
+                                              )}
+                                              {activeMovingStaff && isSlotVacant && (
+                                                <button
+                                                  type="button"
+                                                  className="btn no-print"
+                                                  onClick={() => handleDragDropOnTrain(activeMovingStaff, group, d, false)}
+                                                  style={{
+                                                    padding: '2px 9px',
+                                                    fontSize: '0.72rem',
+                                                    background: '#10b981',
+                                                    color: '#000',
+                                                    fontWeight: 800,
+                                                    borderRadius: '4px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    marginLeft: '4px'
+                                                  }}
+                                                >
+                                                  📥 Fill Link #{d.link_number}
+                                                </button>
+                                              )}
+                                              {(d.seniorityBadge || (d.seniorityRank && d.seniorityRank !== 999)) && (
+                                                <span 
+                                                  className="badge no-print" 
+                                                  title={d.seniorityShiftReason || `Seniority: ${d.seniorityBadge || ('#' + d.seniorityRank)} (List SL #${d.seniorityRank || '-'}) | Priority: 1.CTI > 2.TTI > 3.SRTE > 4.Sr.CCTC > 5.CCTC`}
+                                                  style={{ 
+                                                    background: d.shiftedBySeniority ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)', 
+                                                    color: d.shiftedBySeniority ? '#f59e0b' : 'var(--color-text-secondary)', 
+                                                    border: d.shiftedBySeniority ? '1px solid #f59e0b' : '1px solid var(--border-glass)', 
+                                                    fontSize: '0.68rem', 
+                                                    padding: '1px 6px', 
+                                                    fontWeight: 700 
+                                                  }}
+                                                >
+                                                  🏅 {d.seniorityBadge || (`#${d.seniorityRank}`)}{d.shiftedBySeniority ? ' ⚡' : ''}
+                                                </span>
+                                              )}
+                                              {d.isExtraStaff && (
+                                                <span className="badge no-print" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #60a5fa', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ➕ Extra Crew (Down Below)
+                                                </span>
+                                              )}
+                                              {d.isVacantAdvance && (
+                                                <span 
+                                                  className="blink-advance no-print" 
+                                                  title={`Staff ${d.originalStaffName || ''} utilised in advance by Train No ${d.advanceTrainNo || ''}. Link slot vacant until original rotation.`}
+                                                >
+                                                  ⚡ UTILISED ADVANCE BY TRAIN NO {d.advanceTrainNo || '---'}
+                                                </span>
+                                              )}
+                                              {d.isVacantAvailableReturn && (
+                                                <span className="badge no-print" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ⚡ VACANT ({d.originalStaffName || 'STAFF'} AVL AT HQ)
+                                                </span>
+                                              )}
+                                              {d.isVacantUpgrade && (
+                                                <span className="badge no-print" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid #ef4444', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ⚠️ VACANT (UPGRADED)
+                                                </span>
+                                              )}
+                                              {d.isVacantShifted && (
+                                                <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ⚠️ VACANT (SHIFTED)
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && d.isUpgraded && (
+                                                <span className="badge no-print" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#eab308', border: '1px solid #eab308', fontSize: '0.7rem', padding: '2px 8px', fontWeight: 700 }}>
+                                                  ⭐ Upgraded (COR{d.originalStaffName ? ` - Sub for ${d.originalStaffName}` : ''})
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && d.originalStaffName && (
+                                                <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.68rem', padding: '1px 6px' }}>
+                                                  Sub for {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
+                                                </span>
+                                              )}
+                                              {d.muster_code && (
+                                                <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.2)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.7rem', padding: '1px 7px', fontWeight: 700 }}>
+                                                  📋 Muster: {d.muster_code}
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isSick && (
+                                                <span className="badge no-print" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontSize: '0.68rem', padding: '1px 6px' }}>
+                                                  🤒 SICK
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isLeave && (
+                                                <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontSize: '0.68rem', padding: '1px 6px' }}>
+                                                  🏖️ LEAVE
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && isCr && (
+                                                <span className="badge no-print" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', fontSize: '0.68rem', padding: '1px 6px' }}>
+                                                  💤 CR
+                                                </span>
+                                              )}
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.originalStaffName && !isSick && !isLeave && !isCr && d.isOverridden && (
+                                                <span className="badge no-print" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.68rem', padding: '1px 6px' }}>
+                                                  🔄 OVR
+                                                </span>
+                                              )}
+                                            </div>
+                                            {isAdmin && (
+                                              <button
+                                                type="button"
+                                                className="btn btn-secondary no-print"
+                                                onClick={() => openDutyEditModal(d, selectedDate)}
+                                                style={{
+                                                  padding: '3px 8px',
+                                                  fontSize: '0.72rem',
+                                                  fontWeight: 600,
+                                                  borderRadius: '6px',
+                                                  background: 'rgba(255,255,255,0.06)',
+                                                  border: '1px solid var(--border-glass)',
+                                                  cursor: 'pointer',
+                                                  whiteSpace: 'nowrap',
+                                                  flexShrink: 0
+                                                }}
+                                                title="Edit Employee Duty / Sick / Leave / Changed Link"
+                                              >
+                                                ✏️ Edit
+                                              </button>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        {/* Link No */}
+                                        <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
                                           <span style={{ 
                                             fontWeight: 700, 
                                             borderRadius: '6px', 
@@ -6773,162 +6967,141 @@ export default function App() {
                                           }}>
                                             {getLinkDisplayLabel(d.categoryId, d.link_number)}
                                           </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </td>
-                                  <td 
-                                    onClick={() => {
-                                      if (isAdmin) {
-                                        setEditTrainCoachModal({
-                                          slotId: group.slotId,
-                                          isSlotLevel: true,
-                                          slotTitle: group.title || `Slot ${group.slotId}`,
-                                          firstTrain: group.firstTrain || '',
-                                          lastTrain: group.lastTrain || '',
-                                          firstCoaches: (group.duties && group.duties[0] && group.duties[0].firstCoaches) || '',
-                                          lastCoaches: (group.duties && group.duties[0] && group.duties[0].lastCoaches) || '',
-                                          dutyKey: null,
-                                          categoryId: null,
-                                          linkNum: null
-                                        });
-                                      }
-                                    }}
-                                    className={isAdmin ? 'train-coach-editable-cell' : ''}
-                                    title={isAdmin ? "Click to edit Train No & Coaches for this slot" : undefined}
-                                    style={{ 
-                                      textAlign: 'center', 
-                                      verticalAlign: 'middle', 
-                                      fontWeight: 800, 
-                                      fontSize: '1.05rem', 
-                                      color: 'var(--primary)',
-                                      cursor: isAdmin ? 'pointer' : 'default'
-                                    }}
-                                  >
-                                    <span>{group.firstTrain}</span>
-                                    {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
-                                  </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
-                                    {group.duties.map((d, dIdx) => (
-                                      <div 
-                                        key={`${d.staffId || 'd'}-${dIdx}`} 
-                                        onClick={() => {
-                                          if (isAdmin) {
-                                            setEditTrainCoachModal({
-                                              slotId: group.slotId,
-                                              slotTitle: group.title || `Slot ${group.slotId}`,
-                                              dutyKey: d.dutyKey,
-                                              categoryId: d.categoryId,
-                                              linkNum: d.link_number,
-                                              staffName: d.name,
-                                              firstTrain: d.firstTrain || group.firstTrain || '',
-                                              firstCoaches: d.firstCoaches || '',
-                                              lastTrain: d.lastTrain || group.lastTrain || '',
-                                              lastCoaches: d.lastCoaches || ''
-                                            });
-                                          }
-                                        }}
-                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
-                                        title={isAdmin ? `Click to edit coaches/train for ${d.name || 'this duty'}` : undefined}
-                                        style={{ 
-                                          padding: '10px 8px', 
-                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                          minHeight: '46px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: isAdmin ? 'pointer' : 'default'
-                                        }}
-                                      >
-                                        <span>{d.firstCoaches}</span>
-                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
-                                      </div>
-                                    ))}
-                                  </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
-                                    {group.duties.map((d, dIdx) => (
-                                      <div 
-                                        key={`${d.staffId || 'd'}-${dIdx}`} 
-                                        onClick={() => {
-                                          if (isAdmin) {
-                                            setEditTrainCoachModal({
-                                              slotId: group.slotId,
-                                              slotTitle: group.title || `Slot ${group.slotId}`,
-                                              dutyKey: d.dutyKey,
-                                              categoryId: d.categoryId,
-                                              linkNum: d.link_number,
-                                              staffName: d.name,
-                                              firstTrain: d.firstTrain || group.firstTrain || '',
-                                              firstCoaches: d.firstCoaches || '',
-                                              lastTrain: d.lastTrain || group.lastTrain || '',
-                                              lastCoaches: d.lastCoaches || ''
-                                            });
-                                          }
-                                        }}
-                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
-                                        title={isAdmin ? `Click to edit last day train & coaches for ${d.name || 'this duty'}` : undefined}
-                                        style={{ 
-                                          padding: '10px 8px', 
-                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                          minHeight: '46px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          fontWeight: 'bold',
-                                          cursor: isAdmin ? 'pointer' : 'default'
-                                        }}
-                                      >
-                                        <span>{d.lastTrain}</span>
-                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
-                                      </div>
-                                    ))}
-                                  </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
-                                    {group.duties.map((d, dIdx) => (
-                                      <div 
-                                        key={`${d.staffId || 'd'}-${dIdx}`} 
-                                        onClick={() => {
-                                          if (isAdmin) {
-                                            setEditTrainCoachModal({
-                                              slotId: group.slotId,
-                                              slotTitle: group.title || `Slot ${group.slotId}`,
-                                              dutyKey: d.dutyKey,
-                                              categoryId: d.categoryId,
-                                              linkNum: d.link_number,
-                                              staffName: d.name,
-                                              firstTrain: d.firstTrain || group.firstTrain || '',
-                                              firstCoaches: d.firstCoaches || '',
-                                              lastTrain: d.lastTrain || group.lastTrain || '',
-                                              lastCoaches: d.lastCoaches || ''
-                                            });
-                                          }
-                                        }}
-                                        className={isAdmin ? 'train-coach-editable-cell' : ''}
-                                        title={isAdmin ? `Click to edit last day coaches for ${d.name || 'this duty'}` : undefined}
-                                        style={{ 
-                                          padding: '10px 8px', 
-                                          borderBottom: dIdx < group.duties.length - 1 ? '1px solid var(--border-glass)' : 'none',
-                                          minHeight: '46px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: isAdmin ? 'pointer' : 'default'
-                                        }}
-                                      >
-                                        <span>{d.lastCoaches}</span>
-                                        {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
-                                      </div>
-                                    ))}
-                                  </td>
-                                  {isAdmin && (
-                                    <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                                      {group.duties.map((d, dIdx) => {
-                                        const isSlotVacant = d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacant || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
+                                        </td>
 
-                                        return (
-                                          <div key={d.staffId || dIdx} style={{ minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                        {/* Train No (1st day) */}
+                                        <td 
+                                          onClick={() => {
+                                            if (isAdmin) {
+                                              setEditTrainCoachModal({
+                                                slotId: group.slotId,
+                                                slotTitle: group.title || `Slot ${group.slotId}`,
+                                                dutyKey: d.dutyKey,
+                                                categoryId: d.categoryId,
+                                                linkNum: d.link_number,
+                                                staffName: d.name,
+                                                firstTrain: d.firstTrain || group.firstTrain || '',
+                                                firstCoaches: d.firstCoaches || '',
+                                                lastTrain: d.lastTrain || group.lastTrain || '',
+                                                lastCoaches: d.lastCoaches || ''
+                                              });
+                                            }
+                                          }}
+                                          className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                          title={isAdmin ? `Click to edit first day train for ${d.name || 'this duty'}` : undefined}
+                                          style={{ 
+                                            padding: '8px 6px', 
+                                            textAlign: 'center',
+                                            verticalAlign: 'middle',
+                                            fontWeight: 800,
+                                            fontSize: '1.05rem',
+                                            color: 'var(--primary)',
+                                            cursor: isAdmin ? 'pointer' : 'default'
+                                          }}
+                                        >
+                                          <span>{d.firstTrain || group.firstTrain}</span>
+                                          {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                        </td>
+
+                                        {/* Coach (1st day) */}
+                                        <td 
+                                          onClick={() => {
+                                            if (isAdmin) {
+                                              setEditTrainCoachModal({
+                                                slotId: group.slotId,
+                                                slotTitle: group.title || `Slot ${group.slotId}`,
+                                                dutyKey: d.dutyKey,
+                                                categoryId: d.categoryId,
+                                                linkNum: d.link_number,
+                                                staffName: d.name,
+                                                firstTrain: d.firstTrain || group.firstTrain || '',
+                                                firstCoaches: d.firstCoaches || '',
+                                                lastTrain: d.lastTrain || group.lastTrain || '',
+                                                lastCoaches: d.lastCoaches || ''
+                                              });
+                                            }
+                                          }}
+                                          className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                          title={isAdmin ? `Click to edit coaches/train for ${d.name || 'this duty'}` : undefined}
+                                          style={{ 
+                                            padding: '8px 6px', 
+                                            textAlign: 'center',
+                                            verticalAlign: 'middle',
+                                            cursor: isAdmin ? 'pointer' : 'default'
+                                          }}
+                                        >
+                                          <span>{d.firstCoaches}</span>
+                                          {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                        </td>
+
+                                        {/* Train No (last day) */}
+                                        <td 
+                                          onClick={() => {
+                                            if (isAdmin) {
+                                              setEditTrainCoachModal({
+                                                slotId: group.slotId,
+                                                slotTitle: group.title || `Slot ${group.slotId}`,
+                                                dutyKey: d.dutyKey,
+                                                categoryId: d.categoryId,
+                                                linkNum: d.link_number,
+                                                staffName: d.name,
+                                                firstTrain: d.firstTrain || group.firstTrain || '',
+                                                firstCoaches: d.firstCoaches || '',
+                                                lastTrain: d.lastTrain || group.lastTrain || '',
+                                                lastCoaches: d.lastCoaches || ''
+                                              });
+                                            }
+                                          }}
+                                          className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                          title={isAdmin ? `Click to edit last day train & coaches for ${d.name || 'this duty'}` : undefined}
+                                          style={{ 
+                                            padding: '8px 6px', 
+                                            textAlign: 'center',
+                                            verticalAlign: 'middle',
+                                            fontWeight: 'bold',
+                                            cursor: isAdmin ? 'pointer' : 'default'
+                                          }}
+                                        >
+                                          <span>{d.lastTrain}</span>
+                                          {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                        </td>
+
+                                        {/* Coach (last day) */}
+                                        <td 
+                                          onClick={() => {
+                                            if (isAdmin) {
+                                              setEditTrainCoachModal({
+                                                slotId: group.slotId,
+                                                slotTitle: group.title || `Slot ${group.slotId}`,
+                                                dutyKey: d.dutyKey,
+                                                categoryId: d.categoryId,
+                                                linkNum: d.link_number,
+                                                staffName: d.name,
+                                                firstTrain: d.firstTrain || group.firstTrain || '',
+                                                firstCoaches: d.firstCoaches || '',
+                                                lastTrain: d.lastTrain || group.lastTrain || '',
+                                                lastCoaches: d.lastCoaches || ''
+                                              });
+                                            }
+                                          }}
+                                          className={isAdmin ? 'train-coach-editable-cell' : ''}
+                                          title={isAdmin ? `Click to edit last day coaches for ${d.name || 'this duty'}` : undefined}
+                                          style={{ 
+                                            padding: '8px 6px', 
+                                            textAlign: 'center',
+                                            verticalAlign: 'middle',
+                                            cursor: isAdmin ? 'pointer' : 'default'
+                                          }}
+                                        >
+                                          <span>{d.lastCoaches}</span>
+                                          {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
+                                        </td>
+
+                                        {/* Actions (if admin) */}
+                                        {isAdmin && (
+                                          <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '8px 6px' }}>
                                             {isSlotVacant ? (
-                                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                                                 <button
                                                   type="button"
                                                   className="btn btn-primary"
@@ -6975,7 +7148,7 @@ export default function App() {
                                                 )}
                                               </div>
                                             ) : (
-                                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                                                 <button
                                                   type="button"
                                                   className="btn btn-secondary no-print"
@@ -7038,7 +7211,7 @@ export default function App() {
                                                 </button>
                                                 <button
                                                   type="button"
-                                                  className="btn btn-secondary"
+                                                  className="btn btn-secondary no-print"
                                                   onClick={() => openDutyEditModal({
                                                     ...d,
                                                     initialMode: 'EXCHANGE_STAFF'
@@ -7079,15 +7252,99 @@ export default function App() {
                                                 )}
                                               </div>
                                             )}
-                                          </div>
-                                        );
-                                      })}
-                                    </td>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    );
+                                  })}
+
+                                  {/* Dedicated Extra Crew Drag & Drop row spanning the slot */}
+                                  {hasExtraRow && (
+                                    <tr
+                                      key={`${group.slotId || groupIndex}-extra-drop`}
+                                      className="no-print"
+                                      style={{
+                                        borderBottom: '2px solid var(--border-glass)',
+                                        backgroundColor: isSlotHighlighted ? 'rgba(16, 185, 129, 0.08)' : 'transparent'
+                                      }}
+                                    >
+                                      <td
+                                        colSpan={isAdmin ? 8 : 7}
+                                        style={{ padding: '6px 12px' }}
+                                      >
+                                        <div
+                                          onDragOver={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            e.dataTransfer.dropEffect = 'move';
+                                            if (dragOverSlotId !== `${group.slotId}-extra`) setDragOverSlotId(`${group.slotId}-extra`);
+                                          }}
+                                          onDragLeave={(e) => {
+                                            if (e.currentTarget.contains(e.relatedTarget)) return;
+                                            if (dragOverSlotId === `${group.slotId}-extra`) setDragOverSlotId(null);
+                                          }}
+                                          onDrop={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setDragOverSlotId(null);
+                                            let dragData = null;
+                                            try {
+                                              const raw = e.dataTransfer.getData('text/plain');
+                                              if (raw) dragData = JSON.parse(raw);
+                                            } catch (err) {}
+                                            if (!dragData && draggedStaff) dragData = draggedStaff;
+                                            if (!dragData) return;
+                                            handleDragDropOnTrain(dragData, group, null, true);
+                                          }}
+                                          style={{
+                                            padding: '6px 12px',
+                                            border: dragOverSlotId === `${group.slotId}-extra` ? '2px dashed #10b981' : (draggedStaff ? '1.5px dashed rgba(59, 130, 246, 0.6)' : '1px dashed rgba(255,255,255,0.12)'),
+                                            borderRadius: '6px',
+                                            textAlign: 'center',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 600,
+                                            color: dragOverSlotId === `${group.slotId}-extra` ? '#10b981' : (draggedStaff ? '#60a5fa' : 'var(--color-text-secondary)'),
+                                            background: dragOverSlotId === `${group.slotId}-extra` ? 'rgba(16, 185, 129, 0.18)' : (draggedStaff ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.02)'),
+                                            cursor: draggedStaff ? 'copy' : 'default',
+                                            transition: 'all 0.15s ease'
+                                          }}
+                                        >
+                                          {dragOverSlotId === `${group.slotId}-extra`
+                                            ? '🟢 Release to add down below as Extra Crew!'
+                                            : (draggedStaff
+                                              ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
+                                              : `➕ Drag & drop employee here (adds down below as extra crew for Train ${group.firstTrain})`)}
+                                          {activeMovingStaff && (
+                                            <button
+                                              type="button"
+                                              className="btn no-print"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDragDropOnTrain(activeMovingStaff, group, null, true);
+                                              }}
+                                              style={{
+                                                marginLeft: '8px',
+                                                padding: '2px 8px',
+                                                fontSize: '0.72rem',
+                                                background: '#3b82f6',
+                                                color: '#fff',
+                                                fontWeight: 700,
+                                                borderRadius: '4px',
+                                                border: 'none',
+                                                cursor: 'pointer'
+                                              }}
+                                            >
+                                              ➕ Add {activeMovingStaff.staffName} as Extra Crew
+                                            </button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
                                   )}
-                                </tr>
-                            );
-                          });
-                        })()}
+                                </React.Fragment>
+                              );
+                            });
+                          })()}
                         {activeSlotRows.length === 0 && (
                           <tr>
                             <td colSpan={isAdmin ? "8" : "7"} style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>

@@ -149,16 +149,13 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     return null;
   }
 
-  // 1. Fetch saved custom entries from nda_entries if present in date range
+  // 1. Fetch saved custom entries from nda_entries if present for this month/year
   const allSavedEntries = await all(
     `SELECT * FROM nda_entries 
-     WHERE staff_id = ? ORDER BY id ASC`,
-    [staffId]
+     WHERE staff_id = ? AND month_year = ? ORDER BY row_order ASC, id ASC`,
+    [staffId, monthYearStr]
   );
-  const savedEntries = (allSavedEntries || []).filter(r => {
-    const dIso = resolveDutyDateIso(r);
-    return dIso && dIso >= actualStart && dIso <= actualEnd;
-  });
+  const savedEntries = allSavedEntries || [];
 
   // 2. Fetch TA entries for this staff in date range to copy synced timings
   const taEntries = await all(
@@ -220,8 +217,8 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     const fixedRows = savedEntries.map((r, idx) => {
       let schedDep = r.sched_dep || '';
       let schedArr = r.sched_arr || '';
-      let actDep = r.act_dep || '---';
-      let actArr = r.act_arr || '---';
+      let actDep = (r.act_dep && r.act_dep !== '---') ? r.act_dep : '';
+      let actArr = (r.act_arr && r.act_arr !== '---') ? r.act_arr : '';
 
       const dIso = resolveDutyDateIso(r);
       const mRec = dIso ? musterMap[dIso] : null;
@@ -335,11 +332,14 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
 
     for (const duty of duties) {
       rowOrder++;
-      const schedDep = duty.dep || '---';
-      const schedArr = duty.arr || '---';
+      const isOutboundOnly = (!duty.arr || duty.arr === '---');
+      const isInboundOnly = (!duty.dep || duty.dep === '---');
 
-      let actualDep = duty.dep || '---';
-      let actualArr = duty.arr || '---';
+      const schedDep = (duty.dep && duty.dep !== '---') ? duty.dep : '';
+      const schedArr = (duty.arr && duty.arr !== '---') ? duty.arr : '';
+
+      let actualDep = (duty.dep && duty.dep !== '---') ? duty.dep : '';
+      let actualArr = (duty.arr && duty.arr !== '---') ? duty.arr : '';
 
       // 1. Inherit from synced TA entry if available
       const taMatch = taMap[`${dateStrDisplay}_${duty.train_no}`] || taMap[`${dateStrIso}_${duty.train_no}`] || taMap[`row_${rowOrder}`];
@@ -358,8 +358,11 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
         }
       }
 
-      if (!duty.dep || duty.dep === '---') actualDep = '---';
-      if (!duty.arr || duty.arr === '---') actualArr = '---';
+      if (actualDep === '---') actualDep = '';
+      if (actualArr === '---') actualArr = '';
+
+      const fromStn = isOutboundOnly ? (duty.from || '') : (isInboundOnly ? '' : (duty.from || ''));
+      const toStn = isInboundOnly ? (duty.to || '') : (isOutboundOnly ? '' : (duty.to || ''));
 
       const nightHours = calculateNightDutyHours(actualDep, actualArr, duty.from, duty.to, duty.train_no);
 
@@ -371,12 +374,12 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
         date_iso: dateStrIso,
         is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === dateStrDisplay,
         train_no: duty.train_no,
-        sched_dep: schedDep,
-        sched_arr: schedArr,
+        sched_dep: '', // Left blank in official document
+        sched_arr: '', // Left blank in official document
         act_dep: actualDep,
         act_arr: actualArr,
-        from_station: duty.from,
-        to_station: duty.to,
+        from_station: fromStn,
+        to_station: toStn,
         night_hours: nightHours
       });
     }

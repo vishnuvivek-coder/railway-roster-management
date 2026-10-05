@@ -238,19 +238,35 @@ export function isReturnTrainReachingHq(trainNumber, toStation = '', fromStation
 }
 
 /**
+ * Official Railway TA Rules for Departure from Headquarters (HQ - GNT):
+ * 1. Departure between 00:00 and 11:55 -> 1.0 TA (time gap to 24:00 is > 12h)
+ * 2. Departure between 12:00 and 17:55 -> 0.7 TA (time gap to 24:00 is > 6h)
+ * 3. Departure between 18:00 and 23:55 -> 0.3 TA (time gap to 24:00 is < 6h)
+ */
+export function calculateDepartureFromHqTa(depTime) {
+  if (!depTime || !depTime.includes(':')) return 0.3;
+  const [dH, dM] = depTime.split(':').map(v => parseInt(v, 10) || 0);
+  const depM = dH * 60 + dM;
+  if (depM <= 11 * 60 + 55) return 1.0;
+  if (depM <= 17 * 60 + 55) return 0.7;
+  return 0.3;
+}
+
+/**
  * Official Railway TA Rules for Reaching Headquarters (HQ - GNT) by Return Train:
  * 
  * TA Claim is governed by total absence on the return calendar day from midnight (00:00) to HQ arrival:
- * 1. Early Morning Arrival (00:00 to 06:00, absence <= 6 hrs):
+ * 4. Early Morning Arrival (00:10 to 06:05, absence < 6 hrs):
  *    -> Awards 0.3 TA (30%).
- * 2. Late Morning Arrival (06:01 to 12:00, absence > 6 hrs and <= 12 hrs):
+ * 5. Late Morning Arrival (06:10 to 12:10, absence > 6 hrs):
  *    -> Awards 0.7 TA (70%).
- * 3. Afternoon / Evening Arrival (After 12:00, absence > 12 hrs):
+ * 6. Afternoon / Evening Arrival (After 12:10 to 23:55, absence > 12 hrs):
  *    -> Awards 1.0 TA (100%).
- * 4. Midnight Boundary Trains (e.g. 12603 sched 23:50, 17252 sched 23:10):
- *    -> If arrives on-time before 00:00: Main tour TA on departure day, Next Day TA = 0.
- *    -> If delayed past 00:00 (e.g. 00:10): Duty spills into next calendar day <= 6 hrs -> +0.3 Extra Next Day TA!
- *    -> If delayed past 06:00 (e.g. 06:10): Duty spills into next calendar day > 6 hrs -> +0.7 Extra Next Day TA!
+ * 
+ * Midnight Boundary Trains (e.g. 12603 sched 23:50, 17252 sched 23:10):
+ * -> If arrives on-time before 00:00: Main tour TA on departure day, Next Day TA = 0.
+ * -> If delayed on/after 00:10: Duty spills into next calendar day <= 6 hrs -> +0.3 Extra Next Day TA!
+ * -> If delayed on/after 06:10: Duty spills into next calendar day > 6 hrs -> +0.7 Extra Next Day TA!
  */
 export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, schedArrTime = null) {
   const tNum = String(trainNumber || '').trim();
@@ -274,24 +290,26 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
 
   // 1. Midnight Boundary Return Trains (scheduled near midnight, e.g. 12603 at 23:50 or 17252 at 23:10)
   if (std?.boundary === 'midnight' || (sched && sched >= '22:00' && sched <= '23:59')) {
-    if (aH >= 0 && aH < 6) {
+    if (aH >= 0 && arrMinsFromMidnight <= 6 * 60 + 5) {
       return {
         isReturnToHq: true,
         arrTime: arrStr,
         taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
-        extraNextDayTa: 0.3,
-        isDelayed: true,
-        badgeText: `🏠 Reached HQ at ${arrStr} (Past Midnight 00:00) ➔ +0.3 Extra Next Day TA`,
+        extraNextDayTa: arrMinsFromMidnight < 10 ? 0 : 0.3,
+        isDelayed: arrMinsFromMidnight >= 10,
+        badgeText: arrMinsFromMidnight >= 10
+          ? `🏠 Reached HQ at ${arrStr} (Past Midnight 00:00) ➔ +0.3 Extra Next Day TA`
+          : `🏠 Reached HQ at ${arrStr} (Midnight)`,
         ruleDesc: `Return Train ${tNum} arrived at HQ after 00:00 at ${arrStr}. Next day absence ≤6h qualifies for +0.3 TA on Next Day Account.`
       };
-    } else if (aH >= 6 && aH < 12) {
+    } else if (arrMinsFromMidnight > 6 * 60 + 5 && arrMinsFromMidnight <= 12 * 60 + 10) {
       return {
         isReturnToHq: true,
         arrTime: arrStr,
         taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
         extraNextDayTa: 0.7,
         isDelayed: true,
-        badgeText: `🏠 Reached HQ at ${arrStr} (Past 06:00) ➔ +0.7 Extra Next Day TA`,
+        badgeText: `🏠 Reached HQ at ${arrStr} (Past 06:10) ➔ +0.7 Extra Next Day TA`,
         ruleDesc: `Return Train ${tNum} arrived at HQ heavily delayed at ${arrStr}. Next day absence >6h qualifies for +0.7 TA on Next Day Account.`
       };
     } else {
@@ -309,18 +327,28 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
 
   // 2. Overnight Return Trains arriving early morning / morning (e.g. 20630, 12733, 17070, 17216, 17262, 57210)
   if (std?.boundary === 'morning' || (sched && sched >= '04:00' && sched <= '11:59') || (aH >= 0 && aH < 12)) {
-    if (arrMinsFromMidnight <= 360) { // 360 mins = 06:00
+    if (arrMinsFromMidnight < 10) {
+      return {
+        isReturnToHq: true,
+        arrTime: arrStr,
+        taPct: null,
+        extraNextDayTa: 0,
+        isDelayed: false,
+        badgeText: `🏠 Reached HQ at ${arrStr} (Midnight arrival)`,
+        ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}.`
+      };
+    } else if (arrMinsFromMidnight <= 6 * 60 + 5) { // 00:10 to 06:05 -> 0.3 TA
       return {
         isReturnToHq: true,
         arrTime: arrStr,
         taPct: 0.3,
         extraNextDayTa: 0,
         isDelayed: false,
-        badgeText: `🏠 Reached HQ at ${arrStr} (≤06:00) ➔ 0.3 TA (≤6h Return Absence)`,
-        ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Total absence from midnight is ≤ 6 hours, granting 0.3 TA (30%).`
+        badgeText: `🏠 Reached HQ at ${arrStr} (00:10–06:05) ➔ 0.3 TA (<6h Return Absence)`,
+        ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Total absence from midnight is < 6 hours, granting 0.3 TA (30%).`
       };
-    } else if (arrMinsFromMidnight > 360 && arrMinsFromMidnight <= 720) { // 06:01 to 12:00
-      const isDelayTriggered = std?.boundaryThreshold === '06:00' && sched <= '06:00';
+    } else if (arrMinsFromMidnight <= 12 * 60 + 10) { // 06:10 to 12:10 -> 0.7 TA
+      const isDelayTriggered = std?.boundaryThreshold === '06:00' && sched <= '06:05';
       return {
         isReturnToHq: true,
         arrTime: arrStr,
@@ -328,19 +356,19 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         extraNextDayTa: 0,
         isDelayed: isDelayTriggered,
         badgeText: isDelayTriggered
-          ? `⚡ Reached HQ at ${arrStr} (Delayed past 06:00) ➔ Auto-Changed to 0.7 TA (>6h Absence)`
-          : `🏠 Reached HQ at ${arrStr} (06:00–12:00) ➔ 0.7 TA (6h–12h Absence)`,
+          ? `⚡ Reached HQ at ${arrStr} (Delayed on/after 06:10) ➔ Auto-Changed to 0.7 TA (>6h Absence)`
+          : `🏠 Reached HQ at ${arrStr} (06:10–12:10) ➔ 0.7 TA (>6h Absence)`,
         ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Absence from midnight exceeds 6 hours, qualifying for 0.7 TA (70%).`
       };
-    } else {
+    } else { // After 12:10 to 23:55 -> 1.0 TA
       return {
         isReturnToHq: true,
         arrTime: arrStr,
         taPct: 1.0,
         extraNextDayTa: 0,
         isDelayed: true,
-        badgeText: `🏠 Reached HQ at ${arrStr} (>12:00) ➔ 1.0 TA (>12h Absence)`,
-        ruleDesc: `Return Train ${tNum} reached HQ after 12:00 at ${arrStr}. Absence exceeds 12 hours, granting 1.0 TA (100%).`
+        badgeText: `🏠 Reached HQ at ${arrStr} (>12:10) ➔ 1.0 TA (>12h Absence)`,
+        ruleDesc: `Return Train ${tNum} reached HQ after 12:10 at ${arrStr}. Absence exceeds 12 hours, granting 1.0 TA (100%).`
       };
     }
   }
@@ -349,7 +377,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
   return {
     isReturnToHq: true,
     arrTime: arrStr,
-    taPct: std?.defaultTa !== undefined ? std.defaultTa : (arrMinsFromMidnight > 720 ? 1.0 : 0.7),
+    taPct: std?.defaultTa !== undefined ? std.defaultTa : (arrMinsFromMidnight > 12 * 60 + 10 ? 1.0 : 0.7),
     extraNextDayTa: 0,
     isDelayed: false,
     badgeText: `🏠 Reached HQ at ${arrStr} (Return Run)`,
@@ -382,8 +410,8 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
   // 1. Midnight Boundary Check (e.g. 12603 sched 23:50 or 17252 sched 23:10)
   const isMidnightBoundaryTrain = std?.boundary === 'midnight' || (sched && sched >= '22:00' && sched <= '23:59');
   if (isMidnightBoundaryTrain) {
-    // If actual arrival is between 00:00 and 06:00 (i.e. morning after midnight)
-    if (aH >= 0 && aH < 6) {
+    // If actual arrival is on or after 00:10 and before 06:05
+    if (actMinsFromMidnight >= 10 && actMinsFromMidnight <= 6 * 60 + 5) {
       return {
         isDelayed: true,
         boundaryType: 'midnight',
@@ -391,8 +419,19 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0.3,
         autoAdjustedTa: null,
-        badgeText: `⚡ NTES: Arrived ${actStr} (>00:00) ➔ +0.3 Extra Next Day Account`,
-        explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr} past midnight (00:00). Next day calendar duty (00:00–${actStr} ≤ 6 hrs) qualifies for +0.3 Extra TA on next day account.`
+        badgeText: `⚡ NTES: Arrived ${actStr} (00:10–06:05) ➔ +0.3 Extra Next Day Account`,
+        explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr} past midnight. Next day calendar duty (<6h from 00:00) qualifies for +0.3 Extra TA on next day account.`
+      };
+    } else if (actMinsFromMidnight > 6 * 60 + 5 && actMinsFromMidnight <= 12 * 60 + 10) {
+      return {
+        isDelayed: true,
+        boundaryType: 'midnight',
+        schedArr: sched || '23:50',
+        actualArr: actStr,
+        extraNextDayTa: 0.7,
+        autoAdjustedTa: null,
+        badgeText: `⚡ NTES: Arrived ${actStr} (>06:10) ➔ +0.7 Extra Next Day Account`,
+        explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr}. Next day calendar duty (>6h from 00:00) qualifies for +0.7 Extra TA on next day account.`
       };
     } else {
       return {
@@ -402,17 +441,17 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: null,
-        badgeText: `✓ NTES: Arrived earlier / on-time (${actStr}) ➔ TA Updated as Earlier (No Next Day Claim)`,
+        badgeText: `✓ NTES: Arrived on-time (${actStr}) ➔ TA Updated as Earlier (No Next Day Claim)`,
         explanation: `Train ${tNum} arrived before midnight at ${actStr}. No extra next-day TA applicable.`
       };
     }
   }
 
   // 2. Morning Boundary Check (e.g. 20630 sched 05:50, 17070 sched 05:15)
-  const isMorningBoundaryTrain = std?.boundary === 'morning' || (sched && sched >= '04:00' && sched < '06:00');
+  const isMorningBoundaryTrain = std?.boundary === 'morning' || (sched && sched >= '04:00' && sched <= '06:05');
   if (isMorningBoundaryTrain) {
-    // If actual arrival is on or after 06:00 (e.g. 06:10) and before 12:00
-    if (actMinsFromMidnight >= 360 && actMinsFromMidnight < 720) { // 360 mins = 06:00
+    // If actual arrival is on or after 06:10 up to 12:10
+    if (actMinsFromMidnight >= 6 * 60 + 10 && actMinsFromMidnight <= 12 * 60 + 10) {
       return {
         isDelayed: true,
         boundaryType: 'morning',
@@ -420,8 +459,19 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: 0.7,
-        badgeText: `⚡ NTES: Arrived ${actStr} (≥06:00) ➔ TA Auto-Changed to 0.7 (>6h Absence)`,
+        badgeText: `⚡ NTES: Arrived ${actStr} (≥06:10) ➔ TA Auto-Changed to 0.7 (>6h Absence)`,
         explanation: `Train ${tNum} scheduled at ${sched || '05:50'} arrived delayed at ${actStr}. Absence from midnight exceeds 6 hours, automatically elevating TA claim to 0.7 (>6h absence).`
+      };
+    } else if (actMinsFromMidnight > 12 * 60 + 10) {
+      return {
+        isDelayed: true,
+        boundaryType: 'morning',
+        schedArr: sched || '05:50',
+        actualArr: actStr,
+        extraNextDayTa: 0,
+        autoAdjustedTa: 1.0,
+        badgeText: `⚡ NTES: Arrived ${actStr} (>12:10) ➔ TA Auto-Changed to 1.0 (>12h Absence)`,
+        explanation: `Train ${tNum} arrived after 12:10 at ${actStr}. Absence from midnight exceeds 12 hours, elevating TA claim to 1.0.`
       };
     } else {
       return {
@@ -431,8 +481,8 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: 0.3,
-        badgeText: `✓ NTES: Arrived earlier / on-time (${actStr}) ➔ TA Updated as Earlier (0.3)`,
-        explanation: `Train ${tNum} arrived before 06:00 at ${actStr}. Absence ≤ 6 hours qualifies for baseline 0.3 TA.`
+        badgeText: `✓ NTES: Arrived on-time (${actStr}) ➔ TA 0.3 (<6h Absence)`,
+        explanation: `Train ${tNum} arrived before 06:10 at ${actStr}. Absence < 6 hours qualifies for baseline 0.3 TA.`
       };
     }
   }

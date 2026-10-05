@@ -3621,62 +3621,62 @@ export default function DutyEditModal({
                         ))}
                       </div>
 
-                      {/* Search and Dropdown */}
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="🔍 Search name, PF, designation..."
-                          value={reassignSearchText}
-                          onChange={(e) => setReassignSearchText(e.target.value)}
-                          style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-                        />
-                        {reassignSearchText && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => setReassignSearchText('')}
-                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-
-                      <select
-                        className="form-input"
-                        value={reassignStaffId || replacementStaffId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setReassignStaffId(val);
-                          setReplacementStaffId(val);
-                          const found = allStaffList.find(s => String(s.id) === String(val));
-                          if (found) setReplacementName(found.name);
-                        }}
-                        style={{ fontSize: '0.84rem' }}
-                      >
-                        <option value="">-- Choose Employee to Reassign ({eligibleReplacementStaff.filter(s => !reassignSearchText || s.name.toLowerCase().includes(reassignSearchText.toLowerCase()) || (s.pf_no && s.pf_no.includes(reassignSearchText))).length} options) --</option>
-                        {eligibleReplacementStaff
-                          .filter(s => !reassignSearchText || s.name.toLowerCase().includes(reassignSearchText.toLowerCase()) || (s.pf_no && s.pf_no.includes(reassignSearchText)))
-                          .map(s => {
+                      {/* Searchable Select for Reassign */}
+                      <div style={{ position: 'relative', zIndex: 25 }}>
+                        <SearchableStaffSelect
+                          staffList={eligibleReplacementStaff}
+                          value={reassignStaffId || replacementStaffId}
+                          onChange={(val) => {
+                            setReassignStaffId(val);
+                            setReplacementStaffId(val);
+                            const found = allStaffList?.find(s => String(s.id) === String(val));
+                            if (found) setReplacementName(found.name);
+                            else setReplacementName('');
+                          }}
+                          placeholder={`🔍 Type employee name to reassign (${eligibleReplacementStaff.length} options)...`}
+                          formatLabel={(s) => {
                             const dutyInfo = getStaffDutyInfo(s, selectedDate);
                             const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                             const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                            let statusPrefix = '';
+                            let statusText = '🟢 [AVAILABLE]';
                             if (assignStatus.isAssigned) {
-                              statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
+                              statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
                             } else if (assignStatus.isUnavailable) {
-                              statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
-                            } else {
-                              statusPrefix = '🟢 [AVAILABLE] ';
+                              statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
                             }
-                            return (
-                              <option key={s.id} value={s.id}>
-                                {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
-                              </option>
-                            );
-                          })}
-                      </select>
+                            return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                          }}
+                          customStyles={{
+                            control: (base, state) => ({
+                              ...base,
+                              minHeight: '38px',
+                              fontSize: '0.86rem',
+                              fontWeight: 600,
+                              borderRadius: '8px',
+                              borderColor: state.isFocused ? '#3b82f6' : 'rgba(59, 130, 246, 0.4)',
+                              background: 'rgba(15, 23, 42, 0.85)',
+                              boxShadow: state.isFocused ? '0 0 0 2px rgba(59, 130, 246, 0.25)' : 'none'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              background: '#0f172a',
+                              border: '1px solid rgba(59, 130, 246, 0.4)',
+                              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7)'
+                            }),
+                            option: (base, state) => ({
+                              ...base,
+                              background: state.isSelected ? '#2563eb' : state.isFocused ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                              color: '#f8fafc',
+                              fontSize: '0.83rem',
+                              padding: '8px 12px',
+                              borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                            })
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
+                        💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
+                      </div>
                     </div>
 
                     {/* Selected Replacement Card Preview */}
@@ -3899,42 +3899,66 @@ export default function DutyEditModal({
                           </label>
                         </div>
 
-                        {/* Dropdown */}
-                        <select
-                          className="form-input"
-                          value={replacementStaffId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setReplacementStaffId(val);
-                            const found = allStaffList.find(s => String(s.id) === String(val));
-                            if (found) setReplacementName(found.name);
-                          }}
-                          style={{ fontSize: '0.84rem' }}
-                        >
-                          <option value="">-- Choose Replacement Employee ({eligibleReplacementStaff.length} {replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'}) --</option>
-                          {eligibleReplacementStaff.map(s => {
-                            const dutyInfo = getStaffDutyInfo(s, selectedDate);
-                            const assignStatus = getStaffAssignmentStatus(s, selectedDate);
-                            const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                            let statusPrefix = '';
-                            if (assignStatus.isAssigned) {
-                              statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
-                            } else if (assignStatus.isUnavailable) {
-                              statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
-                            } else {
-                              statusPrefix = '🟢 [AVAILABLE] ';
-                            }
-                            return (
-                              <option key={s.id} value={s.id}>
-                                {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        {eligibleReplacementStaff.length === 0 && (
+                        {/* Searchable Select for Replacement */}
+                        <div style={{ position: 'relative', zIndex: 25 }}>
+                          <SearchableStaffSelect
+                            staffList={eligibleReplacementStaff}
+                            value={replacementStaffId}
+                            onChange={(val) => {
+                              setReplacementStaffId(val);
+                              const found = allStaffList?.find(s => String(s.id) === String(val));
+                              if (found) setReplacementName(found.name);
+                              else setReplacementName('');
+                            }}
+                            placeholder={`🔍 Type employee name to select (${eligibleReplacementStaff.length} ${replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'})...`}
+                            formatLabel={(s) => {
+                              const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                              const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+                              const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                              let statusText = '🟢 [AVAILABLE]';
+                              if (assignStatus.isAssigned) {
+                                statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
+                              } else if (assignStatus.isUnavailable) {
+                                statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
+                              }
+                              return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                            }}
+                            customStyles={{
+                              control: (base, state) => ({
+                                ...base,
+                                minHeight: '38px',
+                                fontSize: '0.86rem',
+                                fontWeight: 600,
+                                borderRadius: '8px',
+                                borderColor: state.isFocused ? '#3b82f6' : 'rgba(59, 130, 246, 0.4)',
+                                background: 'rgba(15, 23, 42, 0.85)',
+                                boxShadow: state.isFocused ? '0 0 0 2px rgba(59, 130, 246, 0.25)' : 'none'
+                              }),
+                              menu: (base) => ({
+                                ...base,
+                                background: '#0f172a',
+                                border: '1px solid rgba(59, 130, 246, 0.4)',
+                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7)'
+                              }),
+                              option: (base, state) => ({
+                                ...base,
+                                background: state.isSelected ? '#2563eb' : state.isFocused ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                color: '#f8fafc',
+                                fontSize: '0.83rem',
+                                padding: '8px 12px',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                              })
+                            }}
+                          />
+                        </div>
+                        {eligibleReplacementStaff.length === 0 ? (
                           <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
                             💡 No employees currently available for booking in this pool.
                             {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
+                            💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
                           </div>
                         )}
 
@@ -4111,36 +4135,60 @@ export default function DutyEditModal({
                       <span>⚠️ Show busy / assigned staff (to shift duty)</span>
                     </label>
                   </div>
-                  <select
-                    className="form-input"
-                    value={assignStaffId}
-                    onChange={(e) => setAssignStaffId(e.target.value)}
-                    style={{ fontSize: '0.86rem', fontWeight: 600 }}
-                  >
-                    <option value="">-- Choose Employee to Assign ({eligibleAssignStaff.length} {assignCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'candidates'}) --</option>
-                    {eligibleAssignStaff.map(s => {
-                      const dutyInfo = getStaffDutyInfo(s, selectedDate);
-                      const assignStatus = getStaffAssignmentStatus(s, selectedDate);
-                      const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                      let statusPrefix = '';
-                      if (assignStatus.isAssigned) {
-                        statusPrefix = `⚠️ [BUSY: ${assignStatus.trainDesc}] `;
-                      } else if (assignStatus.isUnavailable) {
-                        statusPrefix = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}] `;
-                      } else {
-                        statusPrefix = '🟢 [AVAILABLE] ';
-                      }
-                      return (
-                        <option key={s.id} value={s.id}>
-                          {statusPrefix}{s.name} ({s.designation || 'Staff'}) • [{catName}] — {dutyInfo.label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {eligibleAssignStaff.length === 0 && (
+                  <div style={{ position: 'relative', zIndex: 30 }}>
+                    <SearchableStaffSelect
+                      staffList={eligibleAssignStaff}
+                      value={assignStaffId}
+                      onChange={(val) => setAssignStaffId(val)}
+                      placeholder={`🔍 Type employee name to select (${eligibleAssignStaff.length} ${assignCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'candidates'})...`}
+                      formatLabel={(s) => {
+                        const dutyInfo = getStaffDutyInfo(s, selectedDate);
+                        const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+                        const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
+                        let statusText = '🟢 [AVAILABLE]';
+                        if (assignStatus.isAssigned) {
+                          statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
+                        } else if (assignStatus.isUnavailable) {
+                          statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
+                        }
+                        return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                      }}
+                      customStyles={{
+                        control: (base, state) => ({
+                          ...base,
+                          minHeight: '38px',
+                          fontSize: '0.86rem',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          borderColor: state.isFocused ? '#3b82f6' : 'rgba(59, 130, 246, 0.4)',
+                          background: 'rgba(15, 23, 42, 0.85)',
+                          boxShadow: state.isFocused ? '0 0 0 2px rgba(59, 130, 246, 0.25)' : 'none'
+                        }),
+                        menu: (base) => ({
+                          ...base,
+                          background: '#0f172a',
+                          border: '1px solid rgba(59, 130, 246, 0.4)',
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7)'
+                        }),
+                        option: (base, state) => ({
+                          ...base,
+                          background: state.isSelected ? '#2563eb' : state.isFocused ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                          color: '#f8fafc',
+                          fontSize: '0.83rem',
+                          padding: '8px 12px',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                        })
+                      }}
+                    />
+                  </div>
+                  {eligibleAssignStaff.length === 0 ? (
                     <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
                       💡 No employees currently available for booking in this pool.
                       {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
+                      💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
                     </div>
                   )}
                 </div>

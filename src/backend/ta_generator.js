@@ -204,9 +204,12 @@ function calculateAbsenceAndTa(depTime, arrTime, fromStn, toStn, trainNo, baseTa
   // 1. Return leg reaching HQ / GNT (whether dep is null or connecting morning leg from BZA e.g. 57210, 57201, 12703)
   if (arrM !== null && (toStn === 'GNT' || toStn === '---') && (depM === null || ['57210', '57201', '12703'].includes(trainNo) || fromStn === 'BZA')) {
     const hours = Math.round((arrM / 60) * 10) / 10;
-    if (arrM <= 5) return { absence_hours: hours, ta_percentage: null };
-    if (arrM <= 6 * 60) return { absence_hours: hours, ta_percentage: 0.3 };
-    if (arrM <= 12 * 60) return { absence_hours: hours, ta_percentage: 0.7 };
+    if (arrM < 10) return { absence_hours: hours, ta_percentage: null };
+    // Rule 4: Arrival between 00:10 and 06:05 -> 0.3 TA (<6h from 00:00)
+    if (arrM <= 6 * 60 + 5) return { absence_hours: hours, ta_percentage: 0.3 };
+    // Rule 5: Arrival on, after 06:10 up to 12:10 -> 0.7 TA (>6h from 00:00)
+    if (arrM <= 12 * 60 + 10) return { absence_hours: hours, ta_percentage: 0.7 };
+    // Rule 6: Arrival after 12:10 up to 23:55 -> 1.0 TA (>12h from 00:00)
     return { absence_hours: hours, ta_percentage: 1.0 };
   }
 
@@ -223,8 +226,11 @@ function calculateAbsenceAndTa(depTime, arrTime, fromStn, toStn, trainNo, baseTa
   if (depM !== null && arrM === null) {
     const diff = 1440 - depM;
     const hours = Math.round((diff / 60) * 10) / 10;
-    if (hours > 12.0) return { absence_hours: hours, ta_percentage: 1.0 };
-    if (hours > 6.0) return { absence_hours: hours, ta_percentage: 0.7 };
+    // Rule 1: Departure between 00:00 and 11:55 -> 1.0 TA (>12h to 00:00)
+    if (depM <= 11 * 60 + 55) return { absence_hours: hours, ta_percentage: 1.0 };
+    // Rule 2: Departure between 12:00 and 17:55 -> 0.7 TA (>6h to 00:00)
+    if (depM <= 17 * 60 + 55) return { absence_hours: hours, ta_percentage: 0.7 };
+    // Rule 3: Departure between 18:00 and 23:55 -> 0.3 TA (<6h to 00:00)
     return { absence_hours: hours, ta_percentage: 0.3 };
   }
 
@@ -364,9 +370,12 @@ function calculateDayDutiesTa(duties) {
     if (depM !== null) {
       const timeTo00Hrs = (1440 - depM) / 60;
       let dayTa = 0.3;
-      if (timeTo00Hrs > 12) {
+      // Rule 1: Departure 00:00 to 11:55 -> 1.0 TA (>12h to 00:00)
+      // Rule 2: Departure 12:00 to 17:55 -> 0.7 TA (>6h to 00:00)
+      // Rule 3: Departure 18:00 to 23:55 -> 0.3 TA (<6h to 00:00)
+      if (depM <= 11 * 60 + 55) {
         dayTa = 1.0;
-      } else if (timeTo00Hrs > 6) {
+      } else if (depM <= 17 * 60 + 55) {
         dayTa = 0.7;
       } else {
         dayTa = 0.3;
@@ -396,11 +405,14 @@ function calculateDayDutiesTa(duties) {
     if (arrM !== null) {
       let dayTa = null;
       let hours = Math.round((arrM / 60) * 10) / 10;
-      if (arrM <= 5) {
+      // Rule 4: Arrival 00:10 to 06:05 -> 0.3 TA (<6h from 00:00)
+      // Rule 5: Arrival 06:10 to 12:10 -> 0.7 TA (>6h from 00:00)
+      // Rule 6: Arrival after 12:10 to 23:55 -> 1.0 TA (>12h from 00:00)
+      if (arrM < 10) {
         dayTa = null;
-      } else if (arrM <= 6 * 60) {
+      } else if (arrM <= 6 * 60 + 5) {
         dayTa = 0.3;
-      } else if (arrM <= 12 * 60) {
+      } else if (arrM <= 12 * 60 + 10) {
         dayTa = 0.7;
       } else {
         dayTa = 1.0;
@@ -429,9 +441,9 @@ function calculateDayDutiesTa(duties) {
     const arrM = parseMinutes(gntArrLeg.arr || gntArrLeg.arr_time);
     let arrTa = 0.3;
     if (arrM !== null) {
-      if (arrM <= 5) arrTa = null;
-      else if (arrM <= 6 * 60) arrTa = 0.3;
-      else if (arrM <= 12 * 60) arrTa = 0.7;
+      if (arrM < 10) arrTa = null;
+      else if (arrM <= 6 * 60 + 5) arrTa = 0.3;
+      else if (arrM <= 12 * 60 + 10) arrTa = 0.7;
       else arrTa = 1.0;
     }
     gntArrLeg.ta_b1 = arrTa !== null ? String(arrTa) : '';
@@ -443,9 +455,8 @@ function calculateDayDutiesTa(duties) {
     const depM = parseMinutes(nightDepLeg.dep || nightDepLeg.dep_time);
     let depTa = 0.3;
     if (depM !== null) {
-      const timeTo00Hrs = (1440 - depM) / 60;
-      if (timeTo00Hrs > 12) depTa = 1.0;
-      else if (timeTo00Hrs > 6) depTa = 0.7;
+      if (depM <= 11 * 60 + 55) depTa = 1.0;
+      else if (depM <= 17 * 60 + 55) depTa = 0.7;
       else depTa = 0.3;
     }
     nightDepLeg.ta_b1 = String(depTa);
@@ -1672,8 +1683,8 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dIso, musterMap, staffOverrideMap);
         const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
 
-        // If staff is on leave or standby at HQ, discard stale saved duty entry
-        if (isStandby || isMultiDayReturn || leaveInfoMap[dIso]) {
+        // If staff is on leave or standby at HQ on this date, discard
+        if (leaveInfoMap[dIso] || (isStandby && !hasDutyOverride)) {
           return;
         }
 
@@ -1682,7 +1693,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       }
     });
   }
-  if (approvedClaims && approvedClaims.length > 0) {
+  if (approvedClaims && approvedClaims.length > 0 && (!savedEntries || savedEntries.length < 20)) {
     approvedClaims.forEach(claim => {
       const dIso = claim.duty_date;
       if (!savedDateSet.has(dIso)) {
