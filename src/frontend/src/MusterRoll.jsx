@@ -406,11 +406,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const handlePrint = () => {
-    printElement('.muster-roll-container', {
-      title: `Railway_Muster_Roll_${cycleData?.cycle?.periodLabel?.replace(/[\s,]+/g, '_') || 'Sheet'}`,
-      orientation: 'landscape',
-      pageFormat: 'a3'
-    });
+    window.print();
   };
 
   const handleDownloadPdf = async () => {
@@ -496,7 +492,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       {musterTab === 'wage-period' && (
         <>
       {/* 1. Header Card */}
-      <div className="card" style={{
+      <div className="card no-print" style={{
         background: 'var(--bg-secondary)',
         borderRadius: '14px',
         padding: '20px 24px',
@@ -796,41 +792,50 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       {/* 3. Main Master Muster Grid */}
       {!loading && !error && cycleData && (
-        <div className="card muster-card" style={{
-          background: 'var(--bg-secondary)',
-          borderRadius: '14px',
-          border: '1px solid var(--border-glass)',
-          overflow: 'hidden'
-        }}>
-          <div className="muster-table-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '72vh' }}>
-            <table className="roster-table muster-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#18181b' }}>
-                {/* Top Row: Headers */}
-                <tr>
-                  <th className="muster-col-sno" title={isAdmin ? "Drag rows to reorder employees" : undefined}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                      {isAdmin && <span style={{ fontSize: '0.75rem', opacity: 0.7 }} title="Drag rows to reorder">⠿</span>}
-                      <span>S.No</span>
-                    </div>
-                  </th>
-                  <th className="muster-col-name" title={isAdmin ? "Click any name or ✏️ to edit Name / PF No" : undefined}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>Name of Employee</span>
-                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
-                    </div>
-                  </th>
-                  <th className="muster-col-desg" title={isAdmin ? "Click on any employee's designation to edit" : undefined}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                      <span>Designation</span>
-                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
-                    </div>
-                  </th>
-                  <th className="muster-col-hrms" title={isAdmin ? "Click on any employee's HRMS ID to edit" : undefined}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
-                      <span>HRMS ID</span>
-                      {isAdmin && <span style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
-                    </div>
-                  </th>
+        <div className="muster-grid-wrapper">
+          {/* Print-Only Title Header */}
+          <div className="print-only muster-print-title-banner">
+            <div className="muster-print-railway">SOUTH CENTRAL RAILWAY — GUNTUR DIVISION</div>
+            <div className="muster-print-period">
+              STAFF ATTENDANCE & MUSTER ROLL — {cycleData.cycle?.periodLabel || 'WAGE PERIOD'}
+            </div>
+          </div>
+
+          <div className="card muster-card" style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: '14px',
+            border: '1px solid var(--border-glass)',
+            overflow: 'hidden'
+          }}>
+            <div className="muster-table-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '72vh' }}>
+              <table className="roster-table muster-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#18181b' }}>
+                  {/* Top Row: Headers */}
+                  <tr>
+                    <th className="muster-col-sno" title={isAdmin ? "Drag rows to reorder employees" : undefined}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                        {isAdmin && <span className="no-print muster-drag-handle" style={{ fontSize: '0.75rem', opacity: 0.7 }} title="Drag rows to reorder">⠿</span>}
+                        <span>S.No</span>
+                      </div>
+                    </th>
+                    <th className="muster-col-name" title={isAdmin ? "Click any name or ✏️ to edit Name / PF No" : undefined}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Name of Employee</span>
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                      </div>
+                    </th>
+                    <th className="muster-col-desg" title={isAdmin ? "Click on any employee's designation to edit" : undefined}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        <span>Designation</span>
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                      </div>
+                    </th>
+                    <th className="muster-col-hrms" title={isAdmin ? "Click on any employee's HRMS ID to edit" : undefined}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                        <span>HRMS ID</span>
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                      </div>
+                    </th>
 
                   {/* Day Date Headers */}
                   {cycleData.cycle.dates.map(d => (
@@ -893,7 +898,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
                           {isAdmin && (
                             <span
-                              className="muster-drag-handle"
+                              className="no-print muster-drag-handle"
                               title="Drag to reorder employee row (all 3 columns combinedly)"
                               style={{ cursor: 'grab', fontSize: '0.85rem' }}
                             >
@@ -922,16 +927,16 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <strong style={{ fontSize: '0.84rem', color: '#f8fafc' }}>
+                              <strong style={{ fontSize: '0.84rem', color: '#f8fafc' }} className="muster-print-name">
                                 {staff.name}
                               </strong>
                               {isAdmin && (
-                                <span style={{ fontSize: '0.62rem', opacity: 0.6 }} title="Edit Name & PF">
+                                <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.6 }} title="Edit Name & PF">
                                   ✏️
                                 </span>
                               )}
                             </div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
+                            <span className="muster-print-pf" style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
                               PF NO: {staff.pf_no || '-'}
                             </span>
                           </div>
@@ -956,19 +961,20 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         title={isAdmin ? `Click to edit designation for ${staff.name} (Current: ${staff.designation || '-'})` : undefined}
                       >
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', position: 'relative' }}>
-                          <span className="badge" style={{
+                          <span className="muster-desg-val" style={{
                             background: 'rgba(59, 130, 246, 0.12)',
                             color: '#93c5fd',
                             border: '1px solid rgba(59, 130, 246, 0.25)',
                             fontSize: '0.72rem',
                             fontWeight: 700,
                             padding: '2px 8px',
-                            cursor: isAdmin ? 'pointer' : 'default'
+                            cursor: isAdmin ? 'pointer' : 'default',
+                            borderRadius: '4px'
                           }}>
                             {staff.designation || '-'}
                           </span>
                           {isAdmin && (
-                            <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
+                            <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
                               ✏️
                             </span>
                           )}
@@ -988,73 +994,78 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         title={isAdmin && editingHrmsId !== staff.id ? `Click to edit HRMS ID for ${staff.name}` : undefined}
                       >
                       {editingHrmsId === staff.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            autoFocus
-                            className="form-input"
-                            style={{
-                              width: '70px',
-                              fontSize: '0.74rem',
-                              padding: '2px 4px',
-                              textTransform: 'uppercase',
-                              textAlign: 'center',
-                              fontWeight: 700,
-                              background: '#27272a',
-                              border: '1px solid var(--border-gold)',
-                              borderRadius: '4px',
-                              color: '#fff'
-                            }}
-                            value={hrmsInputVal}
-                            onChange={e => setHrmsInputVal(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() });
-                              } else if (e.key === 'Escape') {
-                                setEditingHrmsId(null);
-                              }
-                            }}
-                            placeholder="HRMS"
-                          />
-                          <button
-                            type="button"
-                            disabled={savingStaffField}
-                            onClick={() => handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() })}
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.25)',
-                              color: '#34d399',
-                              border: '1px solid rgba(16, 185, 129, 0.5)',
-                              borderRadius: '4px',
-                              padding: '2px 4px',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                            title="Save HRMS ID"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingHrmsId(null)}
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.2)',
-                              color: '#f87171',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              borderRadius: '4px',
-                              padding: '2px 4px',
-                              fontSize: '0.72rem',
-                              fontWeight: 800,
-                              cursor: 'pointer'
-                            }}
-                            title="Cancel"
-                          >
-                            ✕
-                          </button>
-                        </div>
+                        <>
+                          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              autoFocus
+                              className="form-input"
+                              style={{
+                                width: '70px',
+                                fontSize: '0.74rem',
+                                padding: '2px 4px',
+                                textTransform: 'uppercase',
+                                textAlign: 'center',
+                                fontWeight: 700,
+                                background: '#27272a',
+                                border: '1px solid var(--border-gold)',
+                                borderRadius: '4px',
+                                color: '#fff'
+                              }}
+                              value={hrmsInputVal}
+                              onChange={e => setHrmsInputVal(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() });
+                                } else if (e.key === 'Escape') {
+                                  setEditingHrmsId(null);
+                                }
+                              }}
+                              placeholder="HRMS"
+                            />
+                            <button
+                              type="button"
+                              disabled={savingStaffField}
+                              onClick={() => handleSaveStaffField(staff.id, { hrms_id: hrmsInputVal.trim().toUpperCase() })}
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.25)',
+                                color: '#34d399',
+                                border: '1px solid rgba(16, 185, 129, 0.5)',
+                                borderRadius: '4px',
+                                padding: '2px 4px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                              title="Save HRMS ID"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingHrmsId(null)}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                color: '#f87171',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                borderRadius: '4px',
+                                padding: '2px 4px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <span className="print-only muster-hrms-val">
+                            {staff.hrms_id || '-'}
+                          </span>
+                        </>
                       ) : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                          <span style={{
+                          <span className="muster-hrms-val" style={{
                             fontSize: '0.76rem',
                             fontWeight: 600,
                             color: staff.hrms_id ? '#f1f5f9' : 'var(--color-text-muted)',
@@ -1063,13 +1074,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                             {staff.hrms_id || '-'}
                           </span>
                           {isAdmin && (
-                            <span style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit HRMS ID">
+                            <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit HRMS ID">
                               ✏️
                             </span>
                           )}
                         </div>
                       )}
-                    </td>
+                      </td>
 
                     {/* Daily Muster Cells */}
                     {cycleData.cycle.dates.map(d => {
@@ -1121,7 +1132,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                           }}>
                             {dayData.code}
                             {dayData.isManual && (
-                              <span style={{
+                              <span className="no-print muster-cell-dot" style={{
                                 position: 'absolute',
                                 top: '1px',
                                 right: '2px',
@@ -1132,7 +1143,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               }} />
                             )}
                             {dayData.isRestDayWorked && (
-                              <span style={{
+                              <span className="no-print muster-cell-dot" style={{
                                 position: 'absolute',
                                 bottom: '1px',
                                 right: '2px',
@@ -1155,7 +1166,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#a78bfa', fontSize: '0.84rem' }} title={staff.cr_available ? `CR Balance: ${staff.cr_available} | Redeemed: ${staff.counts.CR}` : `Redeemed CR: ${staff.counts.CR}`}>
                       {staff.counts.CR > 0 ? staff.counts.CR : 0}
                       {staff.cr_count > 0 && (
-                        <div style={{ fontSize: '0.66rem', color: '#38bdf8', fontWeight: 800, marginTop: '1px' }} title={staff.cr_available}>
+                        <div className="no-print" style={{ fontSize: '0.66rem', color: '#38bdf8', fontWeight: 800, marginTop: '1px' }} title={staff.cr_available}>
                           +{staff.cr_count} Avail
                         </div>
                       )}
@@ -1168,7 +1179,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               </tbody>
 
               {/* Table Footer: Division Totals */}
-              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#18181b', borderTop: '2px solid var(--border-gold)' }}>
+              <tfoot className="muster-tfoot" style={{ position: 'sticky', bottom: 0, zIndex: 10, background: '#18181b', borderTop: '2px solid var(--border-gold)' }}>
                 <tr>
                   <td colSpan={2} className="muster-footer-label">
                     DIVISION TOTALS ({filteredStaff.length} Employees)
@@ -1196,11 +1207,12 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             </table>
           </div>
         </div>
+        </div>
       )}
 
       {/* 4. Cell Assignment Modal */}
       {activeCellModal && (
-        <div style={{
+        <div className="no-print" style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -1332,7 +1344,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       {/* Designation Edit Modal */}
       {editDesgModal && (
-        <div style={{
+        <div className="no-print" style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -1446,7 +1458,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       {/* Employee Name & PF Number Edit Modal */}
       {editNameModal && (
-        <div style={{
+        <div className="no-print" style={{
           position: 'fixed',
           top: 0,
           left: 0,

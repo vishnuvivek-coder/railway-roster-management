@@ -1670,6 +1670,11 @@ html, body {
    ========================================================================== */
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 6mm 4mm;
+  }
+
   html, body, #root, .app-container, .main-content, .tab-content-container, .table-responsive, .card, .roster-grid-container {
     display: block !important;
     position: static !important;
@@ -1690,8 +1695,217 @@ html, body {
     display: none !important;
   }
 
-  .sidebar, .nav-links, .demo-bar, .filters-panel, .btn, .mobile-top-bar, .mobile-bottom-nav, .no-print, header, .header-container, .floating-actions, .mobile-hamburger-btn {
+  .sidebar, .nav-links, .demo-bar, .filters-panel, .btn, .mobile-top-bar, .mobile-bottom-nav, 
+  .no-print, header, .header-container, .floating-actions, .mobile-hamburger-btn,
+  .muster-drag-handle, .muster-edit-pencil, .muster-edit-icon, .muster-cell-dot,
+  .modal-overlay, .modal-backdrop, .modal, .toast-container, .toast {
     display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* MUSTER ROLL PRINT STYLING - ONLY CLEAN TABLE AND VALUES */
+  .muster-roll-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+  }
+
+  .muster-print-title-banner {
+    display: block !important;
+    text-align: center !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 4px !important;
+    border-bottom: 1.5px solid #000000 !important;
+  }
+  .muster-print-railway {
+    font-size: 11pt !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+  }
+  .muster-print-period {
+    font-size: 9pt !important;
+    font-weight: 700 !important;
+    color: #222222 !important;
+    margin-top: 2px !important;
+  }
+
+  .muster-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .muster-table-container {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    scrollbar-width: none !important;
+  }
+  .muster-table-container::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  .muster-table {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    table-layout: auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 7.5pt !important;
+    line-height: 1.15 !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .muster-table thead {
+    display: table-header-group !important;
+    position: static !important;
+  }
+
+  .muster-table tfoot {
+    display: table-footer-group !important;
+    position: static !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .muster-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .muster-table th,
+  .muster-table td {
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    border: 1px solid #444444 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    padding: 2.5px 1.5px !important;
+    vertical-align: middle !important;
+  }
+
+  .muster-table th {
+    background: #f0f0f0 !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    font-size: 7pt !important;
+    text-align: center !important;
+    border-bottom: 1.5px solid #000000 !important;
+  }
+
+  .muster-table th.muster-col-name,
+  .muster-table td.muster-col-name {
+    text-align: left !important;
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+    width: auto !important;
+    max-width: 160px !important;
+  }
+
+  .muster-table td.muster-col-sno {
+    text-align: center !important;
+    width: 24px !important;
+    min-width: 20px !important;
+    font-weight: 700 !important;
+  }
+
+  .muster-table td.muster-col-desg,
+  .muster-table th.muster-col-desg {
+    text-align: center !important;
+    width: 48px !important;
+    min-width: 40px !important;
+  }
+
+  .muster-table td.muster-col-hrms,
+  .muster-table th.muster-col-hrms {
+    text-align: center !important;
+    width: 52px !important;
+    min-width: 45px !important;
+  }
+
+  .muster-print-name {
+    color: #000000 !important;
+    font-weight: 800 !important;
+    font-size: 7.5pt !important;
+    display: block !important;
+    white-space: nowrap !important;
+  }
+
+  .muster-print-pf {
+    color: #333333 !important;
+    font-size: 6.5pt !important;
+    display: block !important;
+    font-weight: 600 !important;
+  }
+
+  .muster-desg-val {
+    color: #000000 !important;
+    background: transparent !important;
+    border: none !important;
+    font-weight: 700 !important;
+    font-size: 7.5pt !important;
+    padding: 0 !important;
+    display: inline-block !important;
+  }
+
+  .muster-hrms-val {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    font-size: 7.5pt !important;
+    display: inline-block !important;
+  }
+
+  .muster-cell-box {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    font-size: 7.5pt !important;
+    text-align: center !important;
+    padding: 0 !important;
+  }
+
+  .muster-table tfoot td {
+    background: #f0f0f0 !important;
+    color: #000000 !important;
+    font-weight: 900 !important;
+    border-top: 1.5px solid #000000 !important;
+    font-size: 7.5pt !important;
+  }
+
+  .muster-footer-label {
+    text-align: left !important;
+    padding-left: 4px !important;
+    font-weight: 900 !important;
   }
 
   /* Website-Only Badges: Hide completely on print & PDF (Sub for, Upgraded, Extra Crew, Muster, OVR, Advance, etc.) */

@@ -69,11 +69,55 @@ export const printElement = (elementOrId, options = {}) => {
               width: 100% !important;
               height: auto !important;
             }
-            .no-print, .btn, .sidebar, .mobile-top-bar, .mobile-bottom-nav, .floating-actions, .filters-panel, .header-container {
+            .no-print, .btn, .sidebar, .mobile-top-bar, .mobile-bottom-nav, .floating-actions, .filters-panel, .header-container, .muster-drag-handle, .muster-edit-pencil, .muster-edit-icon, .muster-cell-dot {
               display: none !important;
+            }
+            .print-only {
+              display: block !important;
             }
             .badge, .sub-badge, .blink-advance {
               display: none !important;
+            }
+            .muster-card {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+              overflow: visible !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            .muster-table-container {
+              overflow: visible !important;
+              max-height: none !important;
+              height: auto !important;
+              width: 100% !important;
+              scrollbar-width: none !important;
+            }
+            .muster-table-container::-webkit-scrollbar {
+              display: none !important;
+            }
+            .muster-desg-val {
+              color: #000000 !important;
+              background: transparent !important;
+              border: none !important;
+              font-weight: 700 !important;
+              font-size: 8pt !important;
+              display: inline-block !important;
+            }
+            .muster-hrms-val {
+              color: #000000 !important;
+              font-weight: 600 !important;
+              font-size: 8pt !important;
+              display: inline-block !important;
+            }
+            .muster-cell-box {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+              color: #000000 !important;
+              font-weight: 800 !important;
+              font-size: 8pt !important;
+              text-align: center !important;
             }
             table {
               border-collapse: collapse !important;
@@ -85,6 +129,7 @@ export const printElement = (elementOrId, options = {}) => {
               border: 1px solid #555555 !important;
               color: #000000 !important;
               background: #ffffff !important;
+              position: static !important;
             }
             tr {
               page-break-inside: avoid !important;
