@@ -1858,16 +1858,22 @@ export default function App() {
     }
   }, [selectedCatId, year, month, activeTab, movementDateMode, movementStartDate, movementEndDate]);
 
-  // Fetch daily duties on date or tab change
+  // Fetch data on active tab switch to ensure views are never stale
   useEffect(() => {
-    if (activeTab === 'daily-summary' && selectedDate) {
+    if (activeTab === 'daily' || activeTab === 'daily-summary') {
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
       fetchDailyDuties();
-      fetchNonDailyTrains();
+      fetchNonDailyTrains('ALL');
+      if (activeTab === 'daily') fetchRoster();
     }
-  }, [activeTab, selectedDate]);
-
-  // Load other data based on active tab
-  useEffect(() => {
+    if (activeTab === 'roster') {
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      fetchRoster();
+    }
+    if (activeTab === 'muster') {
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
+      fetchAllStaff();
+    }
     if (activeTab === 'links') {
       fetchLinkSets(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter);
       if (linkSubTab === 'train-centric') {
@@ -1875,12 +1881,15 @@ export default function App() {
       } else {
         fetchLinks(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter, selectedLinkSetId);
       }
-      fetchNonDailyTrains();
+      fetchNonDailyTrains('ALL');
     }
-    if (activeTab === 'staff' && selectedCatId) fetchStaff();
+    if (activeTab === 'staff') {
+      fetchStaff();
+      fetchAllStaff();
+    }
     if (activeTab === 'leaves' || activeTab === 'daily-summary') fetchLeaveRequests();
     if (activeTab === 'audit') fetchAuditLogs();
-  }, [activeTab, selectedCatId, trainCategoryFilter, selectedLinkSetId, linkSubTab]);
+  }, [activeTab, selectedDate, selectedCatId, trainCategoryFilter, selectedLinkSetId, linkSubTab]);
 
   // Automatically sync staff list for dropdowns
   useEffect(() => {
@@ -2048,18 +2057,121 @@ export default function App() {
     fetchSlotCustomizations();
   }, []);
 
+  // Comprehensive synchronization across Link Master, Daily Movement, Roster Grid, Muster Roll, and All Documents
+  const notifyAllModulesUpdated = async (source = 'links') => {
+    try {
+      const res = await fetch(`${API_BASE}/links`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllLinksList(data);
+      }
+    } catch (e) {
+      console.error('Error refreshing links in notifyAllModulesUpdated:', e);
+    }
+
+    try {
+      if (typeof fetchLinks === 'function') {
+        fetchLinks(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter, selectedLinkSetId);
+      }
+      if (typeof fetchLinkSets === 'function') {
+        fetchLinkSets(trainCategoryFilter === 'ALL' ? selectedCatId : trainCategoryFilter);
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof fetchDailyDuties === 'function') fetchDailyDuties();
+      if (typeof fetchRoster === 'function') fetchRoster();
+      if (typeof fetchNonDailyTrains === 'function') fetchNonDailyTrains('ALL');
+      if (typeof fetchSlotCustomizations === 'function') fetchSlotCustomizations();
+      if (typeof fetchStaff === 'function') fetchStaff();
+      if (typeof fetchAllStaff === 'function') fetchAllStaff();
+    } catch (e) {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { timestamp: Date.now(), source }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_duty_allotment_updated', {
+        detail: { timestamp: Date.now(), source }
+      }));
+    } catch (e) {}
+  };
+
+  const handleSaveDailyRoster = async () => {
+    try {
+      await notifyAllModulesUpdated('daily_roster_save');
+      const msg = `✓ Daily Roster for ${selectedDate} saved & synchronized across all modules!`;
+      setTaNdaToast(msg);
+      setDragNotice(msg);
+      setTimeout(() => {
+        setTaNdaToast(null);
+        setDragNotice(null);
+      }, 4000);
+    } catch (err) {
+      alert(`Error saving daily roster: ${err.message}`);
+    }
+  };
+
+  const handleSaveRosterGrid = async () => {
+    try {
+      await notifyAllModulesUpdated('roster_grid_save');
+      const msg = `✓ Monthly Roster Grid (${year}-${String(month).padStart(2, '0')}) saved & synchronized across all modules!`;
+      setTaNdaToast(msg);
+      setDragNotice(msg);
+      setTimeout(() => {
+        setTaNdaToast(null);
+        setDragNotice(null);
+      }, 4000);
+    } catch (err) {
+      alert(`Error saving roster: ${err.message}`);
+    }
+  };
+
+  const handleSaveStaffRoster = async () => {
+    if (!isAdmin) return;
+    try {
+      if (staffList && staffList.length > 0) {
+        const reorders = staffList.map((s, idx) => ({
+          id: s.id,
+          row_position: s.row_position !== undefined && s.row_position !== null ? s.row_position : (idx + 1)
+        }));
+        await fetch(`${API_BASE}/staff/reorder`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ reorders })
+        });
+      }
+
+      await notifyAllModulesUpdated('staff_save');
+      const msg = '✓ Staff Roster saved and synchronized across all modules!';
+      setTaNdaToast(msg);
+      setDragNotice(msg);
+      setTimeout(() => {
+        setTaNdaToast(null);
+        setDragNotice(null);
+      }, 4000);
+    } catch (err) {
+      alert(`Error saving staff roster: ${err.message}`);
+    }
+  };
+
   // Real-time universal synchronization across all tabs and components
   useEffect(() => {
     const handleUniversalRosterUpdate = () => {
+      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
       fetchDailyDuties();
       fetchRoster();
-      fetchNonDailyTrains();
+      fetchNonDailyTrains('ALL');
       fetchSlotCustomizations();
+      fetchStaff();
       fetchAllStaff();
     };
     window.addEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
     return () => window.removeEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
-  }, [selectedDate, movementStartDate, movementEndDate, year, month]);
+  }, [selectedDate, movementStartDate, movementEndDate, year, month, selectedCatId]);
 
   // ----------------------------------------------------
   // DAILY DUTY REGISTER HANDLERS
@@ -2254,14 +2366,9 @@ export default function App() {
       fetchLinks(selectedCatId, selectedLinkSetId);
       fetchLinkSets(selectedCatId);
 
-      // CRITICAL: Only refresh daily duties and live roster if the link is published!
-      // Draft link edits must NEVER affect the live roster until published!
+      // CRITICAL: Synchronize daily duties, live roster, muster roll and all views if published!
       if (!isDraft) {
-        fetchDailyDuties();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-        try {
-          window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
-        } catch (e) {}
+        await notifyAllModulesUpdated('link_modal_save');
       }
     } catch (err) {
       alert(`Error updating link: ${err.message}`);
@@ -3269,12 +3376,7 @@ export default function App() {
       fetchLinks(selectedCatId || catId, selectedLinkSetId);
       fetchLinkSets(selectedCatId || catId);
       if (!isSetDraft) {
-        fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
-        fetchDailyDuties();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
-        try {
-          window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail: { timestamp: Date.now() } }));
-        } catch (e) {}
+        await notifyAllModulesUpdated('link_save');
       }
       setDragNotice(`✓ Link ${isSetDraft ? '(Draft)' : ''} saved successfully!`);
       setTimeout(() => setDragNotice(null), 3000);
@@ -3329,7 +3431,6 @@ export default function App() {
 
       // CRITICAL: Only touch live roster, TA/NDA, and allLinksList if NOT draft!
       if (!isSetDraft) {
-        fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
         fetch(`${API_BASE}/train-ta-nda`)
           .then(r => r.json())
           .then(d => {
@@ -3337,9 +3438,7 @@ export default function App() {
             else if (d && d.map) setTrainTaNdaRules(d.map);
           })
           .catch(() => {});
-
-        fetchDailyDuties();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        await notifyAllModulesUpdated('link_delete');
       }
 
       const shiftedMsg = data.shifted_count > 0 
@@ -3367,11 +3466,11 @@ export default function App() {
           'Authorization': `Bearer ${authToken}` 
         },
         body: JSON.stringify({ link_set_id: selectedLinkSetId || null })
-      }).then(() => {
+      }).then(async () => {
         fetchLinks(selectedCatId, selectedLinkSetId);
         fetchLinkSets(selectedCatId);
         if (!isSetDraft) {
-          if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+          await notifyAllModulesUpdated('links_cleared');
         }
       });
     }
@@ -3395,9 +3494,11 @@ export default function App() {
         set_name: setName,
         set_type: setType || link.set_type
       })
-    }).then(() => {
+    }).then(async () => {
       fetchLinks(selectedCatId, selectedLinkSetId);
-      if (!isDraft && (activeTab === 'daily' || activeTab === 'roster')) fetchRoster();
+      if (!isDraft) {
+        await notifyAllModulesUpdated('link_set_assigned');
+      }
     });
   };
 
@@ -3421,10 +3522,12 @@ export default function App() {
         });
       });
 
-      Promise.all(promises).then(() => {
+      Promise.all(promises).then(async () => {
         setCustomSets(prev => prev.filter(s => !(s.name === setName && s.category_id === parseInt(selectedCatId, 10))));
         fetchLinks(selectedCatId, selectedLinkSetId);
-        if (!isDraft && (activeTab === 'daily' || activeTab === 'roster')) fetchRoster();
+        if (!isDraft) {
+          await notifyAllModulesUpdated('custom_set_deleted');
+        }
       });
     }
   };
@@ -3451,11 +3554,11 @@ export default function App() {
         'Authorization': `Bearer ${authToken}`
       },
       body: JSON.stringify({ reorders })
-    }).then(() => {
+    }).then(async () => {
       fetchLinks(selectedCatId, selectedLinkSetId);
       const currentSet = linkSetsList.find(s => String(s.id) === String(selectedLinkSetId));
       if (currentSet?.status !== 'draft') {
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        await notifyAllModulesUpdated('links_reordered');
       }
     });
   };
@@ -3512,8 +3615,7 @@ export default function App() {
 
       await fetchLinkSets(selectedCatId);
       await fetchLinks(selectedCatId, setId);
-      fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      await notifyAllModulesUpdated('link_set_published');
       setPublishModal(null);
       setDragNotice(`🚀 Link Set "${target.name}" is now PUBLISHED and live on the roster!`);
       setTimeout(() => setDragNotice(null), 4000);
@@ -3541,6 +3643,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to update link set');
       await fetchLinkSets(selectedCatId);
       await fetchLinks(selectedCatId, setId);
+      await notifyAllModulesUpdated('link_set_meta_updated');
       setEditLinkSetModal(null);
       setDragNotice('✓ Link set details updated');
       setTimeout(() => setDragNotice(null), 3000);
@@ -3564,6 +3667,7 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete link set');
       await fetchLinkSets(selectedCatId);
+      await notifyAllModulesUpdated('link_set_deleted');
       setDragNotice(`✓ Deleted link set "${target.name}"`);
       setTimeout(() => setDragNotice(null), 3000);
     } catch (err) {
@@ -3590,11 +3694,10 @@ export default function App() {
         ...staffForm,
         row_position: staffForm.row_position ? parseInt(staffForm.row_position, 10) : undefined
       })
-    }).then(() => {
+    }).then(async () => {
       setEditingStaff(null);
       setStaffForm({ name: '', designation: '', row_position: '', rest_day: '' });
-      fetchStaff();
-      fetchAllStaff();
+      await notifyAllModulesUpdated('staff_save');
     });
   };
 
@@ -3606,10 +3709,8 @@ export default function App() {
       fetch(`${API_BASE}/staff/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${authToken}` }
-      }).then(() => {
-        fetchStaff();
-        fetchAllStaff();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+      }).then(async () => {
+        await notifyAllModulesUpdated('staff_delete');
       }).catch(err => {
         alert(`Failed to delete staff: ${err.message}`);
       });
@@ -3649,9 +3750,7 @@ export default function App() {
           throw new Error(data.error || 'Failed to mark staff as vacant');
         }
         setRemoveStaffId('');
-        fetchStaff();
-        fetchAllStaff();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        await notifyAllModulesUpdated('staff_vacant');
         alert(`Slot on Row ${target?.row_position} marked as (VACANT).`);
       } catch (err) {
         alert(err.message);
@@ -3672,9 +3771,7 @@ export default function App() {
           throw new Error(data.error || 'Failed to delete staff');
         }
         setRemoveStaffId('');
-        fetchStaff();
-        fetchAllStaff();
-        if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+        await notifyAllModulesUpdated('staff_remove');
         alert(`Successfully removed ${targetName} from the roster.`);
       } catch (err) {
         alert(err.message);
@@ -3706,9 +3803,8 @@ export default function App() {
         'Authorization': `Bearer ${authToken}`
       },
       body: JSON.stringify({ reorders })
-    }).then(() => {
-      fetchStaff();
-      if (activeTab === 'daily' || activeTab === 'roster') fetchRoster();
+    }).then(async () => {
+      await notifyAllModulesUpdated('staff_reorder');
     });
   };
 
@@ -4718,6 +4814,27 @@ export default function App() {
                     >
                       📋 Individual Muster
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveDailyRoster}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '0.8rem',
+                        borderRadius: '8px',
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        border: 'none',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                      }}
+                      title="Save and synchronize daily schedule and muster baseline"
+                    >
+                      💾 Save Roster
+                    </button>
                   </div>
                 </>
               ) : (
@@ -4808,6 +4925,28 @@ export default function App() {
               </div>
               {isAdmin && (
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleSaveDailyRoster}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.84rem',
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                    }}
+                    title="Save and synchronize daily roster across all views and muster roll"
+                  >
+                    <span>💾</span> Save Roster
+                  </button>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -4958,7 +5097,8 @@ export default function App() {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
-                    const targetDraft = linkSetsList.find(s => s.status === 'draft' && (currentActiveCatId === 'ALL' || String(s.category_id) === String(currentActiveCatId)))
+                    const activeCat = selectedCatId || '1';
+                    const targetDraft = linkSetsList.find(s => s.status === 'draft' && (activeCat === 'ALL' || String(s.category_id) === String(activeCat)))
                       || linkSetsList.find(s => s.status === 'draft');
                     if (targetDraft) {
                       setPublishDateInput(targetDraft.effective_from || `${year}-${String(month).padStart(2, '0')}-01`);
@@ -4981,6 +5121,23 @@ export default function App() {
                   <span>🚀</span> Publish Draft
                 </button>
               )}
+              <button 
+                type="button"
+                className="btn btn-primary" 
+                onClick={handleSaveRosterGrid}
+                style={{ 
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                  border: 'none', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' 
+                }}
+                title="Save and synchronize monthly roster grid across all modules"
+              >
+                💾 Save Roster
+              </button>
               <button className="btn btn-secondary" onClick={exportToCSV}>
                 📥 Export CSV
               </button>
@@ -6181,15 +6338,11 @@ export default function App() {
                         </button>
                         <button 
                           className="btn btn-primary" 
-                          onClick={() => {
-                            fetchDailyDuties();
-                            setDragNotice('✅ All daily roster changes, link assignments & swaps are saved permanently to the database.');
-                            setTimeout(() => setDragNotice(null), 4000);
-                          }}
+                          onClick={handleSaveDailyRoster}
                           style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
-                          title="Verify and save all current daily roster assignments to database"
+                          title="Verify and save all current daily roster assignments to database and synchronize across all modules"
                         >
-                          💾 Save & Sync Roster
+                          💾 Save Roster
                         </button>
                         <button 
                           className="btn btn-primary" 
@@ -9455,7 +9608,8 @@ export default function App() {
 
                 {/* Draft Schedule Notice & Direct Publish Date Control in Roster Grid */}
                 {(() => {
-                  const draftSets = linkSetsList.filter(s => s.status === 'draft' && (currentActiveCatId === 'ALL' || String(s.category_id) === String(currentActiveCatId)));
+                  const activeCat = selectedCatId || '1';
+                  const draftSets = linkSetsList.filter(s => s.status === 'draft' && (activeCat === 'ALL' || String(s.category_id) === String(activeCat)));
                   if (draftSets.length === 0) return null;
                   return (
                     <div style={{
@@ -12315,6 +12469,29 @@ export default function App() {
                     <span>⭐</span> Upgrade to COR
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleSaveStaffRoster}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#ffffff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                    }}
+                    title="Save and synchronize staff records and seniority across all modules"
+                  >
+                    <span>💾</span> Save Staff Roster
+                  </button>
+                )}
               </div>
 
               {/* Staff Search Input */}
@@ -14848,11 +15025,7 @@ export default function App() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => {
-              fetchDailyDuties();
-              setDragNotice('✅ Verified: All duty changes, swaps & overrides are saved in the database.');
-              setTimeout(() => setDragNotice(null), 4000);
-            }}
+            onClick={handleSaveDailyRoster}
             style={{
               padding: '6px 14px',
               fontSize: '0.8rem',
