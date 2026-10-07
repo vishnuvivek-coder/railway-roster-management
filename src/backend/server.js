@@ -11126,6 +11126,31 @@ app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/muster/batch-reset - Batch reset multiple muster cells back to baseline
+app.post('/api/muster/batch-reset', requireAdmin, async (req, res) => {
+  try {
+    const { resets } = req.body; // Array of { staff_id, date }
+    if (!Array.isArray(resets) || resets.length === 0) {
+      return res.status(400).json({ error: 'Array of resets required' });
+    }
+
+    await run('BEGIN TRANSACTION');
+    for (const item of resets) {
+      if (!item.staff_id || !item.date) continue;
+      await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [item.staff_id, item.date]);
+      await revertMusterFromSchedulesAndApprovals(item.staff_id, item.date);
+    }
+    await run('COMMIT');
+
+    await logAudit('Admin', 'MUSTER_BATCH_RESET', `Batch reset ${resets.length} muster records to baseline`);
+    res.json({ success: true, message: `Successfully reset ${resets.length} muster records to baseline` });
+  } catch (err) {
+    await run('ROLLBACK');
+    console.error('Error batch resetting muster records:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/muster/reorder - Reorder staff rows in Muster Roll (persists custom order / seniority_no)
 app.post('/api/muster/reorder', requireAdmin, async (req, res) => {
   try {

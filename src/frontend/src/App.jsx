@@ -14006,6 +14006,7 @@ export default function App() {
             <div style={{ display: docSubTab === 'muster' ? 'block' : 'none' }}>
               <IndividualMusterDocument
                 authToken={authToken}
+                isAdmin={isAdmin}
                 categories={categories}
                 selectedCatId={selectedCatId}
                 setSelectedCatId={setSelectedCatId}
@@ -14107,6 +14108,7 @@ export default function App() {
           }}>
             <IndividualMusterDocument
               authToken={authToken}
+              isAdmin={isAdmin}
               categories={categories}
               selectedCatId={selectedCatId}
               setSelectedCatId={setSelectedCatId}

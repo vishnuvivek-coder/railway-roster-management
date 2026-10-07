@@ -34,6 +34,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [activeCellModal, setActiveCellModal] = useState(null);
   const [cellRemarks, setCellRemarks] = useState('');
   const [savingCell, setSavingCell] = useState(false);
+  const [rangeEditModal, setRangeEditModal] = useState(null);
 
   // Name, Designation & HRMS ID editing state
   const [editNameModal, setEditNameModal] = useState(null);
@@ -283,6 +284,114 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       alert('Error resetting cell: ' + err.message);
+    } finally {
+      setSavingCell(false);
+    }
+  };
+
+  const handleBatchUpdateMuster = async (staffId, fromDate, toDate, code, remarks = '') => {
+    try {
+      setSavingCell(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+
+      const dates = [];
+      let curr = new Date(fromDate + 'T12:00:00');
+      const end = new Date(toDate + 'T12:00:00');
+      while (curr <= end) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      if (dates.length === 0) {
+        showToast('⚠️ No valid dates in selected range');
+        return;
+      }
+
+      const updates = dates.map(d => ({
+        staff_id: staffId,
+        date: d,
+        code,
+        remarks: remarks.trim() || undefined
+      }));
+
+      const res = await fetch('/api/muster/batch-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ updates })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update muster range');
+
+      setRangeEditModal(null);
+      await fetchMuster(selectedCycleStart);
+      showToast(`✓ Updated ${dates.length} days (${fromDate} to ${toDate}) to ${code}`);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      console.error('Batch muster update error:', err);
+      showToast(`❌ Error: ${err.message}`);
+    } finally {
+      setSavingCell(false);
+    }
+  };
+
+  const handleBatchResetMuster = async (staffId, fromDate, toDate) => {
+    try {
+      setSavingCell(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+
+      const dates = [];
+      let curr = new Date(fromDate + 'T12:00:00');
+      const end = new Date(toDate + 'T12:00:00');
+      while (curr <= end) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      if (dates.length === 0) return;
+
+      const resets = dates.map(d => ({ staff_id: staffId, date: d }));
+
+      const res = await fetch('/api/muster/batch-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ resets })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset muster cells');
+
+      setRangeEditModal(null);
+      await fetchMuster(selectedCycleStart);
+      showToast(`✓ Reset ${dates.length} days back to baseline`);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      console.error('Batch reset error:', err);
+      showToast(`❌ Error: ${err.message}`);
     } finally {
       setSavingCell(false);
     }
@@ -706,6 +815,45 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               </button>
             )}
           </div>
+
+          {searchQuery && filteredStaff.length > 0 && isAdmin && (
+            <button
+              type="button"
+              className="no-print"
+              onClick={() => {
+                const target = filteredStaff[0];
+                const dates = cycleData?.cycle?.dates || [];
+                const fDate = dates.length > 0 ? dates[0].dateStr : '';
+                const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
+                setRangeEditModal({
+                  staffId: target.id,
+                  staffName: target.name,
+                  designation: target.designation,
+                  fromDate: fDate,
+                  toDate: lDate,
+                  code: 'P',
+                  remarks: ''
+                });
+              }}
+              style={{
+                background: 'linear-gradient(135deg, rgba(212, 161, 92, 0.25), rgba(212, 161, 92, 0.45))',
+                border: '1.5px solid var(--border-gold)',
+                color: 'var(--primary)',
+                borderRadius: '8px',
+                padding: '6px 14px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap'
+              }}
+              title={`Edit date range (From - Upto) for ${filteredStaff[0].name}`}
+            >
+              <span>⚡ Range Edit: {filteredStaff[0].name.split(' ')[0]}</span>
+            </button>
+          )}
         </div>
 
         {/* Category Filter Pills */}
@@ -940,6 +1088,41 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               PF NO: {staff.pf_no || '-'}
                             </span>
                           </div>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="no-print"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const dates = cycleData?.cycle?.dates || [];
+                                const fDate = dates.length > 0 ? dates[0].dateStr : '';
+                                const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
+                                setRangeEditModal({
+                                  staffId: staff.id,
+                                  staffName: staff.name,
+                                  designation: staff.designation,
+                                  fromDate: fDate,
+                                  toDate: lDate,
+                                  code: 'P',
+                                  remarks: ''
+                                });
+                              }}
+                              style={{
+                                background: 'rgba(212, 161, 92, 0.15)',
+                                border: '1px solid rgba(212, 161, 92, 0.35)',
+                                color: 'var(--primary)',
+                                borderRadius: '6px',
+                                padding: '2px 7px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={`Edit muster details date-wise (From - Upto) for ${staff.name}`}
+                            >
+                              📅 Range
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -1256,8 +1439,39 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               fontSize: '0.84rem'
             }}>
               <div>Employee: <strong style={{ color: '#f3f4f6' }}>{activeCellModal.staffName}</strong> ({activeCellModal.designation || 'Staff'})</div>
-              <div style={{ marginTop: '3px' }}>
-                Date: <strong>{activeCellModal.dateStr}</strong> ({activeCellModal.dayOfWeek}) | Current: <strong>{activeCellModal.currentCode}</strong>
+              <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Date: <strong>{activeCellModal.dateStr}</strong> ({activeCellModal.dayOfWeek}) | Current: <strong>{activeCellModal.currentCode}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dates = cycleData?.cycle?.dates || [];
+                    const fDate = activeCellModal.dateStr;
+                    const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : fDate;
+                    setRangeEditModal({
+                      staffId: activeCellModal.staffId,
+                      staffName: activeCellModal.staffName,
+                      designation: activeCellModal.designation,
+                      fromDate: fDate,
+                      toDate: lDate,
+                      code: activeCellModal.currentCode || 'P',
+                      remarks: cellRemarks || ''
+                    });
+                    setActiveCellModal(null);
+                  }}
+                  style={{
+                    background: 'rgba(212, 161, 92, 0.2)',
+                    border: '1px solid var(--border-gold)',
+                    color: 'var(--primary)',
+                    borderRadius: '6px',
+                    padding: '2px 8px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title="Switch to date-range editor"
+                >
+                  📅 Edit Range
+                </button>
               </div>
             </div>
 
@@ -1335,6 +1549,243 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   style={{ fontSize: '0.82rem', padding: '6px 14px' }}
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Range Batch Edit Modal */}
+      {rangeEditModal && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '560px',
+            maxWidth: '100%',
+            background: 'var(--bg-secondary)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '2px solid var(--border-gold)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.9)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📅</span>
+                  <span>Date-Wise Muster Range Editor</span>
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
+                  Set muster attendance across multiple dates for the whole month or custom range
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRangeEditModal(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.3rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Employee Info */}
+            <div style={{
+              background: 'rgba(212, 161, 92, 0.1)',
+              border: '1px solid rgba(212, 161, 92, 0.3)',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)', display: 'block' }}>Employee</span>
+                <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{rangeEditModal.staffName}</strong>
+              </div>
+              <span style={{ fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }}>
+                {rangeEditModal.designation || 'Staff'}
+              </span>
+            </div>
+
+            {/* Date Pickers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '12px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0' }}>From Date:</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={rangeEditModal.fromDate}
+                  onChange={(e) => setRangeEditModal(prev => ({ ...prev, fromDate: e.target.value }))}
+                  style={{ fontSize: '0.88rem', padding: '8px 12px', background: '#09090b', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
+                />
+              </div>
+              <div>
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0' }}>Upto Date:</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={rangeEditModal.toDate}
+                  onChange={(e) => setRangeEditModal(prev => ({ ...prev, toDate: e.target.value }))}
+                  style={{ fontSize: '0.88rem', padding: '8px 12px', background: '#09090b', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
+                />
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div style={{ marginBottom: '16px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                Quick Date Presets:
+              </span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {(() => {
+                  const dates = cycleData?.cycle?.dates || [];
+                  const fDate = dates.length > 0 ? dates[0].dateStr : '';
+                  const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
+                  const midDate = dates.length > 15 ? dates[14].dateStr : '';
+                  const nextMid = dates.length > 15 ? dates[15].dateStr : '';
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setRangeEditModal(prev => ({ ...prev, fromDate: fDate, toDate: lDate }))}
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#e2e8f0', borderRadius: '6px', padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Full Cycle ({cycleData?.cycle?.dates?.[0]?.dayStr || '11'} - {cycleData?.cycle?.dates?.[cycleData?.cycle?.dates?.length - 1]?.dayStr || '10'})
+                      </button>
+                      {midDate && (
+                        <button
+                          type="button"
+                          onClick={() => setRangeEditModal(prev => ({ ...prev, fromDate: fDate, toDate: midDate }))}
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#e2e8f0', borderRadius: '6px', padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          First Half (11th - 25th)
+                        </button>
+                      )}
+                      {nextMid && (
+                        <button
+                          type="button"
+                          onClick={() => setRangeEditModal(prev => ({ ...prev, fromDate: nextMid, toDate: lDate }))}
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#e2e8f0', borderRadius: '6px', padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Second Half (26th - 10th)
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Attendance Code Selection */}
+            <div style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '8px' }}>
+                Select Attendance Code:
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                {MUSTER_CODES.map(c => {
+                  const isSelected = rangeEditModal.code === c.code;
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => setRangeEditModal(prev => ({ ...prev, code: c.code }))}
+                      style={{
+                        padding: '8px 4px',
+                        borderRadius: '8px',
+                        border: isSelected ? '2px solid #ffffff' : '1px solid var(--border-glass)',
+                        background: isSelected ? c.color : 'rgba(255,255,255,0.04)',
+                        color: isSelected ? '#ffffff' : c.color,
+                        fontWeight: 800,
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '2px',
+                        boxShadow: isSelected ? `0 0 10px ${c.color}88` : 'none'
+                      }}
+                    >
+                      <span>{c.code}</span>
+                      <span style={{ fontSize: '0.62rem', opacity: 0.9 }}>
+                        {c.code === 'P' ? 'Duty' : c.code === 'R' ? 'Rest' : c.code === 'O' ? 'Absent' : c.code === 'E' ? 'Emerg' : c.code}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Remarks */}
+            <div style={{ marginBottom: '18px' }}>
+              <label className="form-label" style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Remarks / Reason (Optional):</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Sanctioned leave, Medical certificate, Special order"
+                value={rangeEditModal.remarks || ''}
+                onChange={(e) => setRangeEditModal(prev => ({ ...prev, remarks: e.target.value }))}
+                style={{ fontSize: '0.82rem', padding: '8px 12px', background: '#09090b', color: '#fff' }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={savingCell}
+                onClick={() => handleBatchResetMuster(rangeEditModal.staffId, rangeEditModal.fromDate, rangeEditModal.toDate)}
+                style={{ fontSize: '0.78rem', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)' }}
+                title="Reset this range to default cyclic baseline"
+              >
+                ↺ Reset Range to Baseline
+              </button>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setRangeEditModal(null)}
+                  style={{ fontSize: '0.82rem', padding: '8px 16px' }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingCell || !rangeEditModal.fromDate || !rangeEditModal.toDate || rangeEditModal.fromDate > rangeEditModal.toDate}
+                  onClick={() => handleBatchUpdateMuster(
+                    rangeEditModal.staffId,
+                    rangeEditModal.fromDate,
+                    rangeEditModal.toDate,
+                    rangeEditModal.code,
+                    rangeEditModal.remarks
+                  )}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    fontWeight: 800,
+                    fontSize: '0.86rem',
+                    padding: '8px 20px',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                  }}
+                >
+                  {savingCell ? 'Saving...' : '⚡ Apply & Save Range'}
                 </button>
               </div>
             </div>
