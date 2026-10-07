@@ -244,6 +244,174 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
   const [refSearch, setRefSearch] = useState('');
   const [refDayFilter, setRefDayFilter] = useState('ALL');
 
+  // Add LR Member Modal states
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMode, setAddMode] = useState('existing'); // 'existing' | 'new'
+  const [allStaffList, setAllStaffList] = useState([]);
+  const [loadingStaffList, setLoadingStaffList] = useState(false);
+  const [newMemberForm, setNewMemberForm] = useState({
+    existing_staff_id: '',
+    name: '',
+    designation: 'CCTC',
+    rest_day: 'MON',
+    pf_no: '',
+    hrms_id: ''
+  });
+  const [savingMember, setSavingMember] = useState(false);
+
+  // Remove LR Member Confirmation states
+  const [memberToRemove, setMemberToRemove] = useState(null);
+  const [removePermanent, setRemovePermanent] = useState(false);
+  const [removingStaffId, setRemovingStaffId] = useState(null);
+
+  // Fetch available staff database to select from
+  const fetchAvailableStaff = async () => {
+    try {
+      setLoadingStaffList(true);
+      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const res = await fetch(`${API_BASE}/staff`, {
+        headers: {
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        }
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setAllStaffList(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch staff list:', err);
+    } finally {
+      setLoadingStaffList(false);
+    }
+  };
+
+  // Staff members eligible for transfer to Leave Reserve (exclude members already in Cat 4)
+  const nonCat4Staff = useMemo(() => {
+    if (!allStaffList || allStaffList.length === 0) return [];
+    const currentLrIds = new Set(sheetData?.staff?.map(s => s.staffId) || []);
+    return allStaffList.filter(s => s.category_id !== 4 && !currentLrIds.has(s.id));
+  }, [allStaffList, sheetData]);
+
+  const handleSelectExistingStaff = (staffId) => {
+    const selected = allStaffList.find(s => s.id === parseInt(staffId, 10));
+    if (selected) {
+      setNewMemberForm(prev => ({
+        ...prev,
+        existing_staff_id: selected.id,
+        name: selected.name || '',
+        designation: selected.designation || 'CCTC',
+        rest_day: selected.rest_day || 'MON',
+        pf_no: selected.pf_no || '',
+        hrms_id: selected.hrms_id || ''
+      }));
+    } else {
+      setNewMemberForm(prev => ({ ...prev, existing_staff_id: '' }));
+    }
+  };
+
+  const handleAddMember = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setSavingMember(true);
+      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const payload = addMode === 'existing'
+        ? {
+            existing_staff_id: parseInt(newMemberForm.existing_staff_id, 10),
+            designation: newMemberForm.designation,
+            rest_day: newMemberForm.rest_day,
+            pf_no: newMemberForm.pf_no,
+            hrms_id: newMemberForm.hrms_id
+          }
+        : {
+            name: newMemberForm.name,
+            designation: newMemberForm.designation,
+            rest_day: newMemberForm.rest_day,
+            pf_no: newMemberForm.pf_no,
+            hrms_id: newMemberForm.hrms_id
+          };
+
+      if (addMode === 'existing' && !payload.existing_staff_id) {
+        alert('Please choose an employee to transfer to Leave Reserve.');
+        return;
+      }
+      if (addMode === 'new' && (!payload.name || !payload.name.trim())) {
+        alert('Please enter employee name.');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/lr-sheet/add-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to add LR member');
+      }
+
+      setShowAddMemberModal(false);
+      setNewMemberForm({
+        existing_staff_id: '',
+        name: '',
+        designation: 'CCTC',
+        rest_day: 'MON',
+        pf_no: '',
+        hrms_id: ''
+      });
+      setSyncNotice(data.message || 'Staff member added to Leave Reserve successfully!');
+      await fetchSheet(year, month);
+      setTimeout(() => setSyncNotice(null), 6000);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'lr_add_member', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error adding LR member: ' + err.message);
+    } finally {
+      setSavingMember(false);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return;
+    try {
+      setRemovingStaffId(memberToRemove.staffId);
+      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const res = await fetch(`${API_BASE}/lr-sheet/remove-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({
+          staff_id: memberToRemove.staffId,
+          permanent_delete: removePermanent
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to remove member');
+      }
+
+      setMemberToRemove(null);
+      setRemovePermanent(false);
+      setSyncNotice(data.message || 'Member removed from Leave Reserve successfully.');
+      await fetchSheet(year, month);
+      setTimeout(() => setSyncNotice(null), 6000);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'lr_remove_member', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error removing LR member: ' + err.message);
+    } finally {
+      setRemovingStaffId(null);
+    }
+  };
+
   const fetchSheet = async (targetYear = year, targetMonth = month) => {
     try {
       setLoading(true);
@@ -670,6 +838,30 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
 
           <button
             type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setShowAddMemberModal(true);
+              fetchAvailableStaff();
+            }}
+            title="Add a new member or transfer existing staff into Leave Reserve (LR)"
+            style={{
+              padding: '7px 14px',
+              fontSize: '0.84rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              color: '#fff',
+              border: '1px solid rgba(59, 130, 246, 0.5)',
+              fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)'
+            }}
+          >
+            <span>➕</span> Add LR Member
+          </button>
+
+          <button
+            type="button"
             className="btn btn-secondary"
             onClick={() => fetchSheet(year, month)}
             title="Refresh Leave Reserve sheet from latest daily duty allotments"
@@ -849,6 +1041,9 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                 <th style={{ width: '55px', textAlign: 'center', padding: '8px 4px', background: '#17171a', color: '#f43f5e', fontWeight: 700 }}>
                   LEAVE
                 </th>
+                <th className="no-print" style={{ width: '85px', textAlign: 'center', padding: '8px 4px', background: '#17171a', color: '#f87171', fontWeight: 700 }}>
+                  ACTIONS
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1024,6 +1219,41 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#f43f5e', padding: '6px 2px' }}>
                       {stats.leave}
+                    </td>
+                    <td className="no-print" style={{ textAlign: 'center', padding: '6px 4px', verticalAlign: 'middle', borderLeft: '1px solid var(--border-glass)' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMemberToRemove(staff);
+                        }}
+                        disabled={removingStaffId === staff.staffId}
+                        title={`Remove ${staff.name} from Leave Reserve`}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                          e.currentTarget.style.borderColor = '#ef4444';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
+                          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                        }}
+                      >
+                        <span>🗑️</span> Remove
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1495,6 +1725,399 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                 style={{ padding: '8px 20px', fontSize: '0.85rem' }}
               >
                 Close Reference
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ➕ ADD LR MEMBER MODAL */}
+      {showAddMemberModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.78)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div className="card" style={{
+            background: '#1a1a1d',
+            border: '1px solid rgba(59, 130, 246, 0.45)',
+            borderRadius: '16px',
+            maxWidth: '560px',
+            width: '100%',
+            padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.85)',
+            maxHeight: '92vh',
+            overflowY: 'auto'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>➕</span> Add Leave Reserve (LR) Member
+                </h3>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
+                  Add a new employee or transfer an existing staff member into Category 4
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddMemberModal(false)}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer', padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Mode Selector Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setAddMode('existing')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: addMode === 'existing' ? '#2563eb' : 'transparent',
+                  color: addMode === 'existing' ? '#fff' : 'var(--color-text-secondary)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                🔄 Transfer Existing Employee
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddMode('new')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: addMode === 'new' ? '#2563eb' : 'transparent',
+                  color: addMode === 'new' ? '#fff' : 'var(--color-text-secondary)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                👤 Create New LR Member
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMember}>
+              {addMode === 'existing' ? (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Select Staff Member to Transfer: *
+                  </label>
+                  {loadingStaffList ? (
+                    <div style={{ padding: '10px', fontSize: '0.82rem', color: '#94a3b8' }}>Loading staff database...</div>
+                  ) : (
+                    <select
+                      className="form-input"
+                      value={newMemberForm.existing_staff_id}
+                      onChange={(e) => handleSelectExistingStaff(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                    >
+                      <option value="">-- Choose an employee from database --</option>
+                      {nonCat4Staff.map(s => {
+                        let catLabel = 'Unassigned';
+                        if (s.category_id === 1) catLabel = 'COR';
+                        else if (s.category_id === 2) catLabel = 'Sleeper';
+                        else if (s.category_id === 3) catLabel = 'Ladies TTE';
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.designation || 'CCTC'} • {catLabel} • Rest: {s.rest_day || '-'}) {s.pf_no ? `[PF: ${s.pf_no}]` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
+                    Selecting an employee transfers them into Leave Reserve (Category 4) with a dedicated LR link position.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Full Employee Name: *
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. M. SURESH BABU"
+                    value={newMemberForm.name}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, name: e.target.value.toUpperCase() })}
+                    required
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  />
+                </div>
+              )}
+
+              {/* Designation & Rest Day Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Designation:
+                  </label>
+                  <select
+                    className="form-input"
+                    value={newMemberForm.designation}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, designation: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  >
+                    <option value="CTI">CTI</option>
+                    <option value="Sr.CCTC">Sr.CCTC</option>
+                    <option value="CCTC">CCTC</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Weekly Rest Day:
+                  </label>
+                  <select
+                    className="form-input"
+                    value={newMemberForm.rest_day}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, rest_day: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  >
+                    <option value="SUN">SUN (Sunday)</option>
+                    <option value="MON">MON (Monday)</option>
+                    <option value="TUE">TUE (Tuesday)</option>
+                    <option value="WED">WED (Wednesday)</option>
+                    <option value="THU">THU (Thursday)</option>
+                    <option value="FRI">FRI (Friday)</option>
+                    <option value="SAT">SAT (Saturday)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* PF No & HRMS ID Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    PF / Employee No (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 24508932145"
+                    value={newMemberForm.pf_no}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, pf_no: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    HRMS ID (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. AB1234"
+                    value={newMemberForm.hrms_id}
+                    onChange={(e) => setNewMemberForm({ ...newMemberForm, hrms_id: e.target.value.toUpperCase() })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAddMemberModal(false)}
+                  style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingMember}
+                  style={{
+                    padding: '8px 22px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
+                  }}
+                >
+                  {savingMember ? 'Adding...' : '➕ Add to Leave Reserve'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🗑️ REMOVE LR MEMBER CONFIRMATION MODAL */}
+      {memberToRemove && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.78)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div className="card" style={{
+            background: '#1a1a1d',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            borderRadius: '16px',
+            maxWidth: '520px',
+            width: '100%',
+            padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.85)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#f87171', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🗑️</span> Remove LR Member
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setMemberToRemove(null); setRemovePermanent(false); }}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer', padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Member Card Summary */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: '10px',
+              padding: '14px 16px',
+              marginBottom: '18px'
+            }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff' }}>
+                {memberToRemove.name}
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '4px', display: 'flex', gap: '12px' }}>
+                <span>Sl No: #{memberToRemove.slNo}</span>
+                <span>•</span>
+                <span>Desg: {memberToRemove.designation || 'CCTC'}</span>
+                <span>•</span>
+                <span>Rest: {memberToRemove.restDay || '-'}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: '#e2e8f0', lineHeight: 1.5, marginBottom: '16px' }}>
+              Are you sure you want to remove <strong>{memberToRemove.name}</strong> from Leave Reserve (LR)?
+            </p>
+
+            {/* Removal Mode Options */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: !removePermanent ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255,255,255,0.03)',
+                border: !removePermanent ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="radio"
+                  name="removeType"
+                  checked={!removePermanent}
+                  onChange={() => setRemovePermanent(false)}
+                  style={{ marginTop: '3px' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#93c5fd' }}>
+                    Remove from Leave Reserve (Unlink from Category 4)
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Recommended: Keeps employee profile & history intact in the database, but removes them from the LR monthly sheet.
+                  </div>
+                </div>
+              </label>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: removePermanent ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.03)',
+                border: removePermanent ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="radio"
+                  name="removeType"
+                  checked={removePermanent}
+                  onChange={() => setRemovePermanent(true)}
+                  style={{ marginTop: '3px' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#f87171' }}>
+                    Permanently Delete Employee Record
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Warning: Completely deletes the employee and all their Leave Reserve duty records from the database.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => { setMemberToRemove(null); setRemovePermanent(false); }}
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleRemoveMember}
+                disabled={removingStaffId === memberToRemove.staffId}
+                style={{
+                  padding: '8px 22px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)'
+                }}
+              >
+                {removingStaffId === memberToRemove.staffId ? 'Removing...' : 'Confirm Remove'}
               </button>
             </div>
           </div>

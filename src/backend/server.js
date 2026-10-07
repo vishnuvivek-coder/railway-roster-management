@@ -11642,44 +11642,25 @@ app.get('/api/lr-sheet', async (req, res) => {
       });
     }
 
-    const allCat4Staff = await all('SELECT * FROM staff WHERE category_id = 4 ORDER BY row_position ASC');
+    const allCat4Staff = await all('SELECT * FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
 
-    // Official order from physical register
-    const targetStaffOrder = [
-      { id: 97, name: 'CH SRINIVASA RAO', desg: 'CTI', rest: 'SUN' },
-      { id: 98, name: 'AG KRISHNA', desg: 'Sr.CCTC', rest: 'TUE' },
-      { id: 99, name: 'D RAKESH', desg: 'Sr.CCTC', rest: 'FRI' },
-      { id: 100, name: 'G SHIVAN', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 101, name: 'MVS NAGI REDDY', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 102, name: 'B VENKAT REDDY', desg: 'Sr.CCTC', rest: 'TUE' },
-      { id: 103, name: 'MSA RAJU', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 104, name: 'KB RAO', desg: 'Sr.CCTC', rest: 'FRI' },
-      { id: 105, name: 'SANJAY KUMAR', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 106, name: 'NC MEENA', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 107, name: 'T KANTHA RAO', desg: 'Sr.CCTC', rest: 'TUE' },
-      { id: 108, name: 'BR MEENA', desg: 'Sr.CCTC', rest: 'WED' },
-      { id: 109, name: 'T ANKAMMA RAO', desg: 'Sr.CCTC', rest: 'MON' },
-      { id: 110, name: 'MV RAMA REDDY', desg: 'Sr.CCTC', rest: 'FRI' },
-      { id: 111, name: 'MV ANJANEYULU', desg: 'Sr.CCTC', rest: 'FRI' },
-      { id: 112, name: 'SV SIVA KUMAR', desg: 'CCTC', rest: 'SUN' },
-      { id: 113, name: 'ELN RAO', desg: 'CCTC', rest: 'MON' },
-      { id: 114, name: 'V SRINIVASA RAO', desg: 'CCTC', rest: 'THU' },
-      { id: 116, name: 'B P SINGH', desg: 'CCTC', rest: 'WED' },
-      { id: 117, name: 'R SAIDA NAIK', desg: 'CCTC', rest: 'THU' },
-      { id: 118, name: 'S HYMA TULASI', desg: 'Sr.CCTC', rest: 'THU' },
-      { id: 115, name: 'K NAGA NAIK', desg: 'CCTC', rest: '-', isRelieved: true, relievedNote: 'RELIEVED TO ZRTI / MLY' }
-    ];
+    // Separate active and relieved staff (relieved kept at bottom)
+    const activeStaff = allCat4Staff.filter(s => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
+    const relievedStaff = allCat4Staff.filter(s => s.name === 'K NAGA NAIK' || s.id === 115 || s.is_relieved);
+    const sortedCat4Staff = [...activeStaff, ...relievedStaff];
 
-    const staffList = targetStaffOrder.map((t, idx) => {
-      const found = allCat4Staff.find(s => s.id === t.id);
+    const staffList = sortedCat4Staff.map((s, idx) => {
+      const isRelieved = s.name === 'K NAGA NAIK' || s.id === 115 || !!s.is_relieved;
       return {
         slNo: idx + 1,
-        staffId: t.id,
-        name: found?.name || t.name,
-        designation: found?.designation || t.desg,
-        restDay: found?.rest_day || t.rest,
-        isRelieved: !!t.isRelieved,
-        relievedNote: t.relievedNote || ''
+        staffId: s.id,
+        name: s.name,
+        designation: s.designation || 'CCTC',
+        restDay: isRelieved ? '-' : (s.rest_day || '-'),
+        pfNo: s.pf_no || '',
+        hrmsId: s.hrms_id || '',
+        isRelieved,
+        relievedNote: isRelieved ? (s.relieved_note || 'RELIEVED TO ZRTI / MLY') : ''
       };
     });
 
@@ -12057,6 +12038,147 @@ app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
   } catch (err) {
     await run('ROLLBACK');
     console.error('Error batch updating LR records:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lr-sheet/add-member - Add or transfer a staff member into Leave Reserve (Category 4)
+app.post('/api/lr-sheet/add-member', async (req, res) => {
+  if (req.user && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
+  }
+  try {
+    const { existing_staff_id, name, designation, rest_day, pf_no, hrms_id } = req.body;
+
+    const maxPosRow = await get('SELECT MAX(row_position) as maxPos FROM staff WHERE category_id = 4');
+    const nextPos = (maxPosRow && maxPosRow.maxPos ? maxPosRow.maxPos : 0) + 1;
+    const cleanRest = rest_day ? String(rest_day).trim().toUpperCase() : 'MON';
+    const cleanDesg = designation ? String(designation).trim() : 'CCTC';
+    const cleanPf = pf_no ? String(pf_no).trim() : null;
+    const cleanHrms = hrms_id ? String(hrms_id).trim() : null;
+
+    let targetStaffId;
+    let staffName = '';
+
+    if (existing_staff_id) {
+      const existing = await get('SELECT * FROM staff WHERE id = ?', [existing_staff_id]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Selected staff member not found in database' });
+      }
+      targetStaffId = existing.id;
+      staffName = name && name.trim() ? name.trim() : existing.name;
+
+      await run(`
+        UPDATE staff 
+        SET category_id = 4,
+            row_position = ?,
+            rest_day = ?,
+            designation = COALESCE(?, designation),
+            pf_no = COALESCE(?, pf_no),
+            hrms_id = COALESCE(?, hrms_id),
+            active = 1
+        WHERE id = ?
+      `, [
+        nextPos,
+        cleanRest,
+        cleanDesg,
+        cleanPf,
+        cleanHrms,
+        targetStaffId
+      ]);
+    } else {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Staff name is required to create a new member' });
+      }
+      staffName = name.trim();
+      const insResult = await run(`
+        INSERT INTO staff (name, designation, category_id, row_position, rest_day, pf_no, hrms_id, active)
+        VALUES (?, ?, 4, ?, ?, ?, ?, 1)
+      `, [
+        staffName,
+        cleanDesg,
+        nextPos,
+        cleanRest,
+        cleanPf,
+        cleanHrms
+      ]);
+      targetStaffId = insResult.lastID;
+    }
+
+    // Ensure dummy LR link exists in links table
+    const existingLink = await get('SELECT id FROM links WHERE category_id = 4 AND link_number = ?', [nextPos]);
+    if (!existingLink) {
+      await run(`
+        INSERT INTO links (category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, link_set_id, status)
+        VALUES (4, ?, ?, 'GNT', 'GNT', 'Relief / LR', 0, '2020-01-01', '9999-12-31', 'Relief / LR', ?, 4, 'published')
+      `, [nextPos, `LR-${nextPos} (${cleanRest} Rest)`, `LR Link ${nextPos}`]);
+    }
+
+    // Keep categories cycle length in sync with current LR count
+    try {
+      await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
+    } catch (e) {}
+
+    await logAudit(req.user ? req.user.role : 'Admin', 'ADD_LR_MEMBER', `Added LR staff member '${staffName}' (ID: ${targetStaffId}) at position ${nextPos} with Rest: ${cleanRest}`);
+
+    res.json({
+      success: true,
+      message: `Successfully added ${staffName} to Leave Reserve (Position ${nextPos})!`,
+      staffId: targetStaffId,
+      rowPosition: nextPos
+    });
+  } catch (err) {
+    console.error('Error adding LR member:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lr-sheet/remove-member - Remove a staff member from Leave Reserve (Category 4)
+app.post('/api/lr-sheet/remove-member', async (req, res) => {
+  if (req.user && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
+  }
+  try {
+    const { staff_id, permanent_delete } = req.body;
+    if (!staff_id) {
+      return res.status(400).json({ error: 'staff_id is required' });
+    }
+
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    const oldPos = staff.row_position;
+    const staffName = staff.name;
+
+    if (permanent_delete) {
+      await run('DELETE FROM staff WHERE id = ?', [staff_id]);
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]);
+    } else {
+      await run('UPDATE staff SET category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
+    }
+
+    // Re-index row_position for remaining Category 4 staff to keep contiguous sequence 1, 2, 3...
+    const remainingCat4 = await all('SELECT id FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
+    for (let i = 0; i < remainingCat4.length; i++) {
+      await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remainingCat4[i].id]);
+    }
+
+    // Update categories cycle length
+    try {
+      await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
+    } catch (e) {}
+
+    await logAudit(req.user ? req.user.role : 'Admin', 'REMOVE_LR_MEMBER', `${permanent_delete ? 'Permanently deleted' : 'Removed from LR pool'} staff '${staffName}' (was position ${oldPos})`);
+
+    res.json({
+      success: true,
+      message: `Successfully removed ${staffName} from Leave Reserve.`,
+      staffId: staff_id
+    });
+  } catch (err) {
+    console.error('Error removing LR member:', err);
     res.status(500).json({ error: err.message });
   }
 });
