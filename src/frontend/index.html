@@ -31,8 +31,18 @@
       });
 
       if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', function(event) {
+          if (event.data && event.data.type === 'RELOAD_NEW_VERSION') {
+            console.log('Received RELOAD_NEW_VERSION from service worker. Updating app...');
+            window.location.reload();
+          }
+        });
+
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').then((reg) => {
+            // Proactively check for updated service worker on every load
+            try { reg.update(); } catch(e) {}
+
             reg.onupdatefound = () => {
               const installingWorker = reg.installing;
               if (installingWorker) {

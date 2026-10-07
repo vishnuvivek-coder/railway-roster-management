@@ -4612,24 +4612,74 @@ export default function App() {
       <div className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="header-container">
           <div className="header-title-section">
-            <div style={{ 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              padding: '4px 14px', 
-              background: 'rgba(212, 161, 92, 0.1)', 
-              border: '1px solid rgba(212, 161, 92, 0.25)', 
-              borderRadius: '20px', 
-              fontSize: '0.74rem', 
-              fontWeight: 700, 
-              color: 'var(--primary)', 
-              letterSpacing: '0.08em', 
-              textTransform: 'uppercase', 
-              marginBottom: '10px' 
-            }}>
-              ✦ Railway Operations & Crew Logistics
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                padding: '4px 14px', 
+                background: 'rgba(212, 161, 92, 0.1)', 
+                border: '1px solid rgba(212, 161, 92, 0.25)', 
+                borderRadius: '20px', 
+                fontSize: '0.74rem', 
+                fontWeight: 700, 
+                color: 'var(--primary)', 
+                letterSpacing: '0.08em', 
+                textTransform: 'uppercase'
+              }}>
+                ✦ Railway Operations & Crew Logistics
+              </div>
+
+              {/* Live update status & cache refresher */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  fontSize: '0.72rem',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  color: '#34d399',
+                  fontWeight: 700
+                }}>
+                  ● v5.2 Live Updated
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(regs => {
+                          for (let r of regs) r.unregister();
+                        });
+                      }
+                      if ('caches' in window) {
+                        caches.keys().then(keys => {
+                          for (let k of keys) caches.delete(k);
+                        });
+                      }
+                    } catch(e) {}
+                    window.location.reload(true);
+                  }}
+                  title="Force purge browser cache and reload newest app version"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--color-text-secondary)',
+                    borderRadius: '8px',
+                    padding: '3px 8px',
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 600
+                  }}
+                >
+                  <span>🔄</span> Refresh App
+                </button>
+              </div>
             </div>
-            <h1>Roster Management Dashboard</h1>
+            <h1 style={{ marginTop: '8px' }}>Roster Management Dashboard</h1>
             <p>Deterministic, fair rotation roster engine for railway conducting staff</p>
           </div>
         </div>

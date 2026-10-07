@@ -1,5 +1,5 @@
 // Service Worker for Railway Roster PWA (Network-First Strategy)
-const CACHE_NAME = 'railway-roster-cache-v4';
+const CACHE_NAME = 'railway-roster-cache-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -11,6 +11,12 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => caches.delete(key))
       );
+    }).then(() => {
+      return self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'RELOAD_NEW_VERSION' });
+        });
+      });
     })
   );
   self.clients.claim();
