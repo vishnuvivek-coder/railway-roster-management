@@ -52,7 +52,8 @@ function compareDutyAndResolve({
   remarks,             // text from remarks column / override reason
   overrideDuty,        // object with extra_train_no, overridden_link_number, etc.
   muster,              // muster record { code, remarks }
-  allLinks = []        // list of all links for fast link lookup
+  allLinks = [],       // list of all links for fast link lookup
+  categoryId = null    // category id (1: COR, 2: TTI/Sleeper, 3: Ladies, 4: LR)
 }) {
   // 1. Check for Muster Leave / Sick / Absent
   const musterCode = muster ? String(muster.code || '').trim().toUpperCase() : null;
@@ -110,8 +111,9 @@ function compareDutyAndResolve({
       isRemarksRest = false;
     } else if (overrideDuty.overridden_link_number) {
       const ln = parseInt(overrideDuty.overridden_link_number, 10);
-      const tCat = overrideDuty.target_category_id || (ln > 21 ? 2 : 1);
-      const linkMatch = allLinks.find(l => (l.category_id === tCat || !l.category_id) && l.link_number === ln);
+      const tCat = overrideDuty.target_category_id || categoryId || (ln > 21 ? 2 : 1);
+      const linkMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === ln && l.category_id !== 4) ||
+                        allLinks.find(l => l.link_number === ln && l.category_id !== 4);
       if (linkMatch && (linkMatch.is_rest || isRestString(linkMatch.train_numbers))) {
         isRemarksRest = true;
         remarksTrain = null;
@@ -134,7 +136,9 @@ function compareDutyAndResolve({
       const linkMatchRegex = remarksStr.match(/(?:Link|link)\s*#?\s*(\d{1,2})\b/);
       if (linkMatchRegex) {
         const linkNumFound = parseInt(linkMatchRegex[1], 10);
-        const lMatch = allLinks.find(l => l.link_number === linkNumFound);
+        const tCat = categoryId || overrideDuty?.target_category_id || 1;
+        const lMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === linkNumFound && l.category_id !== 4) ||
+                      allLinks.find(l => l.link_number === linkNumFound && l.category_id !== 4);
         if (lMatch) {
           if (lMatch.is_rest || isRestString(lMatch.train_numbers)) {
             isRemarksRest = true;
@@ -236,8 +240,9 @@ function getDutyRowsForTrain(trainStr, allLinks = []) {
   if (!trainStr || isRestString(trainStr)) return [];
   const clean = String(trainStr).trim();
 
-  // 1. Check if any link matches this train number
+  // 1. Check if any link matches this train number (exclude dummy category 4 links)
   const matchedLink = allLinks.find(l => 
+    l.category_id !== 4 &&
     l.train_numbers && (
       l.train_numbers === clean ||
       l.train_numbers.split(/[/, ]+/).includes(clean) ||

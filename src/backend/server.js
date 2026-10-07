@@ -7687,7 +7687,8 @@ app.get('/api/roster', async (req, res) => {
             remarks: overrideReason || (muster ? muster.remarks : null),
             overrideDuty: directOv || subOv,
             muster,
-            allLinks
+            allLinks,
+            categoryId: targetCatId || staff.category_id || currentCatId
           });
 
           rowCells.push({
@@ -7875,11 +7876,13 @@ app.get('/api/roster', async (req, res) => {
             const setDetails = getLinkSetDetails(lastTargetCat || currentCatId, lastAssignedLink);
             if (setDetails && setDetails.remainingLinks && setDetails.remainingLinks.length > 0) {
               const nextLink = setDetails.remainingLinks[0];
+              const normalBaseLink = getBaseLinkNumber(staff.row_position, staffDayOffset, curCycleLength);
+              const isNaturalSchedule = (normalBaseLink === nextLink && (lastTargetCat || currentCatId) === currentCatId);
               linkNum = nextLink;
               targetCatId = lastTargetCat || currentCatId;
               status = 'DUTY';
-              isOverridden = true;
-              overrideReason = (muster && muster.remarks) ? `Muster: ${muster.remarks}` : `Return Leg of Multi-Day Link #${nextLink} (Set: ${setDetails.setLinks.join('➔')})`;
+              isOverridden = !isNaturalSchedule;
+              overrideReason = isNaturalSchedule ? '' : ((muster && muster.remarks) ? `Muster: ${muster.remarks}` : `Return Leg of Multi-Day Link #${nextLink} (Set: ${setDetails.setLinks.join('➔')})`);
               lastAssignedLink = nextLink;
             } else {
               lastAssignedLink = null;
@@ -7938,7 +7941,8 @@ app.get('/api/roster', async (req, res) => {
             remarks: overrideReason || (muster ? muster.remarks : null),
             overrideDuty: directOv || subOv,
             muster,
-            allLinks
+            allLinks,
+            categoryId: staff.category_id || currentCatId
           });
 
           rowCells.push({

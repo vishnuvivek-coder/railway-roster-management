@@ -1417,7 +1417,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (duty.remarks || '');
 
           await run(
-            `INSERT INTO ta_approvals (
+            `INSERT OR REPLACE INTO ta_approvals (
               staff_id, month_year, duty_date, date_str, link_number, train_no,
               from_station, to_station, dep_time, arr_time, absence_hours, ta_percentage,
               da_rate, claim_amount, status, object_of_journey, row_order, remarks

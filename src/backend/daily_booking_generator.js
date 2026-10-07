@@ -298,7 +298,10 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
       if (activeLink !== null && status !== 'REST' && status !== 'LEAVE' && status !== 'SICK' && status !== 'CR' && status !== 'ABSENT') {
         linkDef = await get(
           `SELECT * FROM links 
-           WHERE category_id = ? AND link_number = ? AND date(effective_from) <= date(?) AND date(effective_to) >= date(?)
+           WHERE category_id = ? AND link_number = ? 
+             AND (status = 'published' OR status IS NULL OR status = '') 
+             AND (status != 'draft')
+             AND date(effective_from) <= date(?) AND date(effective_to) >= date(?)
            LIMIT 1`,
           [targetCat, activeLink, dateStr, dateStr]
         );
@@ -306,7 +309,9 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
           linkDef = await get(
             `SELECT * FROM links 
              WHERE category_id = ? AND link_number = ? 
-             ORDER BY effective_from ASC LIMIT 1`,
+               AND (status = 'published' OR status IS NULL OR status = '') 
+               AND (status != 'draft')
+             ORDER BY date(effective_from) DESC LIMIT 1`,
             [targetCat, activeLink]
           );
         }

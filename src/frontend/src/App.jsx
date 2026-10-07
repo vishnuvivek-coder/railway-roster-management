@@ -776,7 +776,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
       { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' },
       { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' }
     ]
@@ -826,6 +826,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12603',
     title: '12604 / 12603 (Chennai Express: GNT ➔ MAS)',
     links: [
+      { categoryId: 1, linkNum: 13, altLinkNums: [12], firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
     ]
   },
@@ -837,7 +838,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '20630',
     title: '12734 / 20630 / 17262 (Narayanadri Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 11, firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 11, altLinkNums: [10, 12], firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
       { categoryId: 1, linkNum: 18, firstCoach: 'COR-2', lastTrain: '17262', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' }
     ]
@@ -919,6 +920,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '12604',
     lastTrain: '12603',
     links: [
+      { categoryId: 1, linkNum: 13, altLinkNums: [12], firstCoach: 'AC', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastCoach: 'S1-S5' },
       { categoryId: 2, linkNum: 17, firstCoach: 'S6-S10', lastCoach: 'S6-S10' },
       { categoryId: 2, linkNum: 31, firstCoach: 'S6-S10', lastCoach: 'S6-S10' }
@@ -943,7 +945,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '20629',
     lastTrain: '12733',
     links: [
-      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
       { categoryId: 2, linkNum: 43, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
     ]
   },
@@ -988,7 +990,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '12734',
     lastTrain: '20630',
     links: [
-      { categoryId: 1, linkNum: 11, firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 11, altLinkNums: [10, 12], firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
       { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
       { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
@@ -5958,14 +5960,14 @@ export default function App() {
                       let regularStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) && 
-                        parseInt(d.link_number, 10) === parseInt(lDef.linkNum, 10) &&
+                        (parseInt(d.link_number, 10) === parseInt(lDef.linkNum, 10) || (Array.isArray(lDef.altLinkNums) && lDef.altLinkNums.some(alt => parseInt(alt, 10) === parseInt(d.link_number, 10)))) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
                       // 3. Or original staff who is SICK/LEAVE/CR or AVAILABLE_FOR_BOOKING or SUBSTITUTE or UTILISED_ADVANCE or CHANGED_LINK or EXTRA_CREW on this link
                       let originalSickOrLeaveDuty = staffDuties.find(d =>
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) &&
-                        parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) &&
+                        (parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) || (Array.isArray(lDef.altLinkNums) && lDef.altLinkNums.some(alt => parseInt(alt, 10) === parseInt(d.original_link_number, 10)))) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                         (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
                       );
