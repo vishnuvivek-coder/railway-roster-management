@@ -44,6 +44,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [staffRangeRemarks, setStaffRangeRemarks] = useState('');
   const [savingStaffRange, setSavingStaffRange] = useState(false);
   const [filterOnlySelectedStaff, setFilterOnlySelectedStaff] = useState(false);
+  const [savingStaffId, setSavingStaffId] = useState(null);
+  const [savedStaffMap, setSavedStaffMap] = useState({});
 
   // Name, Designation & HRMS ID editing state
   const [editNameModal, setEditNameModal] = useState(null);
@@ -580,6 +582,74 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       showToast(`❌ Error: ${err.message}`);
     } finally {
       setSavingStaffRange(false);
+    }
+  };
+
+  const handleSaveStaffIndividualMuster = async (staff) => {
+    if (!staff) return;
+    try {
+      setSavingStaffId(staff.id);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      
+      const updates = [];
+      if (staff.days) {
+        Object.entries(staff.days).forEach(([dateStr, dayData]) => {
+          if (dayData && dayData.code) {
+            updates.push({
+              staff_id: staff.id,
+              date: dateStr,
+              code: dayData.code,
+              remarks: dayData.remarks || undefined
+            });
+          }
+        });
+      }
+
+      if (updates.length > 0) {
+        const res = await fetch('/api/muster/batch-update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ updates })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save muster records');
+      }
+
+      await fetchMuster(selectedCycleStart);
+
+      setSavedStaffMap(prev => ({ ...prev, [staff.id]: true }));
+      setTimeout(() => {
+        setSavedStaffMap(prev => ({ ...prev, [staff.id]: false }));
+      }, 3500);
+
+      showToast(`💾 Successfully saved muster details for ${staff.name} permanently!`);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId: staff.id, source: 'muster_roll', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { staffId: staff.id, source: 'muster_roll', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      console.error('Error saving individual muster:', err);
+      showToast(`❌ Error: ${err.message}`);
+    } finally {
+      setSavingStaffId(null);
+    }
+  };
+
+  const handleSaveAllMuster = async () => {
+    try {
+      setLoading(true);
+      await fetchMuster(selectedCycleStart);
+      showToast('💾 All staff muster attendance records verified & saved permanently in database!');
+    } catch (err) {
+      showToast(`❌ Error: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1460,6 +1530,47 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 >
                   <span>↺ Reset Range to Baseline</span>
                 </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingStaffId === selectedStaffObj?.id}
+                  onClick={() => handleSaveStaffIndividualMuster(selectedStaffObj)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: savedStaffMap[selectedStaffObj?.id]
+                      ? 'linear-gradient(135deg, #10b981, #059669)'
+                      : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: savingStaffId === selectedStaffObj?.id ? 'not-allowed' : 'pointer',
+                    fontSize: '0.88rem',
+                    boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)'
+                  }}
+                  title={`Permanently save and commit all muster details for ${selectedStaffObj?.name} to database`}
+                >
+                  {savingStaffId === selectedStaffObj?.id ? (
+                    <>
+                      <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></div>
+                      <span>Saving Muster...</span>
+                    </>
+                  ) : savedStaffMap[selectedStaffObj?.id] ? (
+                    <>
+                      <span>✓</span>
+                      <span>Muster Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>💾</span>
+                      <span>Save Individual Muster ({selectedStaffObj?.name})</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
@@ -1557,6 +1668,23 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   <th style={{ width: '40px', textAlign: 'center', background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', fontWeight: 800 }} title="Compensatory Rest (CR)">CR</th>
                   <th style={{ width: '48px', textAlign: 'center', background: 'rgba(244, 63, 94, 0.12)', color: '#fb7185', fontWeight: 800 }} title="Approved Leaves (CL, CCL, SCL, LAP, LHAP, NH)">Leaves</th>
                   <th style={{ width: '50px', textAlign: 'center', background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', fontWeight: 800 }}>Total</th>
+                  {isAdmin && (
+                    <th
+                      className="no-print muster-col-save"
+                      style={{
+                        width: '105px',
+                        minWidth: '105px',
+                        textAlign: 'center',
+                        background: 'rgba(16, 185, 129, 0.16)',
+                        color: '#34d399',
+                        fontWeight: 800,
+                        borderLeft: '1px solid rgba(255,255,255,0.1)'
+                      }}
+                      title="Save individual employee muster records to database"
+                    >
+                      Save Muster
+                    </th>
+                  )}
                 </tr>
               </thead>
 
@@ -1907,6 +2035,61 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#f43f5e', fontSize: '0.84rem' }}>{staff.counts.totalLeaves}</td>
                     <td style={{ textAlign: 'center', fontWeight: 900, color: 'var(--primary)', fontSize: '0.88rem' }}>{staff.counts.totalDays}</td>
+                    {isAdmin && (
+                      <td
+                        className="no-print muster-col-save"
+                        style={{
+                          textAlign: 'center',
+                          padding: '4px 6px',
+                          whiteSpace: 'nowrap',
+                          borderLeft: '1px solid rgba(255,255,255,0.08)'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSaveStaffIndividualMuster(staff);
+                          }}
+                          disabled={savingStaffId === staff.id}
+                          style={{
+                            background: savedStaffMap[staff.id]
+                              ? 'linear-gradient(135deg, #10b981, #059669)'
+                              : (selectedStaffIdForEdit === staff.id ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(16, 185, 129, 0.16)'),
+                            color: savedStaffMap[staff.id] ? '#ffffff' : (selectedStaffIdForEdit === staff.id ? '#ffffff' : '#34d399'),
+                            border: savedStaffMap[staff.id] ? '1px solid #10b981' : '1px solid rgba(16, 185, 129, 0.4)',
+                            borderRadius: '6px',
+                            padding: '4px 9px',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            cursor: savingStaffId === staff.id ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            boxShadow: selectedStaffIdForEdit === staff.id ? '0 0 10px rgba(16, 185, 129, 0.45)' : 'none',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={`Permanently save muster details for ${staff.name} to database`}
+                        >
+                          {savingStaffId === staff.id ? (
+                            <>
+                              <div className="spinner" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }}></div>
+                              <span>Saving...</span>
+                            </>
+                          ) : savedStaffMap[staff.id] ? (
+                            <>
+                              <span>✓</span>
+                              <span>Saved!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>💾</span>
+                              <span>{selectedStaffIdForEdit === staff.id ? 'Save Muster' : 'Save'}</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -1936,6 +2119,29 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   <td style={{ textAlign: 'center', fontWeight: 900, color: 'var(--primary)' }}>
                     {cycleData.grandTotals.staffCount * cycleData.cycle.totalDays}
                   </td>
+                  {isAdmin && (
+                    <td className="no-print muster-col-save" style={{ textAlign: 'center', padding: '4px 6px', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveAllMuster}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981, #059669)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)'
+                        }}
+                        title="Save all division muster attendance to database"
+                      >
+                        💾 Save All
+                      </button>
+                    </td>
+                  )}
                 </tr>
               </tfoot>
             </table>
@@ -2336,7 +2542,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
                   }}
                 >
-                  {savingCell ? 'Saving...' : '⚡ Apply & Save Range'}
+                  {savingCell ? 'Saving...' : '💾 Save Individual Muster'}
                 </button>
               </div>
             </div>

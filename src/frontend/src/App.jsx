@@ -2225,6 +2225,27 @@ export default function App() {
     }
   };
 
+  const handleSaveMusterRoll = async () => {
+    try {
+      await notifyAllModulesUpdated('muster_save');
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'muster_floating_save', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { source: 'muster_floating_save', timestamp: Date.now() }
+      }));
+      const msg = `💾 All Muster Attendance records, edits & remarks saved permanently to database!`;
+      setTaNdaToast(msg);
+      setDragNotice(msg);
+      setTimeout(() => {
+        setTaNdaToast(null);
+        setDragNotice(null);
+      }, 4500);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Real-time universal synchronization across all tabs and components
   useEffect(() => {
     const handleUniversalRosterUpdate = () => {
@@ -15135,8 +15156,8 @@ export default function App() {
         />
       )}
   
-      {/* Floating Save & Database Sync Dock for Daily Movement & Links */}
-      {(activeTab === 'daily' || activeTab === 'links') && (
+      {/* Floating Save & Database Sync Dock for Daily Movement, Links & Muster */}
+      {(activeTab === 'daily' || activeTab === 'links' || activeTab === 'muster') && (
         <div className="no-print" style={{
           position: 'fixed',
           bottom: '24px',
@@ -15156,7 +15177,7 @@ export default function App() {
             <span style={{ fontSize: '1.1rem' }}>💾</span>
             <div>
               <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary)' }}>
-                {activeTab === 'links' ? 'Links Database Sync Active' : 'Database Auto-Save Active'}
+                {activeTab === 'links' ? 'Links Database Sync Active' : activeTab === 'muster' ? 'Muster Database Sync Active' : 'Database Auto-Save Active'}
               </div>
               <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
                 ● All edits saved permanently
@@ -15166,7 +15187,7 @@ export default function App() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={activeTab === 'links' ? handleSaveLinks : handleSaveDailyRoster}
+            onClick={activeTab === 'links' ? handleSaveLinks : activeTab === 'muster' ? handleSaveMusterRoll : handleSaveDailyRoster}
             style={{
               padding: '6px 14px',
               fontSize: '0.8rem',
@@ -15177,7 +15198,7 @@ export default function App() {
               cursor: 'pointer'
             }}
           >
-            {activeTab === 'links' ? '💾 Save Links' : '💾 Save Roster'}
+            {activeTab === 'links' ? '💾 Save Links' : activeTab === 'muster' ? '💾 Save Muster' : '💾 Save Roster'}
           </button>
         </div>
       )}

@@ -989,6 +989,37 @@ export default function IndividualMusterDocument({
             >
               <span>↺ Reset Range to Baseline</span>
             </button>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={savingRange}
+              onClick={async () => {
+                await loadMusterData();
+                setStatusFeedback({
+                  type: 'success',
+                  message: `💾 Muster for ${staffInfo?.name || 'employee'} verified & saved permanently to database!`
+                });
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                color: '#ffffff',
+                fontWeight: 800,
+                padding: '9px 18px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.88rem',
+                boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)'
+              }}
+              title="Save and lock all muster attendance records to database"
+            >
+              <span>💾</span>
+              <span>Save Individual Muster</span>
+            </button>
           </div>
 
           {/* Feedback Toast Banner */}
