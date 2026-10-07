@@ -36,6 +36,15 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [savingCell, setSavingCell] = useState(false);
   const [rangeEditModal, setRangeEditModal] = useState(null);
 
+  // Select Employee & Edit Muster Details state
+  const [selectedStaffIdForEdit, setSelectedStaffIdForEdit] = useState('');
+  const [staffRangeFromDate, setStaffRangeFromDate] = useState('');
+  const [staffRangeToDate, setStaffRangeToDate] = useState('');
+  const [staffRangeCode, setStaffRangeCode] = useState('P');
+  const [staffRangeRemarks, setStaffRangeRemarks] = useState('');
+  const [savingStaffRange, setSavingStaffRange] = useState(false);
+  const [filterOnlySelectedStaff, setFilterOnlySelectedStaff] = useState(false);
+
   // Name, Designation & HRMS ID editing state
   const [editNameModal, setEditNameModal] = useState(null);
   const [editDesgModal, setEditDesgModal] = useState(null);
@@ -440,18 +449,156 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     }
   };
 
+  // Sync date boundaries when cycle loads
+  useEffect(() => {
+    if (cycleData && cycleData.cycle && cycleData.cycle.dates && cycleData.cycle.dates.length > 0) {
+      const fDate = cycleData.cycle.dates[0].dateStr;
+      const lDate = cycleData.cycle.dates[cycleData.cycle.dates.length - 1].dateStr;
+      if (!staffRangeFromDate) setStaffRangeFromDate(fDate);
+      if (!staffRangeToDate) setStaffRangeToDate(lDate);
+    }
+  }, [cycleData]);
+
+  // Handler: Selecting staff for editing
+  const handleSelectStaffForEdit = (staffId) => {
+    setSelectedStaffIdForEdit(staffId);
+    if (!staffId) return;
+    const dates = cycleData?.cycle?.dates || [];
+    const fDate = dates.length > 0 ? dates[0].dateStr : '';
+    const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
+    setStaffRangeFromDate(fDate);
+    setStaffRangeToDate(lDate);
+    setStaffRangeCode('P');
+    setStaffRangeRemarks('');
+  };
+
+  const selectedStaffObj = useMemo(() => {
+    if (!cycleData || !cycleData.staff || !selectedStaffIdForEdit) return null;
+    return cycleData.staff.find(s => s.id === parseInt(selectedStaffIdForEdit, 10)) || null;
+  }, [cycleData, selectedStaffIdForEdit]);
+
+  const staffRangeDatesList = useMemo(() => {
+    if (!staffRangeFromDate || !staffRangeToDate || staffRangeFromDate > staffRangeToDate) return [];
+    const list = [];
+    let curr = new Date(staffRangeFromDate + 'T12:00:00');
+    const end = new Date(staffRangeToDate + 'T12:00:00');
+    while (curr <= end) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      list.push(`${y}-${m}-${d}`);
+      curr.setDate(curr.getDate() + 1);
+    }
+    return list;
+  }, [staffRangeFromDate, staffRangeToDate]);
+
+  const handleApplyStaffBatchRange = async () => {
+    if (!selectedStaffIdForEdit) {
+      showToast('⚠️ Please select an employee first');
+      return;
+    }
+    if (!staffRangeFromDate || !staffRangeToDate || staffRangeFromDate > staffRangeToDate) {
+      showToast('⚠️ Please select a valid From Date and Upto Date');
+      return;
+    }
+    if (staffRangeDatesList.length === 0) return;
+
+    try {
+      setSavingStaffRange(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const updates = staffRangeDatesList.map(d => ({
+        staff_id: parseInt(selectedStaffIdForEdit, 10),
+        date: d,
+        code: staffRangeCode,
+        remarks: staffRangeRemarks.trim() || undefined
+      }));
+
+      const res = await fetch('/api/muster/batch-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ updates })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update muster records');
+
+      await fetchMuster(selectedCycleStart);
+      showToast(`✓ Successfully updated ${staffRangeDatesList.length} days (${staffRangeFromDate} to ${staffRangeToDate}) to "${staffRangeCode}" for ${selectedStaffObj?.name || 'employee'}!`);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      console.error('Batch muster update error:', err);
+      showToast(`❌ Error: ${err.message}`);
+    } finally {
+      setSavingStaffRange(false);
+    }
+  };
+
+  const handleResetStaffBatchRange = async () => {
+    if (!selectedStaffIdForEdit || staffRangeDatesList.length === 0) return;
+    if (!window.confirm(`Reset ${staffRangeDatesList.length} days to default baseline cyclic duty for ${selectedStaffObj?.name}?`)) {
+      return;
+    }
+
+    try {
+      setSavingStaffRange(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const resets = staffRangeDatesList.map(d => ({
+        staff_id: parseInt(selectedStaffIdForEdit, 10),
+        date: d
+      }));
+
+      const res = await fetch('/api/muster/batch-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ resets })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset muster cells');
+
+      await fetchMuster(selectedCycleStart);
+      showToast(`✓ Successfully reset ${staffRangeDatesList.length} days to cyclic baseline for ${selectedStaffObj?.name}!`);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      console.error('Batch muster reset error:', err);
+      showToast(`❌ Error: ${err.message}`);
+    } finally {
+      setSavingStaffRange(false);
+    }
+  };
+
   const filteredStaff = useMemo(() => {
     if (!cycleData || !cycleData.staff) return [];
-    if (!searchQuery.trim()) return cycleData.staff;
+    let list = cycleData.staff;
+    if (filterOnlySelectedStaff && selectedStaffIdForEdit) {
+      list = list.filter(s => s.id === parseInt(selectedStaffIdForEdit, 10));
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
-    return cycleData.staff.filter(s => 
+    return list.filter(s => 
       (s.name && s.name.toLowerCase().includes(q)) ||
       (s.pf_no && s.pf_no.toLowerCase().includes(q)) ||
       (s.hrms_id && s.hrms_id.toLowerCase().includes(q)) ||
       (s.designation && s.designation.toLowerCase().includes(q)) ||
       (s.categoryName && s.categoryName.toLowerCase().includes(q))
     );
-  }, [cycleData, searchQuery]);
+  }, [cycleData, searchQuery, selectedStaffIdForEdit, filterOnlySelectedStaff]);
 
   const handleExportCSV = () => {
     if (!cycleData || !cycleData.cycle || !cycleData.cycle.dates || !filteredStaff.length) return;
@@ -924,6 +1071,401 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         </div>
       </div>
 
+      {/* 2b. Select Employee & Edit Muster Details (From & Upto Date) Panel */}
+      {isAdmin && cycleData && cycleData.staff && cycleData.staff.length > 0 && (
+        <div className="no-print card" style={{
+          marginBottom: '20px',
+          background: 'linear-gradient(135deg, rgba(24, 24, 27, 0.98), rgba(39, 39, 42, 0.95))',
+          border: '1.5px solid var(--border-gold)',
+          borderRadius: '14px',
+          padding: '16px 20px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)'
+        }}>
+          {/* Header row with Employee Selector Dropdown */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            marginBottom: selectedStaffObj ? '14px' : '0',
+            borderBottom: selectedStaffObj ? '1px solid rgba(255,255,255,0.08)' : 'none',
+            paddingBottom: selectedStaffObj ? '12px' : '0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 320px' }}>
+              <span style={{ fontSize: '1.3rem' }}>👤</span>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.3px', margin: 0 }}>
+                    SELECT ONE EMPLOYEE TO EDIT MUSTER DETAILS:
+                  </label>
+                  {selectedStaffObj && (
+                    <span style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 700 }}>
+                      ✓ Employee Selected
+                    </span>
+                  )}
+                </div>
+                <select
+                  className="form-input"
+                  value={selectedStaffIdForEdit || ''}
+                  onChange={(e) => handleSelectStaffForEdit(e.target.value)}
+                  style={{
+                    width: '100%',
+                    fontSize: '0.88rem',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: '#09090b',
+                    border: '1.5px solid rgba(212, 161, 92, 0.5)',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">-- Choose Employee ({cycleData.staff.length} Employees Available in This Cycle) --</option>
+                  {cycleData.staff.map((s, idx) => (
+                    <option key={s.id} value={s.id}>
+                      #{idx + 1} - {s.name} ({s.designation || 'Staff'}) {s.pf_no ? `[PF: ${s.pf_no}]` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {selectedStaffObj && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setFilterOnlySelectedStaff(!filterOnlySelectedStaff)}
+                  style={{
+                    background: filterOnlySelectedStaff ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                    color: filterOnlySelectedStaff ? '#000000' : '#e2e8f0',
+                    border: '1px solid ' + (filterOnlySelectedStaff ? 'var(--primary)' : 'rgba(255,255,255,0.2)'),
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  title={filterOnlySelectedStaff ? "Show all employees in grid" : "Filter grid below to show only this employee"}
+                >
+                  <span>{filterOnlySelectedStaff ? '👁️ Showing Only This Employee' : '🔍 View Only This Employee in Grid'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedStaffIdForEdit('')}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'var(--color-text-secondary)',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕ Clear Selection
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Expanded Date-Wise Muster Range Editor for the Selected Employee */}
+          {selectedStaffObj && (
+            <div>
+              {/* Employee Summary Card */}
+              <div style={{
+                background: 'rgba(212, 161, 92, 0.08)',
+                border: '1px solid rgba(212, 161, 92, 0.25)',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                marginBottom: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', display: 'block' }}>Editing Muster Details For:</span>
+                  <strong style={{ fontSize: '1.05rem', color: '#ffffff' }}>{selectedStaffObj.name}</strong>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--primary)', marginLeft: '10px', fontWeight: 600 }}>
+                    {selectedStaffObj.designation || 'Staff'} (Commercial)
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#cbd5e1', display: 'flex', gap: '14px' }}>
+                  <span>PF NO: <strong style={{ color: '#fff' }}>{selectedStaffObj.pf_no || '-'}</strong></span>
+                  <span>Present (P): <strong style={{ color: '#10b981' }}>{selectedStaffObj.counts?.P || 0}</strong></span>
+                  <span>Rest (R): <strong style={{ color: '#9ca3af' }}>{selectedStaffObj.counts?.R || 0}</strong></span>
+                  <span>Leaves: <strong style={{ color: '#f59e0b' }}>{selectedStaffObj.counts?.totalLeaves || 0}</strong></span>
+                </div>
+              </div>
+
+              {/* Date Pickers & Presets */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-end', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '4px' }}>
+                    From Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={staffRangeFromDate}
+                    onChange={(e) => setStaffRangeFromDate(e.target.value)}
+                    style={{
+                      background: '#09090b',
+                      border: '1.5px solid rgba(212, 161, 92, 0.5)',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      fontSize: '0.88rem',
+                      fontWeight: 600
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '4px' }}>
+                    Upto Date:
+                  </label>
+                  <input
+                    type="date"
+                    value={staffRangeToDate}
+                    onChange={(e) => setStaffRangeToDate(e.target.value)}
+                    style={{
+                      background: '#09090b',
+                      border: '1.5px solid rgba(212, 161, 92, 0.5)',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      fontSize: '0.88rem',
+                      fontWeight: 600
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Quick Range Presets:
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {(() => {
+                      const dates = cycleData?.cycle?.dates || [];
+                      const fDate = dates.length > 0 ? dates[0].dateStr : '';
+                      const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
+                      const midDate = dates.length > 15 ? dates[14].dateStr : '';
+                      const nextMid = dates.length > 15 ? dates[15].dateStr : '';
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => { setStaffRangeFromDate(fDate); setStaffRangeToDate(lDate); }}
+                            style={{
+                              background: 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              color: '#e2e8f0',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              fontSize: '0.76rem',
+                              cursor: 'pointer',
+                              fontWeight: 700
+                            }}
+                          >
+                            📅 Full Cycle (11th - 10th)
+                          </button>
+                          {midDate && (
+                            <button
+                              type="button"
+                              onClick={() => { setStaffRangeFromDate(fDate); setStaffRangeToDate(midDate); }}
+                              style={{
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                color: '#e2e8f0',
+                                borderRadius: '6px',
+                                padding: '6px 10px',
+                                fontSize: '0.76rem',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                            >
+                              1️⃣ 11th to 25th
+                            </button>
+                          )}
+                          {nextMid && (
+                            <button
+                              type="button"
+                              onClick={() => { setStaffRangeFromDate(nextMid); setStaffRangeToDate(lDate); }}
+                              style={{
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                color: '#e2e8f0',
+                                borderRadius: '6px',
+                                padding: '6px 10px',
+                                fontSize: '0.76rem',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                            >
+                              2️⃣ 26th to 10th
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (dates.length >= 7) {
+                                setStaffRangeFromDate(fDate);
+                                setStaffRangeToDate(dates[6].dateStr);
+                              }
+                            }}
+                            style={{
+                              background: 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              color: '#e2e8f0',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              fontSize: '0.76rem',
+                              cursor: 'pointer',
+                              fontWeight: 600
+                            }}
+                          >
+                            7️⃣ First 7 Days
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Attendance Code Selection */}
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+                    Select Attendance Code to Apply:
+                  </label>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                    Active: <strong style={{ color: 'var(--primary)' }}>{staffRangeCode}</strong> ({MUSTER_CODES.find(o => o.code === staffRangeCode)?.label || staffRangeCode})
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                  {MUSTER_CODES.map(c => {
+                    const isSelected = staffRangeCode === c.code;
+                    return (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => setStaffRangeCode(c.code)}
+                        style={{
+                          background: isSelected ? c.color : 'rgba(255,255,255,0.06)',
+                          color: isSelected ? '#ffffff' : c.color,
+                          border: isSelected ? '2px solid #ffffff' : '1px solid rgba(255,255,255,0.14)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: isSelected ? `0 0 12px ${c.color}80` : 'none',
+                          transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <span style={{ fontSize: '0.92rem' }}>{c.code}</span>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.9, fontWeight: 500 }}>
+                          {c.code === 'P' ? 'Duty' : c.code === 'R' ? 'Rest' : c.code === 'O' ? 'Absent' : c.code === 'E' ? 'Emerg' : c.code}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Remarks and Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 260px' }}>
+                  <input
+                    type="text"
+                    placeholder="Remarks / Reason (Optional - e.g. Approved leave, Sick memo, Spl order)"
+                    value={staffRangeRemarks}
+                    onChange={(e) => setStaffRangeRemarks(e.target.value)}
+                    style={{
+                      background: '#09090b',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '0.85rem',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingStaffRange || staffRangeDatesList.length === 0}
+                  onClick={handleApplyStaffBatchRange}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    padding: '9px 22px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: (savingStaffRange || staffRangeDatesList.length === 0) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {savingStaffRange ? (
+                    <>
+                      <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
+                      <span>Saving {staffRangeDatesList.length} Days...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚡</span>
+                      <span>Apply & Save to Selected Dates ({staffRangeDatesList.length} {staffRangeDatesList.length === 1 ? 'Day' : 'Days'})</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={savingStaffRange || staffRangeDatesList.length === 0}
+                  onClick={handleResetStaffBatchRange}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#e2e8f0',
+                    fontWeight: 600,
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    cursor: (savingStaffRange || staffRangeDatesList.length === 0) ? 'not-allowed' : 'pointer',
+                    fontSize: '0.85rem'
+                  }}
+                  title="Reset selected dates back to cyclic link duty"
+                >
+                  <span>↺ Reset Range to Baseline</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 2. Loading / Error States */}
       {loading && (
         <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
@@ -1039,7 +1581,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                       onDragLeave={handleDragLeaveRow}
                       onDrop={(e) => handleDropRow(e, staff, sIdx)}
                       className={`muster-row-draggable ${dragClass}`}
-                      style={{ borderBottom: '1px solid var(--border-glass)' }}
+                      style={{
+                        borderBottom: '1px solid var(--border-glass)',
+                        background: selectedStaffIdForEdit === staff.id ? 'rgba(212, 161, 92, 0.08)' : undefined
+                      }}
                     >
                       {/* Fixed Left S.No with Drag Grip */}
                       <td className="muster-col-sno" style={{ userSelect: 'none' }}>
@@ -1094,6 +1639,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               className="no-print"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleSelectStaffForEdit(staff.id);
                                 const dates = cycleData?.cycle?.dates || [];
                                 const fDate = dates.length > 0 ? dates[0].dateStr : '';
                                 const lDate = dates.length > 0 ? dates[dates.length - 1].dateStr : '';
@@ -1108,19 +1654,24 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                                 });
                               }}
                               style={{
-                                background: 'rgba(212, 161, 92, 0.15)',
-                                border: '1px solid rgba(212, 161, 92, 0.35)',
-                                color: 'var(--primary)',
+                                background: selectedStaffIdForEdit === staff.id ? 'var(--primary)' : 'rgba(212, 161, 92, 0.22)',
+                                border: '1px solid var(--border-gold)',
+                                color: selectedStaffIdForEdit === staff.id ? '#000000' : 'var(--primary)',
                                 borderRadius: '6px',
-                                padding: '2px 7px',
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
+                                padding: '3px 8px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
                                 cursor: 'pointer',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.25)'
                               }}
-                              title={`Edit muster details date-wise (From - Upto) for ${staff.name}`}
+                              title={`Select ${staff.name} and edit muster details date-wise`}
                             >
-                              📅 Range
+                              <span>⚡</span>
+                              <span>Edit Muster</span>
                             </button>
                           )}
                         </div>
