@@ -2158,6 +2158,71 @@ export default function App() {
     }
   };
 
+  const handleSaveLinks = async () => {
+    if (!isAdmin) return;
+    try {
+      const catId = selectedCatId === 'ALL' ? '1' : (selectedCatId || '1');
+      const targetSetId = selectedLinkSetId;
+      const currentSet = linkSetsList.find(s => String(s.id) === String(targetSetId));
+      const isSetDraft = currentSet?.status === 'draft';
+
+      // 0. If user has an active editing form in the left drawer, commit it first
+      if (editingLink) {
+        const url = `${API_BASE}/links/${editingLink.id}`;
+        await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            category_id: parseInt(linkForm.category_id || catId, 10),
+            link_set_id: targetSetId || null,
+            ...linkForm,
+            status: isSetDraft ? 'draft' : (editingLink.status || 'published'),
+            effective_from: linkForm.effective_from || (currentSet?.effective_from || ''),
+            effective_to: currentSet?.effective_to || '9999-12-31',
+            link_number: parseInt(linkForm.link_number, 10)
+          })
+        });
+        setEditingLink(null);
+        setLinkForm({
+          category_id: catId,
+          link_number: '', train_numbers: '', from_station: '', to_station: '', coaches: '', is_rest: false,
+          effective_from: currentSet?.effective_from || '2026-07-01', set_type: '2-Day Set'
+        });
+      }
+
+      // 1. Re-fetch all links and link sets to verify database state
+      await fetchLinks(selectedCatId, selectedLinkSetId);
+      await fetchLinkSets(selectedCatId);
+
+      // 2. Synchronize across all modules if not draft
+      if (!isSetDraft) {
+        await notifyAllModulesUpdated('links_explicit_save');
+      }
+
+      // 3. Dispatch real-time universal events
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'links_save', timestamp: Date.now() }
+      }));
+      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+        detail: { source: 'links_save', timestamp: Date.now() }
+      }));
+
+      const catName = categories.find(c => String(c.id) === String(catId))?.name || 'Current Category';
+      const msg = `✅ All edited links (${catName}${isSetDraft ? ' - Draft' : ''}) are permanently saved in database and synchronized across Daily Movement, Roster Grid, and Muster Roll!`;
+      setTaNdaToast(msg);
+      setDragNotice(msg);
+      setTimeout(() => {
+        setTaNdaToast(null);
+        setDragNotice(null);
+      }, 5000);
+    } catch (err) {
+      alert(`Error saving links: ${err.message}`);
+    }
+  };
+
   // Real-time universal synchronization across all tabs and components
   useEffect(() => {
     const handleUniversalRosterUpdate = () => {
@@ -10555,6 +10620,27 @@ export default function App() {
                         >
                           <span>➕</span> Add New Link
                         </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={handleSaveLinks}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '0.84rem',
+                            padding: '6px 16px',
+                            borderRadius: '8px',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            border: 'none',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
+                          }}
+                          title="Save and permanently synchronize all edited links to database"
+                        >
+                          <span>💾</span> Save Links
+                        </button>
                       </div>
                     )}
                   </div>
@@ -10651,6 +10737,30 @@ export default function App() {
                       >
                         <span>📋</span> All Sets View
                       </button>
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={handleSaveLinks}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '0.82rem',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            border: 'none',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
+                          }}
+                          title="Save and permanently synchronize all edited links to database"
+                        >
+                          <span>💾</span> Save Links
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -10903,32 +11013,59 @@ export default function App() {
                           </span>
                         </div>
 
-                        <div style={{ position: 'relative', minWidth: '240px' }}>
-                          <input
-                            type="text"
-                            className="form-input"
-                            placeholder="🔍 Filter links, trains, routes..."
-                            value={linkSearchQuery}
-                            onChange={(e) => setLinkSearchQuery(e.target.value)}
-                            style={{ padding: '6px 12px', fontSize: '0.82rem', width: '100%' }}
-                          />
-                          {linkSearchQuery && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ position: 'relative', minWidth: '240px' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="🔍 Filter links, trains, routes..."
+                              value={linkSearchQuery}
+                              onChange={(e) => setLinkSearchQuery(e.target.value)}
+                              style={{ padding: '6px 12px', fontSize: '0.82rem', width: '100%' }}
+                            />
+                            {linkSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setLinkSearchQuery('')}
+                                style={{
+                                  position: 'absolute',
+                                  right: '8px',
+                                  top: '50%',
+                                  transform: 'translateY(-50%)',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: 'var(--color-text-secondary)',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          {isAdmin && (
                             <button
                               type="button"
-                              onClick={() => setLinkSearchQuery('')}
+                              className="btn btn-primary"
+                              onClick={handleSaveLinks}
                               style={{
-                                position: 'absolute',
-                                right: '8px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                background: 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '0.82rem',
+                                padding: '6px 14px',
+                                borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                                 border: 'none',
-                                color: 'var(--color-text-secondary)',
+                                fontWeight: 800,
                                 cursor: 'pointer',
-                                fontSize: '0.8rem'
+                                whiteSpace: 'nowrap',
+                                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
                               }}
+                              title="Save and synchronize all edited links to database"
                             >
-                              ✕
+                              <span>💾</span> Save Links
                             </button>
                           )}
                         </div>
@@ -14996,8 +15133,8 @@ export default function App() {
         />
       )}
   
-      {/* Floating Save & Database Sync Dock for Daily Movement */}
-      {activeTab === 'daily' && (
+      {/* Floating Save & Database Sync Dock for Daily Movement & Links */}
+      {(activeTab === 'daily' || activeTab === 'links') && (
         <div className="no-print" style={{
           position: 'fixed',
           bottom: '24px',
@@ -15017,7 +15154,7 @@ export default function App() {
             <span style={{ fontSize: '1.1rem' }}>💾</span>
             <div>
               <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary)' }}>
-                Database Auto-Save Active
+                {activeTab === 'links' ? 'Links Database Sync Active' : 'Database Auto-Save Active'}
               </div>
               <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
                 ● All edits saved permanently
@@ -15027,7 +15164,7 @@ export default function App() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={handleSaveDailyRoster}
+            onClick={activeTab === 'links' ? handleSaveLinks : handleSaveDailyRoster}
             style={{
               padding: '6px 14px',
               fontSize: '0.8rem',
@@ -15038,7 +15175,7 @@ export default function App() {
               cursor: 'pointer'
             }}
           >
-            💾 Save Roster
+            {activeTab === 'links' ? '💾 Save Links' : '💾 Save Roster'}
           </button>
         </div>
       )}
