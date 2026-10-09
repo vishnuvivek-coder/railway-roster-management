@@ -6,7 +6,7 @@ const API_BASE = '/api';
 
 const computePresetDates = (preset, y, m) => {
   const yr = parseInt(y, 10) || 2026;
-  const mo = parseInt(m, 10) || 9;
+  const mo = parseInt(m, 10) || 10;
   const lastDay = new Date(yr, mo, 0).getDate();
 
   const prevYr = mo === 1 ? yr - 1 : yr;
@@ -54,7 +54,7 @@ export default function TaDocument({
   const [staffList, setStaffList] = useState([]);
   const [internalStaffId, setInternalStaffId] = useState('');
   const [internalYear, setInternalYear] = useState('2026');
-  const [internalMonth, setInternalMonth] = useState('9');
+  const [internalMonth, setInternalMonth] = useState('10');
 
   const selectedStaffId = propSelectedStaffId !== undefined ? propSelectedStaffId : internalStaffId;
   const setSelectedStaffId = propSetSelectedStaffId || setInternalStaffId;
@@ -137,7 +137,7 @@ export default function TaDocument({
     hq: 'GNT',
     name: 'K V R RAO',
     designation: 'CTI',
-    month_name: 'AUGUST',
+    month_name: '30/09/2026 TO 31/10/2026',
     year: '2026',
     pay: '68000',
     pf_no: '07323475',
@@ -1170,11 +1170,7 @@ export default function TaDocument({
                 fontWeight: periodPreset === 'full_month' ? 700 : 500
               }}
             >
-              {(() => {
-                const now = new Date();
-                const isCur = now.getFullYear() === parseInt(year, 10) && (now.getMonth() + 1) === parseInt(month, 10);
-                return isCur ? `Up-to-Date (Prev 30th – ${now.getDate()}th)` : 'Prev 30th to Month-End';
-              })()}
+              📅 Prev 30th to Month-End (Full Month)
             </button>
             <button
               type="button"
@@ -1914,7 +1910,7 @@ export default function TaDocument({
                           {!row.isEmptyPadding && (
                             <input
                               type="text"
-                              value={row.date_str || ''}
+                              value={(row.is_same_date_as_prev && !row.is_leave && row.train_no !== '---') ? '"' : (row.date_str || '')}
                               onChange={(e) => handleCellChange(actualIdx, 'date_str', e.target.value)}
                               style={cellInputStyle}
                             />

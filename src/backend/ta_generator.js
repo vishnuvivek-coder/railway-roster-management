@@ -1125,17 +1125,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
 
   const daysInMonth = new Date(year, month, 0).getDate();
-  let maxDay = daysInMonth;
-  if (year > currentYear || (year === currentYear && month > currentMonth)) {
-    // Future month -> no duties performed yet
-    maxDay = 0;
-  } else if (year === currentYear && month === currentMonth) {
-    // Current month -> strictly up to current date (today)
-    maxDay = Math.min(daysInMonth, currentDay);
-  } else {
-    // Past month -> all days performed
-    maxDay = daysInMonth;
-  }
+  const maxDay = daysInMonth;
 
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
@@ -1297,6 +1287,9 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           allLinks: Object.values(linkMap)
         });
 
+        let duties = [];
+        let linkNum = null;
+
         if (cmp.action === 'SKIP') {
           // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
           lastAssignedLink = null;
@@ -1305,19 +1298,23 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         }
 
         if (cmp.action === 'STANDBY') {
-          isStandbyHq = true;
           lastAssignedLink = null;
           lastAssignedNonDaily = null;
           continue;
         }
 
-        let duties = [];
-        let linkNum = null;
-        let isStandbyHq = false;
-
         if (cmp.action === 'LEAVE') {
           isEffectiveLeave = true;
-          duties = [];
+          const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
+          duties = [{
+            train_no: '---',
+            from: '---',
+            to: '---',
+            dep: '---',
+            arr: '---',
+            remarks: cmp.remarks || `${effLeaveCode} Leave`,
+            is_leave: true
+          }];
           lastAssignedLink = null;
           lastAssignedNonDaily = null;
         } else if (cmp.action === 'DISPLAY') {
@@ -1507,12 +1504,14 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   // 1. Ensure claims exist in ta_approvals for all months covered in the range
   const monthsCovered = getMonthsBetween(actualStart, actualEnd);
   for (const mInfo of monthsCovered) {
-    const totalDaysInMo = new Date(mInfo.year, mInfo.month, 0).getDate();
     const existingClaims = await all(
-      'SELECT COUNT(DISTINCT duty_date) as cnt FROM ta_approvals WHERE staff_id = ? AND month_year = ?',
+      'SELECT COUNT(DISTINCT duty_date) as cnt, MAX(duty_date) as max_date FROM ta_approvals WHERE staff_id = ? AND month_year = ?',
       [staffId, mInfo.monthYearStr]
     );
-    const hasFullClaims = existingClaims && existingClaims[0] && existingClaims[0].cnt >= totalDaysInMo;
+    const cnt = existingClaims && existingClaims[0] ? existingClaims[0].cnt : 0;
+    const maxDate = existingClaims && existingClaims[0] ? existingClaims[0].max_date : null;
+    const expectedEndPrefix = `${mInfo.year}-${String(mInfo.month).padStart(2, '0')}-25`;
+    const hasFullClaims = cnt > 0 && maxDate && maxDate >= expectedEndPrefix;
     if (!hasFullClaims) {
       await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
     }

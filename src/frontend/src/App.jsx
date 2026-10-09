@@ -1139,9 +1139,9 @@ export default function App() {
   });
   const [docMonth, setDocMonth] = useState(() => {
     try {
-      return localStorage.getItem('railway_doc_month') || '8';
+      return localStorage.getItem('railway_doc_month') || '10';
     } catch (e) {
-      return '8';
+      return '10';
     }
   });
   const [individualMusterModalOpen, setIndividualMusterModalOpen] = useState(false);
