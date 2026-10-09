@@ -11180,6 +11180,176 @@ app.post('/api/muster/reorder', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/muster/add-employee - Add new or existing employee to Muster Roll
+app.post('/api/muster/add-employee', async (req, res) => {
+  if (req.user && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
+  }
+  try {
+    const {
+      mode, // 'new' | 'existing'
+      name,
+      designation,
+      category_id,
+      pf_no,
+      hrms_id,
+      rest_day,
+      seniority_no,
+      existing_staff_id
+    } = req.body;
+
+    const targetCatId = parseInt(category_id, 10) || 1;
+
+    if (mode === 'existing') {
+      if (!existing_staff_id) {
+        return res.status(400).json({ error: 'existing_staff_id is required' });
+      }
+      const existing = await get('SELECT * FROM staff WHERE id = ?', [existing_staff_id]);
+      if (!existing) {
+        return res.status(404).json({ error: 'Staff member not found' });
+      }
+
+      const maxRow = await get('SELECT MAX(row_position) as maxPos FROM staff WHERE category_id = ?', [targetCatId]);
+      const nextPos = (maxRow?.maxPos || 0) + 1;
+
+      await run(
+        `UPDATE staff 
+         SET category_id = ?, 
+             row_position = ?, 
+             designation = COALESCE(?, designation),
+             rest_day = COALESCE(?, rest_day),
+             pf_no = COALESCE(?, pf_no),
+             hrms_id = COALESCE(?, hrms_id),
+             seniority_no = COALESCE(?, seniority_no)
+         WHERE id = ?`,
+        [targetCatId, nextPos, designation || null, rest_day || null, pf_no || null, hrms_id || null, seniority_no || null, existing_staff_id]
+      );
+
+      if (targetCatId === 4) {
+        try {
+          await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
+        } catch (e) {}
+      }
+
+      await logAudit(req.user ? req.user.role : 'Admin', 'ADD_MUSTER_EMPLOYEE', `Added existing staff '${existing.name}' to Category ${targetCatId} at position ${nextPos}`);
+
+      return res.json({
+        success: true,
+        message: `Successfully added ${existing.name} to Muster (Category ${targetCatId})!`,
+        staffId: existing_staff_id,
+        rowPosition: nextPos
+      });
+    }
+
+    // Mode: 'new'
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Employee name is required' });
+    }
+
+    const cleanName = name.trim().toUpperCase();
+    const cleanDesg = (designation || 'TTI').trim().toUpperCase();
+    const cleanPf = pf_no ? pf_no.trim().toUpperCase() : null;
+    const cleanHrms = hrms_id ? hrms_id.trim().toUpperCase() : null;
+    const cleanRest = rest_day ? rest_day.trim().toUpperCase() : 'SUN';
+
+    const maxRow = await get('SELECT MAX(row_position) as maxPos FROM staff WHERE category_id = ?', [targetCatId]);
+    const nextPos = (maxRow?.maxPos || 0) + 1;
+
+    let senNo = parseInt(seniority_no, 10);
+    if (!senNo || isNaN(senNo)) {
+      const maxSen = await get('SELECT MAX(seniority_no) as maxSen FROM staff WHERE seniority_no < 9000');
+      senNo = (maxSen?.maxSen || 100) + 1;
+    }
+
+    const insResult = await run(
+      `INSERT INTO staff (name, designation, category_id, row_position, rest_day, pf_no, hrms_id, seniority_no)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cleanName, cleanDesg, targetCatId, nextPos, cleanRest, cleanPf, cleanHrms, senNo]
+    );
+
+    if (targetCatId === 4) {
+      try {
+        await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
+      } catch (e) {}
+    }
+
+    await logAudit(req.user ? req.user.role : 'Admin', 'ADD_MUSTER_EMPLOYEE', `Created new staff '${cleanName}' in Category ${targetCatId} at position ${nextPos}`);
+
+    res.json({
+      success: true,
+      message: `Successfully created and added ${cleanName} to Muster!`,
+      staffId: insResult.lastID,
+      rowPosition: nextPos
+    });
+  } catch (err) {
+    console.error('Error adding employee to muster:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/muster/delete-employee - Delete or remove employee from Muster Roll
+app.post('/api/muster/delete-employee', async (req, res) => {
+  if (req.user && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
+  }
+  try {
+    const { staff_id, permanent_delete } = req.body;
+    if (!staff_id) {
+      return res.status(400).json({ error: 'staff_id is required' });
+    }
+
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    const staffName = staff.name;
+    const catId = staff.category_id;
+    const oldPos = staff.row_position;
+
+    if (permanent_delete) {
+      await run('DELETE FROM staff WHERE id = ?', [staff_id]);
+      await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]);
+      await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]);
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]);
+    } else {
+      await run('UPDATE staff SET category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
+    }
+
+    if (catId) {
+      const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
+      for (let i = 0; i < remaining.length; i++) {
+        await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remaining[i].id]);
+      }
+      if (catId === 4) {
+        try {
+          await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
+        } catch (e) {}
+      }
+    }
+
+    await logAudit(
+      req.user ? req.user.role : 'Admin',
+      'DELETE_MUSTER_EMPLOYEE',
+      `${permanent_delete ? 'Permanently deleted' : 'Removed from Muster/category'} staff '${staffName}' (ID: ${staff_id})`
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully ${permanent_delete ? 'deleted' : 'removed'} ${staffName} from Muster.`,
+      staffId: staff_id
+    });
+  } catch (err) {
+    console.error('Error deleting employee from muster:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ----------------------------------------------------
 // LEAVE RESERVE (LR) SHEET / LIST ENDPOINTS & HELPERS
 // ----------------------------------------------------

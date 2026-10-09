@@ -55,6 +55,27 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const [hrmsInputVal, setHrmsInputVal] = useState('');
   const [savingStaffField, setSavingStaffField] = useState(false);
 
+  // Add & Delete Employee in Muster state
+  const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+  const [addEmployeeMode, setAddEmployeeMode] = useState('new'); // 'new' | 'existing'
+  const [addEmployeeForm, setAddEmployeeForm] = useState({
+    name: '',
+    designation: 'TTI',
+    category_id: '1',
+    pf_no: '',
+    hrms_id: '',
+    rest_day: 'SUN',
+    seniority_no: ''
+  });
+  const [addingEmployee, setAddingEmployee] = useState(false);
+  const [existingStaffOptions, setExistingStaffOptions] = useState([]);
+  const [selectedExistingStaffId, setSelectedExistingStaffId] = useState('');
+
+  // Delete Employee state
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [deletePermanent, setDeletePermanent] = useState(false);
+  const [deletingEmployee, setDeletingEmployee] = useState(false);
+
   // Drag & Drop reordering state for the combined 3 columns
   const [draggedStaffId, setDraggedStaffId] = useState(null);
   const [dragOverStaffId, setDragOverStaffId] = useState(null);
@@ -297,6 +318,131 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       alert('Error resetting cell: ' + err.message);
     } finally {
       setSavingCell(false);
+    }
+  };
+
+  const handleOpenAddEmployeeModal = async () => {
+    setShowAddEmployeeModal(true);
+    setAddEmployeeMode('new');
+    setAddEmployeeForm({
+      name: '',
+      designation: 'TTI',
+      category_id: (selectedCategory && selectedCategory !== 'ALL') ? selectedCategory : '1',
+      pf_no: '',
+      hrms_id: '',
+      rest_day: 'SUN',
+      seniority_no: ''
+    });
+    setSelectedExistingStaffId('');
+    try {
+      const res = await fetch('/api/staff');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setExistingStaffOptions(data.filter(s => !s.name.includes('VACANT')));
+      }
+    } catch (err) {
+      console.error('Error fetching staff for add modal:', err);
+    }
+  };
+
+  const handleSaveAddEmployee = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setAddingEmployee(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      
+      const payload = addEmployeeMode === 'existing'
+        ? {
+            mode: 'existing',
+            existing_staff_id: selectedExistingStaffId,
+            category_id: addEmployeeForm.category_id,
+            designation: addEmployeeForm.designation,
+            rest_day: addEmployeeForm.rest_day,
+            pf_no: addEmployeeForm.pf_no,
+            hrms_id: addEmployeeForm.hrms_id
+          }
+        : {
+            mode: 'new',
+            name: addEmployeeForm.name,
+            designation: addEmployeeForm.designation,
+            category_id: addEmployeeForm.category_id,
+            rest_day: addEmployeeForm.rest_day,
+            pf_no: addEmployeeForm.pf_no,
+            hrms_id: addEmployeeForm.hrms_id,
+            seniority_no: addEmployeeForm.seniority_no
+          };
+
+      if (addEmployeeMode === 'new' && (!payload.name || !payload.name.trim())) {
+        alert('Please enter employee name.');
+        return;
+      }
+      if (addEmployeeMode === 'existing' && !payload.existing_staff_id) {
+        alert('Please select an existing staff member.');
+        return;
+      }
+
+      const res = await fetch('/api/muster/add-employee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to add employee');
+      }
+
+      setShowAddEmployeeModal(false);
+      showToast(data.message || 'Employee added to Muster Roll successfully!');
+      await fetchMuster(selectedCycleStart);
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'muster_add_employee', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error adding employee: ' + err.message);
+    } finally {
+      setAddingEmployee(false);
+    }
+  };
+
+  const handleConfirmDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+    try {
+      setDeletingEmployee(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const res = await fetch('/api/muster/delete-employee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({
+          staff_id: employeeToDelete.id,
+          permanent_delete: deletePermanent
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete employee');
+      }
+
+      const deletedStaffId = employeeToDelete.id;
+      setEmployeeToDelete(null);
+      setDeletePermanent(false);
+      if (selectedStaffIdForEdit === deletedStaffId) {
+        setSelectedStaffIdForEdit('');
+      }
+      showToast(data.message || 'Employee removed from Muster Roll.');
+      await fetchMuster(selectedCycleStart);
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'muster_delete_employee', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error deleting employee: ' + err.message);
+    } finally {
+      setDeletingEmployee(false);
     }
   };
 
@@ -888,6 +1034,31 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             >
               Save Muster
             </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn"
+                onClick={handleOpenAddEmployeeModal}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #d4a15c 0%, #b8860b 100%)',
+                  color: '#000000',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(212, 161, 92, 0.25)'
+                }}
+                title="Add a new or existing employee to Muster Roll"
+              >
+                <span>➕</span>
+                <span>Add Employee</span>
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-primary"
@@ -1221,6 +1392,31 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   title={filterOnlySelectedStaff ? "Show all employees in grid" : "Filter grid below to show only this employee"}
                 >
                   <span>{filterOnlySelectedStaff ? 'Showing Only This Employee' : 'View Only This Employee in Grid'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmployeeToDelete(selectedStaffObj);
+                    setDeletePermanent(false);
+                  }}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.16)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#f87171',
+                    borderRadius: '8px',
+                    padding: '6px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  title={`Delete or remove ${selectedStaffObj.name} from Muster`}
+                >
+                  <span>🗑️</span>
+                  <span>Delete Employee</span>
                 </button>
 
                 <button
@@ -1668,17 +1864,17 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     <th
                       className="no-print muster-col-save"
                       style={{
-                        width: '105px',
-                        minWidth: '105px',
+                        width: '150px',
+                        minWidth: '150px',
                         textAlign: 'center',
                         background: 'rgba(16, 185, 129, 0.16)',
                         color: '#34d399',
                         fontWeight: 800,
                         borderLeft: '1px solid rgba(255,255,255,0.1)'
                       }}
-                      title="Save individual employee muster records to database"
+                      title="Actions: Save or Delete individual employee"
                     >
-                      Save Muster
+                      Actions
                     </th>
                   )}
                 </tr>
@@ -2036,47 +2232,76 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                           borderLeft: '1px solid rgba(255,255,255,0.08)'
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSaveStaffIndividualMuster(staff);
-                          }}
-                          disabled={savingStaffId === staff.id}
-                          style={{
-                            background: savedStaffMap[staff.id]
-                              ? 'linear-gradient(135deg, #10b981, #059669)'
-                              : (selectedStaffIdForEdit === staff.id ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(16, 185, 129, 0.16)'),
-                            color: savedStaffMap[staff.id] ? '#ffffff' : (selectedStaffIdForEdit === staff.id ? '#ffffff' : '#34d399'),
-                            border: savedStaffMap[staff.id] ? '1px solid #10b981' : '1px solid rgba(16, 185, 129, 0.4)',
-                            borderRadius: '6px',
-                            padding: '4px 9px',
-                            fontSize: '0.74rem',
-                            fontWeight: 800,
-                            cursor: savingStaffId === staff.id ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            boxShadow: selectedStaffIdForEdit === staff.id ? '0 0 10px rgba(16, 185, 129, 0.45)' : 'none',
-                            transition: 'all 0.15s ease'
-                          }}
-                          title={`Permanently save muster details for ${staff.name} to database`}
-                        >
-                          {savingStaffId === staff.id ? (
-                            <>
-                              <div className="spinner" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }}></div>
-                              <span>Saving...</span>
-                            </>
-                          ) : savedStaffMap[staff.id] ? (
-                            <>
-                              <span>Saved!</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>{selectedStaffIdForEdit === staff.id ? 'Save Muster' : 'Save'}</span>
-                            </>
-                          )}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveStaffIndividualMuster(staff);
+                            }}
+                            disabled={savingStaffId === staff.id}
+                            style={{
+                              background: savedStaffMap[staff.id]
+                                ? 'linear-gradient(135deg, #10b981, #059669)'
+                                : (selectedStaffIdForEdit === staff.id ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(16, 185, 129, 0.16)'),
+                              color: savedStaffMap[staff.id] ? '#ffffff' : (selectedStaffIdForEdit === staff.id ? '#ffffff' : '#34d399'),
+                              border: savedStaffMap[staff.id] ? '1px solid #10b981' : '1px solid rgba(16, 185, 129, 0.4)',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              cursor: savingStaffId === staff.id ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              boxShadow: selectedStaffIdForEdit === staff.id ? '0 0 10px rgba(16, 185, 129, 0.45)' : 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Permanently save muster details for ${staff.name} to database`}
+                          >
+                            {savingStaffId === staff.id ? (
+                              <>
+                                <div className="spinner" style={{ width: '10px', height: '10px', borderWidth: '1.5px' }}></div>
+                                <span>Saving...</span>
+                              </>
+                            ) : savedStaffMap[staff.id] ? (
+                              <>
+                                <span>Saved!</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>{selectedStaffIdForEdit === staff.id ? 'Save Muster' : 'Save'}</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEmployeeToDelete(staff);
+                              setDeletePermanent(false);
+                            }}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.14)',
+                              color: '#f87171',
+                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                              borderRadius: '6px',
+                              padding: '4px 7px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Delete or remove ${staff.name} from Muster`}
+                          >
+                            <span>🗑️</span>
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -2739,6 +2964,433 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 style={{ fontSize: '0.82rem', padding: '7px 18px', fontWeight: 800, borderRadius: '8px' }}
               >
                 {savingStaffField ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Employee Modal */}
+      {showAddEmployeeModal && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.78)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '480px',
+            maxWidth: '100%',
+            background: 'var(--bg-secondary)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '1.5px solid var(--border-gold)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.85)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>➕</span>
+                <span>Add Employee to Muster</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddEmployeeModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.3rem' }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Mode Selector Switcher */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setAddEmployeeMode('new')}
+                style={{
+                  flex: 1,
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.82rem',
+                  fontWeight: addEmployeeMode === 'new' ? 800 : 600,
+                  background: addEmployeeMode === 'new' ? 'var(--primary)' : 'transparent',
+                  color: addEmployeeMode === 'new' ? '#000' : 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                🆕 Create New Employee
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddEmployeeMode('existing')}
+                style={{
+                  flex: 1,
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.82rem',
+                  fontWeight: addEmployeeMode === 'existing' ? 800 : 600,
+                  background: addEmployeeMode === 'existing' ? 'var(--primary)' : 'transparent',
+                  color: addEmployeeMode === 'existing' ? '#000' : 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                👥 Add Existing Staff
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAddEmployee}>
+              {addEmployeeMode === 'new' ? (
+                <>
+                  <div className="form-group" style={{ marginBottom: '12px' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                      Employee Full Name: <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      required
+                      className="form-input"
+                      placeholder="e.g. K S RAMESH"
+                      value={addEmployeeForm.name}
+                      onChange={e => setAddEmployeeForm(prev => ({ ...prev, name: e.target.value }))}
+                      style={{ fontSize: '0.88rem', padding: '8px 12px', textTransform: 'uppercase', width: '100%', borderRadius: '8px' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        Designation:
+                      </label>
+                      <select
+                        className="form-input"
+                        value={addEmployeeForm.designation}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, designation: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                      >
+                        <option value="CTI">CTI</option>
+                        <option value="TTI">TTI</option>
+                        <option value="Sr.CCTC">Sr.CCTC</option>
+                        <option value="CCTC">CCTC</option>
+                        <option value="SRTE">SRTE</option>
+                        <option value="TE">TE</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        Category:
+                      </label>
+                      <select
+                        className="form-input"
+                        value={addEmployeeForm.category_id}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, category_id: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                      >
+                        <option value="1">Conductors (COR)</option>
+                        <option value="2">TTI / Sleeper Staff</option>
+                        <option value="3">Ladies Staff / TTE</option>
+                        <option value="4">Leave Reserve (LR)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        HRMS ID:
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. HRMS01"
+                        value={addEmployeeForm.hrms_id}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, hrms_id: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', textTransform: 'uppercase', width: '100%', borderRadius: '8px' }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        PF Number:
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 2460732890"
+                        value={addEmployeeForm.pf_no}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, pf_no: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', textTransform: 'uppercase', width: '100%', borderRadius: '8px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        Weekly Rest Day:
+                      </label>
+                      <select
+                        className="form-input"
+                        value={addEmployeeForm.rest_day}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, rest_day: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                      >
+                        <option value="SUN">SUN (Sunday)</option>
+                        <option value="MON">MON (Monday)</option>
+                        <option value="TUE">TUE (Tuesday)</option>
+                        <option value="WED">WED (Wednesday)</option>
+                        <option value="THU">THU (Thursday)</option>
+                        <option value="FRI">FRI (Friday)</option>
+                        <option value="SAT">SAT (Saturday)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                        Seniority No (Optional):
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="Auto"
+                        value={addEmployeeForm.seniority_no}
+                        onChange={e => setAddEmployeeForm(prev => ({ ...prev, seniority_no: e.target.value }))}
+                        style={{ fontSize: '0.84rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-group" style={{ marginBottom: '14px' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                      Select Existing Staff Member: <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <select
+                      required
+                      className="form-input"
+                      value={selectedExistingStaffId}
+                      onChange={e => setSelectedExistingStaffId(e.target.value)}
+                      style={{ fontSize: '0.85rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                    >
+                      <option value="">-- Choose Staff Member --</option>
+                      {existingStaffOptions.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.designation || 'TTI'}{s.hrms_id ? ` • ${s.hrms_id}` : ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '18px' }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px', display: 'block', fontWeight: 700 }}>
+                      Target Category:
+                    </label>
+                    <select
+                      className="form-input"
+                      value={addEmployeeForm.category_id}
+                      onChange={e => setAddEmployeeForm(prev => ({ ...prev, category_id: e.target.value }))}
+                      style={{ fontSize: '0.85rem', padding: '8px 10px', width: '100%', borderRadius: '8px' }}
+                    >
+                      <option value="1">Conductors (COR)</option>
+                      <option value="2">TTI / Sleeper Staff</option>
+                      <option value="3">Ladies Staff / TTE</option>
+                      <option value="4">Leave Reserve (LR)</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAddEmployeeModal(false)}
+                  style={{ fontSize: '0.84rem', padding: '8px 16px', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={addingEmployee || (addEmployeeMode === 'new' && !addEmployeeForm.name.trim()) || (addEmployeeMode === 'existing' && !selectedExistingStaffId)}
+                  style={{
+                    fontSize: '0.84rem',
+                    padding: '8px 20px',
+                    fontWeight: 800,
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #d4a15c 0%, #b8860b 100%)',
+                    color: '#000'
+                  }}
+                >
+                  {addingEmployee ? 'Adding...' : 'Add Employee'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Employee Confirmation Modal */}
+      {employeeToDelete && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card" style={{
+            width: '460px',
+            maxWidth: '100%',
+            background: 'var(--bg-secondary)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '1.5px solid rgba(239, 68, 68, 0.5)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.85)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#f87171', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚠️</span>
+                <span>Delete Employee from Muster</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEmployeeToDelete(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.3rem' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 14px 0', fontSize: '0.86rem', color: '#e2e8f0' }}>
+              Are you sure you want to remove this employee from the attendance register / muster?
+            </p>
+
+            {/* Employee Summary Card */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#ffffff', marginBottom: '4px' }}>
+                {employeeToDelete.name}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <span><strong>Desg:</strong> {employeeToDelete.designation || 'TTI'}</span>
+                <span><strong>Category:</strong> {employeeToDelete.categoryName || 'General'}</span>
+                {employeeToDelete.hrms_id && <span><strong>HRMS:</strong> {employeeToDelete.hrms_id}</span>}
+                {employeeToDelete.pf_no && <span><strong>PF:</strong> {employeeToDelete.pf_no}</span>}
+              </div>
+            </div>
+
+            {/* Deletion Mode Options */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: !deletePermanent ? 'rgba(212, 161, 92, 0.12)' : 'transparent',
+                border: !deletePermanent ? '1px solid var(--border-gold)' : '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                marginBottom: '8px'
+              }}>
+                <input
+                  type="radio"
+                  name="muster_delete_type"
+                  checked={!deletePermanent}
+                  onChange={() => setDeletePermanent(false)}
+                  style={{ marginTop: '3px' }}
+                />
+                <div>
+                  <strong style={{ fontSize: '0.84rem', color: '#f8fafc', display: 'block' }}>
+                    Remove from Active Muster / Category (Recommended)
+                  </strong>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
+                    Unassigns employee from current category. Attendance records & history are safely preserved.
+                  </span>
+                </div>
+              </label>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: deletePermanent ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                border: deletePermanent ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="radio"
+                  name="muster_delete_type"
+                  checked={deletePermanent}
+                  onChange={() => setDeletePermanent(true)}
+                  style={{ marginTop: '3px' }}
+                />
+                <div>
+                  <strong style={{ fontSize: '0.84rem', color: '#fca5a5', display: 'block' }}>
+                    Permanently Delete from Database
+                  </strong>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
+                    Completely removes staff record, overrides, and attendance entries from the entire database.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={deletingEmployee}
+                onClick={() => setEmployeeToDelete(null)}
+                style={{ fontSize: '0.84rem', padding: '8px 16px', borderRadius: '8px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={deletingEmployee}
+                onClick={handleConfirmDeleteEmployee}
+                style={{
+                  fontSize: '0.84rem',
+                  padding: '8px 20px',
+                  fontWeight: 800,
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)'
+                }}
+              >
+                {deletingEmployee ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
           </div>
