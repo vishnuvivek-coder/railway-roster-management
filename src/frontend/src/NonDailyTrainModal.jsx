@@ -238,7 +238,7 @@ export default function NonDailyTrainModal({
         }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)' }}>
-              {isEditing ? `✏️ Edit Non-Daily Train #${formData.train_number}` : '➕ Add New Non-Daily Train'}
+              {isEditing ? `Edit Non-Daily Train #${formData.train_number}` : '+ Add New Non-Daily Train'}
             </h3>
             <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
               Configure train timings and assign crew from Weekly Rest or LR Sheet.
@@ -261,7 +261,7 @@ export default function NonDailyTrainModal({
               justifyContent: 'center'
             }}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -285,7 +285,7 @@ export default function NonDailyTrainModal({
                 color: '#f87171',
                 fontSize: '0.85rem'
               }}>
-                ⚠️ {errorMsg}
+                {errorMsg}
               </div>
             )}
 
@@ -312,7 +312,7 @@ export default function NonDailyTrainModal({
               padding: '12px'
             }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#60a5fa', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🚆 1st Day Train Details</span>
+                <span>1st Day Train Details</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -347,7 +347,7 @@ export default function NonDailyTrainModal({
               padding: '12px'
             }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#c084fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🔄 Last Day / Return Train Details</span>
+                <span>Last Day / Return Train Details</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -444,7 +444,7 @@ export default function NonDailyTrainModal({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>👤 Assign Employee / Relief Crew:</span>
+                  <span>Assign Employee / Relief Crew:</span>
                 </div>
                 {formData.assigned_staff_name && (
                   <span className="badge badge-approved" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
@@ -456,11 +456,11 @@ export default function NonDailyTrainModal({
               {/* Assignment Source Switcher Tabs */}
               <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                 {[
-                  { id: 'REST', label: `😴 Employees on Rest (${restStaffList.length})`, color: '#60a5fa' },
-                  { id: 'LR', label: `📋 LR Sheet Staff (${lrStaffList.length})`, color: '#d4a15c' },
-                  { id: 'ALL', label: '🔀 All Master Staff', color: '#c084fc' },
-                  { id: 'CUSTOM', label: '✍️ Custom Name', color: '#34d399' },
-                  { id: 'NONE', label: '🚫 Unassigned', color: '#9ca3af' }
+                  { id: 'REST', label: `Employees on Rest (${restStaffList.length})`, color: '#60a5fa' },
+                  { id: 'LR', label: `LR Sheet Staff (${lrStaffList.length})`, color: '#d4a15c' },
+                  { id: 'ALL', label: 'All Master Staff', color: '#c084fc' },
+                  { id: 'CUSTOM', label: 'Custom Name', color: '#34d399' },
+                  { id: 'NONE', label: 'Unassigned', color: '#9ca3af' }
                 ].map(opt => (
                   <button
                     key={opt.id}
@@ -509,14 +509,14 @@ export default function NonDailyTrainModal({
                       const cat = s.categoryName || (s.categoryId === 1 ? 'Conductor' : s.categoryId === 2 ? 'Sleeper' : 'Ladies');
                       return (
                         <option key={id} value={id}>
-                          {s.name} ({s.designation || 'Staff'}) — [{cat} - REST]
+                          {s.name} ({s.designation || 'Staff'}) - [{cat} - REST]
                         </option>
                       );
                     })}
                   </select>
                   {restStaffList.length === 0 && (
                     <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', margin: '6px 0 0 0' }}>
-                      💡 No employees found on fixed rest for this date. You can select from the <strong>LR Sheet Staff</strong> tab above.
+                      No employees found on fixed rest for this date. You can select from the <strong>LR Sheet Staff</strong> tab above.
                     </p>
                   )}
                 </div>
@@ -540,12 +540,12 @@ export default function NonDailyTrainModal({
                     <option value="">-- Choose Employee from LR Sheet --</option>
                     {lrStaffList.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.name} ({s.designation || 'Staff'}) {s.rest_day && s.rest_day !== '-' ? `[Rest: ${s.rest_day}]` : ''} — [LR Row #{s.row_position}]
+                        {s.name} ({s.designation || 'Staff'}) {s.rest_day && s.rest_day !== '-' ? `[Rest: ${s.rest_day}]` : ''} - [LR Row #{s.row_position}]
                       </option>
                     ))}
                   </select>
                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', margin: '6px 0 0 0' }}>
-                    💡 Official Leave Reserve (LR) staff list with designated weekly rest days.
+                    Official Leave Reserve (LR) staff list with designated weekly rest days.
                   </p>
                 </div>
               )}
@@ -570,7 +570,7 @@ export default function NonDailyTrainModal({
                       const catName = s.category_id === 1 ? 'COR' : s.category_id === 2 ? 'Sleeper' : 'Ladies';
                       return (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.designation || 'Staff'}) — [{catName} Row #{s.row_position}]
+                          {s.name} ({s.designation || 'Staff'}) - [{catName} Row #{s.row_position}]
                         </option>
                       );
                     })}
@@ -632,7 +632,7 @@ export default function NonDailyTrainModal({
                 disabled={saving}
                 style={{ padding: '8px 14px', fontSize: '0.85rem' }}
               >
-                🗑️ Delete Train
+                Delete Train
               </button>
             ) : <div />}
 

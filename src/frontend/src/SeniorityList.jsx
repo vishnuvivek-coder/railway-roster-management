@@ -162,14 +162,14 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>🏅</span> Seniority List
+              Seniority List
             </h2>
             <span className="badge" style={{ background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 800, fontSize: '0.82rem', padding: '4px 10px', borderRadius: '8px' }}>
               {seniorityList.length} Total Staff
             </span>
           </div>
           <p style={{ color: 'var(--color-text-secondary)', margin: '6px 0 0 0', fontSize: '0.88rem' }}>
-            Basic Data of Ticket Checking Staff &mdash; Guntur Division (South Coast Railway)
+            Basic Data of Ticket Checking Staff - Guntur Division (South Coast Railway)
           </p>
         </div>
 
@@ -181,7 +181,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             title="Refresh list"
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.88rem', padding: '8px 14px' }}
           >
-            <span>🔄</span> Refresh
+            Refresh
           </button>
           <button
             type="button"
@@ -189,7 +189,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             onClick={handleExportCSV}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.88rem', padding: '8px 14px' }}
           >
-            <span>📥</span> Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -197,7 +197,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             onClick={() => window.print()}
             style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.88rem', padding: '8px 14px' }}
           >
-            <span>📄</span> Download / Print
+            Download / Print
           </button>
         </div>
       </div>
@@ -216,21 +216,21 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 800, color: '#60a5fa', fontSize: '0.92rem' }}>⚖️ Seniority Hierarchy:</span>
+          <span style={{ fontWeight: 800, color: '#60a5fa', fontSize: '0.92rem' }}>Seniority Hierarchy:</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '0.85rem', fontWeight: 700 }}>
             <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(217, 119, 6, 0.2)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)' }}>1. CTI</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>→</span>
             <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.4)' }}>2. TTI</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>→</span>
             <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(192, 132, 252, 0.4)' }}>3. SRTE</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>→</span>
             <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.4)' }}>4. Sr.CCTC (SRCCTC)</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>➔</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>→</span>
             <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', border: '1px solid rgba(244, 114, 182, 0.4)' }}>5. CCTC</span>
           </div>
         </div>
         <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
-          💡 <em>Seniority evaluated within same designation &amp; compared across designations by hierarchy priority</em>
+          <em>Seniority evaluated within same designation &amp; compared across designations by hierarchy priority</em>
         </div>
       </div>
 
@@ -252,7 +252,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
               onClick={() => setDesgFilter(desg)}
               style={{
                 padding: '6px 14px',
-                borderRadius: '20px',
+                borderRadius: '6px',
                 fontSize: '0.82rem',
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -287,12 +287,12 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                 color: sortBy === 'hierarchy' ? '#fff' : 'var(--color-text-secondary)'
               }}
             >
-              ⚖️ Hierarchy
+              Hierarchy
             </button>
             <button
               type="button"
               onClick={() => setSortBy('sl_no')}
-              title="Sort by Official List SL NO (1–139)"
+              title="Sort by Official List SL NO (1-139)"
               style={{
                 fontSize: '0.78rem',
                 padding: '5px 10px',
@@ -304,7 +304,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                 color: sortBy === 'sl_no' ? '#fff' : 'var(--color-text-secondary)'
               }}
             >
-              🔢 Sl No (1–139)
+              Sl No (1-139)
             </button>
           </div>
 
@@ -313,7 +313,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
             <input
               type="text"
               className="form-input"
-              placeholder="🔍 Search by name, rank, PF, CUG..."
+              placeholder="Search by name, rank, PF, CUG..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -341,7 +341,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                 }}
                 title="Clear search"
               >
-                ✕
+                ×
               </button>
             )}
           </div>
@@ -356,8 +356,8 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
         </div>
       ) : error ? (
         <div className="card" style={{ padding: '24px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px solid #ef4444' }}>
-          <p style={{ color: '#ef4444', fontWeight: 700, fontSize: '1.1rem' }}>⚠️ {error}</p>
-          <button type="button" className="btn btn-primary" onClick={fetchSeniority} style={{ marginTop: '12px' }}>🔄 Retry</button>
+          <p style={{ color: '#ef4444', fontWeight: 700, fontSize: '1.1rem' }}>{error}</p>
+          <button type="button" className="btn btn-primary" onClick={fetchSeniority} style={{ marginTop: '12px' }}>Retry</button>
         </div>
       ) : (
         /* Seniority Table */
@@ -431,7 +431,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                               fontWeight: 700
                             }}
                           >
-                            🛠️ Working in TTI (not in COR)
+                            Working in TTI (not in COR)
                           </span>
                         )}
                       </td>
@@ -475,7 +475,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                       <td style={{ textAlign: 'center', padding: '10px 8px', fontSize: '0.86rem', color: emp.cug_number && emp.cug_number !== '--' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
                         {emp.cug_number && emp.cug_number !== '--' ? (
                           <a href={`tel:${emp.cug_number}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                            📞 {emp.cug_number}
+                            {emp.cug_number}
                           </a>
                         ) : (
                           '--'
@@ -486,7 +486,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                       <td style={{ textAlign: 'center', padding: '10px 8px', fontSize: '0.86rem' }}>
                         {emp.contact_number && emp.contact_number !== '--' ? (
                           <a href={`tel:${emp.contact_number}`} style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>
-                            📱 {emp.contact_number}
+                            {emp.contact_number}
                           </a>
                         ) : (
                           '--'
@@ -502,7 +502,7 @@ export default function SeniorityList({ API_BASE = '/api', authToken, isAdmin })
                       <td style={{ padding: '10px 14px', fontSize: '0.84rem' }}>
                         {emp.email && emp.email !== '--' && emp.email !== '=' ? (
                           <a href={`mailto:${emp.email}`} style={{ color: '#38bdf8', textDecoration: 'none' }}>
-                            ✉️ {emp.email}
+                            {emp.email}
                           </a>
                         ) : (
                           <span style={{ color: 'var(--color-text-secondary)' }}>--</span>

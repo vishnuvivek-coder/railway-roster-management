@@ -291,7 +291,7 @@ export default function IndividualMusterDocument({
             dayName,
             linkNo: c.actualLinkNumber,
             trains: c.train_numbers || '-',
-            route: (c.from_station && c.to_station && c.from_station !== '-') ? `${c.from_station} ➔ ${c.to_station}` : 'GNT ➔ GNT',
+            route: (c.from_station && c.to_station && c.from_station !== '-') ? `${c.from_station} -> ${c.to_station}` : 'GNT -> GNT',
             coaches: c.coaches || '-',
             musterCode,
             statusDesc,
@@ -401,11 +401,11 @@ export default function IndividualMusterDocument({
 
       setStatusFeedback({
         type: 'success',
-        message: `✓ Successfully updated ${selectedDatesList.length} days (${rangeFromDate.split('-').reverse().join('/')} to ${rangeToDate.split('-').reverse().join('/')}) to "${rangeCode}" for ${staffInfo?.name || 'employee'}!`
+        message: `Successfully updated ${selectedDatesList.length} days (${rangeFromDate.split('-').reverse().join('/')} to ${rangeToDate.split('-').reverse().join('/')}) to "${rangeCode}" for ${staffInfo?.name || 'employee'}!`
       });
     } catch (err) {
       console.error('Batch muster update error:', err);
-      setStatusFeedback({ type: 'error', message: `❌ Error: ${err.message}` });
+      setStatusFeedback({ type: 'error', message: `Error: ${err.message}` });
     } finally {
       setSavingRange(false);
     }
@@ -451,11 +451,11 @@ export default function IndividualMusterDocument({
 
       setStatusFeedback({
         type: 'success',
-        message: `✓ Successfully reset ${selectedDatesList.length} days to default cyclic baseline for ${staffInfo?.name || 'employee'}!`
+        message: `Successfully reset ${selectedDatesList.length} days to default cyclic baseline for ${staffInfo?.name || 'employee'}!`
       });
     } catch (err) {
       console.error('Reset muster error:', err);
-      setStatusFeedback({ type: 'error', message: `❌ Error: ${err.message}` });
+      setStatusFeedback({ type: 'error', message: `Error: ${err.message}` });
     } finally {
       setSavingRange(false);
     }
@@ -493,11 +493,11 @@ export default function IndividualMusterDocument({
 
       setStatusFeedback({
         type: 'success',
-        message: `✓ Updated ${targetDate.split('-').reverse().join('/')} to "${newCode}" for ${staffInfo?.name}!`
+        message: `Updated ${targetDate.split('-').reverse().join('/')} to "${newCode}" for ${staffInfo?.name}!`
       });
     } catch (err) {
       console.error('Update single day error:', err);
-      setStatusFeedback({ type: 'error', message: `❌ Error: ${err.message}` });
+      setStatusFeedback({ type: 'error', message: `Error: ${err.message}` });
     }
   };
 
@@ -531,11 +531,11 @@ export default function IndividualMusterDocument({
 
       setStatusFeedback({
         type: 'success',
-        message: `✓ Reset ${targetDate.split('-').reverse().join('/')} to baseline for ${staffInfo?.name}!`
+        message: `Reset ${targetDate.split('-').reverse().join('/')} to baseline for ${staffInfo?.name}!`
       });
     } catch (err) {
       console.error('Reset single day error:', err);
-      setStatusFeedback({ type: 'error', message: `❌ Error: ${err.message}` });
+      setStatusFeedback({ type: 'error', message: `Error: ${err.message}` });
     }
   };
 
@@ -635,7 +635,7 @@ export default function IndividualMusterDocument({
             }}
             title="Print Individual Muster"
           >
-            🖨️ Print
+            Print
           </button>
           <button
             type="button"
@@ -648,7 +648,7 @@ export default function IndividualMusterDocument({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+              background: '#2563eb',
               color: '#ffffff',
               fontWeight: 700,
               padding: '8px 18px',
@@ -658,7 +658,7 @@ export default function IndividualMusterDocument({
             }}
             title="Download Direct PDF"
           >
-            📄 Download PDF
+            Download PDF
           </button>
           {onClose && (
             <button
@@ -667,7 +667,7 @@ export default function IndividualMusterDocument({
               onClick={onClose}
               style={{ padding: '8px 14px' }}
             >
-              ✕ Close
+              Close
             </button>
           )}
         </div>
@@ -695,7 +695,6 @@ export default function IndividualMusterDocument({
             paddingBottom: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.25rem' }}>⚡</span>
               <div>
                 <strong style={{ fontSize: '0.98rem', color: '#f8fafc', display: 'block' }}>
                   Date-Wise Muster Editor (Whole Month / Custom Date Range)
@@ -709,7 +708,7 @@ export default function IndividualMusterDocument({
               <div style={{
                 background: 'rgba(212, 161, 92, 0.15)',
                 border: '1px solid var(--border-gold)',
-                borderRadius: '20px',
+                borderRadius: '6px',
                 padding: '4px 14px',
                 fontSize: '0.82rem',
                 fontWeight: 700,
@@ -718,7 +717,6 @@ export default function IndividualMusterDocument({
                 alignItems: 'center',
                 gap: '6px'
               }}>
-                <span>👤</span>
                 <span>{staffInfo.name}</span>
                 <span style={{ opacity: 0.75, fontWeight: 500 }}>({staffInfo.designation})</span>
               </div>
@@ -801,7 +799,7 @@ export default function IndividualMusterDocument({
                   }}
                   title="Select entire month"
                 >
-                  📅 Full Month
+                  Full Month
                 </button>
                 <button
                   type="button"
@@ -961,7 +959,6 @@ export default function IndividualMusterDocument({
                 </>
               ) : (
                 <>
-                  <span>⚡</span>
                   <span>Apply & Save to Selected Dates ({selectedDatesList.length} {selectedDatesList.length === 1 ? 'Day' : 'Days'})</span>
                 </>
               )}
@@ -998,14 +995,14 @@ export default function IndividualMusterDocument({
                 await loadMusterData();
                 setStatusFeedback({
                   type: 'success',
-                  message: `💾 Muster for ${staffInfo?.name || 'employee'} verified & saved permanently to database!`
+                  message: `Muster for ${staffInfo?.name || 'employee'} verified & saved permanently to database!`
                 });
               }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                background: '#2563eb',
                 color: '#ffffff',
                 fontWeight: 800,
                 padding: '9px 18px',
@@ -1017,7 +1014,7 @@ export default function IndividualMusterDocument({
               }}
               title="Save and lock all muster attendance records to database"
             >
-              <span>💾</span>
+              <span></span>
               <span>Save Individual Muster</span>
             </button>
           </div>
@@ -1043,7 +1040,7 @@ export default function IndividualMusterDocument({
                 onClick={() => setStatusFeedback(null)}
                 style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '1rem', padding: '0 4px' }}
               >
-                ✕
+                ×
               </button>
             </div>
           )}
@@ -1237,7 +1234,7 @@ export default function IndividualMusterDocument({
                           }}
                           title="Edit this single day"
                         >
-                          ✏️ Edit
+                          Edit
                         </button>
                       </td>
                     )}
@@ -1270,7 +1267,7 @@ export default function IndividualMusterDocument({
         </div>
       ) : (
         <div className="alert-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
-          <span>⚠️</span> No muster data found for selected employee. Please select an employee from the dropdown above.
+          No muster data found for selected employee. Please select an employee from the dropdown above.
         </div>
       )}
 
@@ -1300,7 +1297,6 @@ export default function IndividualMusterDocument({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h4 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📅</span>
                 <span>Edit Date: {singleDayModal.date.split('-').reverse().join('/')} ({singleDayModal.dayName})</span>
               </h4>
               <button
@@ -1308,7 +1304,7 @@ export default function IndividualMusterDocument({
                 onClick={() => setSingleDayModal(null)}
                 style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer' }}
               >
-                ✕
+                ×
               </button>
             </div>
 

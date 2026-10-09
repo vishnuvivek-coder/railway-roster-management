@@ -165,7 +165,7 @@ export default function UpgradeToCorModal({
         throw new Error(json.error || `Upgrade failed with status ${res.status}`);
       }
 
-      alert(`✅ Success: ${json.message}`);
+      alert(`Success: ${json.message}`);
       if (onSuccess) onSuccess(json);
       if (onClose) onClose();
     } catch (err) {
@@ -239,7 +239,7 @@ export default function UpgradeToCorModal({
             }}
             title="Close modal"
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -264,7 +264,6 @@ export default function UpgradeToCorModal({
               alignItems: 'center',
               gap: '8px'
             }}>
-              <span>⚠️</span>
               <span>{error}</span>
             </div>
           )}
@@ -272,7 +271,7 @@ export default function UpgradeToCorModal({
           {/* Section 1: Candidate Employee */}
           <div>
             <label style={{ display: 'block', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary, #d4a15c)', fontWeight: 700, marginBottom: '8px' }}>
-              👤 Employee Being Upgraded
+              Employee Being Upgraded
             </label>
 
             {!staff ? (
@@ -280,7 +279,7 @@ export default function UpgradeToCorModal({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="🔍 Search candidate by name or designation..."
+                  placeholder="Search candidate by name or designation..."
                   value={searchStaffText}
                   onChange={(e) => setSearchStaffText(e.target.value)}
                   style={{ marginBottom: '8px', fontSize: '0.85rem' }}
@@ -351,7 +350,6 @@ export default function UpgradeToCorModal({
               alignItems: 'flex-start',
               gap: '12px'
             }}>
-              <span style={{ fontSize: '1.3rem' }}>🛡️</span>
               <div style={{ fontSize: '0.82rem', lineHeight: '1.4' }}>
                 <strong style={{ color: '#10b981' }}>Old Place Shows Vacant:</strong>
                 <div style={{ color: 'var(--color-text-secondary, #cbd5e1)', marginTop: '2px' }}>
@@ -368,7 +366,7 @@ export default function UpgradeToCorModal({
             paddingTop: '16px'
           }}>
             <label style={{ display: 'block', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary, #d4a15c)', fontWeight: 700, marginBottom: '10px' }}>
-              🚆 Select Target Link in Conductors (COR) Category
+              Select Target Link in Conductors (COR) Category
             </label>
 
             {loadingLinks ? (
@@ -391,7 +389,7 @@ export default function UpgradeToCorModal({
                   >
                     {corLinksData.map(l => (
                       <option key={l.link_number} value={l.link_number}>
-                        Link {l.link_number}: {l.train_numbers} {l.is_vacant ? '🟢 (VACANT)' : `(Occ: ${l.occupant?.name || 'Filled'})`}
+                        Link {l.link_number}: {l.train_numbers} {l.is_vacant ? '(VACANT)' : `(Occ: ${l.occupant?.name || 'Filled'})`}
                       </option>
                     ))}
                   </select>
@@ -426,7 +424,7 @@ export default function UpgradeToCorModal({
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.2rem' }}>{selectedCorLinkDef.is_rest ? '💤' : '🚆'}</span>
+                    <span style={{ fontSize: '1.2rem' }}>{selectedCorLinkDef.is_rest ? '' : ''}</span>
                     <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text-primary, #fff)' }}>
                       Link {selectedCorLinkDef.link_number}: {selectedCorLinkDef.train_numbers}
                     </span>
@@ -434,18 +432,18 @@ export default function UpgradeToCorModal({
 
                   {selectedCorLinkDef.is_vacant ? (
                     <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: 800, border: '1px solid #10b981' }}>
-                      🟢 VACANT SLOT (Ready to Occupy)
+                      VACANT SLOT (Ready to Occupy)
                     </span>
                   ) : (
                     <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 800 }}>
-                      ⚠️ Currently Occupied
+                      Currently Occupied
                     </span>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--color-text-secondary, #94a3b8)', marginTop: '8px' }}>
                   {selectedCorLinkDef.from_station && (
-                    <span>Route: <strong>{selectedCorLinkDef.from_station} ➔ {selectedCorLinkDef.to_station}</strong></span>
+                    <span>Route: <strong>{selectedCorLinkDef.from_station} → {selectedCorLinkDef.to_station}</strong></span>
                   )}
                   {selectedCorLinkDef.coaches && (
                     <span>Coaches: <strong>{selectedCorLinkDef.coaches}</strong></span>

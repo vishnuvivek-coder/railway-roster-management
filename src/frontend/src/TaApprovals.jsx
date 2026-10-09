@@ -82,7 +82,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ TA accepted for ${staffName}! Added to TA Document.`);
+        showToast(`TA accepted for ${staffName}! Added to TA Document.`);
         fetchApprovals();
         window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
           detail: { source: 'ta_approvals', timestamp: Date.now() }
@@ -114,7 +114,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ Accepted ${data.count} selected TA claims! Added to TA Documents.`);
+        showToast(`Accepted ${data.count} selected TA claims! Added to TA Documents.`);
         setSelectedIds(new Set());
         fetchApprovals();
       } else {
@@ -156,7 +156,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ Accepted all ${data.count} pending TA claims! Added to TA Documents.`);
+        showToast(`Accepted all ${data.count} pending TA claims! Added to TA Documents.`);
         setSelectedIds(new Set());
         fetchApprovals();
       } else {
@@ -188,7 +188,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`❌ TA claim rejected.`);
+        showToast(`TA claim rejected.`);
         fetchApprovals();
       } else {
         alert(data.error || 'Failed to reject TA');
@@ -216,7 +216,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`🔄 Reverted claim back to PENDING.`);
+        showToast(`Reverted claim back to PENDING.`);
         fetchApprovals();
       } else {
         alert(data.error || 'Failed to revert TA');
@@ -298,7 +298,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '1.8rem' }}>🎫</span>
+              <span style={{ fontSize: '1.8rem' }}></span>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
                   Railway TA Approvals & Authorization
@@ -319,7 +319,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
               disabled={loading || actionLoading}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem' }}
             >
-              🔄 Refresh List
+              Refresh List
             </button>
           </div>
         </div>
@@ -339,7 +339,6 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           fontSize: '0.84rem'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '1.1rem' }}>📐</span>
             <strong style={{ color: 'var(--primary)' }}>Official Railway TA Duration Calculation Rules:</strong>
           </div>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -389,7 +388,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           padding: '16px'
         }}>
           <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-            ✅ Approved & In TA Doc
+            Approved & In TA Doc
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#10b981', margin: '4px 0' }}>
             {stats.approved}
@@ -407,7 +406,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           padding: '16px'
         }}>
           <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-            ❌ Rejected
+            Rejected
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ef4444', margin: '4px 0' }}>
             {stats.rejected}
@@ -425,7 +424,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           padding: '16px'
         }}>
           <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-            📊 Total Month Claims
+            Total Month Claims
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)', margin: '4px 0' }}>
             {stats.total}
@@ -495,8 +494,8 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                   }}
                 >
                   {st === 'PENDING' ? `⏳ Pending (${stats.pending})` :
-                   st === 'APPROVED' ? `✅ Approved (${stats.approved})` :
-                   st === 'REJECTED' ? `❌ Rejected (${stats.rejected})` :
+                   st === 'APPROVED' ? `Approved (${stats.approved})` :
+                   st === 'REJECTED' ? `Rejected (${stats.rejected})` :
                    `All (${stats.total})`}
                 </button>
               ))}
@@ -506,8 +505,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           {/* Search Input */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <span style={{ position: 'absolute', left: '10px', color: 'var(--color-text-secondary)', fontSize: '0.9rem', pointerEvents: 'none' }}>
-              🔍
-            </span>
+              </span>
             <input
               type="text"
               className="select-input"
@@ -536,7 +534,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                   cursor: 'pointer'
                 }}
               >
-                ✕
+                ×
               </button>
             )}
           </div>
@@ -594,7 +592,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                 color: 'var(--primary)',
                 fontWeight: 600
               }}>
-                Period: {startDate.split('-').reverse().join('/')} ➔ {endDate.split('-').reverse().join('/')}
+                Period: {startDate.split('-').reverse().join('/')} → {endDate.split('-').reverse().join('/')}
               </span>
             </>
           )}
@@ -637,7 +635,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                   gap: '6px'
                 }}
               >
-                <span>✅</span> Accept Selected ({selectedIds.size})
+                Accept Selected ({selectedIds.size})
               </button>
 
               {/* Reject Selected Option */}
@@ -656,7 +654,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                     cursor: 'pointer'
                   }}
                 >
-                  <span>❌</span> Reject Selected ({selectedIds.size})
+                  Reject Selected ({selectedIds.size})
                 </button>
               )}
             </div>
@@ -682,7 +680,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                   boxShadow: stats.pending > 0 ? '0 4px 14px rgba(212, 161, 92, 0.3)' : 'none'
                 }}
               >
-                <span>⚡</span> Accept All Pending ({stats.pending})
+                Accept All Pending ({stats.pending})
               </button>
             </div>
           </div>
@@ -703,7 +701,6 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
           </div>
         ) : claims.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-text-secondary)' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>📋</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>
               No TA Claims Found
             </div>
@@ -809,7 +806,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                       </td>
                       <td>
                         <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', fontWeight: 800 }}>
-                          🚆 {claim.train_no}
+                          {claim.train_no}
                         </span>
                       </td>
                       <td>
@@ -868,7 +865,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                             color: '#10b981',
                             border: '1px solid rgba(16, 185, 129, 0.4)'
                           }} title={claim.approved_by ? `Approved by ${claim.approved_by} at ${claim.approved_at || ''}` : 'Approved'}>
-                            ✅ APPROVED
+                            APPROVED
                           </span>
                         )}
                         {isRejected && (
@@ -881,7 +878,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                             color: '#ef4444',
                             border: '1px solid rgba(239, 68, 68, 0.4)'
                           }} title={claim.rejection_reason ? `Reason: ${claim.rejection_reason}` : 'Rejected'}>
-                            ❌ REJECTED
+                            REJECTED
                           </span>
                         )}
                       </td>
@@ -944,7 +941,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
                                 }}
                                 title="Revert back to Pending status"
                               >
-                                🔄 Revert
+                                Revert
                               </button>
                             )}
                           </div>

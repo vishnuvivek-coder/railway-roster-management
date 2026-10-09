@@ -347,7 +347,7 @@ export default function DailyEarningsDocument({
     }
     isSavingRef.current = true;
     setSaving(true);
-    if (!silent) setStatusMsg('⏳ Saving Daily Earnings sheet...');
+    if (!silent) setStatusMsg('Saving Daily Earnings sheet...');
 
     try {
       if (viewMode === 'continuous') {
@@ -372,10 +372,10 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
+          setStatusMsg(`Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }
       } else if (viewMode === 'single_day') {
         try {
@@ -398,10 +398,10 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
+          setStatusMsg(`Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }
       } else {
         try {
@@ -424,15 +424,15 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
+          setStatusMsg(`Changes saved automatically (${timeStr})`);
           setHasUnsavedChanges(false);
         } else {
-          if (!silent) setStatusMsg(`❌ Save failed: ${result.error || 'Unknown error'}`);
+          if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }
       }
     } catch (err) {
       console.error('Error saving earnings:', err);
-      if (!silent) setStatusMsg(`❌ Save failed: ${err.message}`);
+      if (!silent) setStatusMsg(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
       isSavingRef.current = false;
@@ -502,7 +502,7 @@ export default function DailyEarningsDocument({
           className="btn"
           style={{
             padding: '10px 24px',
-            borderRadius: '24px',
+            borderRadius: '6px',
             fontWeight: 800,
             fontSize: '0.92rem',
             background: viewMode === 'continuous'
@@ -515,7 +515,7 @@ export default function DailyEarningsDocument({
             transition: 'all 0.2s ease'
           }}
         >
-          📆 Daily Summary Register (Continuous Multi-Day Sheet)
+          Daily Summary Register (Continuous Multi-Day Sheet)
         </button>
 
         <button
@@ -524,7 +524,7 @@ export default function DailyEarningsDocument({
           className="btn"
           style={{
             padding: '10px 24px',
-            borderRadius: '24px',
+            borderRadius: '6px',
             fontWeight: 800,
             fontSize: '0.92rem',
             background: viewMode === 'single_day'
@@ -537,7 +537,7 @@ export default function DailyEarningsDocument({
             transition: 'all 0.2s ease'
           }}
         >
-          📅 Single Day View
+          Single Day View
         </button>
 
         <button
@@ -546,7 +546,7 @@ export default function DailyEarningsDocument({
           className="btn"
           style={{
             padding: '10px 24px',
-            borderRadius: '24px',
+            borderRadius: '6px',
             fontWeight: 800,
             fontSize: '0.92rem',
             background: viewMode === 'monthly'
@@ -559,7 +559,7 @@ export default function DailyEarningsDocument({
             transition: 'all 0.2s ease'
           }}
         >
-          👤 Employee Monthly Sheet (Whole Month)
+          Employee Monthly Sheet (Whole Month)
         </button>
       </div>
 
@@ -578,7 +578,7 @@ export default function DailyEarningsDocument({
             /* Controls for Continuous Multi-Day Register */
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary)' }}>
-                📆 Date Range:
+                Date Range:
               </span>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -632,7 +632,7 @@ export default function DailyEarningsDocument({
                   }}
                   style={{ padding: '6px 10px', fontSize: '0.78rem' }}
                 >
-                  📅 Full Month
+                  Full Month
                 </button>
                 <button
                   type="button"
@@ -679,9 +679,9 @@ export default function DailyEarningsDocument({
                   onChange={(e) => setDutyFilter(e.target.value)}
                   style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 700, minWidth: '180px', color: 'var(--primary)' }}
                 >
-                  <option value="on_duty">🚆 On Duty Only (Active Working)</option>
+                  <option value="on_duty">On Duty Only (Active Working)</option>
                   <option value="booked_only">⭐ Booked to Duty (Starting HQ)</option>
-                  <option value="all">📋 All Staff (Including REST)</option>
+                  <option value="all">All Staff (Including REST)</option>
                 </select>
               </div>
 
@@ -705,7 +705,7 @@ export default function DailyEarningsDocument({
             /* Controls for Single Day Mode */
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary)' }}>
-                📅 Sheet Date:
+                Sheet Date:
               </span>
               <input
                 type="date"
@@ -729,9 +729,9 @@ export default function DailyEarningsDocument({
                 onChange={(e) => setDutyFilter(e.target.value)}
                 style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 700, minWidth: '180px' }}
               >
-                <option value="on_duty">🚆 On Duty Only</option>
+                <option value="on_duty">On Duty Only</option>
                 <option value="booked_only">⭐ Booked to Duty Only</option>
-                <option value="all">📋 All Staff (Including REST)</option>
+                <option value="all">All Staff (Including REST)</option>
               </select>
             </div>
           ) : (
@@ -809,7 +809,7 @@ export default function DailyEarningsDocument({
                 boxShadow: hasUnsavedChanges ? '0 0 16px var(--primary-glow-strong)' : 'none'
               }}
             >
-              {saving ? '⏳ Saving...' : hasUnsavedChanges ? '💾 Save Changes *' : '💾 Save Sheet'}
+              {saving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes *' : 'Save Sheet'}
             </button>
 
             <button
@@ -823,7 +823,7 @@ export default function DailyEarningsDocument({
               style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Print Daily Earnings Sheet"
             >
-              🖨️ Print
+              Print
             </button>
 
             <button
@@ -833,10 +833,10 @@ export default function DailyEarningsDocument({
                 orientation: 'portrait',
                 format: 'a4'
               })}
-              style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ padding: '8px 16px', fontSize: '0.88rem', fontWeight: 600, background: '#2563eb', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Download Direct PDF"
             >
-              📄 Download PDF
+              Download PDF
             </button>
           </div>
         </div>
@@ -849,9 +849,9 @@ export default function DailyEarningsDocument({
             borderRadius: '6px',
             fontSize: '0.88rem',
             fontWeight: 600,
-            background: statusMsg.includes('❌') ? 'rgba(189, 90, 90, 0.15)' : 'rgba(104, 166, 125, 0.15)',
-            color: statusMsg.includes('❌') ? '#f87171' : '#68A67D',
-            border: `1px solid ${statusMsg.includes('❌') ? 'rgba(189, 90, 90, 0.3)' : 'rgba(104, 166, 125, 0.3)'}`
+            background: statusMsg.includes('') ? 'rgba(189, 90, 90, 0.15)' : 'rgba(104, 166, 125, 0.15)',
+            color: statusMsg.includes('') ? '#f87171' : '#68A67D',
+            border: `1px solid ${statusMsg.includes('') ? 'rgba(189, 90, 90, 0.3)' : 'rgba(104, 166, 125, 0.3)'}`
           }}>
             {statusMsg}
           </div>
@@ -1293,7 +1293,7 @@ export default function DailyEarningsDocument({
                   RANGE TOTAL
                 </td>
                 <td colSpan="3" style={{ border: '1px solid #777', padding: '4px 10px', textAlign: 'left', fontWeight: 900, fontSize: '11px', letterSpacing: '1px' }}>
-                  🌟 GRAND TOTAL ({rangeDays.length} DAYS — {continuousGrandTotal.count} ENTRIES)
+                  GRAND TOTAL ({rangeDays.length} DAYS - {continuousGrandTotal.count} ENTRIES)
                 </td>
 
                 {/* TWT Grand Totals */}
@@ -1526,7 +1526,7 @@ export default function DailyEarningsDocument({
           }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 800, color: '#000', textTransform: 'uppercase' }}>
-                👤 {currentEmpName}
+                {currentEmpName}
               </span>
               <span style={{ fontSize: '11px', color: '#555', marginLeft: '12px', fontWeight: 600 }}>
                 DESIG: {currentEmpDesig} | HQ: {monthlyData?.employee?.hq_station || 'GNT'} | BILL UNIT: {monthlyData?.employee?.bill_unit || '0910629'}
@@ -1642,7 +1642,7 @@ export default function DailyEarningsDocument({
                     <input type="text" value={row.remarks || ''} onChange={(e) => handleMonthlyCellChange(idx, 'remarks', e.target.value)} placeholder="-" style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'center', fontSize: '10px', outline: 'none' }} />
                   </td>
                   <td className="no-print" style={{ border: '1px solid #DDD', padding: '1px' }}>
-                    <button type="button" onClick={() => jumpToSingleDay(row.date)} style={{ border: 'none', background: 'transparent', color: 'var(--primary)', cursor: 'pointer', fontWeight: 700, fontSize: '10px', padding: '2px 4px' }} title="Open this date">👁️</button>
+                    <button type="button" onClick={() => jumpToSingleDay(row.date)} style={{ border: 'none', background: 'transparent', color: 'var(--primary)', cursor: 'pointer', fontWeight: 700, fontSize: '10px', padding: '2px 4px' }} title="Open this date">View</button>
                   </td>
                 </tr>
               ))}
@@ -1687,7 +1687,7 @@ export default function DailyEarningsDocument({
           background: 'rgba(20, 20, 24, 0.95)',
           border: hasUnsavedChanges ? '2px solid #f59e0b' : '1.5px solid var(--border-gold)',
           padding: '10px 18px',
-          borderRadius: '30px',
+          borderRadius: '6px',
           boxShadow: '0 10px 35px rgba(0, 0, 0, 0.7)',
           backdropFilter: 'blur(10px)'
         }}>
@@ -1698,11 +1698,11 @@ export default function DailyEarningsDocument({
             </span>
           ) : hasUnsavedChanges ? (
             <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>
-              ⚠️ Unsaved edits (Auto-saving...)
+              Unsaved edits (Auto-saving...)
             </span>
           ) : (
             <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
-              ✅ All changes saved permanently
+              All changes saved permanently
             </span>
           )}
           <button
@@ -1713,14 +1713,14 @@ export default function DailyEarningsDocument({
             style={{
               fontSize: '0.85rem',
               padding: '6px 18px',
-              borderRadius: '20px',
+              borderRadius: '6px',
               fontWeight: 700,
               background: hasUnsavedChanges ? 'linear-gradient(135deg, #e5a93c 0%, #d48b1e 100%)' : 'var(--primary)',
               boxShadow: hasUnsavedChanges ? '0 0 12px rgba(245, 158, 11, 0.6)' : 'none'
             }}
             title="Save now (auto-saves automatically on edit)"
           >
-            {saving ? 'Saving...' : '💾 Save Changes'}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       )}

@@ -85,7 +85,7 @@ export default function DailyAmenityBookingDocument({
     if (!chartData || !chartData.whatsapp_text) return;
     navigator.clipboard.writeText(chartData.whatsapp_text).then(() => {
       setCopied(true);
-      showToast('📋 Daily Summary skeleton copied to clipboard! Ready to paste into WhatsApp / Telegram.');
+      showToast('Daily Summary skeleton copied to clipboard! Ready to paste into WhatsApp / Telegram.');
       setTimeout(() => setCopied(false), 3000);
     }).catch(err => {
       console.error('Clipboard copy failed:', err);
@@ -97,7 +97,7 @@ export default function DailyAmenityBookingDocument({
       document.execCommand('copy');
       document.body.removeChild(textarea);
       setCopied(true);
-      showToast('📋 Daily Summary skeleton copied to clipboard!');
+      showToast('Daily Summary skeleton copied to clipboard!');
       setTimeout(() => setCopied(false), 3000);
     });
   };
@@ -146,7 +146,7 @@ export default function DailyAmenityBookingDocument({
           alignItems: 'center',
           gap: '8px'
         }}>
-          <span>✓</span> {toastMsg}
+          {toastMsg}
         </div>
       )}
 
@@ -162,7 +162,7 @@ export default function DailyAmenityBookingDocument({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '14px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.35rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span>📊</span> TENTATIVE AMENITY STAFF BOOKING / DAILY SUMMARY
+              TENTATIVE AMENITY STAFF BOOKING / DAILY SUMMARY
             </h2>
             <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: '0.82rem' }}>
               Official 4-Column Amenity Crew Booking Chart with 1-Click WhatsApp Posting Skeleton.
@@ -189,7 +189,7 @@ export default function DailyAmenityBookingDocument({
               }}
               title="Copy formatted skeleton text for posting to WhatsApp or messaging groups"
             >
-              <span>{copied ? '✅' : '📋'}</span>
+              <span>{copied ? '' : ''}</span>
               {copied ? 'Copied to Clipboard!' : 'Copy WhatsApp Text'}
             </button>
 
@@ -210,7 +210,7 @@ export default function DailyAmenityBookingDocument({
               }}
               title="Print official 4-column booking chart"
             >
-              <span>🖨️</span> Print / PDF Export
+              Print / PDF Export
             </button>
           </div>
         </div>
@@ -219,7 +219,7 @@ export default function DailyAmenityBookingDocument({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           {/* Date Navigation */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>📅 Duty Date:</span>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Duty Date:</span>
             <button
               type="button"
               onClick={() => shiftDate(-1)}
@@ -271,7 +271,7 @@ export default function DailyAmenityBookingDocument({
                 onClick={() => setActiveCategoryId(cat.id)}
                 style={{
                   padding: '5px 12px',
-                  borderRadius: '20px',
+                  borderRadius: '6px',
                   fontSize: '0.78rem',
                   fontWeight: activeCategoryId === cat.id ? 700 : 500,
                   background: activeCategoryId === cat.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
@@ -291,7 +291,7 @@ export default function DailyAmenityBookingDocument({
             <input
               type="text"
               className="form-input"
-              placeholder="🔍 Search train (e.g. 20629), staff..."
+              placeholder="Search train (e.g. 20629), staff..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{
@@ -317,7 +317,7 @@ export default function DailyAmenityBookingDocument({
                   cursor: 'pointer'
                 }}
               >
-                ✕
+                ×
               </button>
             )}
           </div>
@@ -476,7 +476,7 @@ export default function DailyAmenityBookingDocument({
 
                 {colBlocks.length === 0 && (
                   <div style={{ padding: '24px 8px', textAlign: 'center', color: '#999999', fontSize: '10px' }}>
-                    —
+                    -
                   </div>
                 )}
               </div>
@@ -489,7 +489,7 @@ export default function DailyAmenityBookingDocument({
           {/* Standby Staff at HQ */}
           <div style={{ border: '1px solid #000000', borderRadius: '4px', padding: '10px 12px', background: '#f8fafc' }}>
             <div style={{ fontWeight: 'bold', fontSize: '11px', color: '#0f766e', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>🛡️ STANDBY / SPARE STAFF AT HQ</span>
+              <span>STANDBY / SPARE STAFF AT HQ</span>
               <span>({chartData?.standby_staff?.length || 0})</span>
             </div>
             {chartData?.standby_staff?.length > 0 ? (
@@ -509,7 +509,7 @@ export default function DailyAmenityBookingDocument({
           {/* Rest Staff */}
           <div style={{ border: '1px solid #000000', borderRadius: '4px', padding: '10px 12px', background: '#f8fafc' }}>
             <div style={{ fontWeight: 'bold', fontSize: '11px', color: '#334155', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>🛌 STAFF ON REST</span>
+              <span>STAFF ON REST</span>
               <span>({chartData?.rest_staff?.length || 0})</span>
             </div>
             {chartData?.rest_staff?.length > 0 ? (
@@ -529,7 +529,7 @@ export default function DailyAmenityBookingDocument({
           {/* Leave / Sick / OD Staff */}
           <div style={{ border: '1px solid #000000', borderRadius: '4px', padding: '10px 12px', background: '#f8fafc' }}>
             <div style={{ fontWeight: 'bold', fontSize: '11px', color: '#b91c1c', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>🏥 STAFF ON LEAVE / SICK / OD</span>
+              <span>STAFF ON LEAVE / SICK / OD</span>
               <span>({chartData?.leave_staff?.length || 0})</span>
             </div>
             {chartData?.leave_staff?.length > 0 ? (

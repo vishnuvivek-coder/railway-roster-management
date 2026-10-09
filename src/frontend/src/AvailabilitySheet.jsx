@@ -67,11 +67,11 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
 
   // Category Tabs Configuration
   const categoryTabs = [
-    { id: 'ALL', code: 'ALL', name: 'All Staff', icon: '🌐' },
-    { id: '1', code: 'COR', name: 'Conductors (COR)', icon: '🚆' },
-    { id: '2', code: 'TTI_SLEEPER', name: 'TTI / Sleeper (TTE)', icon: '💺' },
-    { id: '3', code: 'LADIES_TTE', name: 'Ladies Staff (LADIES)', icon: '👩' },
-    { id: '4', code: 'LR_STAFF', name: 'Leave Reserve (LR)', icon: '⚡' }
+    { id: 'ALL', code: 'ALL', name: 'All Staff', icon: '' },
+    { id: '1', code: 'COR', name: 'Conductors (COR)', icon: '' },
+    { id: '2', code: 'TTI_SLEEPER', name: 'TTI / Sleeper (TTE)', icon: '' },
+    { id: '3', code: 'LADIES_TTE', name: 'Ladies Staff (LADIES)', icon: '' },
+    { id: '4', code: 'LR_STAFF', name: 'Leave Reserve (LR)', icon: '' }
   ];
 
   // Filtered staff list based on category, status, search, and weekly rest toggle
@@ -303,7 +303,6 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-            <span style={{ fontSize: '1.4rem' }}>🟢</span>
             <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, fontFamily: 'Fraunces, serif', color: 'var(--color-text-primary)' }}>
               Staff Availability & Duty Status Sheet
             </h1>
@@ -312,7 +311,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
             </span>
           </div>
           <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.88rem' }}>
-            Instant real-time availability indicator: <strong style={{ color: '#10b981' }}>🟢 Glowing Green Dot</strong> for available employees present at HQ; <strong style={{ color: '#ef4444' }}>🔴 Glowing Red Dot</strong> for booked, outstation, resting, sick, or on leave staff.
+            Availability status: Green for staff available at HQ; Red for booked, outstation, resting, sick, or on leave staff.
           </p>
         </div>
 
@@ -369,7 +368,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
             onClick={handleExportCSV}
             style={{ padding: '8px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            📥 Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -377,7 +376,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
             onClick={() => window.print()}
             style={{ padding: '8px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            🖨️ Print Sheet
+            Print Sheet
           </button>
         </div>
       </div>
@@ -396,7 +395,6 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
         gap: '10px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '1.2rem' }}>📅</span>
           <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary)' }}>
             {formattedHeaderDate}
           </span>
@@ -413,7 +411,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
               onChange={(e) => setIncludeWeeklyRestAsAvailable(e.target.checked)}
               style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}
             />
-            <span>Count Weekly Rest Staff as 🟢 Available at HQ</span>
+            <span>Count Weekly Rest Staff as Available at HQ</span>
           </label>
         </div>
       </div>
@@ -488,7 +486,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
         {/* Total Staff */}
         <div className="avail-card">
           <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>
-            👥 Total Employees
+            Total Employees
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--color-text-primary)' }}>
@@ -500,12 +498,12 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
           </div>
         </div>
 
-        {/* 🟢 Available Count */}
+        {/* Available Count */}
         <div className="avail-card" style={{ borderLeft: '4px solid #10b981' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="dot-glow-green" style={{ width: '10px', height: '10px' }} />
-              🟢 Available Staff
+              Available Staff
             </span>
             <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: 800 }}>
               {activeMetrics.percentage}% Ready
@@ -534,12 +532,12 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
           </div>
         </div>
 
-        {/* 🔴 Not Available Count */}
+        {/* Not Available Count */}
         <div className="avail-card" style={{ borderLeft: '4px solid #ef4444' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#ef4444', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="dot-glow-red" style={{ width: '10px', height: '10px' }} />
-              🔴 Not Available Staff
+              Not Available Staff
             </span>
             <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 800 }}>
               {100 - activeMetrics.percentage}% Busy
@@ -602,7 +600,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
               color: statusFilter === 'AVAILABLE' ? '#fff' : '#10b981'
             }}
           >
-            🟢 Available ({activeMetrics.available})
+            Available ({activeMetrics.available})
           </button>
           <button
             type="button"
@@ -615,7 +613,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
               color: statusFilter === 'NOT_AVAILABLE' ? '#fff' : '#ef4444'
             }}
           >
-            🔴 Not Available ({activeMetrics.notAvailable})
+            Not Available ({activeMetrics.notAvailable})
           </button>
         </div>
 
@@ -624,7 +622,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
           <input
             type="text"
             className="form-input"
-            placeholder="🔍 Search employee name, train, link, PF..."
+            placeholder="Search employee name, train, link, PF..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -652,7 +650,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
               }}
               title="Clear search"
             >
-              ✕
+              ×
             </button>
           )}
         </div>
@@ -673,12 +671,12 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
           </div>
         ) : error ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>
-            <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '8px' }}>⚠️</span>
+            
             {error}
           </div>
         ) : filteredStaff.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '8px' }}>🔍</span>
+            
             No staff records found matching your filters.
           </div>
         ) : (
@@ -803,7 +801,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                     <td style={{ verticalAlign: 'middle', fontSize: '0.82rem' }}>
                       {staff.from_station && staff.to_station ? (
                         <span style={{ color: staff.from_station === 'GNT' ? 'var(--primary)' : 'inherit', fontWeight: 600 }}>
-                          {staff.from_station} ➔ {staff.to_station}
+                          {staff.from_station} → {staff.to_station}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--color-text-secondary)', opacity: 0.5 }}>-</span>
@@ -835,7 +833,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                               fontWeight: 700,
                               padding: '1px 6px'
                             }}>
-                              📋 Muster: {staff.muster_code}
+                              Muster: {staff.muster_code}
                             </span>
                             {staff.muster_remarks && (
                               <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
@@ -869,7 +867,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                           padding: '3px 8px',
                           whiteSpace: 'nowrap'
                         }} title={staff.cr_available}>
-                          💤 {staff.cr_available}
+                          {staff.cr_available}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
@@ -913,7 +911,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                             }}
                             title="Book Employee to Duty Slot"
                           >
-                            ✏️ Book Duty
+                            Book Duty
                           </button>
                         ) : (
                           <button
@@ -948,7 +946,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                             }}
                             title="Edit Duty Status"
                           >
-                            ✏️ Edit
+                            Edit
                           </button>
                         )}
                       </td>

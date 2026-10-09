@@ -151,7 +151,7 @@ export function StaffRecentDutiesView({ staffId, staffName, targetDate, authToke
         paddingBottom: '4px'
       }}>
         <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span>🕒 Last Duties Performed by <strong>{staffName || 'Employee'}</strong> (Past 5 Days):</span>
+          <span>Last Duties Performed by <strong>{staffName || 'Employee'}</strong> (Past 5 Days):</span>
         </div>
         {loading && <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>Loading...</span>}
       </div>
@@ -164,7 +164,7 @@ export function StaffRecentDutiesView({ staffId, staffName, targetDate, authToke
 
       {error && (
         <div style={{ fontSize: '0.74rem', color: '#f87171', padding: '4px 0' }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -665,7 +665,7 @@ export default function DutyEditModal({
           if (isHqArr && (staffMember.category_id === 4 || activeDuty.categoryId === 4)) {
             const tr = subDuty.train_numbers ? ` (Arr Tr ${subDuty.train_numbers})` : '';
             return {
-              label: `🟢 LR Standby Pool (Available)${tr}`,
+              label: `LR Standby Pool (Available)${tr}`,
               isRest: false,
               isLr: true,
               linkNum: subDuty.link_number
@@ -693,14 +693,14 @@ export default function DutyEditModal({
         if (activeDuty.isRest || activeDuty.status === 'REST' || activeDuty.train_numbers === 'REST') {
           if (staffMember.category_id === 4 || activeDuty.categoryId === 4) {
             return {
-              label: '🟢 LR Standby Pool (Available)',
+              label: 'LR Standby Pool (Available)',
               isRest: false,
               isLr: true,
               linkNum: activeDuty.link_number || null
             };
           }
           return {
-            label: '🏖️ Weekly REST',
+            label: 'Weekly REST',
             isRest: true,
             isLr: false,
             linkNum: activeDuty.link_number
@@ -708,7 +708,7 @@ export default function DutyEditModal({
         }
         if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
           return {
-            label: '⚡ Available for Booking (HQ)',
+            label: 'Available for Booking (HQ)',
             isRest: false,
             isLr: false,
             linkNum: null
@@ -723,7 +723,7 @@ export default function DutyEditModal({
             if (isHqArr) {
               const tr = activeDuty.train_numbers ? ` (Arr Tr ${activeDuty.train_numbers})` : '';
               return {
-                label: `🟢 LR Standby Pool (Available)${tr}`,
+                label: `LR Standby Pool (Available)${tr}`,
                 isRest: false,
                 isLr: true,
                 linkNum: activeDuty.link_number
@@ -738,7 +738,7 @@ export default function DutyEditModal({
             };
           }
           return {
-            label: '🟢 LR Standby Pool (Available)',
+            label: 'LR Standby Pool (Available)',
             isRest: false,
             isLr: true,
             linkNum: null
@@ -751,7 +751,7 @@ export default function DutyEditModal({
           const isNonDaily = [60, 61, 62].includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
           if (isNonDaily && !activeDuty.extra_train_no) {
             return {
-              label: `🟢 Non-Daily Link #${lNum} (Available)`,
+              label: `Non-Daily Link #${lNum} (Available)`,
               isRest: false,
               isLr: false,
               linkNum: lNum
@@ -772,7 +772,7 @@ export default function DutyEditModal({
 
     if (staffMember.category_id === 4) {
       return {
-        label: '🟢 LR Standby Pool (Available)',
+        label: 'LR Standby Pool (Available)',
         isRest: false,
         isLr: true,
         linkNum: null
@@ -792,7 +792,7 @@ export default function DutyEditModal({
     const isNonDaily = [60, 61, 62].includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
     if (isNonDaily) {
       return {
-        label: `🟢 Non-Daily Link #${linkNum} (Available)`,
+        label: `Non-Daily Link #${linkNum} (Available)`,
         isRest: false,
         isLr: false,
         linkNum
@@ -1494,7 +1494,7 @@ export default function DutyEditModal({
           } else if (shiftedMode === 'NON_DAILY') {
             const chosenTrain = (nonDailyList || []).find(t => String(t.id) === String(shiftedNonDailyId) || String(t.train_number) === String(shiftedNonDailyTrainNo).trim());
             const trNo = chosenTrain ? (chosenTrain.train_number + (chosenTrain.last_day_train_number ? `/${chosenTrain.last_day_train_number}` : '')) : (shiftedNonDailyTrainNo.trim() || 'Non-Daily Train');
-            const route = chosenTrain && chosenTrain.departure_station && chosenTrain.arrival_station ? ` (${chosenTrain.departure_station} ➔ ${chosenTrain.arrival_station})` : '';
+            const route = chosenTrain && chosenTrain.departure_station && chosenTrain.arrival_station ? ` (${chosenTrain.departure_station} -> ${chosenTrain.arrival_station})` : '';
             placeDesc = `Non-Daily Train ${trNo}${route}`;
           }
 
@@ -1705,7 +1705,6 @@ export default function DutyEditModal({
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.3rem' }}>🏷️</span>
               <h2 className="modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>
                 Duty Assignment & Status Control
               </h2>
@@ -1743,7 +1742,7 @@ export default function DutyEditModal({
                   }}
                   title="Toggle last duties performed"
                 >
-                  <span>🕒 Last Duties</span>
+                  <span>Last Duties</span>
                   <span>{showSlotStaffDuties ? '▲' : '▼'}</span>
                 </button>
               )}
@@ -1767,7 +1766,7 @@ export default function DutyEditModal({
               transition: 'background 0.2s'
             }}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -1797,7 +1796,7 @@ export default function DutyEditModal({
             }}>
               <div>
                 <label className="form-label" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 700 }}>
-                  📅 Duty Assignment Date:
+                  Duty Assignment Date:
                 </label>
                 <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
                   Day of week: <strong>{dayOfWeek}</strong>
@@ -1825,18 +1824,17 @@ export default function DutyEditModal({
               gap: '12px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1.4rem' }}>🎯</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#60a5fa' }}>
-                    Fixed Duty Link: Link #{targetLink || 'N/A'} {linkDetails?.train_numbers ? `— Train ${linkDetails.train_numbers}` : (dutyModal.train_numbers ? `— Train ${dutyModal.train_numbers}` : '')}
+                    Fixed Duty Link: Link #{targetLink || 'N/A'} {linkDetails?.train_numbers ? `- Train ${linkDetails.train_numbers}` : (dutyModal.train_numbers ? `- Train ${dutyModal.train_numbers}` : '')}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                    {linkDetails ? `${linkDetails.from_station} ➔ ${linkDetails.to_station} [${linkDetails.coaches || 'Coaches'}]` : 'Duty link remains fixed. Only the employee assigned changes.'}
+                    {linkDetails ? `${linkDetails.from_station} -> ${linkDetails.to_station} [${linkDetails.coaches || 'Coaches'}]` : 'Duty link remains fixed. Only the employee assigned changes.'}
                   </div>
                 </div>
               </div>
               <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid #3b82f6', fontWeight: 700, fontSize: '0.74rem' }}>
-                🔒 Link Locked
+                Link Locked
               </span>
             </div>
 
@@ -1864,7 +1862,7 @@ export default function DutyEditModal({
                 flexWrap: 'wrap'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason)) ? '🤒' : '🏖️'}</span>
+                  <span style={{ fontSize: '1.5rem' }}>{dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason)) ? '' : ''}</span>
                   <div>
                     <strong style={{ color: '#f87171', fontSize: '0.94rem' }}>
                       Currently On {dutyModal.status === 'SICK' || (dutyModal.overrideReason && /sick/i.test(dutyModal.overrideReason)) ? 'Sick Leave' : 'Leave'} ({dutyModal.leave_type || dutyModal.overrideReason || (dutyModal.status === 'SICK' ? 'Sick' : 'Leave')})
@@ -1897,7 +1895,7 @@ export default function DutyEditModal({
                         }}
                         title="Mark employee as reported fit and available at HQ"
                       >
-                        🟢 Reported Fit (Available at HQ)
+                        Reported Fit (Available at HQ)
                       </button>
                     )}
                     <button
@@ -1916,7 +1914,7 @@ export default function DutyEditModal({
                         cursor: 'pointer'
                       }}
                     >
-                      ❌ Cancel Leave
+                      Cancel Leave
                     </button>
                   </div>
                 )}
@@ -1936,10 +1934,10 @@ export default function DutyEditModal({
                 flexWrap: 'wrap'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>⚡</span>
+                  <span style={{ fontSize: '1.5rem' }}></span>
                   <div>
                     <strong style={{ color: '#ef4444', fontSize: '0.94rem' }} className="blink-advance">
-                      ⚡ UTILISED ADVANCE BY TRAIN NO {dutyModal.advanceTrainNo || '...'}
+                      UTILISED ADVANCE BY TRAIN NO {dutyModal.advanceTrainNo || '...'}
                     </strong>
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
                       Slot is vacant until original next link.
@@ -1982,10 +1980,10 @@ export default function DutyEditModal({
                 flexWrap: 'wrap'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🔄</span>
+                  <span style={{ fontSize: '1.5rem' }}></span>
                   <div>
                     <strong style={{ color: '#f59e0b', fontSize: '0.94rem' }}>
-                      ⚠️ SHIFTED PLACE ({dutyModal.overrideReason || 'Shifted away from this link'})
+                      SHIFTED PLACE ({dutyModal.overrideReason || 'Shifted away from this link'})
                     </strong>
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
                       Slot is vacant or replaced. Original employee shifted to another location/link.
@@ -2024,7 +2022,7 @@ export default function DutyEditModal({
                 color: '#f87171',
                 fontSize: '0.85rem'
               }}>
-                ⚠️ {errorMsg}
+                {errorMsg}
               </div>
             )}
 
@@ -2056,7 +2054,7 @@ export default function DutyEditModal({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.2rem' }}>🗑️</span>
+                    
                     <span>Delete</span>
                   </div>
                   <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>
@@ -2084,7 +2082,7 @@ export default function DutyEditModal({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.2rem' }}>➕</span>
+                    
                     <span>Add or Assign Duty</span>
                   </div>
                   <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>
@@ -2110,7 +2108,7 @@ export default function DutyEditModal({
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🗑️ Select Reason for Delete:</span>
+                    <span>Select Reason for Delete:</span>
                   </div>
                   <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', fontSize: '0.74rem', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                     Link #{targetLink || 'Duty'} Locked
@@ -2120,14 +2118,14 @@ export default function DutyEditModal({
                 {/* 8 Reasons for Delete / Roster Adjustment Buttons */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {[
-                    { id: 'LEAVE', label: '1. Leave', icon: '🏖️', desc: 'CL, LAP, LHAP, etc.' },
-                    { id: 'SICK', label: '2. Sick', icon: '🤒', desc: 'Medical sick leave' },
-                    { id: 'ADVANCE_BOOKED', label: '3. Advance Booked', icon: '⚡', desc: 'Utilised on advance train' },
-                    { id: 'ABSENT', label: '4. Absent', icon: '🚫', desc: 'Unauthorized [O]' },
-                    { id: 'SHIFTED', label: '5. Shifted Place', icon: '🔄', desc: 'Shifted to place / link' },
-                    { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '❌', desc: 'Remove mistaken allotment' },
+                    { id: 'LEAVE', label: '1. Leave', icon: '', desc: 'CL, LAP, LHAP, etc.' },
+                    { id: 'SICK', label: '2. Sick', icon: '', desc: 'Medical sick leave' },
+                    { id: 'ADVANCE_BOOKED', label: '3. Advance Booked', icon: '', desc: 'Utilised on advance train' },
+                    { id: 'ABSENT', label: '4. Absent', icon: '', desc: 'Unauthorized [O]' },
+                    { id: 'SHIFTED', label: '5. Shifted Place', icon: '', desc: 'Shifted to place / link' },
+                    { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '', desc: 'Remove mistaken allotment' },
                     { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
-                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '👥', desc: 'Reassign link / swap staff' }
+                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '', desc: 'Reassign link / swap staff' }
                   ].map(r => (
                     <button
                       key={r.id}
@@ -2177,7 +2175,7 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                      📋 {leaveDates.length > 1 ? 'Select Default Leave Type (Applies to all days):' : 'Select Leave / Rest Type (All 9 options available):'}
+                      {leaveDates.length > 1 ? 'Select Default Leave Type (Applies to all days):' : 'Select Leave / Rest Type (All 9 options available):'}
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: '6px' }}>
                       {LEAVE_TYPES.map(l => {
@@ -2245,7 +2243,7 @@ export default function DutyEditModal({
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>🗓️</span>
+                            
                             <strong style={{ fontSize: '0.88rem', color: '#fbbf24' }}>
                               Day-Wise Specific Leave Options ({leaveDates.length} Days Applied):
                             </strong>
@@ -2381,7 +2379,7 @@ export default function DutyEditModal({
                                     marginTop: '2px'
                                   }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#ddd6fe' }}>
-                                      <span>💤 <strong>Avail CR Against Forgone Rest Date:</strong></span>
+                                      <span><strong>Avail CR Against Forgone Rest Date:</strong></span>
                                       <span style={{ fontSize: '0.7rem', color: crCount > 0 ? '#c4b5fd' : '#f87171' }}>
                                         {crCount > 0 ? `(${crCount} Available)` : '(0 Due)'}
                                       </span>
@@ -2398,18 +2396,18 @@ export default function DutyEditModal({
                                       >
                                         {dueDates.map(dd => (
                                           <option key={dd.date} value={dd.date}>
-                                            🗓️ {dd.dateDisplay || dd.date} ({dd.dayOfWeek}) — {dd.duty} [{dd.restType}]
+                                            {dd.dateDisplay || dd.date} ({dd.dayOfWeek}) - {dd.duty} [{dd.restType}]
                                           </option>
                                         ))}
                                       </select>
                                     ) : (
                                       <div style={{ fontSize: '0.72rem', color: '#fca5a5' }}>
-                                        ⚠️ No unredeemed rest-worked dates on record for this staff member.
+                                        No unredeemed rest-worked dates on record for this staff member.
                                       </div>
                                     )}
                                     {selectedDueDateObj && (
                                       <div style={{ fontSize: '0.72rem', color: '#a78bfa' }}>
-                                        ✓ Redeeming rest earned on <strong>{selectedDueDateObj.dateDisplay || selectedDueDateObj.date}</strong> ({selectedDueDateObj.duty})
+                                        Redeeming rest earned on <strong>{selectedDueDateObj.dateDisplay || selectedDueDateObj.date}</strong> ({selectedDueDateObj.duty})
                                       </div>
                                     )}
                                   </div>
@@ -2421,7 +2419,7 @@ export default function DutyEditModal({
                       </div>
                     ) : (
                       <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                        ℹ️ Muster Roll attendance marked as <strong style={{ color: '#fbbf24' }}>[{leaveType}]</strong>.
+                        Muster Roll attendance marked as <strong style={{ color: '#fbbf24' }}>[{leaveType}]</strong>.
                       </div>
                     )}
 
@@ -2438,7 +2436,7 @@ export default function DutyEditModal({
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>💤</span>
+                            
                             <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#c4b5fd' }}>
                               Compensatory Rest (CR) Balance & Due Dates:
                             </span>
@@ -2450,7 +2448,7 @@ export default function DutyEditModal({
                             fontWeight: 800,
                             border: crCount > 0 ? '1px solid rgba(167, 139, 250, 0.5)' : '1px solid rgba(239, 68, 68, 0.35)'
                           }}>
-                            {crCount > 0 ? `✨ ${crCount} CR Available` : '⚠️ 0 CR Due'}
+                            {crCount > 0 ? `${crCount} CR Available` : '0 CR Due'}
                           </span>
                         </div>
 
@@ -2481,7 +2479,7 @@ export default function DutyEditModal({
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                       <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#f3f4f6' }}>
-                                        🗓️ {item.dateDisplay || item.date}
+                                        {item.dateDisplay || item.date}
                                       </span>
                                       <span style={{ fontSize: '0.72rem', color: '#c4b5fd', fontWeight: 600 }}>
                                         ({item.dayOfWeekLong || item.dayOfWeek})
@@ -2498,11 +2496,11 @@ export default function DutyEditModal({
                                       </span>
                                     </div>
                                     <div style={{ fontSize: '0.76rem', color: '#e5e7eb' }}>
-                                      🚆 <strong>Duty Worked:</strong> {item.duty}
+                                      <strong>Duty Worked:</strong> {item.duty}
                                     </div>
                                     {item.reason && (
                                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                        📝 <em>{item.reason}</em>
+                                        <em>{item.reason}</em>
                                       </div>
                                     )}
                                   </div>
@@ -2525,7 +2523,7 @@ export default function DutyEditModal({
                                       border: isSelected ? 'none' : '1px solid rgba(167, 139, 250, 0.4)'
                                     }}
                                   >
-                                    {isSelected ? '✓ Selected' : '👉 Avail Against This Date'}
+                                    {isSelected ? 'Selected' : 'Avail Against This Date'}
                                   </button>
                                 </div>
                               );
@@ -2541,12 +2539,12 @@ export default function DutyEditModal({
                             color: '#fca5a5',
                             lineHeight: 1.45
                           }}>
-                            <div><strong>⚠️ No Compensatory Rest (CR) Due Recorded:</strong></div>
+                            <div><strong>No Compensatory Rest (CR) Due Recorded:</strong></div>
                             <div style={{ marginTop: '2px' }}>
                               No record found of <strong>{dutyModal.name || 'this employee'}</strong> working on any scheduled weekly rest or cyclic rest days without availing rest.
                             </div>
                             <div style={{ marginTop: '4px', fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                              ℹ️ If granting a special administrative sanction, please specify the approval reference in the Remarks field.
+                              If granting a special administrative sanction, please specify the approval reference in the Remarks field.
                             </div>
                           </div>
                         )}
@@ -2570,13 +2568,13 @@ export default function DutyEditModal({
                               }}
                             >
                               <span>{showRedeemedHistory ? '▼' : '▶'}</span>
-                              <span>📜 View Previously Redeemed CRs ({redeemedDates.length} availed)</span>
+                              <span>View Previously Redeemed CRs ({redeemedDates.length} availed)</span>
                             </button>
                             {showRedeemedHistory && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
                                 {redeemedDates.map((r, i) => (
                                   <div key={i} style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', padding: '2px 6px' }}>
-                                    • Availed on <strong>{r.dateDisplay || r.date}</strong> — {r.reason || 'CR Availed'}
+                                    • Availed on <strong>{r.dateDisplay || r.date}</strong> - {r.reason || 'CR Availed'}
                                   </div>
                                 ))}
                               </div>
@@ -2598,7 +2596,7 @@ export default function DutyEditModal({
                           border: '1px solid rgba(16, 185, 129, 0.3)',
                           fontSize: '0.76rem'
                         }}>
-                          <span style={{ color: '#10b981', fontWeight: 700 }}>🚆 Multi-Day Link Set ({detectedLinkSet.setLength}-Day Link #{targetLink}):</span>
+                          <span style={{ color: '#10b981', fontWeight: 700 }}>Multi-Day Link Set ({detectedLinkSet.setLength}-Day Link #{targetLink}):</span>
                           <span style={{ color: 'var(--color-text-secondary)', marginLeft: '6px' }}>
                             1-day leave on Day 1. For next {detectedLinkSet.remainingLinks.length} day(s), employee will be marked <strong>Available for Booking</strong> at HQ (Muster [P]), and link vacated for relief.
                           </span>
@@ -2620,7 +2618,7 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#f87171' }}>
-                      🤒 Medical / Sick Classification:
+                      Medical / Sick Classification:
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                       {[
@@ -2677,7 +2675,7 @@ export default function DutyEditModal({
                     </div>
 
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Muster Roll attendance marked as <strong style={{ color: '#f87171' }}>[{sickType}]</strong>.
+                      Muster Roll attendance marked as <strong style={{ color: '#f87171' }}>[{sickType}]</strong>.
                     </div>
                   </div>
                 )}
@@ -2694,7 +2692,7 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                      ⚡ Advance Booked Train Details:
+                      Advance Booked Train Details:
                     </label>
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
@@ -2737,7 +2735,7 @@ export default function DutyEditModal({
                     gap: '10px'
                   }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#ef4444' }}>
-                      🚫 Unauthorized Absence Record:
+                      Unauthorized Absence Record:
                     </label>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -2765,7 +2763,7 @@ export default function DutyEditModal({
                     </div>
 
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Indian Railways Muster Roll attendance recorded as <strong style={{ color: '#ef4444' }}>[O] (Absent)</strong>.
+                      Indian Railways Muster Roll attendance recorded as <strong style={{ color: '#ef4444' }}>[O] (Absent)</strong>.
                     </div>
                   </div>
                 )}
@@ -2783,7 +2781,7 @@ export default function DutyEditModal({
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                       <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                        🔄 Shifted Place / Duty Details:
+                        Shifted Place / Duty Details:
                       </label>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <button
@@ -2800,7 +2798,7 @@ export default function DutyEditModal({
                             cursor: 'pointer'
                           }}
                         >
-                          🏢 Custom Place / Duty
+                          Custom Place / Duty
                         </button>
                         <button
                           type="button"
@@ -2816,7 +2814,7 @@ export default function DutyEditModal({
                             cursor: 'pointer'
                           }}
                         >
-                          🚆 Daily Train Link
+                          Daily Train Link
                         </button>
                         <button
                           type="button"
@@ -2832,7 +2830,7 @@ export default function DutyEditModal({
                             cursor: 'pointer'
                           }}
                         >
-                          🗓️ Non-Daily Train Link
+                          Non-Daily Train Link
                         </button>
                         <button
                           type="button"
@@ -2848,7 +2846,7 @@ export default function DutyEditModal({
                             cursor: 'pointer'
                           }}
                         >
-                          🤝 Mutual Shift of Places
+                          Mutual Shift of Places
                         </button>
                       </div>
                     </div>
@@ -2868,11 +2866,11 @@ export default function DutyEditModal({
                               }}
                               style={{ fontSize: '0.84rem' }}
                             >
-                              <option value="ENTIRE_ROSTER">🌐 All Employees (Entire Roster)</option>
+                              <option value="ENTIRE_ROSTER">All Employees (Entire Roster)</option>
                               {(categories || []).map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                               ))}
-                              <option value="NON_DAILY">🗓️ Non-Daily Link Crew (60, 61, 62)</option>
+                              <option value="NON_DAILY">Non-Daily Link Crew (60, 61, 62)</option>
                             </select>
                           </div>
                           <div>
@@ -2902,7 +2900,7 @@ export default function DutyEditModal({
                               formatLabel={(s) => {
                                 const dInfo = getStaffDutyInfo(s, selectedDate);
                                 const catName = categories?.find(c => c.id === s.category_id)?.name?.split(' ')[0] || `Cat ${s.category_id}`;
-                                return `${s.name} (${catName}) ➔ ${dInfo.label || 'Duty'}`;
+                                return `${s.name} (${catName}) -> ${dInfo.label || 'Duty'}`;
                               }}
                               customStyles={{
                                 control: (base) => ({
@@ -2920,7 +2918,7 @@ export default function DutyEditModal({
                         {/* Live Mutual Shift Preview Card */}
                         {selectedMutualStaffObj ? (
                           <div style={{
-                            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(99, 102, 241, 0.08))',
+                            background: 'rgba(56, 189, 248, 0.08)',
                             border: '1px solid rgba(56, 189, 248, 0.35)',
                             borderRadius: '8px',
                             padding: '10px 14px',
@@ -2929,8 +2927,8 @@ export default function DutyEditModal({
                             gap: '8px'
                           }}>
                             <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span>🤝 Live Mutual Shift Preview (Place ↔ Place):</span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}>📅 {selectedDate}</span>
+                              <span>Live Mutual Shift Preview (Place ↔ Place):</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}>{selectedDate}</span>
                             </div>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '8px', alignItems: 'center' }}>
@@ -2943,13 +2941,13 @@ export default function DutyEditModal({
                                 fontSize: '0.75rem'
                               }}>
                                 <div style={{ fontWeight: 700, color: '#fbbf24' }}>
-                                  👤 {dutyModal.name || initialStaffObj?.name || 'Staff A'}
+                                  {dutyModal.name || initialStaffObj?.name || 'Staff A'}
                                 </div>
                                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
                                   Current: <strong style={{ color: 'var(--color-text-primary)' }}>{staffADutyInfo.label}</strong>
                                 </div>
                                 <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.1)', color: '#38bdf8', fontWeight: 600 }}>
-                                  ➔ Will take: <strong>{staffBDutyInfo?.label || 'Duty'}</strong>
+                                  → Will take: <strong>{staffBDutyInfo?.label || 'Duty'}</strong>
                                 </div>
                               </div>
 
@@ -2966,13 +2964,13 @@ export default function DutyEditModal({
                                 fontSize: '0.75rem'
                               }}>
                                 <div style={{ fontWeight: 700, color: '#38bdf8' }}>
-                                  👤 {selectedMutualStaffObj.name}
+                                  {selectedMutualStaffObj.name}
                                 </div>
                                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
                                   Current: <strong style={{ color: 'var(--color-text-primary)' }}>{staffBDutyInfo?.label || 'Duty'}</strong>
                                 </div>
                                 <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.1)', color: '#fbbf24', fontWeight: 600 }}>
-                                  ➔ Will take: <strong>{staffADutyInfo.label}</strong>
+                                  → Will take: <strong>{staffADutyInfo.label}</strong>
                                 </div>
                               </div>
                             </div>
@@ -2987,7 +2985,7 @@ export default function DutyEditModal({
                             color: 'var(--color-text-muted)',
                             textAlign: 'center'
                           }}>
-                            💡 Select an employee above to see live mutual duty swap preview.
+                            Select an employee above to see live mutual duty swap preview.
                           </div>
                         )}
 
@@ -3017,7 +3015,7 @@ export default function DutyEditModal({
                           alignItems: 'center',
                           gap: '6px'
                         }}>
-                          <span>ℹ️</span>
+                          <span></span>
                           <span><strong>Allow & Shift:</strong> Mutually swaps employee names in the daily roster against their respective trains/links only on the selected date(s).</span>
                         </div>
                       </div>
@@ -3104,8 +3102,8 @@ export default function DutyEditModal({
                               }}
                               style={{ fontSize: '0.84rem' }}
                             >
-                              <option value="AUTO">📅 Auto ({selectedDateDayOfWeek})</option>
-                              <option value="ALL">📋 All Days ({nonDailyList?.length || 0})</option>
+                              <option value="AUTO">Auto ({selectedDateDayOfWeek})</option>
+                              <option value="ALL">All Days ({nonDailyList?.length || 0})</option>
                               {['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'].map(day => (
                                 <option key={day} value={day}>{day}</option>
                               ))}
@@ -3130,7 +3128,7 @@ export default function DutyEditModal({
                               <option value="">-- Choose Non-Daily Service ({availableNonDailyTrains.length}) --</option>
                               {availableNonDailyTrains.map(t => (
                                 <option key={t.id} value={t.id}>
-                                  Tr {t.train_number}{t.last_day_train_number ? `/${t.last_day_train_number}` : ''} {t.departure_station ? `(${t.departure_station} ➔ ${t.arrival_station})` : ''} {t.departure_time ? `[${t.departure_time} - ${t.arrival_time || '---'}]` : ''} ({t.day_of_week})
+                                  Tr {t.train_number}{t.last_day_train_number ? `/${t.last_day_train_number}` : ''} {t.departure_station ? `(${t.departure_station} -> ${t.arrival_station})` : ''} {t.departure_time ? `[${t.departure_time} - ${t.arrival_time || '---'}]` : ''} ({t.day_of_week})
                                 </option>
                               ))}
                             </select>
@@ -3169,10 +3167,10 @@ export default function DutyEditModal({
                               gap: '2px'
                             }}>
                               <div style={{ fontWeight: 700, color: '#60a5fa' }}>
-                                🚆 Train {selectedNonDailyObj.train_number}{selectedNonDailyObj.last_day_train_number ? ` / ${selectedNonDailyObj.last_day_train_number}` : ''} ({selectedNonDailyObj.day_of_week})
+                                Train {selectedNonDailyObj.train_number}{selectedNonDailyObj.last_day_train_number ? ` / ${selectedNonDailyObj.last_day_train_number}` : ''} ({selectedNonDailyObj.day_of_week})
                               </div>
                               <div style={{ color: 'var(--color-text-secondary)' }}>
-                                Route: <strong>{selectedNonDailyObj.departure_station || '---'} ({selectedNonDailyObj.departure_time || '--:--'})</strong> ➔ <strong>{selectedNonDailyObj.arrival_station || '---'} ({selectedNonDailyObj.arrival_time || '--:--'})</strong>
+                                Route: <strong>{selectedNonDailyObj.departure_station || '---'} ({selectedNonDailyObj.departure_time || '--:--'})</strong> → <strong>{selectedNonDailyObj.arrival_station || '---'} ({selectedNonDailyObj.arrival_time || '--:--'})</strong>
                               </div>
                               {selectedNonDailyObj.coaches && (
                                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
@@ -3211,7 +3209,7 @@ export default function DutyEditModal({
                     </div>
 
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Employee is on duty — Muster Roll attendance recorded as <strong style={{ color: '#10b981' }}>[P] (Present)</strong>.
+                      Employee is on duty - Muster Roll attendance recorded as <strong style={{ color: '#10b981' }}>[P] (Present)</strong>.
                     </div>
                   </div>
                 )}
@@ -3229,7 +3227,7 @@ export default function DutyEditModal({
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#f87171' }}>
-                        ❌ Remove as Wrong Allotment:
+                        Remove as Wrong Allotment:
                       </label>
                       <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
                         Correction
@@ -3253,7 +3251,7 @@ export default function DutyEditModal({
                     </div>
 
                     <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ The employee's mistaken allotment on this link will be removed and their duty assignment corrected.
+                      The employee's mistaken allotment on this link will be removed and their duty assignment corrected.
                     </div>
                   </div>
                 )}
@@ -3299,7 +3297,7 @@ export default function DutyEditModal({
                           cursor: 'pointer'
                         }}
                       >
-                        📅 Daily Duty Upgrade (For {selectedDate})
+                        Daily Duty Upgrade (For {selectedDate})
                       </button>
                       <button
                         type="button"
@@ -3316,7 +3314,7 @@ export default function DutyEditModal({
                           cursor: 'pointer'
                         }}
                       >
-                        🎖️ Permanent Cadre Upgrade (Database)
+                        Permanent Cadre Upgrade (Database)
                       </button>
                     </div>
 
@@ -3345,12 +3343,12 @@ export default function DutyEditModal({
                         {Array.from({ length: 21 }, (_, i) => i + 1).map(num => {
                           const corDef = corLinksData.find(l => l.link_number === num);
                           const isVac = corDef ? corDef.is_vacant : false;
-                          const trInfo = corDef ? (corDef.train_numbers ? ` [Tr: ${corDef.train_numbers}]` : (corDef.from_station ? ` [${corDef.from_station} ➔ ${corDef.to_station}]` : '')) : '';
-                          const occName = corDef && corDef.occupant && !corDef.is_vacant ? ` (Occupant: ${corDef.occupant.name})` : (isVac ? ' 🟢 [VACANT]' : '');
+                          const trInfo = corDef ? (corDef.train_numbers ? ` [Tr: ${corDef.train_numbers}]` : (corDef.from_station ? ` [${corDef.from_station} -> ${corDef.to_station}]` : '')) : '';
+                          const occName = corDef && corDef.occupant && !corDef.is_vacant ? ` (Occupant: ${corDef.occupant.name})` : (isVac ? ' [VACANT]' : '');
                           const restDay = corDef?.scheduled_rest_day || getCorRest(num);
                           return (
                             <option key={num} value={num}>
-                              Link #{num}{trInfo} — Rest: {restDay}{occName}
+                              Link #{num}{trInfo} - Rest: {restDay}{occName}
                             </option>
                           );
                         })}
@@ -3374,14 +3372,14 @@ export default function DutyEditModal({
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <strong style={{ color: 'var(--primary)' }}>
-                              🚆 Conductor Link #{targetCorLink} {selectedCorDef.train_numbers ? `(Train ${selectedCorDef.train_numbers})` : ''}
+                              Conductor Link #{targetCorLink} {selectedCorDef.train_numbers ? `(Train ${selectedCorDef.train_numbers})` : ''}
                             </strong>
                             <span className="badge" style={{ background: selectedCorDef.is_vacant ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: selectedCorDef.is_vacant ? '#10b981' : '#f59e0b' }}>
-                              {selectedCorDef.is_vacant ? '🟢 Vacant Slot' : '🔒 Occupied Link'}
+                              {selectedCorDef.is_vacant ? 'Vacant Slot' : 'Occupied Link'}
                             </span>
                           </div>
                           <div style={{ color: 'var(--color-text-secondary)' }}>
-                            Route: <strong>{selectedCorDef.from_station || '---'} ➔ {selectedCorDef.to_station || '---'}</strong> | Scheduled Rest: <strong>{selectedCorDef.scheduled_rest_day || getCorRest(targetCorLink)}</strong>
+                            Route: <strong>{selectedCorDef.from_station || '---'} → {selectedCorDef.to_station || '---'}</strong> | Scheduled Rest: <strong>{selectedCorDef.scheduled_rest_day || getCorRest(targetCorLink)}</strong>
                           </div>
                           {selectedCorDef.occupant && !selectedCorDef.is_vacant && (
                             <div style={{ color: '#f59e0b', fontSize: '0.74rem' }}>
@@ -3446,7 +3444,7 @@ export default function DutyEditModal({
                           fontSize: '0.76rem',
                           color: '#d8b4fe'
                         }}>
-                          ℹ️ Permanent promotion will update the master roster. Their old slot on <strong>Row {initialStaffObj?.row_position || targetLink}</strong> in <strong>{categories.find(c => c.id === dutyModal.categoryId)?.name || 'Current Category'}</strong> will be preserved as <strong style={{ color: '#10b981' }}>VACANT (V)</strong>.
+                          Permanent promotion will update the master roster. Their old slot on <strong>Row {initialStaffObj?.row_position || targetLink}</strong> in <strong>{categories.find(c => c.id === dutyModal.categoryId)?.name || 'Current Category'}</strong> will be preserved as <strong style={{ color: '#10b981' }}>VACANT (V)</strong>.
                         </div>
                       </div>
                     )}
@@ -3479,7 +3477,7 @@ export default function DutyEditModal({
                     )}
 
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Upgraded Conductor duty will be recorded as <strong style={{ color: '#10b981' }}>[P] (Present)</strong> on the Muster Roll and Staff Movement Register.
+                      Upgraded Conductor duty will be recorded as <strong style={{ color: '#10b981' }}>[P] (Present)</strong> on the Muster Roll and Staff Movement Register.
                     </div>
                   </div>
                 )}
@@ -3497,7 +3495,7 @@ export default function DutyEditModal({
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>👥 Option 8: Reassign Link / Duty to Staff</span>
+                        <span>Option 8: Reassign Link / Duty to Staff</span>
                       </div>
                       <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', fontSize: '0.72rem', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
                         Link #{targetLink || 'Duty'}
@@ -3515,10 +3513,10 @@ export default function DutyEditModal({
                       </label>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px' }}>
                         {[
-                          { id: 'SPARE_HQ', label: '🟢 Spare at HQ [P]', desc: 'Available for duty booking' },
-                          { id: 'LEAVE', label: '🏖️ Send on Leave', desc: 'CL, LAP, LHAP, etc.' },
-                          { id: 'REST', label: '🛋️ Weekly Rest [R]', desc: 'Rest day / Off' },
-                          { id: 'SHIFTED', label: '🔄 Shifted Place', desc: 'Shifted to other duty' }
+                          { id: 'SPARE_HQ', label: 'Spare at HQ [P]', desc: 'Available for duty booking' },
+                          { id: 'LEAVE', label: 'Send on Leave', desc: 'CL, LAP, LHAP, etc.' },
+                          { id: 'REST', label: 'Weekly Rest [R]', desc: 'Rest day / Off' },
+                          { id: 'SHIFTED', label: 'Shifted Place', desc: 'Shifted to other duty' }
                         ].map(st => (
                           <button
                             key={st.id}
@@ -3583,20 +3581,20 @@ export default function DutyEditModal({
                             checked={showAlreadyAssigned}
                             onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
                           />
-                          <span>⚠️ Show busy staff</span>
+                          <span>Show busy staff</span>
                         </label>
                       </div>
 
                       {/* Category Filter Pills */}
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
                         {[
-                          { id: 'ENTIRE_ROSTER', label: '👥 Entire Roster' },
-                          { id: 'ALL', label: '🟢 Available at HQ' },
+                          { id: 'ENTIRE_ROSTER', label: 'Entire Roster' },
+                          { id: 'ALL', label: 'Available at HQ' },
                           { id: '4', label: 'LR Pool' },
                           { id: '2', label: 'Sleeper' },
                           { id: '1', label: 'Conductors' },
                           { id: '3', label: 'Ladies' },
-                          { id: 'NON_DAILY', label: '⚡ Non-Daily' }
+                          { id: 'NON_DAILY', label: 'Non-Daily' }
                         ].map(c => (
                           <button
                             key={c.id}
@@ -3633,18 +3631,18 @@ export default function DutyEditModal({
                             if (found) setReplacementName(found.name);
                             else setReplacementName('');
                           }}
-                          placeholder={`🔍 Type employee name to reassign (${eligibleReplacementStaff.length} options)...`}
+                          placeholder={`Type employee name to reassign (${eligibleReplacementStaff.length} options)...`}
                           formatLabel={(s) => {
                             const dutyInfo = getStaffDutyInfo(s, selectedDate);
                             const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                             const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                            let statusText = '🟢 [AVAILABLE]';
+                            let statusText = '[AVAILABLE]';
                             if (assignStatus.isAssigned) {
-                              statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
+                              statusText = `[BUSY: ${assignStatus.trainDesc}]`;
                             } else if (assignStatus.isUnavailable) {
-                              statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
+                              statusText = `[${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
                             }
-                            return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                            return `${s.name} (${s.designation || 'Staff'}) [${catName}] - ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
                           }}
                           customStyles={{
                             control: (base, state) => ({
@@ -3675,7 +3673,7 @@ export default function DutyEditModal({
                         />
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
-                        💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
+                        Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
                       </div>
                     </div>
 
@@ -3699,14 +3697,14 @@ export default function DutyEditModal({
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <strong style={{ color: '#93c5fd' }}>
-                              👤 New Assignee: {repObj.name} ({repObj.designation || 'Staff'})
+                              New Assignee: {repObj.name} ({repObj.designation || 'Staff'})
                             </strong>
                             <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
                               Takes Link #{targetLink || 'Duty'}
                             </span>
                           </div>
                           <div style={{ color: 'var(--color-text-secondary)' }}>
-                            Category: <strong>{catName}</strong> {repObj.pf_no ? `| PF: ${repObj.pf_no}` : ''} | Current Status: <strong>{assignStatus.isAssigned ? `Working ${assignStatus.trainDesc}` : (assignStatus.isUnavailable ? (assignStatus.unavailableReason || 'Rest') : '🟢 Available at HQ')}</strong>
+                            Category: <strong>{catName}</strong> {repObj.pf_no ? `| PF: ${repObj.pf_no}` : ''} | Current Status: <strong>{assignStatus.isAssigned ? `Working ${assignStatus.trainDesc}` : (assignStatus.isUnavailable ? (assignStatus.unavailableReason || 'Rest') : 'Available at HQ')}</strong>
                           </div>
                         </div>
                       );
@@ -3738,7 +3736,7 @@ export default function DutyEditModal({
                     </div>
 
                     <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                      ℹ️ Replacement employee will be allotted to <strong>Link #{targetLink || 'Duty'}</strong> with Muster Roll <strong style={{ color: '#10b981' }}>[P] (Present)</strong>.
+                      Replacement employee will be allotted to <strong>Link #{targetLink || 'Duty'}</strong> with Muster Roll <strong style={{ color: '#10b981' }}>[P] (Present)</strong>.
                     </div>
                   </div>
                 )}
@@ -3759,7 +3757,7 @@ export default function DutyEditModal({
                         What happens to this slot on Link #{targetLink || 'Duty'}?
                       </label>
                       <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                        (Link is fixed — only employee name changes)
+                        (Link is fixed - only employee name changes)
                       </span>
                     </div>
 
@@ -3800,7 +3798,7 @@ export default function DutyEditModal({
                           cursor: 'pointer'
                         }}
                       >
-                        {deleteReason === 'WRONG_ALLOTMENT' ? '🔄 Replace with Correct Employee' : '🔄 Replace with Another Employee'}
+                        {deleteReason === 'WRONG_ALLOTMENT' ? 'Replace with Correct Employee' : 'Replace with Another Employee'}
                       </button>
                       <button
                         type="button"
@@ -3818,7 +3816,7 @@ export default function DutyEditModal({
                           cursor: 'pointer'
                         }}
                       >
-                        🚫 Leave Slot Vacant
+                        Leave Slot Vacant
                       </button>
                     </div>
 
@@ -3831,7 +3829,7 @@ export default function DutyEditModal({
                         fontSize: '0.8rem',
                         color: '#93c5fd'
                       }}>
-                        ℹ️ This will undo the mistaken assignment on <strong>Link #{targetLink || 'Duty'}</strong> and restore the original cyclic roster baseline.
+                        This will undo the mistaken assignment on <strong>Link #{targetLink || 'Duty'}</strong> and restore the original cyclic roster baseline.
                       </div>
                     )}
 
@@ -3844,7 +3842,7 @@ export default function DutyEditModal({
                         fontSize: '0.8rem',
                         color: '#fca5a5'
                       }}>
-                        ℹ️ <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
+                        <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
                       </div>
                     )}
 
@@ -3853,13 +3851,13 @@ export default function DutyEditModal({
                         {/* Filter by Category */}
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                           {[
-                            { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
-                            { id: 'ALL', label: '🟢 All Available' },
+                            { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
+                            { id: 'ALL', label: 'All Available' },
                             { id: '1', label: 'Conductors' },
                             { id: '2', label: 'Sleeper' },
                             { id: '3', label: 'Ladies' },
                             { id: '4', label: 'LR Pool' },
-                            { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
+                            { id: 'NON_DAILY', label: 'Non-Daily (60, 61, 62)' }
                           ].map(c => (
                             <button
                               key={c.id}
@@ -3895,7 +3893,7 @@ export default function DutyEditModal({
                               checked={showAlreadyAssigned}
                               onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
                             />
-                            <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                            <span>Show busy / assigned staff (to shift duty)</span>
                           </label>
                         </div>
 
@@ -3910,18 +3908,18 @@ export default function DutyEditModal({
                               if (found) setReplacementName(found.name);
                               else setReplacementName('');
                             }}
-                            placeholder={`🔍 Type employee name to select (${eligibleReplacementStaff.length} ${replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'})...`}
+                            placeholder={`Type employee name to select (${eligibleReplacementStaff.length} ${replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'})...`}
                             formatLabel={(s) => {
                               const dutyInfo = getStaffDutyInfo(s, selectedDate);
                               const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                               const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                              let statusText = '🟢 [AVAILABLE]';
+                              let statusText = '[AVAILABLE]';
                               if (assignStatus.isAssigned) {
-                                statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
+                                statusText = `[BUSY: ${assignStatus.trainDesc}]`;
                               } else if (assignStatus.isUnavailable) {
-                                statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
+                                statusText = `[${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
                               }
-                              return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                              return `${s.name} (${s.designation || 'Staff'}) [${catName}] - ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
                             }}
                             customStyles={{
                               control: (base, state) => ({
@@ -3953,12 +3951,12 @@ export default function DutyEditModal({
                         </div>
                         {eligibleReplacementStaff.length === 0 ? (
                           <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
-                            💡 No employees currently available for booking in this pool.
+                            No employees currently available for booking in this pool.
                             {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
                           </div>
                         ) : (
                           <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
-                            💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
+                            Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
                           </div>
                         )}
 
@@ -4003,7 +4001,7 @@ export default function DutyEditModal({
                             }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <strong style={{ color: badgeColor }}>
-                                  👤 {selectedReplacementStaffObj.name} ({selectedReplacementStaffObj.designation || 'Staff'}) • [{catName}]
+                                  {selectedReplacementStaffObj.name} ({selectedReplacementStaffObj.designation || 'Staff'}) • [{catName}]
                                 </strong>
                                 <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
                                   {badgeText}
@@ -4065,7 +4063,7 @@ export default function DutyEditModal({
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>➕ Add or Assign Duty to Link #{targetLink || 'Duty'}:</span>
+                    <span>Add or Assign Duty to Link #{targetLink || 'Duty'}:</span>
                   </div>
                   <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid #3b82f6', fontWeight: 700, fontSize: '0.74rem' }}>
                     Fixed Link Assignment
@@ -4076,7 +4074,7 @@ export default function DutyEditModal({
                   Duty link is fixed to <strong>Link #{targetLink || 'N/A'}</strong>. Select which employee will be assigned to work this link on <strong>{selectedDate}</strong>.
                   {!isSlotVacant && dutyModal.name && (
                     <div style={{ marginTop: '4px', color: '#fbbf24' }}>
-                      ℹ️ Current slot employee <strong>{dutyModal.name}</strong> will be relieved to HQ (Available for Booking / Standby).
+                      Current slot employee <strong>{dutyModal.name}</strong> will be relieved to HQ (Available for Booking / Standby).
                     </div>
                   )}
                 </div>
@@ -4088,13 +4086,13 @@ export default function DutyEditModal({
                   </label>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {[
-                      { id: 'ENTIRE_ROSTER', label: '👥 All Employees (Entire Roster)' },
-                      { id: 'ALL', label: '🟢 All Available' },
+                      { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
+                      { id: 'ALL', label: 'All Available' },
                       { id: '1', label: 'Conductors (COR)' },
                       { id: '2', label: 'Sleeper / TTI' },
                       { id: '3', label: 'Ladies / TTE' },
                       { id: '4', label: 'LR Relief Pool' },
-                      { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' }
+                      { id: 'NON_DAILY', label: 'Non-Daily (60, 61, 62)' }
                     ].map(c => (
                       <button
                         key={c.id}
@@ -4132,7 +4130,7 @@ export default function DutyEditModal({
                         checked={showAlreadyAssigned}
                         onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
                       />
-                      <span>⚠️ Show busy / assigned staff (to shift duty)</span>
+                      <span>Show busy / assigned staff (to shift duty)</span>
                     </label>
                   </div>
                   <div style={{ position: 'relative', zIndex: 30 }}>
@@ -4140,18 +4138,18 @@ export default function DutyEditModal({
                       staffList={eligibleAssignStaff}
                       value={assignStaffId}
                       onChange={(val) => setAssignStaffId(val)}
-                      placeholder={`🔍 Type employee name to select (${eligibleAssignStaff.length} ${assignCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'candidates'})...`}
+                      placeholder={`Type employee name to select (${eligibleAssignStaff.length} ${assignCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'candidates'})...`}
                       formatLabel={(s) => {
                         const dutyInfo = getStaffDutyInfo(s, selectedDate);
                         const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                         const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
-                        let statusText = '🟢 [AVAILABLE]';
+                        let statusText = '[AVAILABLE]';
                         if (assignStatus.isAssigned) {
-                          statusText = `⚠️ [BUSY: ${assignStatus.trainDesc}]`;
+                          statusText = `[BUSY: ${assignStatus.trainDesc}]`;
                         } else if (assignStatus.isUnavailable) {
-                          statusText = `🏖️ [${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
+                          statusText = `[${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
                         }
-                        return `${s.name} (${s.designation || 'Staff'}) [${catName}] — ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
+                        return `${s.name} (${s.designation || 'Staff'}) [${catName}] - ${statusText}${dutyInfo?.label ? ` • ${dutyInfo.label}` : ''}`;
                       }}
                       customStyles={{
                         control: (base, state) => ({
@@ -4183,12 +4181,12 @@ export default function DutyEditModal({
                   </div>
                   {eligibleAssignStaff.length === 0 ? (
                     <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
-                      💡 No employees currently available for booking in this pool.
+                      No employees currently available for booking in this pool.
                       {!showAlreadyAssigned && ' Check "Show busy / assigned staff" above to shift a working staff member, or select "All Employees (Entire Roster)".'}
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px' }}>
-                      💡 Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
+                      Click &amp; type any employee's name (or designation / PF) to instantly filter and select them.
                     </div>
                   )}
                 </div>
@@ -4212,14 +4210,14 @@ export default function DutyEditModal({
                     cardBorder = 'rgba(245, 158, 11, 0.4)';
                     cardBg = 'rgba(245, 158, 11, 0.12)';
                     badgeText = `Busy on ${selAssignStatus.trainDesc}`;
-                    subText = <span>⚠️ Currently busy on <strong>{selAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to <strong>Link #{targetLink || 'Duty'}</strong> and vacate their previous slot.</span>;
+                    subText = <span>Currently busy on <strong>{selAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to <strong>Link #{targetLink || 'Duty'}</strong> and vacate their previous slot.</span>;
                   } else if (selAssignStatus.isUnavailable) {
                     badgeColor = '#c084fc';
                     badgeBg = 'rgba(192, 132, 252, 0.25)';
                     cardBorder = 'rgba(192, 132, 252, 0.4)';
                     cardBg = 'rgba(192, 132, 252, 0.1)';
                     badgeText = selAssignStatus.unavailableReason || 'Rest / Leave';
-                    subText = <span>ℹ️ Currently on <strong>{selAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> (Muster: <strong>[P]</strong>).</span>;
+                    subText = <span>Currently on <strong>{selAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to <strong>Link #{targetLink || 'Duty'}</strong> on <strong>{selectedDate}</strong> (Muster: <strong>[P]</strong>).</span>;
                   }
 
                   return (
@@ -4235,7 +4233,7 @@ export default function DutyEditModal({
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <strong style={{ color: badgeColor }}>
-                          👤 {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'}) • [{catName}]
+                          {selectedAssignStaffObj.name} ({selectedAssignStaffObj.designation || 'Staff'}) • [{catName}]
                         </strong>
                         <span className="badge" style={{ background: badgeBg, color: badgeColor, fontSize: '0.72rem' }}>
                           {badgeText}
@@ -4297,7 +4295,7 @@ export default function DutyEditModal({
                   }}
                   title="Remove override and restore master cyclic rotation"
                 >
-                  🔄 Reset to Cyclic
+                  Reset to Cyclic
                 </button>
               )}
             </div>
@@ -4336,19 +4334,19 @@ export default function DutyEditModal({
                     : 'none'
                 }}
               >
-                {submitting ? '💾 Saving Changes...' :
+                {submitting ? 'Saving Changes...' :
                  activeMode === 'DELETE' ? (
                    deleteReason === 'UPGRADE_COR'
-                     ? (upgradeMode === 'PERMANENT' ? '💾 Save & Upgrade to COR (Cadre)' : `💾 Save & Upgrade to COR Link #${targetCorLink || '1'}`)
+                     ? (upgradeMode === 'PERMANENT' ? 'Save & Upgrade to COR (Cadre)' : `Save & Upgrade to COR Link #${targetCorLink || '1'}`)
                      : (deleteReason === 'REASSIGN_STAFF'
-                         ? `💾 Save & Reassign Link #${targetLink || 'Duty'} to Staff`
+                         ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
                          : (deleteReason === 'WRONG_ALLOTMENT'
-                             ? (deleteSlotAction === 'REPLACE' ? '💾 Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? '💾 Save & Revert Wrong Allotment' : '💾 Save & Remove Wrong Allotment'))
+                             ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
                              : (deleteReason === 'SHIFTED' 
-                                 ? (shiftedMode === 'MUTUAL' ? '💾 Save & Shift Employee Names' : '💾 Shift & Save Duty') 
-                                 : `💾 Save Status Change`)))
+                                 ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
+                                 : `Save Status Change`)))
                  ) :
-                 `💾 Save & Assign to Link #${targetLink || 'Duty'}`}
+                 `Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>
             </div>
           </div>
@@ -4380,7 +4378,7 @@ export default function DutyEditModal({
               boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(245, 158, 11, 0.25)',
               textAlign: 'center'
             }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>⚠️</div>
+              
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f59e0b', margin: '0 0 10px 0' }}>
                 Confirm Employee Shift
               </h3>
@@ -4398,7 +4396,7 @@ export default function DutyEditModal({
                 marginBottom: '20px',
                 textAlign: 'left'
               }}>
-                📌 <strong>What will happen:</strong>
+                <strong>What will happen:</strong>
                 <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
                   <li>Staff will be shifted to <strong>{shiftConfirmDialog.targetDesc}</strong>.</li>
                   <li>Their slot on <strong>{shiftConfirmDialog.currentTrainDesc}</strong> will immediately show as <strong style={{ color: '#ef4444' }}>[VACANT]</strong>.</li>

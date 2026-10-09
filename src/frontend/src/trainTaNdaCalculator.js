@@ -18,8 +18,8 @@ export const DEFAULT_NDA_HOURLY_RATE = 168; // Standard Railway NDA hourly rate
 export const STANDARD_TRAIN_SCHEDULES = {
   '12603': {
     trainNo: '12603',
-    name: 'Chennai – Hyderabad Express',
-    route: 'MAS ➔ GNT',
+    name: 'Chennai - Hyderabad Express',
+    route: 'MAS -> GNT',
     schedArr: '23:50',
     isReturnToHq: true,
     boundary: 'midnight',
@@ -31,7 +31,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
   '20630': {
     trainNo: '20630',
     name: 'Vande Bharat / Tirupati Express',
-    route: 'TPTY ➔ GNT',
+    route: 'TPTY -> GNT',
     schedArr: '05:50',
     isReturnToHq: true,
     boundary: 'morning',
@@ -43,8 +43,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17252': {
     trainNo: '17252',
-    name: 'Guntur – Dhone Express (Return)',
-    route: 'DHNE ➔ GNT',
+    name: 'Guntur - Dhone Express (Return)',
+    route: 'DHNE -> GNT',
     schedArr: '23:10',
     isReturnToHq: true,
     boundary: 'midnight',
@@ -55,8 +55,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17070': {
     trainNo: '17070',
-    name: 'Bhadrachalam – Guntur Express',
-    route: 'BDCR ➔ GNT',
+    name: 'Bhadrachalam - Guntur Express',
+    route: 'BDCR -> GNT',
     schedArr: '05:15',
     isReturnToHq: true,
     boundary: 'morning',
@@ -69,7 +69,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
   '12733': {
     trainNo: '12733',
     name: 'Narayanadri Express',
-    route: 'TPTY ➔ GNT',
+    route: 'TPTY -> GNT',
     schedArr: '05:35',
     isReturnToHq: true,
     boundary: 'morning',
@@ -81,8 +81,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17216': {
     trainNo: '17216',
-    name: 'Dharmavaram – Guntur Express',
-    route: 'DMM ➔ GNT',
+    name: 'Dharmavaram - Guntur Express',
+    route: 'DMM -> GNT',
     schedArr: '06:15',
     isReturnToHq: true,
     boundary: 'morning',
@@ -93,8 +93,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17262': {
     trainNo: '17262',
-    name: 'Tirupati – Guntur Express',
-    route: 'TPTY ➔ GNT',
+    name: 'Tirupati - Guntur Express',
+    route: 'TPTY -> GNT',
     schedArr: '06:55',
     isReturnToHq: true,
     boundary: 'morning',
@@ -105,8 +105,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '57210': {
     trainNo: '57210',
-    name: 'BZA – GNT Passenger',
-    route: 'BZA ➔ GNT',
+    name: 'BZA - GNT Passenger',
+    route: 'BZA -> GNT',
     schedArr: '07:35',
     isReturnToHq: true,
     boundary: 'morning',
@@ -117,8 +117,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '57201': {
     trainNo: '57201',
-    name: 'BZA – GNT Passenger',
-    route: 'BZA ➔ GNT',
+    name: 'BZA - GNT Passenger',
+    route: 'BZA -> GNT',
     schedArr: '07:35',
     isReturnToHq: true,
     boundary: 'morning',
@@ -129,8 +129,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17244': {
     trainNo: '17244',
-    name: 'Rayagada – Guntur Express',
-    route: 'VSKP ➔ GNT',
+    name: 'Rayagada - Guntur Express',
+    route: 'VSKP -> GNT',
     schedArr: '07:45',
     isReturnToHq: true,
     boundary: 'morning',
@@ -141,8 +141,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17282': {
     trainNo: '17282',
-    name: 'Narsapur – Guntur Express',
-    route: 'NS ➔ GNT',
+    name: 'Narsapur - Guntur Express',
+    route: 'NS -> GNT',
     schedArr: '11:50',
     isReturnToHq: true,
     boundary: 'morning',
@@ -153,8 +153,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17227': {
     trainNo: '17227',
-    name: 'Dhone – Guntur Express',
-    route: 'DHNE ➔ GNT',
+    name: 'Dhone - Guntur Express',
+    route: 'DHNE -> GNT',
     schedArr: '14:00',
     isReturnToHq: true,
     boundary: 'daytime',
@@ -165,8 +165,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17254': {
     trainNo: '17254',
-    name: 'Dhone – Guntur Express (Night)',
-    route: 'DHNE ➔ GNT',
+    name: 'Dhone - Guntur Express (Night)',
+    route: 'DHNE -> GNT',
     schedArr: '20:00',
     isReturnToHq: true,
     boundary: 'daytime',
@@ -178,7 +178,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
   '12748': {
     trainNo: '12748',
     name: 'Palnadu Express (Return)',
-    route: 'VKB ➔ GNT',
+    route: 'VKB -> GNT',
     schedArr: '21:10',
     isReturnToHq: true,
     boundary: 'daytime',
@@ -190,7 +190,7 @@ export const STANDARD_TRAIN_SCHEDULES = {
   '17202': {
     trainNo: '17202',
     name: 'Golconda Express (Return)',
-    route: 'KZJ ➔ GNT',
+    route: 'KZJ -> GNT',
     schedArr: '21:30',
     isReturnToHq: true,
     boundary: 'daytime',
@@ -201,8 +201,8 @@ export const STANDARD_TRAIN_SCHEDULES = {
   },
   '17645': {
     trainNo: '17645',
-    name: 'Secunderabad – Guntur Express',
-    route: 'SC ➔ GNT',
+    name: 'Secunderabad - Guntur Express',
+    route: 'SC -> GNT',
     schedArr: '22:30',
     isReturnToHq: true,
     boundary: 'daytime',
@@ -298,8 +298,8 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         extraNextDayTa: arrMinsFromMidnight < 10 ? 0 : 0.3,
         isDelayed: arrMinsFromMidnight >= 10,
         badgeText: arrMinsFromMidnight >= 10
-          ? `🏠 Reached HQ at ${arrStr} (Past Midnight 00:00) ➔ +0.3 Extra Next Day TA`
-          : `🏠 Reached HQ at ${arrStr} (Midnight)`,
+          ? `Reached HQ at ${arrStr} (Past Midnight 00:00) -> +0.3 Extra Next Day TA`
+          : `Reached HQ at ${arrStr} (Midnight)`,
         ruleDesc: `Return Train ${tNum} arrived at HQ after 00:00 at ${arrStr}. Next day absence ≤6h qualifies for +0.3 TA on Next Day Account.`
       };
     } else if (arrMinsFromMidnight > 6 * 60 + 5 && arrMinsFromMidnight <= 12 * 60 + 10) {
@@ -309,7 +309,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
         extraNextDayTa: 0.7,
         isDelayed: true,
-        badgeText: `🏠 Reached HQ at ${arrStr} (Past 06:10) ➔ +0.7 Extra Next Day TA`,
+        badgeText: `Reached HQ at ${arrStr} (Past 06:10) -> +0.7 Extra Next Day TA`,
         ruleDesc: `Return Train ${tNum} arrived at HQ heavily delayed at ${arrStr}. Next day absence >6h qualifies for +0.7 TA on Next Day Account.`
       };
     } else {
@@ -319,7 +319,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         taPct: std?.defaultTa !== undefined ? std.defaultTa : 1.0,
         extraNextDayTa: 0,
         isDelayed: false,
-        badgeText: `🏠 Reached HQ on-time at ${arrStr} (No Next Day Claim)`,
+        badgeText: `Reached HQ on-time at ${arrStr} (No Next Day Claim)`,
         ruleDesc: `Return Train ${tNum} reached HQ before midnight at ${arrStr}. Duty completed on same calendar day.`
       };
     }
@@ -334,7 +334,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         taPct: null,
         extraNextDayTa: 0,
         isDelayed: false,
-        badgeText: `🏠 Reached HQ at ${arrStr} (Midnight arrival)`,
+        badgeText: `Reached HQ at ${arrStr} (Midnight arrival)`,
         ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}.`
       };
     } else if (arrMinsFromMidnight <= 6 * 60 + 5) { // 00:10 to 06:05 -> 0.3 TA
@@ -344,7 +344,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         taPct: 0.3,
         extraNextDayTa: 0,
         isDelayed: false,
-        badgeText: `🏠 Reached HQ at ${arrStr} (00:10–06:05) ➔ 0.3 TA (<6h Return Absence)`,
+        badgeText: `Reached HQ at ${arrStr} (00:10-06:05) -> 0.3 TA (<6h Return Absence)`,
         ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Total absence from midnight is < 6 hours, granting 0.3 TA (30%).`
       };
     } else if (arrMinsFromMidnight <= 12 * 60 + 10) { // 06:10 to 12:10 -> 0.7 TA
@@ -356,8 +356,8 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         extraNextDayTa: 0,
         isDelayed: isDelayTriggered,
         badgeText: isDelayTriggered
-          ? `⚡ Reached HQ at ${arrStr} (Delayed on/after 06:10) ➔ Auto-Changed to 0.7 TA (>6h Absence)`
-          : `🏠 Reached HQ at ${arrStr} (06:10–12:10) ➔ 0.7 TA (>6h Absence)`,
+          ? `Reached HQ at ${arrStr} (Delayed on/after 06:10) -> Auto-Changed to 0.7 TA (>6h Absence)`
+          : `Reached HQ at ${arrStr} (06:10-12:10) -> 0.7 TA (>6h Absence)`,
         ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}. Absence from midnight exceeds 6 hours, qualifying for 0.7 TA (70%).`
       };
     } else { // After 12:10 to 23:55 -> 1.0 TA
@@ -367,7 +367,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
         taPct: 1.0,
         extraNextDayTa: 0,
         isDelayed: true,
-        badgeText: `🏠 Reached HQ at ${arrStr} (>12:10) ➔ 1.0 TA (>12h Absence)`,
+        badgeText: `Reached HQ at ${arrStr} (>12:10) -> 1.0 TA (>12h Absence)`,
         ruleDesc: `Return Train ${tNum} reached HQ after 12:10 at ${arrStr}. Absence exceeds 12 hours, granting 1.0 TA (100%).`
       };
     }
@@ -380,7 +380,7 @@ export function calculateReturnTrainHqTa(trainNumber, actualOrSchedArrTime, sche
     taPct: std?.defaultTa !== undefined ? std.defaultTa : (arrMinsFromMidnight > 12 * 60 + 10 ? 1.0 : 0.7),
     extraNextDayTa: 0,
     isDelayed: false,
-    badgeText: `🏠 Reached HQ at ${arrStr} (Return Run)`,
+    badgeText: `Reached HQ at ${arrStr} (Return Run)`,
     ruleDesc: `Return Train ${tNum} reached HQ at ${arrStr}.`
   };
 }
@@ -419,7 +419,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0.3,
         autoAdjustedTa: null,
-        badgeText: `⚡ NTES: Arrived ${actStr} (00:10–06:05) ➔ +0.3 Extra Next Day Account`,
+        badgeText: `NTES: Arrived ${actStr} (00:10-06:05) -> +0.3 Extra Next Day Account`,
         explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr} past midnight. Next day calendar duty (<6h from 00:00) qualifies for +0.3 Extra TA on next day account.`
       };
     } else if (actMinsFromMidnight > 6 * 60 + 5 && actMinsFromMidnight <= 12 * 60 + 10) {
@@ -430,7 +430,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0.7,
         autoAdjustedTa: null,
-        badgeText: `⚡ NTES: Arrived ${actStr} (>06:10) ➔ +0.7 Extra Next Day Account`,
+        badgeText: `NTES: Arrived ${actStr} (>06:10) -> +0.7 Extra Next Day Account`,
         explanation: `Train ${tNum} scheduled at ${sched || '23:50'} arrived at ${actStr}. Next day calendar duty (>6h from 00:00) qualifies for +0.7 Extra TA on next day account.`
       };
     } else {
@@ -441,7 +441,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: null,
-        badgeText: `✓ NTES: Arrived on-time (${actStr}) ➔ TA Updated as Earlier (No Next Day Claim)`,
+        badgeText: `NTES: Arrived on-time (${actStr}) -> TA Updated as Earlier (No Next Day Claim)`,
         explanation: `Train ${tNum} arrived before midnight at ${actStr}. No extra next-day TA applicable.`
       };
     }
@@ -459,7 +459,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: 0.7,
-        badgeText: `⚡ NTES: Arrived ${actStr} (≥06:10) ➔ TA Auto-Changed to 0.7 (>6h Absence)`,
+        badgeText: `NTES: Arrived ${actStr} (≥06:10) -> TA Auto-Changed to 0.7 (>6h Absence)`,
         explanation: `Train ${tNum} scheduled at ${sched || '05:50'} arrived delayed at ${actStr}. Absence from midnight exceeds 6 hours, automatically elevating TA claim to 0.7 (>6h absence).`
       };
     } else if (actMinsFromMidnight > 12 * 60 + 10) {
@@ -470,7 +470,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: 1.0,
-        badgeText: `⚡ NTES: Arrived ${actStr} (>12:10) ➔ TA Auto-Changed to 1.0 (>12h Absence)`,
+        badgeText: `NTES: Arrived ${actStr} (>12:10) -> TA Auto-Changed to 1.0 (>12h Absence)`,
         explanation: `Train ${tNum} arrived after 12:10 at ${actStr}. Absence from midnight exceeds 12 hours, elevating TA claim to 1.0.`
       };
     } else {
@@ -481,7 +481,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
         actualArr: actStr,
         extraNextDayTa: 0,
         autoAdjustedTa: 0.3,
-        badgeText: `✓ NTES: Arrived on-time (${actStr}) ➔ TA 0.3 (<6h Absence)`,
+        badgeText: `NTES: Arrived on-time (${actStr}) -> TA 0.3 (<6h Absence)`,
         explanation: `Train ${tNum} arrived before 06:10 at ${actStr}. Absence < 6 hours qualifies for baseline 0.3 TA.`
       };
     }
@@ -494,7 +494,7 @@ export function evaluateNtesTaRule(trainNumber, actualArrTime, schedArrTime = nu
     actualArr: actStr,
     extraNextDayTa: 0,
     autoAdjustedTa: null,
-    badgeText: `✓ NTES: On-Time (${actStr})`,
+    badgeText: `NTES: On-Time (${actStr})`,
     explanation: `Train ${tNum} arrived on schedule at ${actStr}.`
   };
 }

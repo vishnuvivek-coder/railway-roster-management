@@ -126,7 +126,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       staff: currentList
     }));
 
-    showToast(`✓ Moved "${movedItem.name}" to position #${insertIdx + 1}`);
+    showToast(`Moved "${movedItem.name}" to position #${insertIdx + 1}`);
 
     // Persist new ordering to backend database
     try {
@@ -144,7 +144,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to persist order');
     } catch (err) {
       console.error('Failed to reorder staff in database:', err);
-      showToast('⚠️ Could not save new order: ' + err.message);
+      showToast('Could not save new order: ' + err.message);
     }
   };
 
@@ -260,7 +260,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       });
 
       setActiveCellModal(null);
-      showToast('✅ Attendance code saved permanently to database');
+      showToast('Attendance code saved permanently to database');
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
       }));
@@ -288,7 +288,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to reset cell');
 
       setActiveCellModal(null);
-      showToast('🔄 Cell reset and saved permanently to database');
+      showToast('Cell reset and saved permanently to database');
       await fetchMuster(selectedCycleStart);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
@@ -317,7 +317,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }
 
       if (dates.length === 0) {
-        showToast('⚠️ No valid dates in selected range');
+        showToast('No valid dates in selected range');
         return;
       }
 
@@ -342,7 +342,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setRangeEditModal(null);
       await fetchMuster(selectedCycleStart);
-      showToast(`✓ Updated ${dates.length} days (${fromDate} to ${toDate}) to ${code}`);
+      showToast(`Updated ${dates.length} days (${fromDate} to ${toDate}) to ${code}`);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
@@ -352,7 +352,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Batch muster update error:', err);
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setSavingCell(false);
     }
@@ -392,7 +392,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setRangeEditModal(null);
       await fetchMuster(selectedCycleStart);
-      showToast(`✓ Reset ${dates.length} days back to baseline`);
+      showToast(`Reset ${dates.length} days back to baseline`);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
@@ -402,7 +402,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Batch reset error:', err);
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setSavingCell(false);
     }
@@ -443,7 +443,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       setEditNameModal(null);
       setEditDesgModal(null);
       setEditingHrmsId(null);
-      showToast(`✓ Updated employee details`);
+      showToast(`Updated employee details`);
     } catch (err) {
       alert('Error updating employee details: ' + err.message);
     } finally {
@@ -496,11 +496,11 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
   const handleApplyStaffBatchRange = async () => {
     if (!selectedStaffIdForEdit) {
-      showToast('⚠️ Please select an employee first');
+      showToast('Please select an employee first');
       return;
     }
     if (!staffRangeFromDate || !staffRangeToDate || staffRangeFromDate > staffRangeToDate) {
-      showToast('⚠️ Please select a valid From Date and Upto Date');
+      showToast('Please select a valid From Date and Upto Date');
       return;
     }
     if (staffRangeDatesList.length === 0) return;
@@ -527,7 +527,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to update muster records');
 
       await fetchMuster(selectedCycleStart);
-      showToast(`✓ Successfully updated ${staffRangeDatesList.length} days (${staffRangeFromDate} to ${staffRangeToDate}) to "${staffRangeCode}" for ${selectedStaffObj?.name || 'employee'}!`);
+      showToast(`Successfully updated ${staffRangeDatesList.length} days (${staffRangeFromDate} to ${staffRangeToDate}) to "${staffRangeCode}" for ${selectedStaffObj?.name || 'employee'}!`);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
@@ -537,7 +537,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Batch muster update error:', err);
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setSavingStaffRange(false);
     }
@@ -569,7 +569,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to reset muster cells');
 
       await fetchMuster(selectedCycleStart);
-      showToast(`✓ Successfully reset ${staffRangeDatesList.length} days to cyclic baseline for ${selectedStaffObj?.name}!`);
+      showToast(`Successfully reset ${staffRangeDatesList.length} days to cyclic baseline for ${selectedStaffObj?.name}!`);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
@@ -579,7 +579,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Batch muster reset error:', err);
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setSavingStaffRange(false);
     }
@@ -625,7 +625,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         setSavedStaffMap(prev => ({ ...prev, [staff.id]: false }));
       }, 3500);
 
-      showToast(`💾 Successfully saved muster details for ${staff.name} permanently!`);
+      showToast(`Successfully saved muster details for ${staff.name} permanently!`);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: staff.id, source: 'muster_roll', timestamp: Date.now() }
@@ -635,7 +635,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Error saving individual muster:', err);
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setSavingStaffId(null);
     }
@@ -645,9 +645,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     try {
       setLoading(true);
       await fetchMuster(selectedCycleStart);
-      showToast('💾 All staff muster attendance records verified & saved permanently in database!');
+      showToast('All staff muster attendance records verified & saved permanently in database!');
     } catch (err) {
-      showToast(`❌ Error: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -737,17 +737,17 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
   const handleDownloadPdf = async () => {
     setDownloadingPdf(true);
-    showToast('⏳ Generating and downloading Muster Roll PDF...');
+    showToast('Generating and downloading Muster Roll PDF...');
     try {
       await downloadPdfFromElement('.muster-roll-container', `Railway_Muster_Roll_${cycleData?.cycle?.periodLabel?.replace(/[\s,]+/g, '_') || 'Sheet'}`, {
         orientation: 'landscape',
         format: 'a3',
         margin: [4, 4, 4, 4]
       });
-      showToast('✅ Muster Roll PDF downloaded successfully!');
+      showToast('Muster Roll PDF downloaded successfully!');
     } catch (err) {
       console.error(err);
-      showToast('⚠️ PDF generation failed, opened print window instead.');
+      showToast('PDF generation failed, opened print window instead.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -786,7 +786,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             transition: 'all 0.2s ease'
           }}
         >
-          <span>📅</span> Muster Roll (11th – 10th Wage Period)
+          Muster Roll (11th - 10th Wage Period)
         </button>
         <button
           type="button"
@@ -807,7 +807,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             transition: 'all 0.2s ease'
           }}
         >
-          <span>📋</span> LR List (Monthly Leave Reserve Sheet)
+          LR List (Monthly Leave Reserve Sheet)
         </button>
       </div>
 
@@ -830,13 +830,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                📅 Railway Attendance & Muster Roll
+                Railway Attendance & Muster Roll
               </h2>
               <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.18)', color: 'var(--primary)', fontWeight: 800, fontSize: '0.82rem', border: '1px solid var(--border-gold)' }}>
                 Wage Period Cycle: 11th - 10th
               </span>
               <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', fontWeight: 800, fontSize: '0.82rem', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
-                ✅ Auto-Save Active (Instant Database Sync)
+                Auto-Save Active (Instant Database Sync)
               </span>
             </div>
             <p style={{ margin: '6px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.86rem' }}>
@@ -863,14 +863,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 cursor: 'pointer'
               }}
             >
-              📥 Export CSV / Excel
+              Export CSV / Excel
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={async () => {
                 await fetchMuster(selectedCycleStart);
-                showToast('✅ All attendance codes, remarks, and employee edits are saved permanently in the database.');
+                showToast('All attendance codes, remarks, and employee edits are saved permanently in the database.');
               }}
               style={{
                 display: 'flex',
@@ -886,7 +886,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               }}
               title="Verify and save all muster attendance codes to database"
             >
-              💾 Save Muster
+              Save Muster
             </button>
             <button
               type="button"
@@ -906,7 +906,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               }}
               title="Print formatted Muster Roll"
             >
-              🖨️ Print
+              Print
             </button>
             <button
               type="button"
@@ -921,13 +921,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 borderRadius: '8px',
                 fontSize: '0.85rem',
                 fontWeight: 800,
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                background: '#2563eb',
                 border: 'none',
                 cursor: 'pointer'
               }}
               title="Directly download Muster Roll PDF"
             >
-              {downloadingPdf ? '⏳ Generating PDF...' : '📄 Download PDF'}
+              {downloadingPdf ? 'Generating PDF...' : 'Download PDF'}
             </button>
           </div>
         </div>
@@ -960,7 +960,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               minWidth: '220px',
               textAlign: 'center'
             }}>
-              📅 {(cycleData && cycleData.cycle && cycleData.cycle.periodLabel) || 'Loading Cycle...'}
+              {(cycleData && cycleData.cycle && cycleData.cycle.periodLabel) || 'Loading Cycle...'}
               <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginLeft: '8px' }}>
                 ({(cycleData && cycleData.cycle && cycleData.cycle.totalDays) || 0} Days)
               </span>
@@ -1001,7 +1001,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <input
               type="text"
               className="form-input"
-              placeholder="🔍 Search employee name, desg..."
+              placeholder="Search employee name, desg..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -1028,7 +1028,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   fontSize: '0.8rem'
                 }}
               >
-                ✕
+                ×
               </button>
             )}
           </div>
@@ -1068,7 +1068,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               }}
               title={`Edit date range (From - Upto) for ${filteredStaff[0].name}`}
             >
-              <span>⚡ Range Edit: {filteredStaff[0].name.split(' ')[0]}</span>
+              <span>Range Edit: {filteredStaff[0].name.split(' ')[0]}</span>
             </button>
           )}
         </div>
@@ -1083,7 +1083,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             { id: '1', label: 'Conductors (COR)' },
             { id: '2', label: 'TTI / Sleeper Staff' },
             { id: '3', label: 'Ladies Staff / TTE' },
-            { id: '4', label: '📋 Leave Reserve (LR)' }
+            { id: '4', label: 'Leave Reserve (LR)' }
           ].map(cat => (
             <button
               key={cat.id}
@@ -1091,7 +1091,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               onClick={() => setSelectedCategory(cat.id)}
               style={{
                 padding: '4px 12px',
-                borderRadius: '20px',
+                borderRadius: '6px',
                 fontSize: '0.78rem',
                 fontWeight: selectedCategory === cat.id ? 800 : 500,
                 background: selectedCategory === cat.id ? 'var(--primary)' : 'rgba(255,255,255,0.04)',
@@ -1163,7 +1163,6 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             paddingBottom: selectedStaffObj ? '12px' : '0'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 320px' }}>
-              <span style={{ fontSize: '1.3rem' }}>👤</span>
               <div style={{ flex: 1, minWidth: '240px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <label style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.3px', margin: 0 }}>
@@ -1171,7 +1170,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   </label>
                   {selectedStaffObj && (
                     <span style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 700 }}>
-                      ✓ Employee Selected
+                      Employee Selected
                     </span>
                   )}
                 </div>
@@ -1221,7 +1220,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   }}
                   title={filterOnlySelectedStaff ? "Show all employees in grid" : "Filter grid below to show only this employee"}
                 >
-                  <span>{filterOnlySelectedStaff ? '👁️ Showing Only This Employee' : '🔍 View Only This Employee in Grid'}</span>
+                  <span>{filterOnlySelectedStaff ? 'Showing Only This Employee' : 'View Only This Employee in Grid'}</span>
                 </button>
 
                 <button
@@ -1237,7 +1236,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     cursor: 'pointer'
                   }}
                 >
-                  ✕ Clear Selection
+                  × Clear Selection
                 </button>
               </div>
             )}
@@ -1343,7 +1342,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               fontWeight: 700
                             }}
                           >
-                            📅 Full Cycle (11th - 10th)
+                            Full Cycle (11th - 10th)
                           </button>
                           {midDate && (
                             <button
@@ -1502,7 +1501,6 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     </>
                   ) : (
                     <>
-                      <span>⚡</span>
                       <span>Apply & Save to Selected Dates ({staffRangeDatesList.length} {staffRangeDatesList.length === 1 ? 'Day' : 'Days'})</span>
                     </>
                   )}
@@ -1561,12 +1559,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     </>
                   ) : savedStaffMap[selectedStaffObj?.id] ? (
                     <>
-                      <span>✓</span>
                       <span>Muster Saved!</span>
                     </>
                   ) : (
                     <>
-                      <span>💾</span>
                       <span>Save Individual Muster ({selectedStaffObj?.name})</span>
                     </>
                   )}
@@ -1587,7 +1583,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -1596,9 +1592,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         <div className="muster-grid-wrapper">
           {/* Print-Only Title Header */}
           <div className="print-only muster-print-title-banner">
-            <div className="muster-print-railway">SOUTH CENTRAL RAILWAY — GUNTUR DIVISION</div>
+            <div className="muster-print-railway">SOUTH CENTRAL RAILWAY - GUNTUR DIVISION</div>
             <div className="muster-print-period">
-              STAFF ATTENDANCE & MUSTER ROLL — {cycleData.cycle?.periodLabel || 'WAGE PERIOD'}
+              STAFF ATTENDANCE & MUSTER ROLL - {cycleData.cycle?.periodLabel || 'WAGE PERIOD'}
             </div>
           </div>
 
@@ -1619,22 +1615,22 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         <span>S.No</span>
                       </div>
                     </th>
-                    <th className="muster-col-name" title={isAdmin ? "Click any name or ✏️ to edit Name / PF No" : undefined}>
+                    <th className="muster-col-name" title={isAdmin ? "Click any name or to edit Name / PF No" : undefined}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>Name of Employee</span>
-                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}></span>}
                       </div>
                     </th>
                     <th className="muster-col-desg" title={isAdmin ? "Click on any employee's designation to edit" : undefined}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
                         <span>Designation</span>
-                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}></span>}
                       </div>
                     </th>
                     <th className="muster-col-hrms" title={isAdmin ? "Click on any employee's HRMS ID to edit" : undefined}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
                         <span>HRMS ID</span>
-                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}>✏️</span>}
+                        {isAdmin && <span className="no-print muster-edit-pencil" style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--primary)' }}></span>}
                       </div>
                     </th>
 
@@ -1753,8 +1749,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               </strong>
                               {isAdmin && (
                                 <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.6 }} title="Edit Name & PF">
-                                  ✏️
-                                </span>
+                                  </span>
                               )}
                             </div>
                             <span className="muster-print-pf" style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', letterSpacing: '0.3px', marginTop: '1px' }}>
@@ -1798,7 +1793,6 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               }}
                               title={`Select ${staff.name} and edit muster details date-wise`}
                             >
-                              <span>⚡</span>
                               <span>Edit Muster</span>
                             </button>
                           )}
@@ -1837,8 +1831,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                           </span>
                           {isAdmin && (
                             <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit Designation">
-                              ✏️
-                            </span>
+                              </span>
                           )}
                         </div>
                       </td>
@@ -1901,8 +1894,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               }}
                               title="Save HRMS ID"
                             >
-                              ✓
-                            </button>
+                              </button>
                             <button
                               type="button"
                               onClick={() => setEditingHrmsId(null)}
@@ -1918,7 +1910,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                               }}
                               title="Cancel"
                             >
-                              ✕
+                              ×
                             </button>
                           </div>
                           <span className="print-only muster-hrms-val">
@@ -1937,8 +1929,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                           </span>
                           {isAdmin && (
                             <span className="no-print muster-edit-pencil" style={{ fontSize: '0.62rem', opacity: 0.55 }} title="Edit HRMS ID">
-                              ✏️
-                            </span>
+                              </span>
                           )}
                         </div>
                       )}
@@ -2078,12 +2069,10 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                             </>
                           ) : savedStaffMap[staff.id] ? (
                             <>
-                              <span>✓</span>
                               <span>Saved!</span>
                             </>
                           ) : (
                             <>
-                              <span>💾</span>
                               <span>{selectedStaffIdForEdit === staff.id ? 'Save Muster' : 'Save'}</span>
                             </>
                           )}
@@ -2138,7 +2127,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                         }}
                         title="Save all division muster attendance to database"
                       >
-                        💾 Save All
+                        Save All
                       </button>
                     </td>
                   )}
@@ -2177,14 +2166,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
-                ✍️ Assign Muster Code
+                Assign Muster Code
               </h3>
               <button
                 type="button"
                 onClick={() => setActiveCellModal(null)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -2227,7 +2216,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   }}
                   title="Switch to date-range editor"
                 >
-                  📅 Edit Range
+                  Edit Range
                 </button>
               </div>
             </div>
@@ -2295,7 +2284,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                   onClick={() => handleResetCell(activeCellModal.staffId, activeCellModal.dateStr)}
                   style={{ fontSize: '0.78rem', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)' }}
                 >
-                  🔄 Reset to Cyclic Baseline
+                  Reset to Cyclic Baseline
                 </button>
               )}
               <div style={{ marginLeft: 'auto' }}>
@@ -2342,7 +2331,6 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📅</span>
                   <span>Date-Wise Muster Range Editor</span>
                 </h3>
                 <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
@@ -2354,7 +2342,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 onClick={() => setRangeEditModal(null)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.3rem' }}
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -2542,7 +2530,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
                   }}
                 >
-                  {savingCell ? 'Saving...' : '💾 Save Individual Muster'}
+                  {savingCell ? 'Saving...' : 'Save Individual Muster'}
                 </button>
               </div>
             </div>
@@ -2577,14 +2565,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
-                👔 Edit Employee Designation
+                Edit Employee Designation
               </h3>
               <button
                 type="button"
                 onClick={() => setEditDesgModal(null)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -2691,14 +2679,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
-                👤 Edit Employee Name & PF No
+                Edit Employee Name & PF No
               </h3>
               <button
                 type="button"
                 onClick={() => setEditNameModal(null)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -2750,7 +2738,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 })}
                 style={{ fontSize: '0.82rem', padding: '7px 18px', fontWeight: 800, borderRadius: '8px' }}
               >
-                {savingStaffField ? 'Saving...' : '💾 Save Changes'}
+                {savingStaffField ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

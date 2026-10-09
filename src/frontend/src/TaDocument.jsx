@@ -651,7 +651,7 @@ export default function TaDocument({
   const handleSyncNtes = async () => {
     if (!journalData || !journalData.rows || journalData.rows.length === 0) return;
     setSyncingNtes(true);
-    setStatusMsg('⏳ Connecting directly to Official NTES (enquiry.indianrail.gov.in)...');
+    setStatusMsg('Connecting directly to Official NTES (enquiry.indianrail.gov.in)...');
 
     try {
       const res = await fetch(`${API_BASE}/train-timings/sync-ntes`, {
@@ -691,7 +691,7 @@ export default function TaDocument({
           total_days: Math.round(totalDays * 10) / 10
         });
 
-        setStatusMsg(`⚡ Successfully synced ${syncedCount} train timings from Official NTES (enquiry.indianrail.gov.in) and recalculated TA values!`);
+        setStatusMsg(`Successfully synced ${syncedCount} train timings from Official NTES (enquiry.indianrail.gov.in) and recalculated TA values!`);
         setTimeout(() => setStatusMsg(''), 5000);
       } else {
         alert(data.error || 'Failed to sync with Official NTES website.');
@@ -716,7 +716,7 @@ export default function TaDocument({
     }
     isSavingRef.current = true;
     setSaving(true);
-    if (!silent) setStatusMsg('⏳ Saving TA journal...');
+    if (!silent) setStatusMsg('Saving TA journal...');
 
     try {
       const payload = {
@@ -746,7 +746,7 @@ export default function TaDocument({
       if (res.ok) {
         setHasUnsavedChanges(false);
         const timeStr = new Date().toLocaleTimeString();
-        setStatusMsg(`✅ Changes saved automatically (${timeStr})`);
+        setStatusMsg(`Changes saved automatically (${timeStr})`);
         setTimeout(() => setStatusMsg(''), 4500);
       } else {
         if (!silent) alert(data.error || 'Failed to save TA journal.');
@@ -812,7 +812,7 @@ export default function TaDocument({
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (res.ok) {
-        setStatusMsg('🔄 Reset to auto-generated master timetable.');
+        setStatusMsg('Reset to auto-generated master timetable.');
         fetchJournal();
         setTimeout(() => setStatusMsg(''), 4000);
       } else {
@@ -837,17 +837,17 @@ export default function TaDocument({
 
   const handleDownloadPdf = async () => {
     setDownloadingPdf(true);
-    setStatusMsg('⏳ Generating and downloading TA Journal PDF...');
+    setStatusMsg('Generating and downloading TA Journal PDF...');
     try {
       await downloadPdfFromElement('.ta-document-container', `TA_Journal_${editableMeta.name || 'Staff'}_${journalData?.month_name || month}_${year}`, {
         orientation: 'portrait',
         format: 'legal',
         margin: [4, 4, 4, 4]
       });
-      setStatusMsg('✅ TA Journal PDF downloaded successfully!');
+      setStatusMsg('TA Journal PDF downloaded successfully!');
     } catch (err) {
       console.error(err);
-      setStatusMsg('⚠️ PDF generation failed, opened print window instead.');
+      setStatusMsg('PDF generation failed, opened print window instead.');
     } finally {
       setDownloadingPdf(false);
       setTimeout(() => setStatusMsg(''), 4000);
@@ -954,7 +954,7 @@ export default function TaDocument({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h2 style={{ margin: 0, fontSize: '1.35rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span>📄</span> TRAVELLING ALLOWANCE JOURNAL
+                <span></span> TRAVELLING ALLOWANCE JOURNAL
               </h2>
               <span style={{
                 background: 'rgba(212, 161, 92, 0.15)',
@@ -970,7 +970,7 @@ export default function TaDocument({
               </span>
             </div>
             <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: '0.82rem' }}>
-              ✨ <strong>NTES Real-Time Timings Connected</strong>: Extracts official live/historical departure and arrival times directly from NTES (enquiry.indianrail.gov.in/mntes/) with 1-click sync.
+              Fetches scheduled departure and arrival timings from NTES reference data.
             </p>
           </div>
 
@@ -983,7 +983,7 @@ export default function TaDocument({
               style={{ fontSize: '0.84rem', padding: '8px 14px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#60a5fa', fontWeight: 600 }}
               title="Extract official live arrival & departure timings directly from NTES (enquiry.indianrail.gov.in)"
             >
-              {syncingNtes ? '⏳ Syncing NTES...' : '⚡ Sync Live Timings (Official NTES)'}
+              {syncingNtes ? 'Syncing NTES...' : 'Sync Live Timings (Official NTES)'}
             </button>
             <button
               onClick={handleAddRow}
@@ -991,7 +991,7 @@ export default function TaDocument({
               style={{ fontSize: '0.84rem', padding: '8px 14px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid #22c55e', color: '#22c55e', fontWeight: 600 }}
               title="Add an extra row to the statement"
             >
-              ➕ Add Row
+              + Add Row
             </button>
             <button
               onClick={handleResetToAuto}
@@ -1000,7 +1000,7 @@ export default function TaDocument({
               style={{ fontSize: '0.84rem', padding: '8px 14px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid #ef4444', color: '#ef4444' }}
               title="Revert manual edits back to auto-generated master roster schedule"
             >
-              {resetting ? 'Resetting...' : '🔄 Reset to Auto'}
+              {resetting ? 'Resetting...' : 'Reset to Auto'}
             </button>
             <button
               onClick={handleSave}
@@ -1015,7 +1015,7 @@ export default function TaDocument({
               }}
               title="Save all edited values to database (Ctrl+S)"
             >
-              {saving ? 'Saving...' : (hasUnsavedChanges ? '💾 Save Changes *' : '💾 Save Changes')}
+              {saving ? 'Saving...' : (hasUnsavedChanges ? 'Save Changes *' : 'Save Changes')}
             </button>
             <button
               onClick={handlePrint}
@@ -1023,16 +1023,16 @@ export default function TaDocument({
               style={{ fontSize: '0.84rem', padding: '8px 16px', background: 'rgba(212, 161, 92, 0.15)', border: '1px solid var(--border-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Print formatted on LEGAL paper size"
             >
-              🖨️ Print
+              Print
             </button>
             <button
               onClick={handleDownloadPdf}
               className="btn btn-primary"
               disabled={downloadingPdf}
-              style={{ fontSize: '0.84rem', padding: '8px 16px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ fontSize: '0.84rem', padding: '8px 16px', background: '#2563eb', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Directly download PDF file"
             >
-              {downloadingPdf ? '⏳ Generating PDF...' : '📄 Download PDF'}
+              {downloadingPdf ? 'Generating PDF...' : 'Download PDF'}
             </button>
           </div>
         </div>
@@ -1108,7 +1108,7 @@ export default function TaDocument({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <div>
               <label className="form-label" style={{ fontSize: '0.74rem', marginBottom: '3px', color: 'var(--primary)' }}>
-                📅 From Date:
+                From Date:
               </label>
               <input
                 type="date"
@@ -1121,7 +1121,7 @@ export default function TaDocument({
 
             <div>
               <label className="form-label" style={{ fontSize: '0.74rem', marginBottom: '3px', color: 'var(--primary)' }}>
-                📅 To Date:
+                To Date:
               </label>
               <input
                 type="date"
@@ -1145,8 +1145,8 @@ export default function TaDocument({
                 fontSize: '0.8rem',
                 fontWeight: 700
               }}>
-                <span>📍 Period:</span>
-                <span>{startDate.split('-').reverse().join('/')} ➔ {endDate.split('-').reverse().join('/')}</span>
+                <span>Period:</span>
+                <span>{startDate.split('-').reverse().join('/')} → {endDate.split('-').reverse().join('/')}</span>
               </span>
             </div>
           </div>
@@ -1170,7 +1170,7 @@ export default function TaDocument({
                 fontWeight: periodPreset === 'full_month' ? 700 : 500
               }}
             >
-              📅 {(() => {
+              {(() => {
                 const now = new Date();
                 const isCur = now.getFullYear() === parseInt(year, 10) && (now.getMonth() + 1) === parseInt(month, 10);
                 return isCur ? `Up-to-Date (Prev 30th – ${now.getDate()}th)` : 'Prev 30th to Month-End';
@@ -1236,11 +1236,11 @@ export default function TaDocument({
             </div>
           ) : hasUnsavedChanges ? (
             <div style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>⚠️</span> Unsaved edits in TA Journal. Press <strong>Ctrl+S</strong> or click <strong>Save Changes</strong> to store.
+              <span></span> Unsaved edits in TA Journal. Press <strong>Ctrl+S</strong> or click <strong>Save Changes</strong> to store.
             </div>
           ) : (
             <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
-              ✓ Period: <strong>{startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</strong> | Total TA Claim: <strong>{grandTotalDays || page1Total || 0} DAYS</strong>
+              Period: <strong>{startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</strong> | Total TA Claim: <strong>{grandTotalDays || page1Total || 0} DAYS</strong>
             </div>
           )}
         </div>
@@ -1261,7 +1261,7 @@ export default function TaDocument({
             color: journalData.pending_count > 0 ? '#fef3c7' : '#dcfce7'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.1rem' }}>{journalData.pending_count > 0 ? '⏳' : '✅'}</span>
+              <span style={{ fontSize: '1.1rem' }}>{journalData.pending_count > 0 ? '' : ''}</span>
               <span>
                 {journalData.pending_count > 0 ? (
                   <>
@@ -1294,18 +1294,18 @@ export default function TaDocument({
           background: 'rgba(20, 20, 24, 0.95)',
           border: '1.5px solid var(--border-gold)',
           padding: '10px 18px',
-          borderRadius: '30px',
+          borderRadius: '6px',
           boxShadow: '0 10px 35px rgba(0, 0, 0, 0.7)',
           backdropFilter: 'blur(10px)'
         }}>
-          <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>⚠️ Unsaved Changes</span>
+          <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>Unsaved Changes</span>
           <button
             onClick={handleSave}
             disabled={saving}
             className="btn btn-primary"
-            style={{ fontSize: '0.85rem', padding: '6px 18px', borderRadius: '20px', fontWeight: 700 }}
+            style={{ fontSize: '0.85rem', padding: '6px 18px', borderRadius: '6px', fontWeight: 700 }}
           >
-            {saving ? 'Saving...' : '💾 Save Now (Ctrl+S)'}
+            {saving ? 'Saving...' : 'Save Now (Ctrl+S)'}
           </button>
         </div>
       )}
@@ -1377,7 +1377,7 @@ export default function TaDocument({
          ---------------------------------------------------- */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-secondary)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⏳</div>
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}></div>
           Generating Travelling Allowance Journal...
         </div>
       ) : journalData ? (
@@ -2032,7 +2032,7 @@ export default function TaDocument({
               </table>
             </div>
 
-            {/* Page 2 — Exact Legal Certification Paragraph from User PDF */}
+            {/* Page 2 - Exact Legal Certification Paragraph from User PDF */}
             <div style={{ paddingTop: '10px' }}>
               <div style={{
                 fontSize: '8.5px',
@@ -2054,7 +2054,7 @@ export default function TaDocument({
                 </p>
               </div>
 
-              {/* Page 2 — 3-Column Footer - Pinned flush to bottom */}
+              {/* Page 2 - 3-Column Footer - Pinned flush to bottom */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -2106,7 +2106,7 @@ export default function TaDocument({
           border: '1px solid var(--border-subtle)',
           boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)'
         }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📄</div>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}></div>
           <h3 style={{ color: 'var(--primary)', marginBottom: '8px' }}>Select an Employee to View Travelling Allowance Journal</h3>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', maxWidth: '500px', margin: '0 auto 16px' }}>
             Choose a Category and Employee from the dropdown above to load and edit their official 2-page TA Claim Journal.
@@ -2141,7 +2141,7 @@ export default function TaDocument({
           background: 'rgba(20, 20, 24, 0.95)',
           border: hasUnsavedChanges ? '2px solid #f59e0b' : '1.5px solid var(--border-gold)',
           padding: '10px 18px',
-          borderRadius: '30px',
+          borderRadius: '6px',
           boxShadow: '0 10px 35px rgba(0, 0, 0, 0.7)',
           backdropFilter: 'blur(10px)'
         }}>
@@ -2152,11 +2152,11 @@ export default function TaDocument({
             </span>
           ) : hasUnsavedChanges ? (
             <span style={{ color: '#f59e0b', fontSize: '0.85rem', fontWeight: 600 }}>
-              ⚠️ Unsaved edits (Auto-saving...)
+              Unsaved edits (Auto-saving...)
             </span>
           ) : (
             <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
-              ✅ All changes saved permanently
+              All changes saved permanently
             </span>
           )}
           <button
@@ -2167,14 +2167,14 @@ export default function TaDocument({
             style={{
               fontSize: '0.85rem',
               padding: '6px 18px',
-              borderRadius: '20px',
+              borderRadius: '6px',
               fontWeight: 700,
               background: hasUnsavedChanges ? 'linear-gradient(135deg, #e5a93c 0%, #d48b1e 100%)' : 'var(--primary)',
               boxShadow: hasUnsavedChanges ? '0 0 12px rgba(245, 158, 11, 0.6)' : 'none'
             }}
             title="Save now (auto-saves automatically on edit)"
           >
-            {saving ? 'Saving...' : '💾 Save Changes'}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       )}
