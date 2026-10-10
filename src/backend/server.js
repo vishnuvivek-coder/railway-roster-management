@@ -93,6 +93,15 @@ function is18047Day(dStr) {
   return day === 0 || day === 2 || day === 3 || day === 5;
 }
 
+// Helper to determine if date is an 18048 run day from GTL (Sunday, Tuesday, Thursday, Friday)
+// On remaining days (Monday, Wednesday, Saturday), 17226 runs instead.
+function is18048Day(dStr) {
+  if (!dStr) return true;
+  const d = new Date(dStr + (dStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 4 || day === 5;
+}
+
 // Helper: Get active link definition for a link number on a given date (strictly published only)
 async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
   const catId = parseInt(categoryId, 10);
@@ -139,15 +148,21 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
     } else if (cat === 1 && num === 16) {
       const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
       const dow = d.getDay();
-      link.train_numbers = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 17226';
+      const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+      link.train_numbers = `${inTrain}, ${retTrain}`;
+    } else if (cat === 1 && num === 17) {
+      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+      link.train_numbers = `${retTrain}, 57201`;
     } else if (cat === 2 && num === 51) {
       const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
       const dow = d.getDay();
-      link.train_numbers = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 18048';
+      const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+      link.train_numbers = `${inTrain}, ${retTrain}`;
     } else if (cat === 2 && num === 52) {
-      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-      const dow = d.getDay();
-      link.train_numbers = (dow === 1 || dow === 3 || dow === 6) ? '17226, PILOT(12703)' : '18048, PILOT(12703)';
+      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+      link.train_numbers = `${retTrain}, PILOT(12703)`;
     }
   }
   return link || { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
@@ -2515,7 +2530,39 @@ app.get('/api/links', async (req, res) => {
       }
     }
     sql += ' ORDER BY category_id, CAST(link_number AS INTEGER) ASC, link_number ASC, date(effective_from) DESC';
-    const links = await all(sql, params);
+    let links = await all(sql, params);
+    if (date) {
+      links = links.map(link => {
+        const num = parseInt(link.link_number, 10);
+        const cat = parseInt(link.category_id, 10);
+        if ((cat === 1 && num === 15) || (cat === 2 && num === 50)) {
+          const is18047 = is18047Day(date);
+          return {
+            ...link,
+            train_numbers: cat === 1 ? (is18047 ? '67230, 18047' : '67230, 17225') : (is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225')
+          };
+        } else if (cat === 1 && num === 16) {
+          const d = new Date(date + (date.includes('T') ? '' : 'T00:00:00'));
+          const dow = d.getDay();
+          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+          const retT = is18048Day(date) ? '18048' : '17226';
+          return { ...link, train_numbers: `${inT}, ${retT}` };
+        } else if (cat === 1 && num === 17) {
+          const retT = is18048Day(date) ? '18048' : '17226';
+          return { ...link, train_numbers: `${retT}, 57201` };
+        } else if (cat === 2 && num === 51) {
+          const d = new Date(date + (date.includes('T') ? '' : 'T00:00:00'));
+          const dow = d.getDay();
+          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+          const retT = is18048Day(date) ? '18048' : '17226';
+          return { ...link, train_numbers: `${inT}, ${retT}` };
+        } else if (cat === 2 && num === 52) {
+          const retT = is18048Day(date) ? '18048' : '17226';
+          return { ...link, train_numbers: `${retT}, PILOT(12703)` };
+        }
+        return link;
+      });
+    }
     res.json(links);
   } catch (err) {
     res.status(500).json({ error: err.message });

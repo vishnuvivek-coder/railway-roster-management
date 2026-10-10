@@ -538,6 +538,15 @@ function is18047Day(dateStr) {
   return day === 0 || day === 2 || day === 3 || day === 5;
 }
 
+// Helper: 18048 runs Sunday, Tuesday, Thursday, Friday from GTL
+// 17226 runs remaining days (Monday, Wednesday, Saturday) from GTL
+function is18048Day(dateStr) {
+  if (!dateStr) return true;
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 4 || day === 5;
+}
+
 /**
  * Exact Link-to-Duty Mapping for Conductors (COR), TTI Sleeper, Ladies Staff, and LR Staff
  */
@@ -638,23 +647,25 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link, dateStr = null) 
         } else if (link?.train_numbers) {
           isAfter17225 = link.train_numbers.includes('17225');
         }
-        if (isAfter17225) {
-          return [
-            { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null },
-            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
-          ];
-        } else {
-          return [
-            { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
-            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
-          ];
-        }
+        const incomingRow = isAfter17225
+          ? { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null }
+          : { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null };
+        const isRun18048 = dateStr ? is18048Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17226') || link.train_numbers.includes('18048')) : true);
+        const returnRow = isRun18048
+          ? { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
+          : { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 };
+        return [incomingRow, returnRow];
       }
-      case 17:
+      case 17: {
+        const isRun18048 = dateStr ? is18048Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17226') || link.train_numbers.includes('18048')) : true);
+        const arrivalRow = isRun18048
+          ? { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null }
+          : { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null };
         return [
-          { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null },
+          arrivalRow,
           { train_no: '57201', from: 'BZA', to: 'GNT', dep: '06:20', arr: '07:35', ta: 0.7 }
         ];
+      }
       case 18:
         return [
           { train_no: '12734', from: 'GNT', to: '---', dep: '23:10', arr: '---', ta: 0.3 }
@@ -825,38 +836,24 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link, dateStr = null) 
         } else if (link?.train_numbers) {
           isAfter17225 = link.train_numbers.includes('17225');
         }
-        if (isAfter17225) {
-          return [
-            { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null },
-            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
-          ];
-        } else {
-          return [
-            { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
-            { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
-          ];
-        }
+        const incomingRow = isAfter17225
+          ? { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null }
+          : { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null };
+        const isRun18048 = dateStr ? is18048Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17226') || link.train_numbers.includes('18048')) : true);
+        const returnRow = isRun18048
+          ? { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
+          : { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 };
+        return [incomingRow, returnRow];
       }
       case 52: {
-        let isAfter17226 = false;
-        if (dateStr) {
-          const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-          const dow = d.getDay();
-          isAfter17226 = (dow === 1 || dow === 3 || dow === 6); // Mon, Wed, Sat (after 17226 on Tue, Fri, Sun)
-        } else if (link?.train_numbers) {
-          isAfter17226 = link.train_numbers.includes('17226');
-        }
-        if (isAfter17226) {
-          return [
-            { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null },
-            { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
-          ];
-        } else {
-          return [
-            { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null },
-            { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
-          ];
-        }
+        const isRun18048 = dateStr ? is18048Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17226') || link.train_numbers.includes('18048')) : true);
+        const arrivalRow = isRun18048
+          ? { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null }
+          : { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null };
+        return [
+          arrivalRow,
+          { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
+        ];
       }
       case 53:
       case 54:
@@ -1354,15 +1351,22 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               origTrain = is18047Day(dateStrIso) ? '67230, 18047' : '67230, 17225';
             } else if (category.id === 1 && origLinkNum === 16) {
               const dow = new Date(dateStrIso + 'T00:00:00').getDay();
-              origTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 17226';
+              const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+              const retT = is18048Day(dateStrIso) ? '18048' : '17226';
+              origTrain = `${inT}, ${retT}`;
+            } else if (category.id === 1 && origLinkNum === 17) {
+              const retT = is18048Day(dateStrIso) ? '18048' : '17226';
+              origTrain = `${retT}, 57201`;
             } else if (category.id === 2 && origLinkNum === 50) {
               origTrain = is18047Day(dateStrIso) ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
             } else if (category.id === 2 && origLinkNum === 51) {
               const dow = new Date(dateStrIso + 'T00:00:00').getDay();
-              origTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 18048';
+              const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+              const retT = is18048Day(dateStrIso) ? '18048' : '17226';
+              origTrain = `${inT}, ${retT}`;
             } else if (category.id === 2 && origLinkNum === 52) {
-              const dow = new Date(dateStrIso + 'T00:00:00').getDay();
-              origTrain = (dow === 1 || dow === 3 || dow === 6) ? '17226, PILOT(12703)' : '18048, PILOT(12703)';
+              const retT = is18048Day(dateStrIso) ? '18048' : '17226';
+              origTrain = `${retT}, PILOT(12703)`;
             } else {
               origTrain = origLink ? (origLink.train_numbers || 'REST') : 'REST';
             }

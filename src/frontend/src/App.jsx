@@ -1068,12 +1068,25 @@ export function is18047Day(dateStr) {
   return day === 0 || day === 2 || day === 3 || day === 5;
 }
 
+// Helper: 18048 runs Sunday, Tuesday, Thursday, Friday from GTL
+// 17226 runs remaining days (Monday, Wednesday, Saturday) from GTL
+export function is18048Day(dateStr) {
+  if (!dateStr) return true;
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 4 || day === 5;
+}
+
 export function getMasterDailySlots(dateStr) {
   const baseSlots = (dateStr && dateStr < '2026-10-01')
     ? LEGACY_MASTER_DAILY_SLOTS
     : OCT_2026_MASTER_DAILY_SLOTS;
 
   const is18047 = is18047Day(dateStr);
+  const is18048 = is18048Day(dateStr);
+
+  const effFirstTrain = is18047 ? '18047' : '17225';
+  const effLastTrain = is18048 ? '18048' : '17226';
 
   return baseSlots.map(slot => {
     const hasCor15OrTti50 = slot.links && slot.links.some(l => 
@@ -1081,36 +1094,20 @@ export function getMasterDailySlots(dateStr) {
       (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)
     );
 
-    if (hasCor15OrTti50 || slot.slotId === 11 || (slot.firstTrain === '18047' && slot.lastTrain === '18048')) {
-      if (is18047) {
-        return {
-          ...slot,
-          firstTrain: '18047',
-          lastTrain: '18048',
-          title: '18047 / 18048 (Amaravati Express: BZA ➔ GTL)',
-          links: slot.links.map(l => {
-            if ((parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
-                (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)) {
-              return { ...l, firstTrain: '18047', lastTrain: '18048' };
-            }
-            return l;
-          })
-        };
-      } else {
-        return {
-          ...slot,
-          firstTrain: '17225',
-          lastTrain: '17226',
-          title: '17225 / 17226 (Amaravati Express: BZA ➔ GTL)',
-          links: slot.links.map(l => {
-            if ((parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
-                (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)) {
-              return { ...l, firstTrain: '17225', lastTrain: '17226' };
-            }
-            return l;
-          })
-        };
-      }
+    if (hasCor15OrTti50 || slot.slotId === 11 || (slot.firstTrain === '18047' && (slot.lastTrain === '18048' || slot.lastTrain === '17226'))) {
+      return {
+        ...slot,
+        firstTrain: effFirstTrain,
+        lastTrain: effLastTrain,
+        title: `${effFirstTrain} / ${effLastTrain} (Amaravati Express: BZA ➔ GTL)`,
+        links: slot.links.map(l => {
+          if ((parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
+              (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)) {
+            return { ...l, firstTrain: effFirstTrain, lastTrain: effLastTrain };
+          }
+          return l;
+        })
+      };
     }
     return slot;
   });
@@ -6037,7 +6034,34 @@ export default function App() {
                       let linkLastTrain = '';
                       let linkCoach = '';
                       if (matchedLink && matchedLink.train_numbers && matchedLink.train_numbers.trim() && matchedLink.train_numbers.toUpperCase() !== 'REST') {
-                        const parts = matchedLink.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                        let dynamicTrainNums = matchedLink.train_numbers;
+                        const cId = parseInt(lDef.categoryId, 10);
+                        const lNum = parseInt(lDef.linkNum, 10);
+                        if (cId === 1 && lNum === 15) {
+                          dynamicTrainNums = is18047Day(selectedDate) ? '67230, 18047' : '67230, 17225';
+                        } else if (cId === 1 && lNum === 16) {
+                          const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
+                          const dow = d.getDay();
+                          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
+                          dynamicTrainNums = `${inT}, ${retT}`;
+                        } else if (cId === 1 && lNum === 17) {
+                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
+                          dynamicTrainNums = `${retT}, 57201`;
+                        } else if (cId === 2 && lNum === 50) {
+                          dynamicTrainNums = is18047Day(selectedDate) ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+                        } else if (cId === 2 && lNum === 51) {
+                          const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
+                          const dow = d.getDay();
+                          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
+                          dynamicTrainNums = `${inT}, ${retT}`;
+                        } else if (cId === 2 && lNum === 52) {
+                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
+                          dynamicTrainNums = `${retT}, PILOT(12703)`;
+                        }
+
+                        const parts = dynamicTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
                         if (parts.length > 0) linkFirstTrain = parts[0];
                         if (parts.length > 1) linkLastTrain = parts[parts.length - 1];
                       }
