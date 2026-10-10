@@ -529,10 +529,19 @@ function recalculateJournalRowsTa(rows) {
   return updatedRows;
 }
 
+// Helper: 18047 runs Sunday, Tuesday, Wednesday, Friday
+// 17225 runs remaining days (Monday, Thursday, Saturday)
+function is18047Day(dateStr) {
+  if (!dateStr) return true;
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 3 || day === 5;
+}
+
 /**
  * Exact Link-to-Duty Mapping for Conductors (COR), TTI Sleeper, Ladies Staff, and LR Staff
  */
-function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
+function getDutyRowsForLinkNumber(categoryId, linkNumber, link, dateStr = null) {
   if (!link || link.is_rest || !link.train_numbers || link.train_numbers === 'REST' || link.train_numbers === 'OFF') {
     return [];
   }
@@ -606,16 +615,41 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
         ];
       case 14:
         return []; // REST
-      case 15:
-        return [
-          { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
-          { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }
-        ];
-      case 16:
-        return [
-          { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
-          { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
-        ];
+      case 15: {
+        const isRun18047 = dateStr ? is18047Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17225') || link.train_numbers.includes('18047')) : true);
+        if (isRun18047) {
+          return [
+            { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+            { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }
+          ];
+        } else {
+          return [
+            { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+            { train_no: '17225', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
+          ];
+        }
+      }
+      case 16: {
+        let isAfter17225 = false;
+        if (dateStr) {
+          const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+          const dow = d.getDay();
+          isAfter17225 = (dow === 0 || dow === 2 || dow === 5); // Sun, Tue, Fri (after 17225 on Mon, Thu, Sat)
+        } else if (link?.train_numbers) {
+          isAfter17225 = link.train_numbers.includes('17225');
+        }
+        if (isAfter17225) {
+          return [
+            { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null },
+            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
+          ];
+        } else {
+          return [
+            { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
+            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
+          ];
+        }
+      }
       case 17:
         return [
           { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null },
@@ -768,21 +802,62 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link) {
           { train_no: '12795', from: 'BZA', to: 'SC', dep: '17:30', arr: '23:20', ta: null },
           { train_no: '17645', from: 'SC', to: 'GNT', dep: '07:45', arr: '14:30', ta: 1.0 }
         ];
-      case 50:
-        return [
-          { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
-          { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }
-        ];
-      case 51:
-        return [
-          { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
-          { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
-        ];
-      case 52:
-        return [
-          { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null },
-          { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
-        ];
+      case 50: {
+        const isRun18047 = dateStr ? is18047Day(dateStr) : (link?.train_numbers ? (!link.train_numbers.includes('17225') || link.train_numbers.includes('18047')) : true);
+        if (isRun18047) {
+          return [
+            { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+            { train_no: '18047', from: 'BZA', to: '---', dep: '20:45', arr: '---', ta: 0.7 }
+          ];
+        } else {
+          return [
+            { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+            { train_no: '17225', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
+          ];
+        }
+      }
+      case 51: {
+        let isAfter17225 = false;
+        if (dateStr) {
+          const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+          const dow = d.getDay();
+          isAfter17225 = (dow === 0 || dow === 2 || dow === 5); // Sun, Tue, Fri (after 17225 on Mon, Thu, Sat)
+        } else if (link?.train_numbers) {
+          isAfter17225 = link.train_numbers.includes('17225');
+        }
+        if (isAfter17225) {
+          return [
+            { train_no: '17225', from: '---', to: 'GTL', dep: '---', arr: '05:10', ta: null },
+            { train_no: '17226', from: 'GTL', to: '---', dep: '19:10', arr: '---', ta: 1.0 }
+          ];
+        } else {
+          return [
+            { train_no: '18047', from: '---', to: 'GTL', dep: '---', arr: '04:00', ta: null },
+            { train_no: '18048', from: 'GTL', to: '---', dep: '14:30', arr: '---', ta: 1.0 }
+          ];
+        }
+      }
+      case 52: {
+        let isAfter17226 = false;
+        if (dateStr) {
+          const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+          const dow = d.getDay();
+          isAfter17226 = (dow === 1 || dow === 3 || dow === 6); // Mon, Wed, Sat (after 17226 on Tue, Fri, Sun)
+        } else if (link?.train_numbers) {
+          isAfter17226 = link.train_numbers.includes('17226');
+        }
+        if (isAfter17226) {
+          return [
+            { train_no: '17226', from: '---', to: 'BZA', dep: '---', arr: '03:55', ta: null },
+            { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
+          ];
+        } else {
+          return [
+            { train_no: '18048', from: '---', to: 'BZA', dep: '---', arr: '22:45', ta: null },
+            { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: 1.0 }
+          ];
+        }
+      }
       case 53:
       case 54:
       case 55:
@@ -1067,6 +1142,12 @@ function resolveDutyCodeToRows(dutyCode) {
     return [{ train_no: '12703', from: 'BZA', to: 'GNT', dep: '05:45', arr: '06:25', ta: 0.3 }];
   }
   if (code.includes('17225')) {
+    if (code.includes('67230') || code.includes('PILOT')) {
+      return [
+        { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null },
+        { train_no: '17225', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
+      ];
+    }
     return [
       { train_no: '17281', from: 'GNT', to: 'BZA', dep: '17:45', arr: '18:50', ta: null },
       { train_no: '17225', from: 'BZA', to: '---', dep: '19:45', arr: '---', ta: 0.7 }
@@ -1268,7 +1349,26 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           origLinkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
           const origLink = linkMap[`${category.id}_${origLinkNum}`] || linkMap[origLinkNum];
           origIsRest = !origLink || origLink.is_rest === 1 || isRestString(origLink.train_numbers);
-          origTrain = origIsRest ? 'REST' : (origLink.train_numbers || 'REST');
+          if (!origIsRest) {
+            if (category.id === 1 && origLinkNum === 15) {
+              origTrain = is18047Day(dateStrIso) ? '67230, 18047' : '67230, 17225';
+            } else if (category.id === 1 && origLinkNum === 16) {
+              const dow = new Date(dateStrIso + 'T00:00:00').getDay();
+              origTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 17226';
+            } else if (category.id === 2 && origLinkNum === 50) {
+              origTrain = is18047Day(dateStrIso) ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+            } else if (category.id === 2 && origLinkNum === 51) {
+              const dow = new Date(dateStrIso + 'T00:00:00').getDay();
+              origTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 18048';
+            } else if (category.id === 2 && origLinkNum === 52) {
+              const dow = new Date(dateStrIso + 'T00:00:00').getDay();
+              origTrain = (dow === 1 || dow === 3 || dow === 6) ? '17226, PILOT(12703)' : '18048, PILOT(12703)';
+            } else {
+              origTrain = origLink ? (origLink.train_numbers || 'REST') : 'REST';
+            }
+          } else {
+            origTrain = 'REST';
+          }
         } else {
           const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
           origIsRest = isRestString(dutyCode);
@@ -1284,7 +1384,9 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           remarks: remarksStr,
           overrideDuty,
           muster,
-          allLinks: Object.values(linkMap)
+          allLinks: Object.values(linkMap),
+          dateStr: dateStrIso,
+          categoryId: category.id
         });
 
         let duties = [];
@@ -1340,7 +1442,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             const nextLink = setDetails.remainingLinks[0];
             linkNum = nextLink;
             const targetCatId = lastTargetCat || category.id;
-            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink]);
+            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink], dateStrIso);
             const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
             const derivedRemark = `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
             duties.forEach(d => { d.remarks = derivedRemark; });

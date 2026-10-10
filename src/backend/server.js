@@ -84,6 +84,15 @@ function requireAdmin(req, res, next) {
 
 app.use(authenticateToken);
 
+// Helper to determine if date is an 18047 run day (Sunday, Tuesday, Wednesday, Friday)
+// On remaining days (Monday, Thursday, Saturday), 17225 runs instead.
+function is18047Day(dStr) {
+  if (!dStr) return true;
+  const d = new Date(dStr + (dStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 3 || day === 5;
+}
+
 // Helper: Get active link definition for a link number on a given date (strictly published only)
 async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
   const catId = parseInt(categoryId, 10);
@@ -114,6 +123,32 @@ async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
        ORDER BY date(effective_from) DESC, category_id ASC LIMIT 1`,
       [linkNumber, dateStr, dateStr]
     );
+  }
+  if (link && dateStr) {
+    // Clone link object so we don't mutate DB cache
+    link = { ...link };
+    const num = parseInt(link.link_number, 10);
+    const cat = parseInt(link.category_id, 10);
+    if ((cat === 1 && num === 15) || (cat === 2 && num === 50)) {
+      const is18047 = is18047Day(dateStr);
+      if (cat === 1) {
+        link.train_numbers = is18047 ? '67230, 18047' : '67230, 17225';
+      } else {
+        link.train_numbers = is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+      }
+    } else if (cat === 1 && num === 16) {
+      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+      const dow = d.getDay();
+      link.train_numbers = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 17226';
+    } else if (cat === 2 && num === 51) {
+      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+      const dow = d.getDay();
+      link.train_numbers = (dow === 0 || dow === 2 || dow === 5) ? '17225, 17226' : '18047, 18048';
+    } else if (cat === 2 && num === 52) {
+      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+      const dow = d.getDay();
+      link.train_numbers = (dow === 1 || dow === 3 || dow === 6) ? '17226, PILOT(12703)' : '18048, PILOT(12703)';
+    }
   }
   return link || { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
 }

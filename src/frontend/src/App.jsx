@@ -1059,11 +1059,61 @@ export const LEGACY_NON_DAILY_SLOTS = [
   }
 ];
 
+// Helper: 18047 runs Sunday, Tuesday, Wednesday, Friday
+// 17225 runs remaining days (Monday, Thursday, Saturday)
+export function is18047Day(dateStr) {
+  if (!dateStr) return true;
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  return day === 0 || day === 2 || day === 3 || day === 5;
+}
+
 export function getMasterDailySlots(dateStr) {
-  if (dateStr && dateStr < '2026-10-01') {
-    return LEGACY_MASTER_DAILY_SLOTS;
-  }
-  return OCT_2026_MASTER_DAILY_SLOTS;
+  const baseSlots = (dateStr && dateStr < '2026-10-01')
+    ? LEGACY_MASTER_DAILY_SLOTS
+    : OCT_2026_MASTER_DAILY_SLOTS;
+
+  const is18047 = is18047Day(dateStr);
+
+  return baseSlots.map(slot => {
+    const hasCor15OrTti50 = slot.links && slot.links.some(l => 
+      (parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
+      (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)
+    );
+
+    if (hasCor15OrTti50 || slot.slotId === 11 || (slot.firstTrain === '18047' && slot.lastTrain === '18048')) {
+      if (is18047) {
+        return {
+          ...slot,
+          firstTrain: '18047',
+          lastTrain: '18048',
+          title: '18047 / 18048 (Amaravati Express: BZA ➔ GTL)',
+          links: slot.links.map(l => {
+            if ((parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
+                (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)) {
+              return { ...l, firstTrain: '18047', lastTrain: '18048' };
+            }
+            return l;
+          })
+        };
+      } else {
+        return {
+          ...slot,
+          firstTrain: '17225',
+          lastTrain: '17226',
+          title: '17225 / 17226 (Amaravati Express: BZA ➔ GTL)',
+          links: slot.links.map(l => {
+            if ((parseInt(l.categoryId, 10) === 1 && parseInt(l.linkNum, 10) === 15) ||
+                (parseInt(l.categoryId, 10) === 2 && parseInt(l.linkNum, 10) === 50)) {
+              return { ...l, firstTrain: '17225', lastTrain: '17226' };
+            }
+            return l;
+          })
+        };
+      }
+    }
+    return slot;
+  });
 }
 
 export function getNonDailySlots(dateStr) {

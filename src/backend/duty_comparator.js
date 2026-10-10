@@ -53,7 +53,8 @@ function compareDutyAndResolve({
   overrideDuty,        // object with extra_train_no, overridden_link_number, etc.
   muster,              // muster record { code, remarks }
   allLinks = [],       // list of all links for fast link lookup
-  categoryId = null    // category id (1: COR, 2: TTI/Sleeper, 3: Ladies, 4: LR)
+  categoryId = null,   // category id (1: COR, 2: TTI/Sleeper, 3: Ladies, 4: LR)
+  dateStr = null       // duty date string (YYYY-MM-DD) for day-of-week conditional duties
 }) {
   // 1. Check for Muster Leave / Sick / Absent
   const musterCode = muster ? String(muster.code || '').trim().toUpperCase() : null;
@@ -172,7 +173,7 @@ function compareDutyAndResolve({
   // if he goes on a train on rest day (i.e, if train number column shows rest and remarks column shows a train number)
   // then that train number should be displayed in the TA,NDA,DIARY document
   if (isOrigRest && remarksTrain) {
-    const dutyRows = getDutyRowsForTrain(remarksTrain, allLinks);
+    const dutyRows = getDutyRowsForTrain(remarksTrain, allLinks, dateStr);
     return {
       action: 'DISPLAY',
       condition: 4,
@@ -207,7 +208,7 @@ function compareDutyAndResolve({
 
   if (isSameTrain) {
     const finalTrain = origStr;
-    const dutyRows = getDutyRowsForTrain(finalTrain, allLinks);
+    const dutyRows = getDutyRowsForTrain(finalTrain, allLinks, dateStr);
     return {
       action: 'DISPLAY',
       condition: 1,
@@ -222,7 +223,7 @@ function compareDutyAndResolve({
   // if both have different train numbers then display the train number in the remarks column
   // (cause that is the final decision) in the TA,NDA,DIARY document
   const finalTrain = remarksTrain;
-  const dutyRows = getDutyRowsForTrain(finalTrain, allLinks);
+  const dutyRows = getDutyRowsForTrain(finalTrain, allLinks, dateStr);
   return {
     action: 'DISPLAY',
     condition: 2,
@@ -236,7 +237,7 @@ function compareDutyAndResolve({
 /**
  * Resolves duty rows (train_no, from, to, dep, arr, ta) for a given train number string.
  */
-function getDutyRowsForTrain(trainStr, allLinks = []) {
+function getDutyRowsForTrain(trainStr, allLinks = [], dateStr = null) {
   if (!trainStr || isRestString(trainStr)) return [];
   const clean = String(trainStr).trim();
 
@@ -250,7 +251,7 @@ function getDutyRowsForTrain(trainStr, allLinks = []) {
     )
   );
   if (matchedLink) {
-    const rows = getDutyRowsForLinkNumber(matchedLink.category_id || 1, matchedLink.link_number, matchedLink);
+    const rows = getDutyRowsForLinkNumber(matchedLink.category_id || 1, matchedLink.link_number, matchedLink, dateStr);
     if (rows && rows.length > 0) return rows;
   }
 
