@@ -18,7 +18,9 @@ const MUSTER_CODES = [
   { code: 'NH', label: 'National Holiday', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)', border: 'rgba(245, 158, 11, 0.4)' }
 ];
 
-const CODE_MAP = {};
+const CODE_MAP = {
+  '': { code: '', label: 'Blank / Unfilled', color: '#94a3b8', bg: 'rgba(255, 255, 255, 0.02)', border: 'rgba(255, 255, 255, 0.15)' }
+};
 MUSTER_CODES.forEach(c => { CODE_MAP[c.code] = c; });
 
 export default function MusterRoll({ isAdmin, categories = [], authToken, API_BASE = '/api', initialTab = 'wage-period' }) {
@@ -2134,7 +2136,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                     {/* Daily Muster Cells */}
                     {cycleData.cycle.dates.map(d => {
                       const dayData = staff.days[d.dateStr] || { code: 'P', isManual: false };
-                      const meta = CODE_MAP[dayData.code] || CODE_MAP.P;
+                      const meta = (dayData.code === '' ? CODE_MAP[''] : CODE_MAP[dayData.code]) || CODE_MAP.P;
 
                       return (
                         <td
@@ -2449,6 +2451,34 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '10px' }}>
               Select Attendance / Muster Code:
             </label>
+
+            {/* Option to keep muster blank to fill later */}
+            <button
+              type="button"
+              disabled={savingCell}
+              onClick={() => handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, '', cellRemarks || 'Mark Reason Later (Muster Blank)')}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                marginBottom: '12px',
+                borderRadius: '8px',
+                border: activeCellModal.currentCode === '' ? '2px solid #f59e0b' : '1px dashed #f59e0b',
+                background: activeCellModal.currentCode === '' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(245, 158, 11, 0.08)',
+                color: '#fbbf24',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Leave muster attendance blank for this date so it can be filled later"
+            >
+              <span>⏳</span>
+              <span>Keep Muster Blank / Fill Later</span>
+            </button>
 
             {/* Grid of 10 Options */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginBottom: '18px' }}>

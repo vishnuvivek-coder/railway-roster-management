@@ -130,7 +130,10 @@ function checkMultiDayLeaveReturnSync(staffId, categoryId, rowPosition, cycleLen
       if (ov.status === 'AVAILABLE_FOR_BOOKING' || (ov.reason && ov.reason.toLowerCase().includes('available for booking'))) {
         return null;
       }
-      if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(ov.status) || ov.leave_type) {
+      if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(ov.status) || ov.leave_type) {
+        if (ov.status === 'MARK_LATER') {
+          return { isLeave: true, status: 'MARK_LATER', isSick: false };
+        }
         const isSick = ov.status === 'SICK' || ov.leave_type === 'SICK' || ov.leave_type === 'LHAP' || (ov.reason && ov.reason.toLowerCase().includes('sick'));
         return { isLeave: true, status: isSick ? 'SICK' : (ov.leave_type || ov.status), isSick };
       }
@@ -1332,7 +1335,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         const lrEntry = lrMap[dateStrIso];
         const earnEntry = earningsMap[dateStrIso];
 
-        const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(directOverride.status) || directOverride.leave_type);
+        const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOverride.status) || directOverride.leave_type);
         let isEffectiveLeave = isMusterLeave || isDirectLeave;
 
         const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
@@ -1765,11 +1768,11 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   if (Array.isArray(allStaffOverrides)) {
     allStaffOverrides.forEach(o => {
       if (o.staff_id === staffId && !leaveInfoMap[o.date]) {
-        if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(o.status) || o.leave_type) {
-          const code = o.leave_type || (o.status === 'SICK' ? 'SICK' : (o.status === 'REST' ? 'R' : (o.status === 'CR' ? 'CR' : (o.status === 'ABSENT' ? 'O' : 'LEAVE'))));
+        if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(o.status) || o.leave_type) {
+          const code = o.status === 'MARK_LATER' ? '' : (o.leave_type || (o.status === 'SICK' ? 'SICK' : (o.status === 'REST' ? 'R' : (o.status === 'CR' ? 'CR' : (o.status === 'ABSENT' ? 'O' : 'LEAVE')))));
           leaveInfoMap[o.date] = {
             code,
-            natureOfLeave: formatNatureOfLeave(code, o.reason)
+            natureOfLeave: o.status === 'MARK_LATER' ? (o.reason || 'Reason Later (Muster Blank)') : formatNatureOfLeave(code, o.reason)
           };
         }
       }

@@ -279,8 +279,9 @@ export default function DutyEditModal({
   // Shift confirmation modal state: { staffName, currentTrainDesc, targetDesc, onConfirm }
   const [shiftConfirmDialog, setShiftConfirmDialog] = useState(null);
 
-  // SUB-OPTIONS UNDER DELETE: 'LEAVE', 'SICK', 'ADVANCE_BOOKED', 'ABSENT', 'SHIFTED'
+  // SUB-OPTIONS UNDER DELETE: 'LEAVE', 'SICK', 'ADVANCE_BOOKED', 'ABSENT', 'SHIFTED', 'WRONG_ALLOTMENT', 'UPGRADE_COR', 'REASSIGN_STAFF', 'MARK_LATER'
   const [deleteReason, setDeleteReason] = useState(() => {
+    if (dutyModal.status === 'MARK_LATER' || dutyModal.isMarkLater) return 'MARK_LATER';
     if (dutyModal.isVacantShifted || dutyModal.status === 'SHIFTED') return 'SHIFTED';
     if (dutyModal.status === 'SICK') return 'SICK';
     if (dutyModal.status === 'ABSENT') return 'ABSENT';
@@ -680,7 +681,15 @@ export default function DutyEditModal({
           };
         }
 
-        // 3. Rest & Leaves
+        // 3. Rest & Leaves & Mark Later
+        if (activeDuty.status === 'MARK_LATER') {
+          return {
+            label: 'Deleted (Reason Later)',
+            isRest: true,
+            isLr: false,
+            linkNum: null
+          };
+        }
         if (['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) || activeDuty.leave_type) {
           const code = activeDuty.leave_type || activeDuty.status;
           return {
@@ -757,7 +766,7 @@ export default function DutyEditModal({
               linkNum: lNum
             };
           }
-          const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
+          const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(activeDuty.train_numbers)
             ? `Tr ${activeDuty.train_numbers}`
             : '';
           return {
@@ -857,13 +866,13 @@ export default function DutyEditModal({
           };
         }
 
-        // 3. Leave, Sick, CR, Absent (applies to all staff including LR)
+        // 3. Leave, Sick, CR, Absent, Mark Later (applies to all staff including LR)
         if (
-          ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) ||
+          ['SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(activeDuty.status) ||
           activeDuty.leave_type ||
           (activeDuty.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(activeDuty.muster_code.toUpperCase()))
         ) {
-          const reason = activeDuty.leave_type || activeDuty.muster_code || activeDuty.status;
+          const reason = activeDuty.status === 'MARK_LATER' ? 'Reason Later' : (activeDuty.leave_type || activeDuty.muster_code || activeDuty.status);
           return {
             isAssigned: false,
             isUnavailable: true,
@@ -952,7 +961,7 @@ export default function DutyEditModal({
               trainNo: null
             };
           }
-          const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.train_numbers)
+          const trStr = activeDuty.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(activeDuty.train_numbers)
             ? `Tr ${activeDuty.train_numbers}`
             : '';
           return {
@@ -1319,7 +1328,7 @@ export default function DutyEditModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update duty status');
 
-      onSuccess(data.message || `Duty updated: ${dutyModal.name} marked ${deleteReason} on ${selectedDate}!`);
+      onSuccess(data.message || (deleteReason === 'MARK_LATER' ? `Deleted name of ${dutyModal.name || 'employee'} from Link #${targetLink || 'Duty'}: reason marked later and muster kept blank.` : `Duty updated: ${dutyModal.name} marked ${deleteReason} on ${selectedDate}!`));
       onClose();
     } catch (err) {
       setErrorMsg(err.message);
@@ -1547,6 +1556,12 @@ export default function DutyEditModal({
           }
           if (!finalReason) {
             finalReason = `Reassigned Link #${targetLink || 'Duty'} to ${effectiveRepName} (${reassignOriginalStaffAction === 'SPARE_HQ' ? 'Original staff Available at HQ / Spare' : reassignOriginalStaffAction})`;
+          }
+        } else if (deleteReason === 'MARK_LATER') {
+          actionCode = 'MARK_LATER';
+          selectedLeaveType = null;
+          if (!finalReason) {
+            finalReason = reason?.trim() || 'Mark Reason Later (Muster Blank)';
           }
         }
 
@@ -2115,7 +2130,7 @@ export default function DutyEditModal({
                   </span>
                 </div>
 
-                {/* 8 Reasons for Delete / Roster Adjustment Buttons */}
+                {/* 9 Reasons for Delete / Roster Adjustment Buttons */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {[
                     { id: 'LEAVE', label: '1. Leave', icon: '', desc: 'CL, LAP, LHAP, etc.' },
@@ -2125,14 +2140,17 @@ export default function DutyEditModal({
                     { id: 'SHIFTED', label: '5. Shifted Place', icon: '', desc: 'Shifted to place / link' },
                     { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '', desc: 'Remove mistaken allotment' },
                     { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
-                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '', desc: 'Reassign link / swap staff' }
+                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '', desc: 'Reassign link / swap staff' },
+                    { id: 'MARK_LATER', label: '9. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' }
                   ].map(r => (
                     <button
                       key={r.id}
                       type="button"
                       onClick={() => {
                         setDeleteReason(r.id);
-                        if (r.id === 'WRONG_ALLOTMENT') {
+                        if (r.id === 'MARK_LATER') {
+                          setDeleteSlotAction('VACANT');
+                        } else if (r.id === 'WRONG_ALLOTMENT') {
                           if (dutyModal.isOverridden) {
                             setDeleteSlotAction('RESET');
                           } else {
@@ -3741,6 +3759,79 @@ export default function DutyEditModal({
                   </div>
                 )}
 
+                {/* SUB-OPTION 9: MARK REASON LATER */}
+                {deleteReason === 'MARK_LATER' && (
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.05)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#f59e0b' }}>
+                        ⏳ Delete Name &amp; Mark Reason Later:
+                      </label>
+                      <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', fontSize: '0.72rem', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                        Muster Kept Blank
+                      </span>
+                    </div>
+
+                    <div style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.2)',
+                      fontSize: '0.78rem',
+                      color: '#fef3c7',
+                      lineHeight: 1.45
+                    }}>
+                      <strong>{dutyModal.name || 'This employee'}</strong> will be deleted from <strong>Link #{targetLink || 'Duty'}</strong>.
+                      Their Muster Roll attendance code will be kept <strong>BLANK</strong> so supervisors can fill it in later when official leave/sick documents are received.
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>From Date:</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>To Date (Optional multi-day):</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={leaveToDate}
+                          min={selectedDate}
+                          onChange={(e) => setLeaveToDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                        Optional Remarks / Note:
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Reason to be marked later / Pending documentation"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        style={{ fontSize: '0.82rem' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
                 {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && (
                   <div style={{
@@ -3843,6 +3934,19 @@ export default function DutyEditModal({
                         color: '#fca5a5'
                       }}>
                         <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong>.
+                      </div>
+                    )}
+
+                    {deleteSlotAction === 'VACANT' && deleteReason === 'MARK_LATER' && (
+                      <div style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        fontSize: '0.8rem',
+                        color: '#fef3c7'
+                      }}>
+                        <strong>{dutyModal.name || 'This employee'}</strong> will be removed from Link #{targetLink || 'Duty'} on {selectedDate}. The slot will remain <strong>[UNMANNED / VACANT]</strong> to assign relief later, and their muster attendance will remain blank.
                       </div>
                     )}
 
@@ -4320,16 +4424,18 @@ export default function DutyEditModal({
                         ? 'linear-gradient(135deg, #d97706, #b45309)'
                         : (deleteReason === 'REASSIGN_STAFF'
                             ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
-                            : ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
-                                ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
-                                : 'linear-gradient(135deg, #ef4444, #dc2626)')))
+                            : (deleteReason === 'MARK_LATER'
+                                ? 'linear-gradient(135deg, #d97706, #b45309)'
+                                : ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
+                                    ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                                    : 'linear-gradient(135deg, #ef4444, #dc2626)'))))
                     : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#ffffff',
                   border: 'none',
                   fontWeight: 700,
                   padding: '8px 20px',
                   minWidth: '160px',
-                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')))
+                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') || deleteReason === 'MARK_LATER'))
                     ? '0 0 16px rgba(212, 161, 92, 0.45)'
                     : 'none'
                 }}
@@ -4340,11 +4446,13 @@ export default function DutyEditModal({
                      ? (upgradeMode === 'PERMANENT' ? 'Save & Upgrade to COR (Cadre)' : `Save & Upgrade to COR Link #${targetCorLink || '1'}`)
                      : (deleteReason === 'REASSIGN_STAFF'
                          ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
-                         : (deleteReason === 'WRONG_ALLOTMENT'
-                             ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
-                             : (deleteReason === 'SHIFTED' 
-                                 ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
-                                 : `Save Status Change`)))
+                         : (deleteReason === 'MARK_LATER'
+                             ? 'Delete Name & Mark Reason Later'
+                             : (deleteReason === 'WRONG_ALLOTMENT'
+                                 ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
+                                 : (deleteReason === 'SHIFTED' 
+                                     ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
+                                     : `Save Status Change`))))
                  ) :
                  `Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>

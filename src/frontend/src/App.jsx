@@ -2642,10 +2642,11 @@ export default function App() {
       staffDuty.isVacantShifted || 
       staffDuty.isVacantAdvance || 
       staffDuty.isVacantAvailableReturn || 
+      staffDuty.isVacantMarkLater || 
       (staffDuty.name && staffDuty.name.toUpperCase().includes('VACANT'))
     );
-    const staffId = typeof rawStaffId === 'string' && (rawStaffId.startsWith('vacant-') || rawStaffId.startsWith('vacant-upgrade-') || rawStaffId.startsWith('vacant-shifted-') || rawStaffId.startsWith('vacant-advance-') || rawStaffId.startsWith('vacant-avl-'))
-      ? parseInt(rawStaffId.replace('vacant-upgrade-', '').replace('vacant-shifted-', '').replace('vacant-advance-', '').replace('vacant-avl-', '').replace(/^vacant-.*?-(\d+)$/, '$1').replace(/^vacant-\d+$/, ''), 10) || null
+    const staffId = typeof rawStaffId === 'string' && (rawStaffId.startsWith('vacant-') || rawStaffId.startsWith('vacant-upgrade-') || rawStaffId.startsWith('vacant-shifted-') || rawStaffId.startsWith('vacant-advance-') || rawStaffId.startsWith('vacant-avl-') || rawStaffId.startsWith('vacant-mark-later-'))
+      ? parseInt(rawStaffId.replace('vacant-upgrade-', '').replace('vacant-shifted-', '').replace('vacant-advance-', '').replace('vacant-avl-', '').replace('vacant-mark-later-', '').replace(/^vacant-.*?-(\d+)$/, '$1').replace(/^vacant-\d+$/, ''), 10) || null
       : rawStaffId;
     const staffObj = typeof staffId === 'number' ? allStaffList.find(s => s.id === staffId) : null;
     const staffName = isVacant ? (staffDuty.name || (staffObj ? staffObj.name : 'Vacant Slot')) : (staffDuty.name || staffDuty.staffName);
@@ -2662,7 +2663,7 @@ export default function App() {
     const status = staffDuty.status || (staffDuty.isRest ? 'REST' : staffDuty.isOverridden ? 'CHANGED_LINK' : 'DUTY');
 
     setDutyEditModal({
-      staffId: isVacant ? (staffDuty.isVacantShifted || staffDuty.isVacantAdvance || staffDuty.isVacantUpgrade ? staffId : null) : staffId,
+      staffId: isVacant ? (staffDuty.isVacantShifted || staffDuty.isVacantAdvance || staffDuty.isVacantUpgrade || staffDuty.isVacantMarkLater ? staffId : null) : staffId,
       originalStaffId: staffDuty.originalStaffId || staffId,
       shiftedStaffId: (staffDuty.isVacantShifted || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-shifted-'))) ? staffId : null,
       advanceStaffId: (staffDuty.isVacantAdvance || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-advance-'))) ? staffId : null,
@@ -2694,6 +2695,7 @@ export default function App() {
       isVacantShifted: staffDuty.isVacantShifted || false,
       isVacantUpgrade: staffDuty.isVacantUpgrade || false,
       isVacantAdvance: staffDuty.isVacantAdvance || false,
+      isVacantMarkLater: staffDuty.isVacantMarkLater || false,
       advanceTrainNo: staffDuty.advanceTrainNo || null,
       isUpgraded: staffDuty.isUpgraded || false,
       initialMode: staffDuty.initialMode || (isVacant ? 'ASSIGN_DUTY' : undefined)
@@ -6114,7 +6116,7 @@ export default function App() {
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) &&
                         (parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) || (Array.isArray(lDef.altLinkNums) && lDef.altLinkNums.some(alt => parseInt(alt, 10) === parseInt(d.original_link_number, 10)))) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
-                        (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
+                        (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
                       );
 
                       const isUtilisedAdvance = originalSickOrLeaveDuty &&
@@ -6299,6 +6301,31 @@ export default function App() {
                             originalStaffStatus: 'AVAILABLE_FOR_BOOKING',
                             isRestLink: slot.isRestLink || lDef.isRest
                           });
+                        } else if (originalSickOrLeaveDuty.status === 'MARK_LATER') {
+                          dutiesInSlot.push({
+                            ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
+                            staffId: originalSickOrLeaveDuty.substituteName ? originalSickOrLeaveDuty.staffId : `vacant-mark-later-${originalSickOrLeaveDuty.staffId}`,
+                            name: originalSickOrLeaveDuty.substituteName || `[UNMANNED / VACANT]`,
+                            designation: originalSickOrLeaveDuty.substituteName ? 'Relief TTE' : 'VACANT',
+                            link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
+                            isVacantMarkLater: true,
+                            isVacant: !originalSickOrLeaveDuty.substituteName,
+                            isLeave: false,
+                            isSick: false,
+                            isCr: false,
+                            isMarkLater: true,
+                            originalStaffName: originalSickOrLeaveDuty.name,
+                            originalStaffStatus: 'MARK_LATER',
+                            isRestLink: slot.isRestLink || lDef.isRest
+                          });
                         } else {
                           // Duty has no internal substitute staff (e.g. Custom name or Unmanned)
                           dutiesInSlot.push({
@@ -6419,7 +6446,7 @@ export default function App() {
                       ? (selectedDate >= l.from_date && selectedDate <= l.to_date) 
                       : (l.date === selectedDate))
                   );
-                  const isSickOrLeave = d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || isApprovedLeave;
+                  const isSickOrLeave = d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || isApprovedLeave;
                   const isRest = d.isRest || d.link_number === null;
                   return isSickOrLeave || isRest || !activeWorkedStaffIds.has(d.staffId);
                 }).map(d => ({
@@ -6427,7 +6454,7 @@ export default function App() {
                   isLeave: d.status === 'LEAVE' || safeLeaveRequests.some(l => 
                     String(l.staff_id) === String(d.staffId) && 
                     l.date === selectedDate && 
-                    l.status === 'APPROVED' &&
+                    l.status === 'APPROVED' && 
                     l.type === 'LEAVE'
                   ),
                   isSick: d.status === 'SICK',
@@ -6448,7 +6475,7 @@ export default function App() {
                       // Exclude staff already working active slots
                       if (activeWorkedStaffIds.has(s.staffId)) return;
 
-                      const isSickOrLeave = s.status === 'SICK' || s.status === 'LEAVE' || s.status === 'CR' || s.status === 'ABSENT' || s.leave_type;
+                      const isSickOrLeave = s.status === 'SICK' || s.status === 'LEAVE' || s.status === 'CR' || s.status === 'ABSENT' || s.status === 'MARK_LATER' || s.leave_type;
                       if (isSickOrLeave) return;
 
                       if (cat.categoryId === 4) {
@@ -6953,7 +6980,7 @@ export default function App() {
                                     const isLeave = d.status === 'LEAVE' || d.isLeave;
                                     const isCr = d.status === 'CR' || d.isCr;
                                     const hasSub = d.originalStaffName || d.substituteName;
-                                    const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
+                                    const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacantMarkLater || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
                                     const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
                                     const isVacantOver = dragOverSlotId === `${group.slotId}-vacant-${dIdx}`;
                                     const isStaffOver = dragOverStaffDutyKey === `${group.slotId}-${d.staffId || dIdx}`;
@@ -7258,6 +7285,11 @@ export default function App() {
                                               {d.isVacantShifted && (
                                                 <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
                                                   ⚠️ VACANT (SHIFTED)
+                                                </span>
+                                              )}
+                                              {d.isVacantMarkLater && (
+                                                <span className="badge no-print" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ⏳ REASON LATER (MUSTER BLANK)
                                                 </span>
                                               )}
                                               {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && d.isUpgraded && (
@@ -8057,6 +8089,11 @@ export default function App() {
                                                     ⚠️ VACANT (SHIFTED)
                                                   </span>
                                                 )}
+                                                {d.isVacantMarkLater && (
+                                                  <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                    ⏳ REASON LATER (MUSTER BLANK)
+                                                  </span>
+                                                )}
                                                 {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && d.isUpgraded && (
                                                   <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#eab308', border: '1px solid #eab308', fontSize: '0.7rem', padding: '2px 8px', fontWeight: 700 }}>
                                                     ⭐ Upgraded (COR{d.originalStaffName ? ` - Sub for ${d.originalStaffName}` : ''})
@@ -8365,7 +8402,7 @@ export default function App() {
                                   {isAdmin && (
                                         <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                           {group.duties.map((d, dIdx) => {
-                                            const isSlotVacant = d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacant || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
+                                            const isSlotVacant = d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacantMarkLater || d.isVacant || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
 
                                             return (
                                               <div key={d.staffId || dIdx} style={{ minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
@@ -14883,11 +14920,11 @@ export default function App() {
 
           // Leave / Sick check
           const isLeaveOrSick = d && (
-            ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) ||
+            ['SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(d.status) ||
             d.leave_type ||
             (d.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(String(d.muster_code).toUpperCase()))
           );
-          const leaveReason = d ? (d.leave_type || d.muster_code || d.status) : '';
+          const leaveReason = d ? (d.status === 'MARK_LATER' ? 'Reason Later' : (d.leave_type || d.muster_code || d.status)) : '';
 
           const isLR = s.category_id === 4;
           const linkNum = d ? parseInt(d.link_number, 10) : null;
@@ -14900,7 +14937,7 @@ export default function App() {
           let statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
 
           if (isLeaveOrSick) {
-            statusLabel = `🏖️ ${leaveReason || 'On Leave / Sick'}`;
+            statusLabel = (d && d.status === 'MARK_LATER') ? '⏳ Reason Later' : `🏖️ ${leaveReason || 'On Leave / Sick'}`;
             statusBadgeColor = '#f87171';
             statusBadgeBg = 'rgba(239, 68, 68, 0.15)';
           } else if (isBusy) {

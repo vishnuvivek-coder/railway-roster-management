@@ -72,6 +72,16 @@ function compareDutyAndResolve({
   // 2. Check for Override Leave / Sick / Absent / Standby
   if (overrideDuty) {
     const ovStatus = String(overrideDuty.status || '').trim().toUpperCase();
+    if (ovStatus === 'MARK_LATER') {
+      return {
+        action: 'LEAVE',
+        leaveCode: '',
+        isRest: false,
+        remarks: overrideDuty.reason || 'Reason to be marked later (Muster Blank)',
+        train_no: null,
+        duty_rows: []
+      };
+    }
     if (['LEAVE', 'SICK', 'CR', 'ABSENT'].includes(ovStatus) || overrideDuty.leave_type) {
       const code = overrideDuty.leave_type || ovStatus;
       return {
