@@ -21,16 +21,14 @@ export const KNOWN_LINK_SETS = {
     [19, 20],
     [22, 23, 24],
     [25, 26, 27],
-    [29, 30],
-    [31, 32],
-    [33, 34],
+    [29, 30, 31],
+    [32, 33, 34],
     [36, 37, 38],
-    [39, 40, 41],
-    [43, 44, 45, 46],
-    [47, 48],
-    [50, 51, 52],
-    [53, 54, 55],
-    [57, 58, 59]
+    [38, 39],
+    [40, 41],
+    [43, 44, 45],
+    [46, 47, 48],
+    [50, 51, 52]
   ],
   3: [
     [1, 2, 3],
@@ -65,12 +63,13 @@ export function isHqArrivalDuty(linkNum, trainNumbers, toStation, fromStation) {
   if (!trainNumbers && !linkNum) return false;
   const to = (toStation || '').toUpperCase();
   const tr = (trainNumbers || '').toUpperCase();
+  if (tr.includes('NON DAILY')) return false;
   
   // Specific return/arrival trains arriving at GNT in morning/night
   const hqArrivalTrains = ['20630', '12703', '17252', '12603', '17240', '17226', '12806', '17262', '17254', '17646', '17244', '17282', '18048', '17216', '17070', '07002', '07194', '07128', '17232', '17608', '22881'];
   
   // Link numbers in Cat 2 and Cat 1 that are return legs to GNT
-  const cat2ReturnLinks = [2, 4, 10, 13, 16, 18, 20, 24, 27, 30, 32, 34, 38, 41, 46, 48, 52, 55, 59];
+  const cat2ReturnLinks = [2, 4, 10, 13, 16, 18, 20, 24, 27, 30, 32, 34, 38, 41, 46, 48, 52];
   const cat1ReturnLinks = [3, 6, 10, 13, 17, 20];
 
   if (linkNum && (cat2ReturnLinks.includes(Number(linkNum)) || cat1ReturnLinks.includes(Number(linkNum)))) {
@@ -566,7 +565,7 @@ export default function DutyEditModal({
   };
 
   // Slot action under Delete: 'REPLACE' (name changes, link fixed) or 'VACANT'
-  const [deleteSlotAction, setDeleteSlotAction] = useState('REPLACE');
+  const [deleteSlotAction, setDeleteSlotAction] = useState('VACANT');
   const [replacementStaffId, setReplacementStaffId] = useState('');
   const [replacementName, setReplacementName] = useState('');
   const [replacementCatId, setReplacementCatId] = useState('ENTIRE_ROSTER');
@@ -613,6 +612,12 @@ export default function DutyEditModal({
     }
     return '';
   }, [dutyModal]);
+
+  const isCorSlot = useMemo(() => {
+    const cId = parseInt(targetCategoryId, 10);
+    const lNum = parseInt(targetLink, 10);
+    return cId === 1 || (lNum >= 1 && lNum <= 21);
+  }, [targetCategoryId, targetLink]);
 
   // Find link details if present
   const linkDetails = useMemo(() => {
@@ -757,7 +762,8 @@ export default function DutyEditModal({
         // 5. Working cyclic train link
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
-          const isNonDaily = [60, 61, 62].includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
+          const nonDailyLinkNums = (!targetDateStr || targetDateStr >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+          const isNonDaily = nonDailyLinkNums.includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
           if (isNonDaily && !activeDuty.extra_train_no) {
             return {
               label: `Non-Daily Link #${lNum} (Available)`,
@@ -798,7 +804,8 @@ export default function DutyEditModal({
     if (!linkDef || linkDef.is_rest) {
       return { label: `Link #${linkNum} (Weekly REST)`, isRest: true, isLr: false, linkNum };
     }
-    const isNonDaily = [60, 61, 62].includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
+    const nonDailyLinkNums = (!targetDateStr || targetDateStr >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+    const isNonDaily = nonDailyLinkNums.includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
     if (isNonDaily) {
       return {
         label: `Non-Daily Link #${linkNum} (Available)`,
@@ -950,7 +957,8 @@ export default function DutyEditModal({
         // 7. Regular cyclic link duty (Cat 1, 2, 3)
         if (activeDuty.link_number !== null && activeDuty.link_number !== undefined) {
           const lNum = parseInt(activeDuty.link_number, 10);
-          const isNonDaily = [60, 61, 62].includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
+          const nonDailyLinkNums = (!targetDateStr || targetDateStr >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+          const isNonDaily = nonDailyLinkNums.includes(lNum) || (activeDuty.train_numbers && String(activeDuty.train_numbers).toUpperCase().includes('NON DAILY'));
           if (isNonDaily && !activeDuty.extra_train_no) {
             return {
               isAssigned: false,
@@ -1005,7 +1013,8 @@ export default function DutyEditModal({
         trainNo: null
       };
     }
-    const isNonDaily = [60, 61, 62].includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
+    const nonDailyLinkNums = (!targetDateStr || targetDateStr >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+    const isNonDaily = nonDailyLinkNums.includes(linkNum) || (linkDef.train_numbers && String(linkDef.train_numbers).toUpperCase().includes('NON DAILY'));
     if (isNonDaily) {
       return {
         isAssigned: false,
@@ -1031,6 +1040,7 @@ export default function DutyEditModal({
   // When specific category or ALL is selected: filters apply according to category and availability
   const eligibleReplacementStaff = useMemo(() => {
     if (!allStaffList) return [];
+    const nonDailyLinkNums = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
     return allStaffList
       .filter(s => {
         if (s.id === dutyModal.staffId) return false;
@@ -1046,11 +1056,23 @@ export default function DutyEditModal({
           return true;
         }
 
+        // When upgrading Sleeper TTI from any place (all Sleeper TTIs regardless of current link/place)
+        if (replacementCatId === 'UPGRADE_SLEEPER_ANY' || (deleteSlotAction === 'UPGRADE_SLEEPER' && (replacementCatId === '2' || !replacementCatId))) {
+          return String(s.category_id) === '2';
+        }
+
+        if (replacementCatId === 'SLEEPER_AVAIL') {
+          if (String(s.category_id) !== '2') return false;
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          if (assignStatus.isUnavailable || assignStatus.isAssigned) return false;
+          return true;
+        }
+
         if (replacementCatId === 'NON_DAILY') {
           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           const dutyInfo = getStaffDutyInfo(s, selectedDate);
-          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
-                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+          const isND = (assignStatus.linkNum && nonDailyLinkNums.includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && nonDailyLinkNums.includes(dutyInfo.linkNum)) ||
                        (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
                        (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
           if (!isND) return false;
@@ -1058,14 +1080,14 @@ export default function DutyEditModal({
           if (String(s.category_id) !== String(replacementCatId)) return false;
         }
         const assignStatus = getStaffAssignmentStatus(s, selectedDate);
-        if (assignStatus.isUnavailable) return false;
-        if (!showAlreadyAssigned) {
+        if (assignStatus.isUnavailable && !showAlreadyAssigned && deleteSlotAction !== 'UPGRADE_SLEEPER') return false;
+        if (!showAlreadyAssigned && deleteSlotAction !== 'UPGRADE_SLEEPER') {
           if (assignStatus.isAssigned) return false;
         }
         return true;
       })
       .sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()));
-  }, [allStaffList, dutyModal.staffId, replacementCatId, showAlreadyAssigned, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
+  }, [allStaffList, dutyModal.staffId, replacementCatId, showAlreadyAssigned, deleteSlotAction, selectedDate, getStaffAssignmentStatus, getStaffDutyInfo]);
 
   // Selected replacement staff object
   const selectedReplacementStaffObj = useMemo(() => {
@@ -1078,6 +1100,7 @@ export default function DutyEditModal({
   // When specific category or ALL is selected: filters apply according to category and availability
   const eligibleAssignStaff = useMemo(() => {
     if (!allStaffList) return [];
+    const nonDailyLinkNums = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
     return allStaffList
       .filter(s => {
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
@@ -1093,11 +1116,16 @@ export default function DutyEditModal({
           return true;
         }
 
+        // When upgrading Sleeper TTI to vacant COR slot from any place
+        if (assignCatId === 'UPGRADE_SLEEPER_ANY') {
+          return String(s.category_id) === '2';
+        }
+
         if (assignCatId === 'NON_DAILY') {
           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           const dutyInfo = getStaffDutyInfo(s, selectedDate);
-          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
-                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+          const isND = (assignStatus.linkNum && nonDailyLinkNums.includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && nonDailyLinkNums.includes(dutyInfo.linkNum)) ||
                        (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
                        (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
           if (!isND) return false;
@@ -1105,8 +1133,8 @@ export default function DutyEditModal({
           if (String(s.category_id) !== String(assignCatId)) return false;
         }
         const assignStatus = getStaffAssignmentStatus(s, selectedDate);
-        if (assignStatus.isUnavailable) return false;
-        if (!showAlreadyAssigned) {
+        if (assignStatus.isUnavailable && !showAlreadyAssigned && assignCatId !== 'UPGRADE_SLEEPER_ANY') return false;
+        if (!showAlreadyAssigned && assignCatId !== 'UPGRADE_SLEEPER_ANY') {
           if (assignStatus.isAssigned) return false;
         }
         return true;
@@ -1123,6 +1151,7 @@ export default function DutyEditModal({
   // Eligible staff for Mutual Shift of Places mode (Strictly in Alphabetical Order A to Z)
   const eligibleMutualStaff = useMemo(() => {
     if (!allStaffList) return [];
+    const nonDailyLinkNums = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
     return allStaffList
       .filter(s => {
         if (!s.name || s.name.toUpperCase().includes('VACANT')) return false;
@@ -1146,8 +1175,8 @@ export default function DutyEditModal({
         if (mutualCatFilter === 'NON_DAILY') {
           const assignStatus = getStaffAssignmentStatus(s, selectedDate);
           const dutyInfo = getStaffDutyInfo(s, selectedDate);
-          const isND = (assignStatus.linkNum && [60, 61, 62].includes(assignStatus.linkNum)) ||
-                       (dutyInfo.linkNum && [60, 61, 62].includes(dutyInfo.linkNum)) ||
+          const isND = (assignStatus.linkNum && nonDailyLinkNums.includes(assignStatus.linkNum)) ||
+                       (dutyInfo.linkNum && nonDailyLinkNums.includes(dutyInfo.linkNum)) ||
                        (assignStatus.trainDesc && assignStatus.trainDesc.includes('Non-Daily')) ||
                        (dutyInfo.label && dutyInfo.label.includes('Non-Daily'));
           if (!isND) return false;
@@ -1428,8 +1457,9 @@ export default function DutyEditModal({
         }
 
         const effectiveToDate = leaveToDate && leaveToDate >= selectedDate ? leaveToDate : selectedDate;
-        const repStaffIdNum = (deleteSlotAction === 'REPLACE' && replacementStaffId) ? parseInt(replacementStaffId, 10) : null;
-        const repStaffName = (deleteSlotAction === 'REPLACE') ? (selectedReplacementStaffObj?.name || replacementName || null) : null;
+        const hasReplacementAction = deleteSlotAction === 'REPLACE' || deleteSlotAction === 'UPGRADE_SLEEPER';
+        const repStaffIdNum = (hasReplacementAction && replacementStaffId) ? parseInt(replacementStaffId, 10) : null;
+        const repStaffName = hasReplacementAction ? (selectedReplacementStaffObj?.name || replacementName || null) : null;
 
         let actionCode = deleteReason;
         let selectedLeaveType = null;
@@ -1579,6 +1609,26 @@ export default function DutyEditModal({
           ? (allStaffList?.find(s => String(s.id) === String(effectiveRepIdVal))?.name || repStaffName)
           : repStaffName;
 
+        const chosenRepObj = deleteReason === 'REASSIGN_STAFF'
+          ? (allStaffList?.find(s => String(s.id) === String(effectiveRepIdVal)) || selectedReplacementStaffObj)
+          : selectedReplacementStaffObj;
+
+        const isUpgradingToCor = deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY' || (isCorSlot && chosenRepObj && chosenRepObj.category_id !== 1);
+
+        if (deleteSlotAction === 'UPGRADE_SLEEPER' && !effectiveRepIdVal) {
+          throw new Error('Please select a Sleeper TTI to upgrade to this Conductors (COR) link duty.');
+        }
+
+        if (isUpgradingToCor && !finalReason) {
+          finalReason = `Upgraded ${effectiveRepNameVal || 'Sleeper TTI'} to COR Link #${targetLink || 'Duty'}`;
+        }
+
+        const repType = shiftedMode === 'MUTUAL' ? 'NONE' : (
+          isUpgradingToCor 
+            ? 'UPGRADE_SLEEPER' 
+            : ((hasReplacementAction || deleteReason === 'REASSIGN_STAFF') ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE'))
+        );
+
         const payload = {
           staff_id: staffId,
           staff_b_id: shiftedMode === 'MUTUAL' && mutualStaffId ? parseInt(mutualStaffId, 10) : null,
@@ -1589,7 +1639,7 @@ export default function DutyEditModal({
           day_wise_leaves: dayWisePayload,
           advance_train_no: advanceTrainNo,
           vacate_next_link: advanceVacateNext,
-          target_cor_link: targetCorLink ? parseInt(targetCorLink, 10) : 1,
+          target_cor_link: targetCorLink ? parseInt(targetCorLink, 10) : (isUpgradingToCor && targetLink ? parseInt(targetLink, 10) : 1),
           original_staff_action: reassignOriginalStaffAction,
           shifted_mode: shiftedMode,
           shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : (shiftedMode === 'MUTUAL' ? placeDesc : null)),
@@ -1600,26 +1650,22 @@ export default function DutyEditModal({
           is_extra: shiftedMode === 'NON_DAILY' ? 1 : 0,
           target_link: targetLink ? parseInt(targetLink, 10) : null,
           link_number: targetLink ? parseInt(targetLink, 10) : null,
-          target_category_id: targetCategoryId ? parseInt(targetCategoryId, 10) : null,
+          target_category_id: isUpgradingToCor ? 1 : (targetCategoryId ? parseInt(targetCategoryId, 10) : null),
           reason: finalReason,
-          new_link_number: deleteReason === 'UPGRADE_COR' ? parseInt(targetCorLink, 10) : null,
-          replacement_type: shiftedMode === 'MUTUAL' ? 'NONE' : ((deleteSlotAction === 'REPLACE' || deleteReason === 'REASSIGN_STAFF') ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE')),
+          new_link_number: deleteReason === 'UPGRADE_COR' ? parseInt(targetCorLink, 10) : (isUpgradingToCor && targetLink ? parseInt(targetLink, 10) : null),
+          replacement_type: repType,
           replacement_staff_id: shiftedMode === 'MUTUAL' ? null : (effectiveRepIdVal ? parseInt(effectiveRepIdVal, 10) : null),
           replacement_name: shiftedMode === 'MUTUAL' ? null : effectiveRepNameVal,
           wrong_allotment_action: deleteSlotAction
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
-        const chosenRepObj = deleteReason === 'REASSIGN_STAFF'
-          ? (allStaffList?.find(s => String(s.id) === String(effectiveRepIdVal)) || selectedReplacementStaffObj)
-          : selectedReplacementStaffObj;
-
-        if (shiftedMode !== 'MUTUAL' && (deleteSlotAction === 'REPLACE' || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
+        if (shiftedMode !== 'MUTUAL' && (hasReplacementAction || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
           const repStatus = getStaffAssignmentStatus(chosenRepObj, selectedDate);
-          if (repStatus.isUnavailable && (deleteReason === 'REASSIGN_STAFF' ? reassignCatFilter : replacementCatId) !== 'ENTIRE_ROSTER') {
+          if (repStatus.isUnavailable && !isUpgradingToCor && (deleteReason === 'REASSIGN_STAFF' ? reassignCatFilter : replacementCatId) !== 'ENTIRE_ROSTER') {
             throw new Error(`${chosenRepObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
           }
-          if (repStatus.isAssigned) {
+          if (repStatus.isAssigned && !isUpgradingToCor) {
             setShiftConfirmDialog({
               staffName: chosenRepObj.name,
               currentTrainDesc: repStatus.trainDesc,
@@ -2888,7 +2934,7 @@ export default function DutyEditModal({
                               {(categories || []).map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                               ))}
-                              <option value="NON_DAILY">Non-Daily Link Crew (60, 61, 62)</option>
+                              <option value="NON_DAILY">Non-Daily Link Crew ({(!selectedDate || selectedDate >= '2026-10-01') ? '53, 54, 55' : '60, 61, 62'})</option>
                             </select>
                           </div>
                           <div>
@@ -3891,6 +3937,34 @@ export default function DutyEditModal({
                       >
                         {deleteReason === 'WRONG_ALLOTMENT' ? 'Replace with Correct Employee' : 'Replace with Another Employee'}
                       </button>
+                      {isCorSlot && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteSlotAction('UPGRADE_SLEEPER');
+                            setReplacementCatId('UPGRADE_SLEEPER_ANY');
+                            setReplacementStaffId('');
+                            setReplacementName('');
+                          }}
+                          style={{
+                            flex: 1,
+                            minWidth: '190px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: deleteSlotAction === 'UPGRADE_SLEEPER' ? '2px solid #f59e0b' : '1.5px solid rgba(245, 158, 11, 0.45)',
+                            background: deleteSlotAction === 'UPGRADE_SLEEPER'
+                              ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.18))'
+                              : 'rgba(245, 158, 11, 0.08)',
+                            color: deleteSlotAction === 'UPGRADE_SLEEPER' ? '#fde68a' : '#fbbf24',
+                            fontWeight: deleteSlotAction === 'UPGRADE_SLEEPER' ? 800 : 600,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            boxShadow: deleteSlotAction === 'UPGRADE_SLEEPER' ? '0 0 12px rgba(245, 158, 11, 0.35)' : 'none'
+                          }}
+                        >
+                          ⭐ Upgrade Sleeper TTI to COR
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDeleteSlotAction('VACANT')}
@@ -3950,55 +4024,101 @@ export default function DutyEditModal({
                       </div>
                     )}
 
-                    {deleteSlotAction === 'REPLACE' && (
+                    {(deleteSlotAction === 'REPLACE' || deleteSlotAction === 'UPGRADE_SLEEPER') && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        {deleteSlotAction === 'UPGRADE_SLEEPER' && (
+                          <div style={{
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(217, 119, 6, 0.08))',
+                            border: '1px solid rgba(245, 158, 11, 0.45)',
+                            fontSize: '0.8rem',
+                            color: '#fde68a',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '6px'
+                          }}>
+                            <div>
+                              <strong>⭐ Upgrade Sleeper TTI to COR Link #{targetLink || 'Duty'} (From Any Place)</strong>
+                              <div style={{ fontSize: '0.74rem', color: '#fcd34d', marginTop: '2px' }}>
+                                Select any Sleeper TTI from any link, train, non-daily pool, rest, or standby. Their previous place will automatically become <strong>[VACANT - UPGRADED TO COR]</strong>.
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Filter by Category */}
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                          {[
-                            { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
-                            { id: 'ALL', label: 'All Available' },
-                            { id: '1', label: 'Conductors' },
-                            { id: '2', label: 'Sleeper' },
-                            { id: '3', label: 'Ladies' },
-                            { id: '4', label: 'LR Pool' },
-                            { id: 'NON_DAILY', label: 'Non-Daily (60, 61, 62)' }
-                          ].map(c => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => {
-                                setReplacementCatId(c.id);
-                                setReplacementStaffId('');
-                                setReplacementName('');
-                              }}
-                              style={{
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                border: replacementCatId === c.id ? '1px solid #10b981' : '1px solid var(--border-glass)',
-                                background: replacementCatId === c.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.02)',
-                                color: replacementCatId === c.id ? '#34d399' : 'var(--color-text-secondary)',
-                                fontSize: '0.74rem',
-                                fontWeight: replacementCatId === c.id ? 700 : 500,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {c.label}
-                            </button>
-                          ))}
+                          {(deleteSlotAction === 'UPGRADE_SLEEPER'
+                            ? [
+                                { id: 'UPGRADE_SLEEPER_ANY', label: '⭐ All Sleeper TTIs (From Any Place)' },
+                                { id: 'SLEEPER_AVAIL', label: 'Available Sleeper TTIs Only' },
+                                { id: 'NON_DAILY', label: (!selectedDate || selectedDate >= '2026-10-01') ? 'Non-Daily (53, 54, 55)' : 'Non-Daily (60, 61, 62)' },
+                                { id: 'ENTIRE_ROSTER', label: 'All Staff (Entire Roster)' }
+                              ]
+                            : [
+                                ...(isCorSlot ? [{ id: 'UPGRADE_SLEEPER_ANY', label: '⭐ Upgrade Sleeper TTI (From Any Place)' }] : []),
+                                { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
+                                { id: 'ALL', label: 'All Available' },
+                                { id: '1', label: 'Conductors' },
+                                { id: '2', label: 'Sleeper' },
+                                { id: '3', label: 'Ladies' },
+                                { id: '4', label: 'LR Pool' },
+                                { id: 'NON_DAILY', label: (!selectedDate || selectedDate >= '2026-10-01') ? 'Non-Daily (53, 54, 55)' : 'Non-Daily (60, 61, 62)' }
+                              ]
+                          ).map(c => {
+                            const isUpgradePill = c.id === 'UPGRADE_SLEEPER_ANY';
+                            const isSelected = replacementCatId === c.id;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setReplacementCatId(c.id);
+                                  setReplacementStaffId('');
+                                  setReplacementName('');
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  border: isSelected
+                                    ? (isUpgradePill ? '1.5px solid #f59e0b' : '1px solid #10b981')
+                                    : (isUpgradePill ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid var(--border-glass)'),
+                                  background: isSelected
+                                    ? (isUpgradePill ? 'rgba(245, 158, 11, 0.25)' : 'rgba(16, 185, 129, 0.2)')
+                                    : (isUpgradePill ? 'rgba(245, 158, 11, 0.08)' : 'rgba(255,255,255,0.02)'),
+                                  color: isSelected
+                                    ? (isUpgradePill ? '#fde68a' : '#34d399')
+                                    : (isUpgradePill ? '#fbbf24' : 'var(--color-text-secondary)'),
+                                  fontSize: '0.74rem',
+                                  fontWeight: isSelected || isUpgradePill ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {c.label}
+                              </button>
+                            );
+                          })}
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label" style={{ fontSize: '0.78rem', margin: 0 }}>
-                            Choose Replacement Employee:
+                          <label className="form-label" style={{ fontSize: '0.78rem', margin: 0, color: (deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY') ? '#fde68a' : undefined }}>
+                            {(deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY')
+                              ? 'Select Sleeper TTI to Upgrade to COR (From Any Place):'
+                              : 'Choose Replacement Employee:'}
                           </label>
-                          <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input
-                              type="checkbox"
-                              checked={showAlreadyAssigned}
-                              onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
-                            />
-                            <span>Show busy / assigned staff (to shift duty)</span>
-                          </label>
+                          {!(deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY') && (
+                            <label style={{ fontSize: '0.74rem', color: showAlreadyAssigned ? '#f59e0b' : 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
+                              <input
+                                type="checkbox"
+                                checked={showAlreadyAssigned}
+                                onChange={(e) => setShowAlreadyAssigned(e.target.checked)}
+                              />
+                              <span>Show busy / assigned staff (to shift duty)</span>
+                            </label>
+                          )}
                         </div>
 
                         {/* Searchable Select for Replacement */}
@@ -4012,14 +4132,18 @@ export default function DutyEditModal({
                               if (found) setReplacementName(found.name);
                               else setReplacementName('');
                             }}
-                            placeholder={`Type employee name to select (${eligibleReplacementStaff.length} ${replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'})...`}
+                            placeholder={
+                              (deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY')
+                                ? `Type Sleeper TTI name to upgrade to COR (${eligibleReplacementStaff.length} Sleeper TTIs from all places)...`
+                                : `Type employee name to select (${eligibleReplacementStaff.length} ${replacementCatId === 'ENTIRE_ROSTER' ? 'total employees' : 'available'})...`
+                            }
                             formatLabel={(s) => {
                               const dutyInfo = getStaffDutyInfo(s, selectedDate);
                               const assignStatus = getStaffAssignmentStatus(s, selectedDate);
                               const catName = categories.find(c => c.id === s.category_id)?.name || 'Staff';
                               let statusText = '[AVAILABLE]';
                               if (assignStatus.isAssigned) {
-                                statusText = `[BUSY: ${assignStatus.trainDesc}]`;
+                                statusText = `[WORKING: ${assignStatus.trainDesc}]`;
                               } else if (assignStatus.isUnavailable) {
                                 statusText = `[${assignStatus.unavailableReason || 'REST/LEAVE'}]`;
                               }
@@ -4068,28 +4192,35 @@ export default function DutyEditModal({
                           const repAssignStatus = getStaffAssignmentStatus(selectedReplacementStaffObj, selectedDate);
                           const dutyInfo = getStaffDutyInfo(selectedReplacementStaffObj, selectedDate);
                           const catName = categories.find(c => c.id === selectedReplacementStaffObj.category_id)?.name || 'Staff';
+                          const isUpgradePreview = deleteSlotAction === 'UPGRADE_SLEEPER' || replacementCatId === 'UPGRADE_SLEEPER_ANY' || (isCorSlot && Number(selectedReplacementStaffObj.category_id) !== 1);
 
-                          let badgeColor = '#34d399';
-                          let badgeBg = 'rgba(16, 185, 129, 0.25)';
-                          let cardBorder = 'rgba(16, 185, 129, 0.3)';
-                          let cardBg = 'rgba(16, 185, 129, 0.1)';
-                          let badgeText = dutyInfo.label;
-                          let subText = <span><strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+                          let badgeColor = isUpgradePreview ? '#fde68a' : '#34d399';
+                          let badgeBg = isUpgradePreview ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.25)';
+                          let cardBorder = isUpgradePreview ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.3)';
+                          let cardBg = isUpgradePreview ? 'rgba(245, 158, 11, 0.14)' : 'rgba(16, 185, 129, 0.1)';
+                          let badgeText = isUpgradePreview ? `⭐ UPGRADE TO COR LINK #${targetLink || 'Duty'}` : dutyInfo.label;
+                          let subText = isUpgradePreview
+                            ? <span><strong>{selectedReplacementStaffObj.name}</strong> ({catName}) will be <strong>UPGRADED to COR Link #{targetLink || 'Duty'}</strong> on {selectedDate} (Muster: <strong>[P]</strong>).</span>
+                            : <span><strong>{selectedReplacementStaffObj.name}</strong> will take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
 
                           if (repAssignStatus.isAssigned) {
-                            badgeColor = '#fbbf24';
-                            badgeBg = 'rgba(245, 158, 11, 0.25)';
-                            cardBorder = 'rgba(245, 158, 11, 0.35)';
-                            cardBg = 'rgba(245, 158, 11, 0.12)';
-                            badgeText = `Busy on ${repAssignStatus.trainDesc}`;
-                            subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.</span>;
+                            badgeColor = isUpgradePreview ? '#fde68a' : '#fbbf24';
+                            badgeBg = 'rgba(245, 158, 11, 0.28)';
+                            cardBorder = 'rgba(245, 158, 11, 0.5)';
+                            cardBg = 'rgba(245, 158, 11, 0.14)';
+                            badgeText = isUpgradePreview ? `⭐ UPGRADE FROM ${repAssignStatus.trainDesc}` : `Busy on ${repAssignStatus.trainDesc}`;
+                            subText = isUpgradePreview
+                              ? <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.trainDesc}</strong>. They will be <strong>UPGRADED to COR Link #{targetLink || 'Duty'}</strong> and their previous slot on {repAssignStatus.trainDesc} will become <strong>[VACANT - {selectedReplacementStaffObj.name} UPGRADED TO COR]</strong>.</span>
+                              : <span><strong>{selectedReplacementStaffObj.name}</strong> is currently assigned to <strong>{repAssignStatus.trainDesc}</strong>. Submitting will show a confirmation prompt to shift them to Link #{targetLink || 'Duty'} and vacate their previous slot.</span>;
                           } else if (repAssignStatus.isUnavailable) {
-                            badgeColor = '#c084fc';
-                            badgeBg = 'rgba(192, 132, 252, 0.25)';
-                            cardBorder = 'rgba(192, 132, 252, 0.4)';
-                            cardBg = 'rgba(192, 132, 252, 0.1)';
-                            badgeText = repAssignStatus.unavailableReason || 'Rest / Leave';
-                            subText = <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
+                            badgeColor = isUpgradePreview ? '#fde68a' : '#c084fc';
+                            badgeBg = isUpgradePreview ? 'rgba(245, 158, 11, 0.28)' : 'rgba(192, 132, 252, 0.25)';
+                            cardBorder = isUpgradePreview ? 'rgba(245, 158, 11, 0.5)' : 'rgba(192, 132, 252, 0.4)';
+                            cardBg = isUpgradePreview ? 'rgba(245, 158, 11, 0.14)' : 'rgba(192, 132, 252, 0.1)';
+                            badgeText = isUpgradePreview ? `⭐ UPGRADE FROM ${repAssignStatus.unavailableReason || 'REST'}` : (repAssignStatus.unavailableReason || 'Rest / Leave');
+                            subText = isUpgradePreview
+                              ? <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will <strong>UPGRADE them to COR Link #{targetLink || 'Duty'}</strong> on {selectedDate} (Muster: <strong>[P]</strong>).</span>
+                              : <span><strong>{selectedReplacementStaffObj.name}</strong> is currently on <strong>{repAssignStatus.unavailableReason || 'Rest / Leave'}</strong>. Submitting will assign them to take over Link #{targetLink || 'Duty'} on {selectedDate} (Muster: <strong>[P]</strong>).</span>;
                           }
 
                           return (
@@ -4190,35 +4321,46 @@ export default function DutyEditModal({
                   </label>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {[
+                      ...(isCorSlot ? [{ id: 'UPGRADE_SLEEPER_ANY', label: '⭐ Upgrade Sleeper TTI (From Any Place)' }] : []),
                       { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
                       { id: 'ALL', label: 'All Available' },
                       { id: '1', label: 'Conductors (COR)' },
                       { id: '2', label: 'Sleeper / TTI' },
                       { id: '3', label: 'Ladies / TTE' },
                       { id: '4', label: 'LR Relief Pool' },
-                      { id: 'NON_DAILY', label: 'Non-Daily (60, 61, 62)' }
-                    ].map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setAssignCatId(c.id);
-                          setAssignStaffId('');
-                        }}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: '6px',
-                          border: assignCatId === c.id ? '1px solid #3b82f6' : '1px solid var(--border-glass)',
-                          background: assignCatId === c.id ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.02)',
-                          color: assignCatId === c.id ? '#60a5fa' : 'var(--color-text-secondary)',
-                          fontSize: '0.78rem',
-                          fontWeight: assignCatId === c.id ? 700 : 500,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
+                      { id: 'NON_DAILY', label: (!selectedDate || selectedDate >= '2026-10-01') ? 'Non-Daily (53, 54, 55)' : 'Non-Daily (60, 61, 62)' }
+                    ].map(c => {
+                      const isUpgradePill = c.id === 'UPGRADE_SLEEPER_ANY';
+                      const isSelected = assignCatId === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setAssignCatId(c.id);
+                            setAssignStaffId('');
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            border: isSelected
+                              ? (isUpgradePill ? '1.5px solid #f59e0b' : '1px solid #3b82f6')
+                              : (isUpgradePill ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid var(--border-glass)'),
+                            background: isSelected
+                              ? (isUpgradePill ? 'rgba(245, 158, 11, 0.25)' : 'rgba(59, 130, 246, 0.2)')
+                              : (isUpgradePill ? 'rgba(245, 158, 11, 0.08)' : 'rgba(255,255,255,0.02)'),
+                            color: isSelected
+                              ? (isUpgradePill ? '#fde68a' : '#60a5fa')
+                              : (isUpgradePill ? '#fbbf24' : 'var(--color-text-secondary)'),
+                            fontSize: '0.78rem',
+                            fontWeight: isSelected || isUpgradePill ? 700 : 500,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {c.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -4420,7 +4562,7 @@ export default function DutyEditModal({
                 disabled={submitting}
                 style={{
                   background: activeMode === 'DELETE' 
-                    ? (deleteReason === 'UPGRADE_COR'
+                    ? ((deleteReason === 'UPGRADE_COR' || deleteSlotAction === 'UPGRADE_SLEEPER')
                         ? 'linear-gradient(135deg, #d97706, #b45309)'
                         : (deleteReason === 'REASSIGN_STAFF'
                             ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
@@ -4435,7 +4577,7 @@ export default function DutyEditModal({
                   fontWeight: 700,
                   padding: '8px 20px',
                   minWidth: '160px',
-                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') || deleteReason === 'MARK_LATER'))
+                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteSlotAction === 'UPGRADE_SLEEPER' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') || deleteReason === 'MARK_LATER'))
                     ? '0 0 16px rgba(212, 161, 92, 0.45)'
                     : 'none'
                 }}
@@ -4444,15 +4586,17 @@ export default function DutyEditModal({
                  activeMode === 'DELETE' ? (
                    deleteReason === 'UPGRADE_COR'
                      ? (upgradeMode === 'PERMANENT' ? 'Save & Upgrade to COR (Cadre)' : `Save & Upgrade to COR Link #${targetCorLink || '1'}`)
-                     : (deleteReason === 'REASSIGN_STAFF'
-                         ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
-                         : (deleteReason === 'MARK_LATER'
-                             ? 'Delete Name & Mark Reason Later'
-                             : (deleteReason === 'WRONG_ALLOTMENT'
-                                 ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
-                                 : (deleteReason === 'SHIFTED' 
-                                     ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
-                                     : `Save Status Change`))))
+                     : (deleteSlotAction === 'UPGRADE_SLEEPER'
+                         ? `⭐ Save & Upgrade Sleeper TTI to COR Link #${targetLink || 'Duty'}`
+                         : (deleteReason === 'REASSIGN_STAFF'
+                             ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
+                             : (deleteReason === 'MARK_LATER'
+                                 ? 'Delete Name & Mark Reason Later'
+                                 : (deleteReason === 'WRONG_ALLOTMENT'
+                                     ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
+                                     : (deleteReason === 'SHIFTED' 
+                                         ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
+                                         : `Save Status Change`)))))
                  ) :
                  `Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>

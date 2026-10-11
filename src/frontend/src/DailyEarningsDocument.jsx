@@ -183,6 +183,32 @@ export default function DailyEarningsDocument({
     }
   }, [viewMode, rangeStartDate, rangeEndDate, singleDate, activeCategoryId, selectedStaffId, year, month, authToken]);
 
+  // Real-time synchronization across all tabs and documents
+  useEffect(() => {
+    const handleRosterUpdate = (e) => {
+      if (e?.detail?.source === 'earnings_doc_save') return;
+      if (viewMode === 'continuous') {
+        fetchContinuousRange();
+      } else if (viewMode === 'single_day') {
+        fetchSingleDay();
+      } else {
+        fetchMonthlyEarnings();
+      }
+    };
+    window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
+    window.addEventListener('railway_schedule_updated', handleRosterUpdate);
+    window.addEventListener('railway_muster_updated', handleRosterUpdate);
+    window.addEventListener('railway_lr_updated', handleRosterUpdate);
+    window.addEventListener('railway_earnings_updated', handleRosterUpdate);
+    return () => {
+      window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+      window.removeEventListener('railway_schedule_updated', handleRosterUpdate);
+      window.removeEventListener('railway_muster_updated', handleRosterUpdate);
+      window.removeEventListener('railway_lr_updated', handleRosterUpdate);
+      window.removeEventListener('railway_earnings_updated', handleRosterUpdate);
+    };
+  }, [viewMode, rangeStartDate, rangeEndDate, singleDate, activeCategoryId, selectedStaffId, year, month, authToken]);
+
   // Recalculate row totals helper
   const recalcRow = (row) => {
     const twt_nc = parseInt(row.twt_nc, 10) || 0;
@@ -372,8 +398,16 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`Changes saved automatically (${timeStr})`);
+          const savedEmp = result.savedEmployeesCount !== undefined ? result.savedEmployeesCount : (result.savedCount || 0);
+          const errEmp = result.errorEmployeesCount !== undefined ? result.errorEmployeesCount : (result.errorCount || 0);
+          const errText = Array.isArray(result.errors) && result.errors.length > 0
+            ? ` | Errors: ${result.errors.map(e => `${e.staff_name} (${e.date}): ${e.error}`).join('; ')}`
+            : '';
+          setStatusMsg(`Saved (${timeStr}): ${savedEmp} employee(s) saved, ${errEmp} error(s)${errText}`);
+          if (errEmp > 0 && !silent) alert(result.message || `Errors occurred while saving Daily Earnings:${errText}`);
           setHasUnsavedChanges(false);
+          window.dispatchEvent(new CustomEvent('railway_earnings_updated', { detail: { source: 'earnings_doc_save' } }));
+          window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail: { source: 'earnings_doc_save' } }));
         } else {
           if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }
@@ -398,8 +432,16 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`Changes saved automatically (${timeStr})`);
+          const savedEmp = result.savedEmployeesCount !== undefined ? result.savedEmployeesCount : (result.savedCount || singleRows.length);
+          const errEmp = result.errorEmployeesCount !== undefined ? result.errorEmployeesCount : (result.errorCount || 0);
+          const errText = Array.isArray(result.errors) && result.errors.length > 0
+            ? ` | Errors: ${result.errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+            : '';
+          setStatusMsg(`Saved (${timeStr}): ${savedEmp} employee(s) saved, ${errEmp} error(s)${errText}`);
+          if (errEmp > 0 && !silent) alert(result.message || `Errors occurred while saving Daily Earnings:${errText}`);
           setHasUnsavedChanges(false);
+          window.dispatchEvent(new CustomEvent('railway_earnings_updated', { detail: { source: 'earnings_doc_save' } }));
+          window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail: { source: 'earnings_doc_save' } }));
         } else {
           if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }
@@ -424,8 +466,16 @@ export default function DailyEarningsDocument({
         const result = await res.json();
         if (res.ok) {
           const timeStr = new Date().toLocaleTimeString();
-          setStatusMsg(`Changes saved automatically (${timeStr})`);
+          const savedDays = result.savedCount !== undefined ? result.savedCount : monthlyRows.length;
+          const errDays = result.errorCount || 0;
+          const errText = Array.isArray(result.errors) && result.errors.length > 0
+            ? ` | Errors: ${result.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+            : '';
+          setStatusMsg(`Saved (${timeStr}): 1 employee (${savedDays} day(s)) saved, ${errDays} error(s)${errText}`);
+          if (errDays > 0 && !silent) alert(result.message || `Errors occurred while saving Monthly Earnings:${errText}`);
           setHasUnsavedChanges(false);
+          window.dispatchEvent(new CustomEvent('railway_earnings_updated', { detail: { source: 'earnings_doc_save' } }));
+          window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail: { source: 'earnings_doc_save' } }));
         } else {
           if (!silent) setStatusMsg(`Save failed: ${result.error || 'Unknown error'}`);
         }

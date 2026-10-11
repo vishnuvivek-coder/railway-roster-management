@@ -121,7 +121,12 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
   let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
+  const rawLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC, effective_from ASC');
+  const allLinks = rawLinks.filter(l =>
+    l.status !== 'draft' &&
+    (!l.effective_from || l.effective_from <= actualEnd) &&
+    (!l.effective_to || l.effective_to >= actualStart)
+  );
   const linkMap = {};
   allLinks.forEach(l => {
     linkMap[`${l.category_id}_${l.link_number}`] = l;
@@ -131,8 +136,14 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
   });
 
   const getLinkNumForDate = (dateIso) => {
-    const offset = getDayOffset(category.anchor_date, dateIso);
-    return getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+    const curAnchor = category.id === 2
+      ? (dateIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
+      : category.anchor_date;
+    const curCycle = category.id === 2
+      ? (dateIso < '2026-10-01' ? 63 : 56)
+      : category.cycle_length;
+    const offset = getDayOffset(curAnchor, dateIso);
+    return getBaseLinkNumber(staff.row_position, offset, curCycle);
   };
 
   function resolveDutyDateIso(r) {
@@ -200,68 +211,53 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     });
   }
 
-  // Fetch overrides for this staff in date range
+  // Fetch direct & substitute overrides for this staff in date range
   const overridesRecords = await all(
-    'SELECT * FROM overrides WHERE staff_id = ? AND date >= ? AND date <= ?',
-    [staff.id, actualStart, actualEnd]
+    'SELECT * FROM overrides WHERE (staff_id = ? OR substitute_staff_id = ?) AND date >= ? AND date <= ?',
+    [staff.id, staff.id, actualStart, actualEnd]
   );
-  const overrideMap = {};
+  const directOverrideMap = {};
+  const subOverrideMap = {};
   if (Array.isArray(overridesRecords)) {
     overridesRecords.forEach(o => {
-      overrideMap[o.date] = o;
+      if (o.staff_id === staff.id) directOverrideMap[o.date] = o;
+      if (o.substitute_staff_id === staff.id) subOverrideMap[o.date] = o;
     });
   }
 
-  // If saved entries exist for this period, return them
-  if (savedEntries && savedEntries.length > 0 && !startDate && !endDate) {
-    const fixedRows = savedEntries.map((r, idx) => {
-      let schedDep = r.sched_dep || '';
-      let schedArr = r.sched_arr || '';
-      let actDep = (r.act_dep && r.act_dep !== '---') ? r.act_dep : '';
-      let actArr = (r.act_arr && r.act_arr !== '---') ? r.act_arr : '';
-
-      const dIso = resolveDutyDateIso(r);
-      const mRec = dIso ? musterMap[dIso] : null;
-      const isMusterLeave = mRec && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(mRec.code.toUpperCase());
-
-      return {
-        ...r,
-        sched_dep: schedDep,
-        sched_arr: schedArr,
-        act_dep: actDep,
-        act_arr: actArr,
-        night_hours: isMusterLeave ? null : r.night_hours,
-        remarks: isMusterLeave ? `Disallowed: On Leave/Absent as per Muster Chart (${mRec.code.toUpperCase()})` : (r.remarks || ''),
-        is_same_date_as_prev: idx > 0 && r.date_str === savedEntries[idx - 1].date_str
-      };
+  // Fetch LR Sheet records & Daily Earnings entries for Category 4 (LR) linkage
+  const lrRecords = await all(
+    'SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date >= ? AND date <= ?',
+    [staff.id, actualStart, actualEnd]
+  );
+  const lrMap = {};
+  if (Array.isArray(lrRecords)) {
+    lrRecords.forEach(r => {
+      lrMap[r.date] = r;
     });
+  }
 
-    const totalHours = fixedRows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
-    return {
-      employee: {
-        id: staff.id,
-        name: staff.name,
-        designation: staff.designation || 'CTI',
-        branch: 'COMMERCIAL',
-        division: 'GNT',
-        hq: staff.hq_station || 'GNT',
-        pay: staff.pay_amount || 68000,
-        pf_no: staff.pf_no || '07323475',
-        bill_unit: staff.bill_unit || '0910629',
-        doa: staff.doa || '05/08/2000',
-        category_name: category.name,
-        category_code: category.code
-      },
-      month_year: monthYearStr,
-      month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
-      period_label: `${actualStart.split('-').reverse().join('/')} to ${actualEnd.split('-').reverse().join('/')}`,
-      start_date: actualStart,
-      end_date: actualEnd,
-      year: y,
-      month: m,
-      rows: fixedRows,
-      total_night_hours: Math.round(totalHours)
-    };
+  const earnRecords = await all(
+    'SELECT * FROM daily_earnings_entries WHERE staff_id = ? AND date >= ? AND date <= ?',
+    [staff.id, actualStart, actualEnd]
+  );
+  const earnMap = {};
+  if (Array.isArray(earnRecords)) {
+    earnRecords.forEach(e => {
+      earnMap[e.date] = e;
+    });
+  }
+
+  // Index saved entries by ISO date so any date updated in Daily Summary / Muster / LR Sheet regenerates cleanly
+  const savedByDateMap = {};
+  if (Array.isArray(savedEntries)) {
+    savedEntries.forEach(r => {
+      const dIso = resolveDutyDateIso(r);
+      if (dIso) {
+        if (!savedByDateMap[dIso]) savedByDateMap[dIso] = [];
+        savedByDateMap[dIso].push(r);
+      }
+    });
   }
 
   // Generate date list between actualStart and actualEnd
@@ -286,7 +282,31 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
 
     const muster = musterMap[dateStrIso];
     const musterCode = muster ? muster.code.toUpperCase() : null;
-    const override = overrideMap[dateStrIso];
+    const directOverride = directOverrideMap[dateStrIso];
+    const subOverride = subOverrideMap[dateStrIso];
+    const override = directOverride || subOverride;
+    const lrEntry = lrMap[dateStrIso];
+    const earnEntry = earnMap[dateStrIso];
+
+    const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
+    const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOverride.status) || directOverride.leave_type);
+
+    // If custom NDA rows were saved for this date and the staff member was not subsequently marked on leave/rest/standby
+    if (savedByDateMap[dateStrIso] && savedByDateMap[dateStrIso].length > 0 && !isMusterLeave && !isDirectLeave) {
+      for (const sRow of savedByDateMap[dateStrIso]) {
+        rowOrder++;
+        rows.push({
+          ...sRow,
+          row_order: rowOrder,
+          sched_dep: sRow.sched_dep || '',
+          sched_arr: sRow.sched_arr || '',
+          act_dep: (sRow.act_dep && sRow.act_dep !== '---') ? sRow.act_dep : '',
+          act_arr: (sRow.act_arr && sRow.act_arr !== '---') ? sRow.act_arr : '',
+          is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === sRow.date_str
+        });
+      }
+      continue;
+    }
 
     let origLinkNum = null;
     let origTrain = null;
@@ -298,19 +318,25 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
       origIsRest = !link || link.is_rest === 1 || isRestString(link.train_numbers);
       origTrain = origIsRest ? 'REST' : (link.train_numbers || 'REST');
     } else {
-      origIsRest = isRestString(override ? override.status : null) || isRestString(musterCode);
-      origTrain = origIsRest ? 'REST' : 'SPARE (HQ)';
+      const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
+      origIsRest = !dutyCode ? (isRestString(override ? override.status : null) || isRestString(musterCode)) : isRestString(dutyCode);
+      origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
     }
 
-    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || '';
+    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || (lrEntry ? lrEntry.remarks : '') || '';
 
     const cmp = compareDutyAndResolve({
       origTrain,
       origIsRest,
+      origLinkNum,
+      actualLinkNum: override?.overridden_link_number !== undefined ? override.overridden_link_number : null,
+      targetCategoryId: override?.target_category_id || category.id,
       remarks: remarksStr,
       overrideDuty: override,
       muster,
-      allLinks: Object.values(linkMap)
+      allLinks: Object.values(linkMap),
+      categoryId: category.id,
+      dateStr: dateStrIso
     });
 
     // Condition 3: Rest day skipped in NDA document!

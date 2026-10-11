@@ -399,9 +399,14 @@ export default function IndividualMusterDocument({
         detail: { staffId: selectedStaffId, dates: selectedDatesList }
       }));
 
+      const savedDays = data.savedCount !== undefined ? data.savedCount : selectedDatesList.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
       setStatusFeedback({
-        type: 'success',
-        message: `Successfully updated ${selectedDatesList.length} days (${rangeFromDate.split('-').reverse().join('/')} to ${rangeToDate.split('-').reverse().join('/')}) to "${rangeCode}" for ${staffInfo?.name || 'employee'}!`
+        type: errDays > 0 ? 'error' : 'success',
+        message: `Muster Save Complete for ${staffInfo?.name || 'employee'}: ${savedDays} day(s) saved successfully, ${errDays} had an error (${rangeFromDate.split('-').reverse().join('/')} to ${rangeToDate.split('-').reverse().join('/')} -> "${rangeCode}").${errText}`
       });
     } catch (err) {
       console.error('Batch muster update error:', err);
@@ -449,9 +454,14 @@ export default function IndividualMusterDocument({
         detail: { staffId: selectedStaffId, dates: selectedDatesList }
       }));
 
+      const savedDays = data.savedCount !== undefined ? data.savedCount : selectedDatesList.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
       setStatusFeedback({
-        type: 'success',
-        message: `Successfully reset ${selectedDatesList.length} days to default cyclic baseline for ${staffInfo?.name || 'employee'}!`
+        type: errDays > 0 ? 'error' : 'success',
+        message: `Muster Reset Complete for ${staffInfo?.name || 'employee'}: ${savedDays} day(s) reset successfully, ${errDays} had an error.${errText}`
       });
     } catch (err) {
       console.error('Reset muster error:', err);

@@ -58,13 +58,32 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
   }, [year, month, selectedCatId, statusFilter, useDateRange, startDate, endDate, authToken]);
 
   // Real-time synchronization across all tabs and documents
+  const notifyTaApprovalsChanged = () => {
+    const detail = { source: 'ta_approvals', timestamp: Date.now() };
+    window.dispatchEvent(new CustomEvent('railway_roster_data_updated', { detail }));
+    window.dispatchEvent(new CustomEvent('railway_ta_updated', { detail }));
+    window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail }));
+  };
+
   useEffect(() => {
     const handleRosterUpdate = (e) => {
       if (e.detail && e.detail.source === 'ta_approvals') return;
       fetchApprovals();
     };
     window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
-    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+    window.addEventListener('railway_schedule_updated', handleRosterUpdate);
+    window.addEventListener('railway_muster_updated', handleRosterUpdate);
+    window.addEventListener('railway_ta_updated', handleRosterUpdate);
+    window.addEventListener('railway_lr_updated', handleRosterUpdate);
+    window.addEventListener('railway_earnings_updated', handleRosterUpdate);
+    return () => {
+      window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+      window.removeEventListener('railway_schedule_updated', handleRosterUpdate);
+      window.removeEventListener('railway_muster_updated', handleRosterUpdate);
+      window.removeEventListener('railway_ta_updated', handleRosterUpdate);
+      window.removeEventListener('railway_lr_updated', handleRosterUpdate);
+      window.removeEventListener('railway_earnings_updated', handleRosterUpdate);
+    };
   }, [year, month, selectedCatId, statusFilter, useDateRange, startDate, endDate, authToken]);
 
   // Handle single claim acceptance
@@ -84,9 +103,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       if (data.success) {
         showToast(`TA accepted for ${staffName}! Added to TA Document.`);
         fetchApprovals();
-        window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
-          detail: { source: 'ta_approvals', timestamp: Date.now() }
-        }));
+        notifyTaApprovalsChanged();
       } else {
         alert(data.error || 'Failed to accept TA');
       }
@@ -113,16 +130,24 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
         body: JSON.stringify({ ids: idsArray })
       });
       const data = await res.json();
-      if (data.success) {
-        showToast(`Accepted ${data.count} selected TA claims! Added to TA Documents.`);
+      if (res.ok) {
+        const savedEmp = data.savedEmployeesCount !== undefined ? data.savedEmployeesCount : (data.savedCount || data.count || 0);
+        const errEmp = data.errorEmployeesCount !== undefined ? data.errorEmployeesCount : (data.errorCount || 0);
+        const errText = Array.isArray(data.errors) && data.errors.length > 0
+          ? ` | Errors: ${data.errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+          : '';
+        const msg = `TA Batch Save: ${savedEmp} employee(s) (${data.savedCount || data.count || 0} claim(s)) saved successfully, ${errEmp} employee(s) (${data.errorCount || 0} claim(s)) had an error.${errText}`;
+        showToast(msg);
+        if (errEmp > 0) alert(msg);
         setSelectedIds(new Set());
         fetchApprovals();
+        notifyTaApprovalsChanged();
       } else {
         alert(data.error || 'Failed to accept selected TAs');
       }
     } catch (err) {
       console.error(err);
-      alert('Error accepting selected TAs');
+      alert('Error accepting selected TAs: ' + err.message);
     } finally {
       setActionLoading(false);
     }
@@ -155,16 +180,24 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        showToast(`Accepted all ${data.count} pending TA claims! Added to TA Documents.`);
+      if (res.ok) {
+        const savedEmp = data.savedEmployeesCount !== undefined ? data.savedEmployeesCount : (data.savedCount || data.count || 0);
+        const errEmp = data.errorEmployeesCount !== undefined ? data.errorEmployeesCount : (data.errorCount || 0);
+        const errText = Array.isArray(data.errors) && data.errors.length > 0
+          ? ` | Errors: ${data.errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+          : '';
+        const msg = `TA Accept All Complete: ${savedEmp} employee(s) (${data.savedCount || data.count || 0} claim(s)) saved successfully, ${errEmp} employee(s) (${data.errorCount || 0} claim(s)) had an error.${errText}`;
+        showToast(msg);
+        if (errEmp > 0) alert(msg);
         setSelectedIds(new Set());
         fetchApprovals();
+        notifyTaApprovalsChanged();
       } else {
         alert(data.error || 'Failed to accept all TAs');
       }
     } catch (err) {
       console.error(err);
-      alert('Error accepting all TAs');
+      alert('Error accepting all TAs: ' + err.message);
     } finally {
       setActionLoading(false);
     }
@@ -190,6 +223,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       if (data.success) {
         showToast(`TA claim rejected.`);
         fetchApprovals();
+        notifyTaApprovalsChanged();
       } else {
         alert(data.error || 'Failed to reject TA');
       }
@@ -218,6 +252,7 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }) {
       if (data.success) {
         showToast(`Reverted claim back to PENDING.`);
         fetchApprovals();
+        notifyTaApprovalsChanged();
       } else {
         alert(data.error || 'Failed to revert TA');
       }

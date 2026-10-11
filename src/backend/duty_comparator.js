@@ -19,10 +19,14 @@ const { getDutyRowsForLinkNumber, resolveDutyCodeToRows } = require('./ta_genera
 function isRestString(val) {
   if (!val) return false;
   const s = String(val).trim().toUpperCase();
-  if (s === 'REST' || s === 'R' || s === 'WEEKLY REST' || s === 'WEEKLY REST DAY' || s === 'OFF' || s === '-' || s === '---') {
+  if (
+    s === 'REST' || s === 'R' || s === 'WEEKLY REST' || s === 'WEEKLY REST DAY' ||
+    s === 'OFF' || s === '-' || s === '---' ||
+    s === 'SPARE (HQ)' || s === 'SPARE' || s === 'STANDBY' || s === 'AVL'
+  ) {
     return true;
   }
-  if (/^(weekly\s+rest|rest\b|r\b|muster:\s*r\b|weekly\s+rest\s+day)/i.test(String(val).trim())) {
+  if (/^(weekly\s+rest|rest\b|r\b|muster:\s*r\b|weekly\s+rest\s+day|spare\s*\(hq\)|standby\b)/i.test(String(val).trim())) {
     return true;
   }
   return false;
@@ -43,12 +47,32 @@ function extractTrainNumbers(val) {
 }
 
 /**
+ * Helper to resolve duty rows when a specific link number and category are known
+ */
+function resolveDutyRowsWithLinkPriority(linkNum, catId, fallbackTrainStr, allLinks = [], dateStr = null) {
+  if (linkNum !== null && linkNum !== undefined && linkNum <= 100) {
+    const ln = parseInt(linkNum, 10);
+    const effectiveCat = parseInt(catId, 10) || (ln > 21 ? 2 : 1);
+    const matchedLink =
+      allLinks.find(l => parseInt(l.category_id, 10) === effectiveCat && l.link_number === ln && l.category_id !== 4) ||
+      allLinks.find(l => l.link_number === ln && l.category_id !== 4) ||
+      { category_id: effectiveCat, link_number: ln, train_numbers: fallbackTrainStr || 'DUTY', is_rest: 0 };
+    const rows = getDutyRowsForLinkNumber(effectiveCat, ln, matchedLink, dateStr);
+    if (rows && rows.length > 0) return rows;
+  }
+  return getDutyRowsForTrain(fallbackTrainStr, allLinks, dateStr, catId);
+}
+
+/**
  * Compares the original assigned train (Train Numbers column) and the train
  * the employee went to (Remarks column) based on the 4 conditions.
  */
 function compareDutyAndResolve({
   origTrain,           // original assigned train string (e.g. '17253', 'REST', '12704/12703')
   origIsRest,          // boolean flag if original cyclic schedule was rest
+  origLinkNum = null,  // original scheduled link number
+  actualLinkNum = null,// actual worked link number (including multi-day continuation)
+  targetCategoryId = null, // actual worked category id (e.g. 1 when upgraded to COR)
   remarks,             // text from remarks column / override reason
   overrideDuty,        // object with extra_train_no, overridden_link_number, etc.
   muster,              // muster record { code, remarks }
@@ -108,21 +132,28 @@ function compareDutyAndResolve({
   const origStr = String(origTrain || '').trim();
   const isOrigRest = Boolean(origIsRest) || isRestString(origStr);
 
-  // 4. Determine remarks column train and rest status
+  // 4. Determine remarks column train, link number, and rest status
   const remarksStr = String(remarks || (overrideDuty?.reason || '')).trim();
   let isRemarksRest = isRestString(remarksStr) || (overrideDuty?.status === 'REST') || (musterCode === 'R');
 
   let remarksTrain = null;
+  let resolvedRemarksLinkNum = actualLinkNum !== null && actualLinkNum !== undefined ? parseInt(actualLinkNum, 10) : null;
+  let resolvedRemarksCatId = targetCategoryId || overrideDuty?.target_category_id || categoryId;
+
   if (overrideDuty) {
     if (overrideDuty.extra_train_no) {
       remarksTrain = String(overrideDuty.extra_train_no).trim();
+      resolvedRemarksLinkNum = null;
       isRemarksRest = false;
     } else if (overrideDuty.advance_train_no) {
       remarksTrain = String(overrideDuty.advance_train_no).trim();
+      resolvedRemarksLinkNum = null;
       isRemarksRest = false;
-    } else if (overrideDuty.overridden_link_number) {
+    } else if (overrideDuty.overridden_link_number !== null && overrideDuty.overridden_link_number !== undefined) {
       const ln = parseInt(overrideDuty.overridden_link_number, 10);
-      const tCat = overrideDuty.target_category_id || categoryId || (ln > 21 ? 2 : 1);
+      const tCat = overrideDuty.target_category_id || targetCategoryId || categoryId || (ln > 21 ? 2 : 1);
+      resolvedRemarksLinkNum = ln;
+      resolvedRemarksCatId = tCat;
       const linkMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === ln && l.category_id !== 4) ||
                         allLinks.find(l => l.link_number === ln && l.category_id !== 4);
       if (linkMatch && (linkMatch.is_rest || isRestString(linkMatch.train_numbers))) {
@@ -133,32 +164,47 @@ function compareDutyAndResolve({
         isRemarksRest = false;
       } else if (ln > 100) {
         remarksTrain = String(ln);
+        resolvedRemarksLinkNum = null;
         isRemarksRest = false;
       }
     }
   }
 
-  if (!remarksTrain && remarksStr) {
-    const extracted = extractTrainNumbers(remarksStr);
-    if (extracted.length > 0) {
-      remarksTrain = extracted.join('/');
+  if (!remarksTrain && resolvedRemarksLinkNum !== null && resolvedRemarksLinkNum !== undefined && (!overrideDuty || overrideDuty.overridden_link_number === undefined)) {
+    const tCat = resolvedRemarksCatId || categoryId || (resolvedRemarksLinkNum > 21 ? 2 : 1);
+    const lMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === resolvedRemarksLinkNum && l.category_id !== 4) ||
+                   allLinks.find(l => l.link_number === resolvedRemarksLinkNum && l.category_id !== 4);
+    if (lMatch && !lMatch.is_rest && !isRestString(lMatch.train_numbers)) {
+      remarksTrain = lMatch.train_numbers;
       isRemarksRest = false;
-    } else {
-      const linkMatchRegex = remarksStr.match(/(?:Link|link)\s*#?\s*(\d{1,2})\b/);
-      if (linkMatchRegex) {
-        const linkNumFound = parseInt(linkMatchRegex[1], 10);
-        const tCat = categoryId || overrideDuty?.target_category_id || 1;
-        const lMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === linkNumFound && l.category_id !== 4) ||
-                      allLinks.find(l => l.link_number === linkNumFound && l.category_id !== 4);
-        if (lMatch) {
-          if (lMatch.is_rest || isRestString(lMatch.train_numbers)) {
-            isRemarksRest = true;
-            remarksTrain = null;
-          } else if (lMatch.train_numbers) {
-            remarksTrain = lMatch.train_numbers;
-            isRemarksRest = false;
-          }
+    }
+  }
+
+  if (!remarksTrain && remarksStr) {
+    const linkMatchRegex = remarksStr.match(/(?:Link|link)\s*#?\s*(\d{1,2})\b/);
+    if (linkMatchRegex) {
+      const linkNumFound = parseInt(linkMatchRegex[1], 10);
+      const isUpgradedCor = /COR\s+Link|Upgraded\s+to\s+COR/i.test(remarksStr);
+      const tCat = isUpgradedCor ? 1 : (overrideDuty?.target_category_id || targetCategoryId || categoryId || (linkNumFound > 21 ? 2 : 1));
+      resolvedRemarksLinkNum = linkNumFound;
+      resolvedRemarksCatId = tCat;
+      const lMatch = allLinks.find(l => parseInt(l.category_id, 10) === parseInt(tCat, 10) && l.link_number === linkNumFound && l.category_id !== 4) ||
+                     allLinks.find(l => l.link_number === linkNumFound && l.category_id !== 4);
+      if (lMatch) {
+        if (lMatch.is_rest || isRestString(lMatch.train_numbers)) {
+          isRemarksRest = true;
+          remarksTrain = null;
+        } else if (lMatch.train_numbers) {
+          remarksTrain = lMatch.train_numbers;
+          isRemarksRest = false;
         }
+      }
+    }
+    if (!remarksTrain) {
+      const extracted = extractTrainNumbers(remarksStr);
+      if (extracted.length > 0) {
+        remarksTrain = extracted.join('/');
+        isRemarksRest = false;
       }
     }
   }
@@ -183,7 +229,13 @@ function compareDutyAndResolve({
   // if he goes on a train on rest day (i.e, if train number column shows rest and remarks column shows a train number)
   // then that train number should be displayed in the TA,NDA,DIARY document
   if (isOrigRest && remarksTrain) {
-    const dutyRows = getDutyRowsForTrain(remarksTrain, allLinks, dateStr);
+    const dutyRows = resolveDutyRowsWithLinkPriority(
+      resolvedRemarksLinkNum,
+      resolvedRemarksCatId || categoryId,
+      remarksTrain,
+      allLinks,
+      dateStr
+    );
     return {
       action: 'DISPLAY',
       condition: 4,
@@ -210,15 +262,26 @@ function compareDutyAndResolve({
   const origCleanTrains = extractTrainNumbers(origStr);
   const remarksCleanTrains = extractTrainNumbers(remarksTrain || '');
 
+  // Check if link number or category explicitly changed
+  const hasExplicitLinkChange =
+    resolvedRemarksLinkNum !== null &&
+    origLinkNum !== null &&
+    (parseInt(resolvedRemarksLinkNum, 10) !== parseInt(origLinkNum, 10) ||
+      (resolvedRemarksCatId && categoryId && parseInt(resolvedRemarksCatId, 10) !== parseInt(categoryId, 10)));
+
   // CONDITION 1:
-  // if both have the same train numbers then display that train number in the TA,NDA,DIARY document
-  const isSameTrain = !remarksTrain || 
+  // if both have the same train numbers (and not a different link number) then display that train number in the TA,NDA,DIARY document
+  const isSameTrain = !hasExplicitLinkChange && (
+    !remarksTrain ||
     (origCleanTrains.length > 0 && remarksCleanTrains.length > 0 && origCleanTrains.some(t => remarksCleanTrains.includes(t))) ||
-    origStr === remarksTrain;
+    origStr === remarksTrain
+  );
 
   if (isSameTrain) {
     const finalTrain = origStr;
-    const dutyRows = getDutyRowsForTrain(finalTrain, allLinks, dateStr);
+    const effectiveLn = resolvedRemarksLinkNum !== null ? resolvedRemarksLinkNum : origLinkNum;
+    const effectiveCat = resolvedRemarksCatId || categoryId;
+    const dutyRows = resolveDutyRowsWithLinkPriority(effectiveLn, effectiveCat, finalTrain, allLinks, dateStr);
     return {
       action: 'DISPLAY',
       condition: 1,
@@ -230,10 +293,16 @@ function compareDutyAndResolve({
   }
 
   // CONDITION 2:
-  // if both have different train numbers then display the train number in the remarks column
+  // if both have different train numbers (or changed link) then display the train number in the remarks column
   // (cause that is the final decision) in the TA,NDA,DIARY document
   const finalTrain = remarksTrain;
-  const dutyRows = getDutyRowsForTrain(finalTrain, allLinks, dateStr);
+  const dutyRows = resolveDutyRowsWithLinkPriority(
+    resolvedRemarksLinkNum,
+    resolvedRemarksCatId || categoryId,
+    finalTrain,
+    allLinks,
+    dateStr
+  );
   return {
     action: 'DISPLAY',
     condition: 2,
@@ -247,19 +316,21 @@ function compareDutyAndResolve({
 /**
  * Resolves duty rows (train_no, from, to, dep, arr, ta) for a given train number string.
  */
-function getDutyRowsForTrain(trainStr, allLinks = [], dateStr = null) {
+function getDutyRowsForTrain(trainStr, allLinks = [], dateStr = null, preferredCategoryId = null) {
   if (!trainStr || isRestString(trainStr)) return [];
   const clean = String(trainStr).trim();
 
-  // 1. Check if any link matches this train number (exclude dummy category 4 links)
-  const matchedLink = allLinks.find(l => 
+  // 1. Check if any link matches this train number (prefer preferredCategoryId first, exclude dummy category 4 links)
+  const matchesTrain = (l) =>
     l.category_id !== 4 &&
     l.train_numbers && (
       l.train_numbers === clean ||
       l.train_numbers.split(/[/, ]+/).includes(clean) ||
       clean.split(/[/, ]+/).includes(l.train_numbers)
-    )
-  );
+    );
+  const matchedLink =
+    (preferredCategoryId ? allLinks.find(l => parseInt(l.category_id, 10) === parseInt(preferredCategoryId, 10) && matchesTrain(l)) : null) ||
+    allLinks.find(matchesTrain);
   if (matchedLink) {
     const rows = getDutyRowsForLinkNumber(matchedLink.category_id || 1, matchedLink.link_number, matchedLink, dateStr);
     if (rows && rows.length > 0) return rows;

@@ -151,7 +151,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
     showToast(`Moved "${movedItem.name}" to position #${insertIdx + 1}`);
 
-    // Persist new ordering to backend database
+    // Persist new ordering to backend database one-by-one
     try {
       const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
       const staffIds = currentList.map(s => s.id);
@@ -165,6 +165,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to persist order');
+      const savedCnt = data.savedCount !== undefined ? data.savedCount : staffIds.length;
+      const errCnt = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      showToast(`Moved "${movedItem.name}" to #${insertIdx + 1} (${savedCnt} employee(s) saved, ${errCnt} error(s))${errText}`);
+      if (errCnt > 0) alert(data.message);
     } catch (err) {
       console.error('Failed to reorder staff in database:', err);
       showToast('Could not save new order: ' + err.message);
@@ -490,7 +497,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setRangeEditModal(null);
       await fetchMuster(selectedCycleStart);
-      showToast(`Updated ${dates.length} days (${fromDate} to ${toDate}) to ${code}`);
+      const savedDays = data.savedCount !== undefined ? data.savedCount : dates.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `Muster Update: ${savedDays} day(s) saved successfully, ${errDays} had an error (${fromDate} to ${toDate} -> ${code}).${errText}`;
+      showToast(msg);
+      if (errDays > 0) alert(msg);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
@@ -540,7 +554,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setRangeEditModal(null);
       await fetchMuster(selectedCycleStart);
-      showToast(`Reset ${dates.length} days back to baseline`);
+      const savedDays = data.savedCount !== undefined ? data.savedCount : dates.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `Muster Reset: ${savedDays} day(s) reset successfully, ${errDays} had an error.${errText}`;
+      showToast(msg);
+      if (errDays > 0) alert(msg);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, dates, source: 'muster_roll', timestamp: Date.now() }
@@ -675,7 +696,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to update muster records');
 
       await fetchMuster(selectedCycleStart);
-      showToast(`Successfully updated ${staffRangeDatesList.length} days (${staffRangeFromDate} to ${staffRangeToDate}) to "${staffRangeCode}" for ${selectedStaffObj?.name || 'employee'}!`);
+      const savedDays = data.savedCount !== undefined ? data.savedCount : staffRangeDatesList.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `Saved ${savedDays} day(s) (${staffRangeFromDate} to ${staffRangeToDate}) to "${staffRangeCode}" for ${selectedStaffObj?.name || 'employee'} (${errDays} error(s)).${errText}`;
+      showToast(msg);
+      if (errDays > 0) alert(msg);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
@@ -717,7 +745,14 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (!res.ok) throw new Error(data.error || 'Failed to reset muster cells');
 
       await fetchMuster(selectedCycleStart);
-      showToast(`Successfully reset ${staffRangeDatesList.length} days to cyclic baseline for ${selectedStaffObj?.name}!`);
+      const savedDays = data.savedCount !== undefined ? data.savedCount : staffRangeDatesList.length;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `Reset ${savedDays} day(s) to cyclic baseline for ${selectedStaffObj?.name} (${errDays} error(s)).${errText}`;
+      showToast(msg);
+      if (errDays > 0) alert(msg);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: selectedStaffIdForEdit, dates: staffRangeDatesList, source: 'muster_roll', timestamp: Date.now() }
@@ -753,6 +788,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         });
       }
 
+      let savedDays = 0;
+      let errDays = 0;
+      let errText = '';
       if (updates.length > 0) {
         const res = await fetch('/api/muster/batch-update', {
           method: 'POST',
@@ -764,6 +802,11 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to save muster records');
+        savedDays = data.savedCount !== undefined ? data.savedCount : updates.length;
+        errDays = data.errorCount || 0;
+        if (Array.isArray(data.errors) && data.errors.length > 0) {
+          errText = ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`;
+        }
       }
 
       await fetchMuster(selectedCycleStart);
@@ -773,7 +816,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         setSavedStaffMap(prev => ({ ...prev, [staff.id]: false }));
       }, 3500);
 
-      showToast(`Successfully saved muster details for ${staff.name} permanently!`);
+      const msg = `Saved muster details for ${staff.name}: ${savedDays} day(s) saved successfully, ${errDays} had an error.${errText}`;
+      showToast(msg);
+      if (errDays > 0) alert(msg);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: staff.id, source: 'muster_roll', timestamp: Date.now() }
@@ -783,7 +828,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       }));
     } catch (err) {
       console.error('Error saving individual muster:', err);
-      showToast(`Error: ${err.message}`);
+      showToast(`Error saving ${staff.name}: ${err.message}`);
     } finally {
       setSavingStaffId(null);
     }
@@ -792,8 +837,67 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
   const handleSaveAllMuster = async () => {
     try {
       setLoading(true);
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const staffListToSave = cycleData?.staff || [];
+      let savedEmployeesCount = 0;
+      let errorEmployeesCount = 0;
+      const errors = [];
+
+      // Save each employee one-by-one without wrapping all 30+ employees in 30 transactions
+      for (const s of staffListToSave) {
+        try {
+          const manualUpdates = [];
+          if (s.days) {
+            Object.entries(s.days).forEach(([dateStr, dayData]) => {
+              if (dayData && dayData.isManual && dayData.code) {
+                manualUpdates.push({
+                  staff_id: s.id,
+                  date: dateStr,
+                  code: dayData.code,
+                  remarks: dayData.remarks || undefined
+                });
+              }
+            });
+          }
+
+          if (manualUpdates.length > 0) {
+            const res = await fetch('/api/muster/batch-update', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+              },
+              body: JSON.stringify({ updates: manualUpdates })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              throw new Error(data.error || 'Failed to save muster cells');
+            }
+            if (data.errorCount > 0) {
+              errorEmployeesCount++;
+              const empErr = (data.errors || []).map(e => `${e.date}: ${e.error}`).join(', ');
+              errors.push({ staff_id: s.id, staff_name: s.name, error: empErr });
+            } else {
+              savedEmployeesCount++;
+            }
+          } else {
+            savedEmployeesCount++;
+          }
+        } catch (empErr) {
+          errorEmployeesCount++;
+          errors.push({ staff_id: s.id, staff_name: s.name, error: empErr.message });
+        }
+      }
+
       await fetchMuster(selectedCycleStart);
-      showToast('All staff muster attendance records verified & saved permanently in database!');
+      const errText = errors.length > 0
+        ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `Muster Roll Save Complete: ${savedEmployeesCount} employee(s) saved successfully, ${errorEmployeesCount} employee(s) had an error.${errText}`;
+      showToast(msg);
+      if (errorEmployeesCount > 0) {
+        alert(msg);
+      }
     } catch (err) {
       showToast(`Error: ${err.message}`);
     } finally {

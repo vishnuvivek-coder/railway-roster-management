@@ -41,7 +41,12 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
   let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  const allLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
+  const rawLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC, effective_from ASC');
+  const allLinks = rawLinks.filter(l =>
+    l.status !== 'draft' &&
+    (!l.effective_from || l.effective_from <= actualEnd) &&
+    (!l.effective_to || l.effective_to >= actualStart)
+  );
   const linkMap = {};
   allLinks.forEach(l => {
     linkMap[`${l.category_id}_${l.link_number}`] = l;
@@ -51,8 +56,14 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   });
 
   const getLinkNumForDate = (dateIso) => {
-    const offset = getDayOffset(category.anchor_date, dateIso);
-    return getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+    const curAnchor = category.id === 2
+      ? (dateIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
+      : category.anchor_date;
+    const curCycle = category.id === 2
+      ? (dateIso < '2026-10-01' ? 63 : 56)
+      : category.cycle_length;
+    const offset = getDayOffset(curAnchor, dateIso);
+    return getBaseLinkNumber(staff.row_position, offset, curCycle);
   };
 
   function resolveDutyDateIso(r) {
@@ -99,54 +110,6 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
     });
   }
 
-  // If saved entries exist for this period and no custom date range is requested, return them
-  if (savedEntries && savedEntries.length > 0 && !startDate && !endDate) {
-    const totalIssued = savedEntries.reduce((sum, r) => sum + (parseInt(r.total_issued, 10) || 0), 0);
-    const totalCases = savedEntries.reduce((sum, r) => sum + (parseInt(r.no_of_cases, 10) || 0), 0);
-    const totalCollected = savedEntries.reduce((sum, r) => sum + (parseFloat(r.collected_rs) || 0), 0);
-    const totalGstCases = savedEntries.reduce((sum, r) => sum + (parseInt(r.gst_cases, 10) || 0), 0);
-    const totalGstAmount = savedEntries.reduce((sum, r) => sum + (parseFloat(r.gst_amount) || 0), 0);
-    const grandTotal = savedEntries.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0);
-    const totalRemit = savedEntries.reduce((sum, r) => sum + (parseFloat(r.remit_amount) || 0), 0);
-
-    return {
-      employee: {
-        id: staff.id,
-        name: staff.name,
-        designation: staff.designation || 'CTI',
-        t_code_no: staff.t_code_no || '7133',
-        branch: 'COMMERCIAL',
-        division: 'GNT',
-        hq: staff.hq_station || 'GNT',
-        pay: staff.pay_amount || 68000,
-        pf_no: staff.pf_no || '07323475',
-        bill_unit: staff.bill_unit || '0910629',
-        category_name: category.name,
-        category_code: category.code
-      },
-      month_year: monthYearStr,
-      month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
-      period_label: `${actualStart.split('-').reverse().join('/')} to ${actualEnd.split('-').reverse().join('/')}`,
-      start_date: actualStart,
-      end_date: actualEnd,
-      year: y,
-      month: m,
-      rows: savedEntries.map((r, idx) => ({
-        ...r,
-        is_same_date_as_prev: idx > 0 && r.date_str === savedEntries[idx - 1].date_str
-      })),
-      totals: {
-        total_issued: totalIssued,
-        total_cases: totalCases,
-        total_collected: totalCollected,
-        total_gst_cases: totalGstCases,
-        total_gst_amount: totalGstAmount,
-        grand_total_amount: grandTotal,
-        total_remit_amount: totalRemit
-      }
-    };
-  }
-
   // SQLite cache lookup for live train runs
   const cachedRuns = await all(
     'SELECT * FROM actual_train_runs WHERE run_date >= ? AND run_date <= ?',
@@ -171,15 +134,52 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
     });
   }
 
-  // Fetch overrides for this staff in date range
+  // Fetch direct & substitute overrides for this staff in date range
   const overridesRecords = await all(
-    'SELECT * FROM overrides WHERE staff_id = ? AND date >= ? AND date <= ?',
-    [staff.id, actualStart, actualEnd]
+    'SELECT * FROM overrides WHERE (staff_id = ? OR substitute_staff_id = ?) AND date >= ? AND date <= ?',
+    [staff.id, staff.id, actualStart, actualEnd]
   );
-  const overrideMap = {};
+  const directOverrideMap = {};
+  const subOverrideMap = {};
   if (Array.isArray(overridesRecords)) {
     overridesRecords.forEach(o => {
-      overrideMap[o.date] = o;
+      if (o.staff_id === staff.id) directOverrideMap[o.date] = o;
+      if (o.substitute_staff_id === staff.id) subOverrideMap[o.date] = o;
+    });
+  }
+
+  // Fetch LR Sheet records & Daily Earnings entries for universal linkage
+  const lrRecords = await all(
+    'SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date >= ? AND date <= ?',
+    [staff.id, actualStart, actualEnd]
+  );
+  const lrMap = {};
+  if (Array.isArray(lrRecords)) {
+    lrRecords.forEach(r => {
+      lrMap[r.date] = r;
+    });
+  }
+
+  const earnRecords = await all(
+    'SELECT * FROM daily_earnings_entries WHERE staff_id = ? AND date >= ? AND date <= ?',
+    [staff.id, actualStart, actualEnd]
+  );
+  const earnMap = {};
+  if (Array.isArray(earnRecords)) {
+    earnRecords.forEach(e => {
+      earnMap[e.date] = e;
+    });
+  }
+
+  // Index saved entries by ISO date so any date updated in Daily Summary / Muster / LR Sheet regenerates cleanly
+  const savedByDateMap = {};
+  if (Array.isArray(savedEntries)) {
+    savedEntries.forEach(r => {
+      const dIso = resolveDutyDateIso(r);
+      if (dIso) {
+        if (!savedByDateMap[dIso]) savedByDateMap[dIso] = [];
+        savedByDateMap[dIso].push(r);
+      }
     });
   }
 
@@ -255,7 +255,28 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
 
     const muster = musterMap[dateStrIso];
     const musterCode = muster ? muster.code.toUpperCase() : null;
-    const override = overrideMap[dateStrIso];
+    const directOverride = directOverrideMap[dateStrIso];
+    const subOverride = subOverrideMap[dateStrIso];
+    const override = directOverride || subOverride;
+    const lrEntry = lrMap[dateStrIso];
+    const earnEntry = earnMap[dateStrIso];
+
+    const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
+    const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOverride.status) || directOverride.leave_type);
+
+    // If custom Diary rows were saved for this date and the staff member was not subsequently marked on leave/rest/standby
+    if (savedByDateMap[dateStrIso] && savedByDateMap[dateStrIso].length > 0 && !isMusterLeave && !isDirectLeave) {
+      for (const sRow of savedByDateMap[dateStrIso]) {
+        rowOrder++;
+        rows.push({
+          ...sRow,
+          row_order: rowOrder,
+          date_iso: dateStrIso,
+          is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === sRow.date_str
+        });
+      }
+      continue;
+    }
 
     let origLinkNum = null;
     let origTrain = null;
@@ -267,19 +288,25 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       origIsRest = !link || link.is_rest === 1 || isRestString(link.train_numbers);
       origTrain = origIsRest ? 'REST' : (link.train_numbers || 'REST');
     } else {
-      origIsRest = isRestString(override ? override.status : null) || isRestString(musterCode);
-      origTrain = origIsRest ? 'REST' : 'SPARE (HQ)';
+      const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
+      origIsRest = !dutyCode ? (isRestString(override ? override.status : null) || isRestString(musterCode)) : isRestString(dutyCode);
+      origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
     }
 
-    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || '';
+    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || (lrEntry ? lrEntry.remarks : '') || '';
 
     const cmp = compareDutyAndResolve({
       origTrain,
       origIsRest,
+      origLinkNum,
+      actualLinkNum: override?.overridden_link_number !== undefined ? override.overridden_link_number : null,
+      targetCategoryId: override?.target_category_id || category.id,
       remarks: remarksStr,
       overrideDuty: override,
       muster,
-      allLinks: Object.values(linkMap)
+      allLinks: Object.values(linkMap),
+      categoryId: category.id,
+      dateStr: dateStrIso
     });
 
     // Condition 3: If employee rest day and both columns declared rest -> Skip in DIARY!
@@ -333,7 +360,24 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
 
     const effectiveLinkNum = (override && override.overridden_link_number) ? override.overridden_link_number : origLinkNum;
 
-    for (const duty of duties) {
+    // Extract linked earnings from Daily Earnings Sheet if available for this date
+    let dayCases = null;
+    let dayCollected = null;
+    let dayGstAmt = null;
+    let dayTotalAmt = null;
+    if (earnEntry) {
+      const c = (parseInt(earnEntry.twt_nc, 10) || 0) + (parseInt(earnEntry.ir_nc, 10) || 0) + (parseInt(earnEntry.ubl_nc, 10) || 0) + (parseInt(earnEntry.z652_nc, 10) || 0) + (parseInt(earnEntry.oc_nc, 10) || 0);
+      const col = (parseFloat(earnEntry.twt_fare) || 0) + (parseFloat(earnEntry.twt_penalty) || 0) + (parseFloat(earnEntry.ir_fare) || 0) + (parseFloat(earnEntry.ir_penalty) || 0) + (parseFloat(earnEntry.ubl_amt) || 0) + (parseFloat(earnEntry.z652_amt) || 0) + (parseFloat(earnEntry.oc_amt) || 0);
+      const g = parseFloat(earnEntry.gst) || 0;
+      const tot = col + g;
+      if (c > 0) dayCases = c;
+      if (col > 0) dayCollected = col;
+      if (g > 0) dayGstAmt = g;
+      if (tot > 0) dayTotalAmt = tot;
+    }
+
+    for (let dIdx = 0; dIdx < duties.length; dIdx++) {
+      const duty = duties[dIdx];
       rowOrder++;
       
       let actualDep = duty.dep || '---';
@@ -374,11 +418,11 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
         eft_from: '',
         eft_to: '',
         total_issued: null,
-        no_of_cases: null,
-        collected_rs: null,
+        no_of_cases: dIdx === 0 ? dayCases : null,
+        collected_rs: dIdx === 0 ? dayCollected : null,
         gst_cases: null,
-        gst_amount: null,
-        total_amount: null,
+        gst_amount: dIdx === 0 ? dayGstAmt : null,
+        total_amount: dIdx === 0 ? dayTotalAmt : null,
         remit_station: '',
         remit_mr_no: '',
         remit_date: '',
@@ -386,6 +430,14 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       });
     }
   }
+
+  const totalIssued = rows.reduce((sum, r) => sum + (parseInt(r.total_issued, 10) || 0), 0);
+  const totalCases = rows.reduce((sum, r) => sum + (parseInt(r.no_of_cases, 10) || 0), 0);
+  const totalCollected = rows.reduce((sum, r) => sum + (parseFloat(r.collected_rs) || 0), 0);
+  const totalGstCases = rows.reduce((sum, r) => sum + (parseInt(r.gst_cases, 10) || 0), 0);
+  const totalGstAmount = rows.reduce((sum, r) => sum + (parseFloat(r.gst_amount) || 0), 0);
+  const grandTotal = rows.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0);
+  const totalRemit = rows.reduce((sum, r) => sum + (parseFloat(r.remit_amount) || 0), 0);
 
   return {
     employee: {
@@ -411,13 +463,13 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
     month: m,
     rows,
     totals: {
-      total_issued: 0,
-      total_cases: 0,
-      total_collected: 0,
-      total_gst_cases: 0,
-      total_gst_amount: 0,
-      grand_total_amount: 0,
-      total_remit_amount: 0
+      total_issued: totalIssued,
+      total_cases: totalCases,
+      total_collected: totalCollected,
+      total_gst_cases: totalGstCases,
+      total_gst_amount: totalGstAmount,
+      grand_total_amount: grandTotal,
+      total_remit_amount: totalRemit
     }
   };
 }

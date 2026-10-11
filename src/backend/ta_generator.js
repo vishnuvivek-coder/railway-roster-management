@@ -15,13 +15,13 @@ const KNOWN_LINK_SETS = {
     [8, 9, 10],
     [11, 12, 13],
     [15, 16],
-    [17],
-    [18, 19, 20],
+    [17, 18],
+    [19, 20],
     [22, 23, 24],
     [25, 26, 27],
     [29, 30, 31],
     [32, 33, 34],
-    [36, 37],
+    [36, 37, 38],
     [38, 39],
     [40, 41],
     [43, 44, 45],
@@ -62,9 +62,9 @@ const NON_DAILY_PAIRS_MAP = {
   '17077': { returnTrain: '17078', serviceName: 'GNT-TPTY-GNT Exp', from: 'GNT', via: 'TPTY', to: 'GNT', depTime: '18:00', retDepTime: '02:30', arrHqTime: '02:30', totalDays: 2, restTill: '10:30', coaches: 'SL / AC' },
 
   // WEDNESDAY (3-Day Beats)
-  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #60)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
-  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #61)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
-  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #62)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
+  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #53)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
+  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #54)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
+  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #55)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
 
   // THURSDAY
   '12755': { returnTrain: '12756', serviceName: 'BZA-SC-BZA Exp', from: 'BZA', via: 'SC', to: 'BZA', depTime: '08:40', retDepTime: '06:40', arrHqTime: '12:50', totalDays: 2, restTill: '20:50', coaches: 'SL / AC' },
@@ -402,8 +402,10 @@ function calculateDayDutiesTa(duties) {
     }
   }
 
+  const secondDepLeg = nightDepLeg || (gntLeg && gntLeg !== gntArrLeg ? gntLeg : null);
+
   // 4. Return to HQ day
-  if (gntArrLeg && !nightDepLeg) {
+  if (gntArrLeg && !secondDepLeg) {
     const arrM = parseMinutes(gntArrLeg.arr || gntArrLeg.arr_time);
     if (arrM !== null) {
       let dayTa = null;
@@ -439,8 +441,8 @@ function calculateDayDutiesTa(duties) {
     }
   }
 
-  // 5. Day with both return arrival at HQ and departure from HQ (e.g. Link 10 or Link 12)
-  if (gntArrLeg && nightDepLeg) {
+  // 5. Day with both return arrival at HQ and departure from HQ (e.g. Link 10, Link 12, or Sleeper Link 38)
+  if (gntArrLeg && secondDepLeg) {
     const arrM = parseMinutes(gntArrLeg.arr || gntArrLeg.arr_time);
     let arrTa = 0.3;
     if (arrM !== null) {
@@ -455,18 +457,18 @@ function calculateDayDutiesTa(duties) {
     gntArrLeg.ta_percentage = arrTa;
     gntArrLeg.absence_hours = arrM ? Math.round((arrM / 60) * 10) / 10 : 1.0;
 
-    const depM = parseMinutes(nightDepLeg.dep || nightDepLeg.dep_time);
+    const depM = parseMinutes(secondDepLeg.dep || secondDepLeg.dep_time);
     let depTa = 0.3;
     if (depM !== null) {
       if (depM <= 11 * 60 + 55) depTa = 1.0;
       else if (depM <= 17 * 60 + 55) depTa = 0.7;
       else depTa = 0.3;
     }
-    nightDepLeg.ta_b1 = String(depTa);
-    nightDepLeg.days_claiming_ta = depTa;
-    nightDepLeg.ta = depTa;
-    nightDepLeg.ta_percentage = depTa;
-    nightDepLeg.absence_hours = depM ? Math.round(((1440 - depM) / 60) * 10) / 10 : 1.0;
+    secondDepLeg.ta_b1 = String(depTa);
+    secondDepLeg.days_claiming_ta = depTa;
+    secondDepLeg.ta = depTa;
+    secondDepLeg.ta_percentage = depTa;
+    secondDepLeg.absence_hours = depM ? Math.round(((1440 - depM) / 60) * 10) / 10 : 1.0;
 
     return updated;
   }
@@ -1125,15 +1127,63 @@ function resolveDutyCodeToRows(dutyCode) {
       { train_no: '12805', from: 'BZA', to: 'GNT', dep: '12:00', arr: '13:15', ta: 0.3 }
     ];
   }
+  if (code.includes('12755') && !code.includes('12756')) {
+    return [{ train_no: '12755', from: 'BZA', to: 'SC', dep: '08:40', arr: '14:50', ta: 0.7 }];
+  }
   if (code.includes('12756')) {
     return [
-      { train_no: '12756', from: 'SC', to: 'BZA', dep: '12:30', arr: '19:45', ta: 0.7 }
+      { train_no: '12756', from: 'SC', to: 'BZA', dep: '06:40', arr: '12:50', ta: 0.7 }
     ];
+  }
+  if (code.includes('17032') && !code.includes('17031')) {
+    return [{ train_no: '17032', from: 'BZA', to: 'CHZ', dep: '11:05', arr: '19:30', ta: 0.7 }];
+  }
+  if (code.includes('17031')) {
+    return [{ train_no: '17031', from: 'CHZ', to: 'BZA', dep: '04:30', arr: '12:40', ta: 0.7 }];
+  }
+  if (code.includes('17637') && !code.includes('17638')) {
+    return [{ train_no: '17637', from: 'GNT', to: 'RU', dep: '07:00', arr: '14:15', ta: 0.7 }];
+  }
+  if (code.includes('17638')) {
+    return [{ train_no: '17638', from: 'RU', to: 'GNT', dep: '07:15', arr: '14:30', ta: 0.7 }];
+  }
+  if (code.includes('07198')) {
+    return [{ train_no: '07198', from: 'RU', to: 'GNT', dep: '18:30', arr: '01:50', ta: 0.7 }];
+  }
+  if (code.includes('07195')) {
+    return [{ train_no: '07195', from: 'GNT', to: 'RU', dep: '19:10', arr: '01:50', ta: 0.3 }];
   }
   if (code.includes('07227') || code.includes('7227')) {
     return [
-      { train_no: '07227', from: 'GNT', to: '---', dep: '19:30', arr: '---', ta: 0.7 }
+      { train_no: '07227', from: 'GNT', to: 'CHZ', dep: '06:00', arr: '12:30', ta: 0.7 }
     ];
+  }
+  if (code.includes('07228')) {
+    return [{ train_no: '07228', from: 'CHZ', to: 'GNT', dep: '05:30', arr: '12:00', ta: 0.7 }];
+  }
+  if (code.includes('17077') && !code.includes('17078')) {
+    return [{ train_no: '17077', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.3 }];
+  }
+  if (code.includes('17078')) {
+    return [{ train_no: '17078', from: 'TPTY', to: 'GNT', dep: '19:00', arr: '02:30', ta: 0.7 }];
+  }
+  if (code.includes('07001') && !code.includes('07002')) {
+    return [{ train_no: '07001', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '23:45', ta: 0.7 }];
+  }
+  if (code.includes('07002')) {
+    return [{ train_no: '07002', from: 'TPTY', to: 'GNT', dep: '20:30', arr: '03:50', ta: 0.7 }];
+  }
+  if (code.includes('07125') && !code.includes('07126')) {
+    return [{ train_no: '07125', from: 'GNT', to: 'RU', dep: '17:40', arr: '00:50', ta: 0.7 }];
+  }
+  if (code.includes('07126')) {
+    return [{ train_no: '07126', from: 'RU', to: 'GNT', dep: '18:00', arr: '01:10', ta: 0.7 }];
+  }
+  if (code.includes('17607') && !code.includes('17608')) {
+    return [{ train_no: '17607', from: 'GNT', to: 'RU', dep: '12:20', arr: '19:30', ta: 0.7 }];
+  }
+  if (code.includes('17608')) {
+    return [{ train_no: '17608', from: 'RU', to: 'GNT', dep: '12:10', arr: '19:20', ta: 0.7 }];
   }
   if (code.includes('57201') || code.includes('57210')) {
     return [{ train_no: '57201', from: 'BZA', to: 'GNT', dep: '06:20', arr: '07:35', ta: 0.7 }];
@@ -1181,7 +1231,18 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const catMap = {};
   categories.forEach(c => { catMap[c.id] = c; });
 
-  const links = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC');
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const maxDay = daysInMonth;
+
+  const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
+
+  const rawLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC, effective_from ASC');
+  const links = rawLinks.filter(l =>
+    l.status !== 'draft' &&
+    (!l.effective_from || l.effective_from <= endDateStr) &&
+    (!l.effective_to || l.effective_to >= startDateStr)
+  );
   const linkMap = {};
   links.forEach(l => {
     linkMap[`${l.category_id}_${l.link_number}`] = l;
@@ -1204,12 +1265,6 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const currentMonth = now.getMonth() + 1;
   const currentDay = now.getDate();
   const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
-
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const maxDay = daysInMonth;
-
-  const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
 
   const allNdaEntries = await all(
     staffId
@@ -1295,18 +1350,10 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
     await run('DELETE FROM ta_approvals WHERE month_year = ?', [monthYearStr]);
   }
 
-  let inTx = false;
-  try {
-    await run('BEGIN TRANSACTION');
-    inTx = true;
-  } catch (e) {
-    inTx = false;
-  }
-  try {
-    for (const staff of allStaff) {
-      if (staff.name === '(VACANT)') continue;
-      const category = catMap[staff.category_id];
-      if (!category) continue;
+  for (const staff of allStaff) {
+    if (staff.name === '(VACANT)') continue;
+    const category = catMap[staff.category_id];
+    if (!category) continue;
 
       const ndaMap = ndaMapByStaff[staff.id] || {};
       const musterMap = musterMapByStaff[staff.id] || {};
@@ -1345,8 +1392,14 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         let origIsRest = false;
 
         if (category.id !== 4) {
-          const offset = getDayOffset(category.anchor_date, dateStrIso);
-          origLinkNum = getBaseLinkNumber(staff.row_position, offset, category.cycle_length);
+          const curAnchor = category.id === 2
+            ? (dateStrIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
+            : category.anchor_date;
+          const curCycle = category.id === 2
+            ? (dateStrIso < '2026-10-01' ? 63 : 56)
+            : category.cycle_length;
+          const offset = getDayOffset(curAnchor, dateStrIso);
+          origLinkNum = getBaseLinkNumber(staff.row_position, offset, curCycle);
           const origLink = linkMap[`${category.id}_${origLinkNum}`] || linkMap[origLinkNum];
           origIsRest = !origLink || origLink.is_rest === 1 || isRestString(origLink.train_numbers);
           if (!origIsRest) {
@@ -1378,101 +1431,113 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           }
         } else {
           const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
-          origIsRest = isRestString(dutyCode);
-          origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
+          origIsRest = !dutyCode || isRestString(dutyCode);
+          origTrain = origIsRest ? 'REST' : dutyCode;
         }
 
         const overrideDuty = directOverride || subOverride;
         const remarksStr = (overrideDuty && overrideDuty.reason) || (muster ? muster.remarks : '') || '';
 
-        const cmp = compareDutyAndResolve({
-          origTrain,
-          origIsRest,
-          remarks: remarksStr,
-          overrideDuty,
-          muster,
-          allLinks: Object.values(linkMap),
-          dateStr: dateStrIso,
-          categoryId: category.id
-        });
-
         let duties = [];
         let linkNum = null;
 
-        if (cmp.action === 'SKIP') {
-          // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
-          lastAssignedLink = null;
-          lastAssignedNonDaily = null;
-          continue;
-        }
-
-        if (cmp.action === 'STANDBY') {
-          lastAssignedLink = null;
-          lastAssignedNonDaily = null;
-          continue;
-        }
-
-        if (cmp.action === 'LEAVE') {
-          isEffectiveLeave = true;
-          const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
-          duties = [{
-            train_no: '---',
-            from: '---',
-            to: '---',
-            dep: '---',
-            arr: '---',
-            remarks: cmp.remarks || `${effLeaveCode} Leave`,
-            is_leave: true
-          }];
-          lastAssignedLink = null;
-          lastAssignedNonDaily = null;
-        } else if (cmp.action === 'DISPLAY') {
-          isEffectiveLeave = false;
-          if (lastAssignedNonDaily) {
-            if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
-              const nd = lastAssignedNonDaily.service;
-              duties = resolveDutyCodeToRows(nd.returnTrain);
-              const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily)`;
-              duties.forEach(d => { d.remarks = derivedRemark; });
-              lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
-              lastAssignedLink = null;
-            } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
-              duties = [];
-              lastAssignedNonDaily = null;
-              lastAssignedLink = null;
-              continue;
-            } else {
-              lastAssignedNonDaily = null;
-            }
-          } else if (lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0 && !overrideDuty) {
-            const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
-            const nextLink = setDetails.remainingLinks[0];
-            linkNum = nextLink;
-            const targetCatId = lastTargetCat || category.id;
-            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink], dateStrIso);
-            const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
-            const derivedRemark = `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
-            duties.forEach(d => { d.remarks = derivedRemark; });
-            lastAssignedLink = nextLink;
+        // First, check if this day is an active multi-day continuation (Non-Daily Return or Multi-Day Link Return)
+        // when the staff member is not on leave/standby/overridden on this day.
+        const isStandbyOverride = overrideDuty && overrideDuty.status === 'AVAILABLE_FOR_BOOKING';
+        if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedNonDaily) {
+          if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
+            const nd = lastAssignedNonDaily.service;
+            duties = resolveDutyCodeToRows(nd.returnTrain);
+            const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily ${nd.returnTrain})`;
+            duties.forEach(dRow => { dRow.remarks = derivedRemark; });
+            lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
+            lastAssignedLink = null;
+          } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
+            lastAssignedNonDaily = null;
+            lastAssignedLink = null;
+            continue;
           } else {
-            // Apply Condition 1, 2, or 4 from cmp
-            linkNum = overrideDuty?.overridden_link_number || origLinkNum;
+            lastAssignedNonDaily = null;
+          }
+        } else if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0) {
+          const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
+          const nextLink = setDetails.remainingLinks[0];
+          linkNum = nextLink;
+          const targetCatId = lastTargetCat || category.id;
+          duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink], dateStrIso);
+          const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
+          const isNaturalSchedule = (origLinkNum === nextLink && targetCatId === category.id);
+          const derivedRemark = isNaturalSchedule ? 'Regular Cyclic Duty' : `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
+          duties.forEach(dRow => { dRow.remarks = derivedRemark; });
+          lastAssignedLink = nextLink;
+        }
+
+        if (duties.length === 0) {
+          const cmp = compareDutyAndResolve({
+            origTrain,
+            origIsRest,
+            origLinkNum,
+            actualLinkNum: overrideDuty?.overridden_link_number !== undefined ? overrideDuty.overridden_link_number : null,
+            targetCategoryId: overrideDuty?.target_category_id || category.id,
+            remarks: remarksStr,
+            overrideDuty,
+            muster,
+            allLinks: Object.values(linkMap),
+            dateStr: dateStrIso,
+            categoryId: category.id
+          });
+
+          if (cmp.action === 'SKIP') {
+            // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
+            lastAssignedLink = null;
+            lastAssignedNonDaily = null;
+            continue;
+          }
+
+          if (cmp.action === 'STANDBY') {
+            lastAssignedLink = null;
+            lastAssignedNonDaily = null;
+            continue;
+          }
+
+          if (cmp.action === 'LEAVE') {
+            isEffectiveLeave = true;
+            const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
+            duties = [{
+              train_no: '---',
+              from: '---',
+              to: '---',
+              dep: '---',
+              arr: '---',
+              remarks: cmp.remarks || `${effLeaveCode} Leave`,
+              is_leave: true
+            }];
+            lastAssignedLink = null;
+            lastAssignedNonDaily = null;
+          } else if (cmp.action === 'DISPLAY') {
+            isEffectiveLeave = false;
+            linkNum = (overrideDuty && overrideDuty.overridden_link_number !== null && overrideDuty.overridden_link_number !== undefined)
+              ? overrideDuty.overridden_link_number
+              : ((overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) ? null : origLinkNum);
             duties = cmp.duty_rows;
-            duties.forEach(d => {
-              d.train_no = d.train_no || cmp.train_no;
-              d.remarks = cmp.remarks || d.remarks;
+            duties.forEach(dRow => {
+              dRow.train_no = dRow.train_no || cmp.train_no;
+              dRow.remarks = cmp.remarks || dRow.remarks;
             });
             if (overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) {
               const trNo = overrideDuty.extra_train_no || overrideDuty.reason || 'EXTRA';
               const ndMatch = getMultiDayNonDailyMatch(trNo);
               if (ndMatch) {
                 lastAssignedNonDaily = { service: ndMatch, dayIndex: 1, totalDays: ndMatch.totalDays };
+              } else {
+                lastAssignedNonDaily = null;
               }
+              lastAssignedLink = null;
             } else {
               lastAssignedNonDaily = null;
+              lastAssignedLink = linkNum;
+              lastTargetCat = overrideDuty?.target_category_id || (linkNum > 21 && category.id === 4 ? 2 : (category.id === 4 ? 1 : category.id));
             }
-            lastAssignedLink = overrideDuty?.overridden_link_number || origLinkNum;
-            lastTargetCat = overrideDuty?.target_category_id || category.id;
           }
         }
 
@@ -1537,15 +1602,6 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         }
       }
     }
-    if (inTx) {
-      try { await run('COMMIT'); } catch (e) {}
-    }
-  } catch (err) {
-    if (inTx) {
-      try { await run('ROLLBACK'); } catch (e) {}
-    }
-    throw err;
-  }
 }
 
 /**
@@ -1610,20 +1666,11 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
   let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  // 1. Ensure claims exist in ta_approvals for all months covered in the range
+  // 1. Always regenerate claims in ta_approvals for this staff member across all covered months
+  // so that any changes in the Daily Summary Duty List are immediately reflected in the TA claim!
   const monthsCovered = getMonthsBetween(actualStart, actualEnd);
   for (const mInfo of monthsCovered) {
-    const existingClaims = await all(
-      'SELECT COUNT(DISTINCT duty_date) as cnt, MAX(duty_date) as max_date FROM ta_approvals WHERE staff_id = ? AND month_year = ?',
-      [staffId, mInfo.monthYearStr]
-    );
-    const cnt = existingClaims && existingClaims[0] ? existingClaims[0].cnt : 0;
-    const maxDate = existingClaims && existingClaims[0] ? existingClaims[0].max_date : null;
-    const expectedEndPrefix = `${mInfo.year}-${String(mInfo.month).padStart(2, '0')}-25`;
-    const hasFullClaims = cnt > 0 && maxDate && maxDate >= expectedEndPrefix;
-    if (!hasFullClaims) {
-      await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
-    }
+    await generatePendingTaClaimsForMonth(db, mInfo.year, mInfo.month, staffId);
   }
 
   // 2. Fetch count of pending claims in date range
@@ -1801,7 +1848,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       }
     });
   }
-  if (approvedClaims && approvedClaims.length > 0 && (!savedEntries || savedEntries.length < 20)) {
+  if (approvedClaims && approvedClaims.length > 0) {
     approvedClaims.forEach(claim => {
       const dIso = claim.duty_date;
       if (!savedDateSet.has(dIso)) {

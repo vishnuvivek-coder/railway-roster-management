@@ -1,3 +1,50 @@
+/**
+ * ============================================================================
+ * RAILWAY ROSTER MANAGER — FRONTEND APPLICATION (`src/frontend/src/App.jsx`)
+ * ============================================================================
+ *
+ * FRONTEND MODULE -> BACKEND ENDPOINT -> SQLITE TABLE MAP:
+ * ----------------------------------------------------------------------------
+ *  1. Daily Summary / Movement (`activeTab === 'daily' | 'daily-summary'`)
+ *     • Reads : `GET /api/reports/daily-view`, `GET /api/reports/availability-sheet`
+ *     • Saves : `POST /api/duty/change-status`, `POST /api/duty/exchange-staff`,
+ *               `POST /api/duty/drag-assign-train`, `POST /api/duty/assign-non-daily-train`
+ *     • DB    : `overrides` ──► Syncs to `muster_records`, `lr_sheet_records`,
+ *               `ta_approvals`, `ta_entries`, `nda_entries`, `diary_entries`, `daily_earnings_entries`
+ *
+ *  2. Monthly Movement Grid (`activeTab === 'roster'`)
+ *     • Reads : `GET /api/roster`
+ *     • Saves : `POST /api/duty/change-status`, `POST /api/roster/change-rest-day`
+ *     • DB    : `overrides`, `roster_rest_adjustments`, `staff_rest_rules`
+ *
+ *  3. Muster Roll (`activeTab === 'muster'` -> `MusterRoll.jsx`)
+ *     • Reads : `GET /api/muster`
+ *     • Saves : `POST /api/muster/update-cell`, `POST /api/muster/batch-update`
+ *     • DB    : `muster_records` ──► Syncs to `overrides`, `lr_sheet_records`, TA, NDA, Diary, Earnings
+ *
+ *  4. Leave Reserve Sheet (`activeTab === 'lr-list'` -> `LRList.jsx`)
+ *     • Reads : `GET /api/lr-sheet`
+ *     • Saves : `POST /api/lr-sheet/cell`, `POST /api/lr-sheet/batch-update`
+ *     • DB    : `lr_sheet_records` ──► Syncs to `overrides`, `muster_records`, TA, NDA, Diary, Earnings
+ *
+ *  5. TA Approvals (`activeTab === 'ta-approvals'` -> `TaApprovals.jsx`)
+ *     • Reads : `GET /api/ta-approvals`
+ *     • Saves : `POST /api/ta-approvals/accept`, `/accept-batch`, `/accept-all`, `/reject`, `/revert`
+ *     • DB    : `ta_approvals`, `ta_entries`
+ *
+ *  6. Employee Documents Hub (`activeTab === 'documents'`)
+ *     • TA Journal     (`TaDocument.jsx`)            -> `GET/POST/DELETE /api/documents/ta/:staffId`      -> `ta_entries`
+ *     • NDA Journal    (`NdaDocument.jsx`)           -> `GET/POST/DELETE /api/documents/nda/:staffId`     -> `nda_entries`
+ *     • Staff Diary    (`DiaryDocument.jsx`)         -> `GET/POST/DELETE /api/documents/diary/:staffId`   -> `diary_entries`
+ *     • Daily Earnings (`DailyEarningsDocument.jsx`) -> `GET/POST/DELETE /api/documents/daily-earnings*`  -> `daily_earnings_entries`
+ *
+ *  7. Audit Logs & Universal Undo (`activeTab === 'audit'`)
+ *     • Reads : `GET /api/audit-logs`, `GET /api/system/data-flow-map`
+ *     • Saves : `POST /api/audit-logs/:id/undo`
+ *     • DB    : `audit_logs`
+ * ============================================================================
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
 import AuthScreen from './AuthScreen';
@@ -15,6 +62,7 @@ import AvailabilitySheet from './AvailabilitySheet';
 import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
+import { ModuleDataFlowBar, BackendEndpointExplorer } from './apiDataFlowMap';
 import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData';
 import { useDevice } from './useDevice';
 import useDragAutoScroll from './useDragAutoScroll';
@@ -776,7 +824,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
       { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' },
       { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' }
     ]
@@ -826,7 +874,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12603',
     title: '12604 / 12603 (Chennai Express: GNT ➔ MAS)',
     links: [
-      { categoryId: 1, linkNum: 13, altLinkNums: [12], firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 12, altLinkNums: [13], firstTrain: '12604', firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
     ]
   },
@@ -838,7 +886,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '20630',
     title: '12734 / 20630 / 17262 (Narayanadri Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 11, altLinkNums: [10, 12], firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 10, altLinkNums: [11], firstTrain: '12734', firstCoach: 'COR-1', lastTrain: '20630', lastCoach: 'AC' },
       { categoryId: 1, linkNum: 18, firstCoach: 'COR-2', lastTrain: '17262', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' }
     ]
@@ -861,8 +909,8 @@ export const OCT_2026_NON_DAILY_SLOTS = [
   {
     slotId: 53,
     page: 174,
-    firstTrain: 'NON-DAILY-1',
-    lastTrain: 'NON-DAILY-1',
+    firstTrain: 'NON DAILY LINKS',
+    lastTrain: '---',
     links: [
       { categoryId: 2, linkNum: 53, firstCoach: 'SL', lastCoach: 'SL' }
     ]
@@ -870,8 +918,8 @@ export const OCT_2026_NON_DAILY_SLOTS = [
   {
     slotId: 54,
     page: 174,
-    firstTrain: 'NON-DAILY-2',
-    lastTrain: 'NON-DAILY-2',
+    firstTrain: 'NON DAILY LINKS',
+    lastTrain: '---',
     links: [
       { categoryId: 2, linkNum: 54, firstCoach: 'SL', lastCoach: 'SL' }
     ]
@@ -879,8 +927,8 @@ export const OCT_2026_NON_DAILY_SLOTS = [
   {
     slotId: 55,
     page: 174,
-    firstTrain: 'NON-DAILY-3',
-    lastTrain: 'NON-DAILY-3',
+    firstTrain: 'NON DAILY LINKS',
+    lastTrain: '---',
     links: [
       { categoryId: 2, linkNum: 55, firstCoach: 'SL', lastCoach: 'SL' }
     ]
@@ -920,7 +968,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '12604',
     lastTrain: '12603',
     links: [
-      { categoryId: 1, linkNum: 13, altLinkNums: [12], firstCoach: 'AC', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 12, altLinkNums: [13], firstTrain: '12604', firstCoach: 'AC', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastCoach: 'S1-S5' },
       { categoryId: 2, linkNum: 17, firstCoach: 'S6-S10', lastCoach: 'S6-S10' },
       { categoryId: 2, linkNum: 31, firstCoach: 'S6-S10', lastCoach: 'S6-S10' }
@@ -945,7 +993,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '20629',
     lastTrain: '12733',
     links: [
-      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
       { categoryId: 2, linkNum: 43, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
     ]
   },
@@ -990,7 +1038,7 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     firstTrain: '12734',
     lastTrain: '20630',
     links: [
-      { categoryId: 1, linkNum: 11, altLinkNums: [10, 12], firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
+      { categoryId: 1, linkNum: 10, altLinkNums: [11], firstTrain: '12734', firstCoach: 'H1,H2,A1,A2,A3', lastTrain: '20630', lastCoach: 'AC' },
       { categoryId: 1, linkNum: 18, firstCoach: 'B1,B2,B3,B4', lastTrain: '17262', lastCoach: 'AC' },
       { categoryId: 2, linkNum: 8, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' },
       { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
@@ -1558,7 +1606,7 @@ export default function App() {
       });
 
       const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
-      await fetch(`${API_BASE}/train-ta-nda/batch`, {
+      const res = await fetch(`${API_BASE}/train-ta-nda/batch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1566,6 +1614,10 @@ export default function App() {
         },
         body: JSON.stringify({ rules: rulesList })
       });
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to save TA/NDA rules');
+      }
 
       const merged = { ...trainTaNdaRules };
       rulesList.forEach(r => {
@@ -1576,8 +1628,17 @@ export default function App() {
         localStorage.setItem('railway_train_ta_nda_customizations', JSON.stringify(merged));
       } catch (e) {}
 
-      setTaNdaToast(`💾 All ${rulesList.length} Train TA & NDA rules permanently saved to database!`);
-      setTimeout(() => setTaNdaToast(null), 3500);
+      const savedCount = result.savedCount !== undefined ? result.savedCount : rulesList.length;
+      const errorCount = result.errorCount || 0;
+      const errDetails = Array.isArray(result.errors) && result.errors.length > 0
+        ? ` | Errors: ${result.errors.map(e => `Link #${e.link_number} (${e.train_number}): ${e.error}`).join('; ')}`
+        : '';
+      const msg = `💾 Train TA & NDA Save Complete: ${savedCount} saved successfully, ${errorCount} had an error.${errDetails}`;
+      setTaNdaToast(msg);
+      if (errorCount > 0) {
+        alert(msg);
+      }
+      setTimeout(() => setTaNdaToast(null), errorCount > 0 ? 8000 : 4000);
     } catch (err) {
       console.error('Failed to batch save rules:', err);
       alert('Failed to batch save rules: ' + err.message);
@@ -1702,8 +1763,11 @@ export default function App() {
   const [availablePoolSearch, setAvailablePoolSearch] = useState('');
   const [dragNotice, setDragNotice] = useState(null);
 
-  // State for Audit Logs
+  // State for Audit Logs & Endpoint Data-Flow Map
   const [auditLogs, setAuditLogs] = useState([]);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditModuleFilter, setAuditModuleFilter] = useState('ALL');
+  const [showEndpointExplorer, setShowEndpointExplorer] = useState(false);
 
   // States for Daily Duty Register
   const [subTab, setSubTab] = useState('entry'); // entry, reco, history
@@ -2134,6 +2198,8 @@ export default function App() {
       if (typeof fetchSlotCustomizations === 'function') fetchSlotCustomizations();
       if (typeof fetchStaff === 'function') fetchStaff();
       if (typeof fetchAllStaff === 'function') fetchAllStaff();
+      if (typeof fetchLeaveRequests === 'function') fetchLeaveRequests();
+      if (typeof fetchAuditLogs === 'function') fetchAuditLogs();
     } catch (e) {}
 
     try {
@@ -2148,14 +2214,53 @@ export default function App() {
 
   const handleSaveDailyRoster = async () => {
     try {
+      const targetList = (staffList && staffList.length > 0) ? staffList : allStaffList;
+      let savedCount = 0;
+      let errorCount = 0;
+      let errors = [];
+
+      if (isAdmin && targetList && targetList.length > 0) {
+        const reorders = targetList.map((s, idx) => ({
+          id: s.id,
+          name: s.name,
+          designation: s.designation,
+          rest_day: s.rest_day,
+          pf_no: s.pf_no,
+          hrms_id: s.hrms_id,
+          seniority_no: s.seniority_no,
+          row_position: s.row_position !== undefined && s.row_position !== null ? s.row_position : (idx + 1)
+        }));
+        const res = await fetch(`${API_BASE}/staff/reorder`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ reorders })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save daily roster employee details');
+        savedCount = data.savedCount !== undefined ? data.savedCount : targetList.length;
+        errorCount = data.errorCount || 0;
+        errors = data.errors || [];
+      } else {
+        savedCount = targetList ? targetList.length : 0;
+      }
+
       await notifyAllModulesUpdated('daily_roster_save');
-      const msg = `✓ Daily Roster for ${selectedDate} saved & synchronized across all modules!`;
+      const errText = errors.length > 0
+        ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `✓ Daily Roster (${selectedDate}): ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errText}`;
       setTaNdaToast(msg);
       setDragNotice(msg);
+      if (errorCount > 0) {
+        alert(msg);
+      }
       setTimeout(() => {
         setTaNdaToast(null);
         setDragNotice(null);
-      }, 4000);
+      }, errorCount > 0 ? 8000 : 4500);
     } catch (err) {
       alert(`Error saving daily roster: ${err.message}`);
     }
@@ -2163,14 +2268,53 @@ export default function App() {
 
   const handleSaveRosterGrid = async () => {
     try {
+      const targetList = (staffList && staffList.length > 0) ? staffList : allStaffList;
+      let savedCount = 0;
+      let errorCount = 0;
+      let errors = [];
+
+      if (isAdmin && targetList && targetList.length > 0) {
+        const reorders = targetList.map((s, idx) => ({
+          id: s.id,
+          name: s.name,
+          designation: s.designation,
+          rest_day: s.rest_day,
+          pf_no: s.pf_no,
+          hrms_id: s.hrms_id,
+          seniority_no: s.seniority_no,
+          row_position: s.row_position !== undefined && s.row_position !== null ? s.row_position : (idx + 1)
+        }));
+        const res = await fetch(`${API_BASE}/staff/reorder`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ reorders })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save monthly roster employee details');
+        savedCount = data.savedCount !== undefined ? data.savedCount : targetList.length;
+        errorCount = data.errorCount || 0;
+        errors = data.errors || [];
+      } else {
+        savedCount = targetList ? targetList.length : 0;
+      }
+
       await notifyAllModulesUpdated('roster_grid_save');
-      const msg = `✓ Monthly Roster Grid (${year}-${String(month).padStart(2, '0')}) saved & synchronized across all modules!`;
+      const errText = errors.length > 0
+        ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `✓ Monthly Roster Grid (${year}-${String(month).padStart(2, '0')}): ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errText}`;
       setTaNdaToast(msg);
       setDragNotice(msg);
+      if (errorCount > 0) {
+        alert(msg);
+      }
       setTimeout(() => {
         setTaNdaToast(null);
         setDragNotice(null);
-      }, 4000);
+      }, errorCount > 0 ? 8000 : 4500);
     } catch (err) {
       alert(`Error saving roster: ${err.message}`);
     }
@@ -2179,12 +2323,23 @@ export default function App() {
   const handleSaveStaffRoster = async () => {
     if (!isAdmin) return;
     try {
-      if (staffList && staffList.length > 0) {
-        const reorders = staffList.map((s, idx) => ({
+      const targetList = (staffList && staffList.length > 0) ? staffList : allStaffList;
+      let savedCount = 0;
+      let errorCount = 0;
+      let errors = [];
+
+      if (targetList && targetList.length > 0) {
+        const reorders = targetList.map((s, idx) => ({
           id: s.id,
+          name: s.name,
+          designation: s.designation,
+          rest_day: s.rest_day,
+          pf_no: s.pf_no,
+          hrms_id: s.hrms_id,
+          seniority_no: s.seniority_no,
           row_position: s.row_position !== undefined && s.row_position !== null ? s.row_position : (idx + 1)
         }));
-        await fetch(`${API_BASE}/staff/reorder`, {
+        const res = await fetch(`${API_BASE}/staff/reorder`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2192,16 +2347,27 @@ export default function App() {
           },
           body: JSON.stringify({ reorders })
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save staff roster');
+        savedCount = data.savedCount !== undefined ? data.savedCount : targetList.length;
+        errorCount = data.errorCount || 0;
+        errors = data.errors || [];
       }
 
       await notifyAllModulesUpdated('staff_save');
-      const msg = '✓ Staff Roster saved and synchronized across all modules!';
+      const errText = errors.length > 0
+        ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `✓ Staff Roster Save Complete: ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errText}`;
       setTaNdaToast(msg);
       setDragNotice(msg);
+      if (errorCount > 0) {
+        alert(msg);
+      }
       setTimeout(() => {
         setTaNdaToast(null);
         setDragNotice(null);
-      }, 4000);
+      }, errorCount > 0 ? 8000 : 4500);
     } catch (err) {
       alert(`Error saving staff roster: ${err.message}`);
     }
@@ -2274,6 +2440,40 @@ export default function App() {
 
   const handleSaveMusterRoll = async () => {
     try {
+      const targetList = (staffList && staffList.length > 0) ? staffList : allStaffList;
+      let savedCount = 0;
+      let errorCount = 0;
+      let errors = [];
+
+      if (isAdmin && targetList && targetList.length > 0) {
+        const reorders = targetList.map((s, idx) => ({
+          id: s.id,
+          name: s.name,
+          designation: s.designation,
+          rest_day: s.rest_day,
+          pf_no: s.pf_no,
+          hrms_id: s.hrms_id,
+          seniority_no: s.seniority_no,
+          row_position: s.row_position !== undefined && s.row_position !== null ? s.row_position : (idx + 1)
+        }));
+        const res = await fetch(`${API_BASE}/staff/reorder`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ reorders })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          savedCount = data.savedCount !== undefined ? data.savedCount : targetList.length;
+          errorCount = data.errorCount || 0;
+          errors = data.errors || [];
+        }
+      } else {
+        savedCount = targetList ? targetList.length : 0;
+      }
+
       await notifyAllModulesUpdated('muster_save');
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { source: 'muster_floating_save', timestamp: Date.now() }
@@ -2281,15 +2481,22 @@ export default function App() {
       window.dispatchEvent(new CustomEvent('railway_muster_updated', {
         detail: { source: 'muster_floating_save', timestamp: Date.now() }
       }));
-      const msg = `💾 All Muster Attendance records, edits & remarks saved permanently to database!`;
+      const errText = errors.length > 0
+        ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `💾 Muster Roll Save Complete: ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errText}`;
       setTaNdaToast(msg);
       setDragNotice(msg);
+      if (errorCount > 0) {
+        alert(msg);
+      }
       setTimeout(() => {
         setTaNdaToast(null);
         setDragNotice(null);
-      }, 4500);
+      }, errorCount > 0 ? 8000 : 4500);
     } catch (err) {
       console.error(err);
+      alert(`Error saving Muster Roll: ${err.message}`);
     }
   };
 
@@ -2303,9 +2510,28 @@ export default function App() {
       fetchSlotCustomizations();
       fetchStaff();
       fetchAllStaff();
+      fetchLeaveRequests();
+      fetchAuditLogs();
+    };
+    const handleAuditOnlyUpdate = () => {
+      fetchAuditLogs();
     };
     window.addEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
-    return () => window.removeEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
+    window.addEventListener('railway_schedule_updated', handleUniversalRosterUpdate);
+    window.addEventListener('railway_muster_updated', handleUniversalRosterUpdate);
+    window.addEventListener('railway_lr_updated', handleUniversalRosterUpdate);
+    window.addEventListener('railway_ta_updated', handleAuditOnlyUpdate);
+    window.addEventListener('railway_earnings_updated', handleAuditOnlyUpdate);
+    window.addEventListener('railway_audit_updated', handleAuditOnlyUpdate);
+    return () => {
+      window.removeEventListener('railway_roster_data_updated', handleUniversalRosterUpdate);
+      window.removeEventListener('railway_schedule_updated', handleUniversalRosterUpdate);
+      window.removeEventListener('railway_muster_updated', handleUniversalRosterUpdate);
+      window.removeEventListener('railway_lr_updated', handleUniversalRosterUpdate);
+      window.removeEventListener('railway_ta_updated', handleAuditOnlyUpdate);
+      window.removeEventListener('railway_earnings_updated', handleAuditOnlyUpdate);
+      window.removeEventListener('railway_audit_updated', handleAuditOnlyUpdate);
+    };
   }, [selectedDate, movementStartDate, movementEndDate, year, month, selectedCatId]);
 
   // ----------------------------------------------------
@@ -2378,8 +2604,23 @@ export default function App() {
     })
       .then(res => res.json())
       .then(data => {
-        alert('Duty register saved successfully!');
+        if (data.error) {
+          alert(`Error saving duty register: ${data.error}`);
+          return;
+        }
+        const savedEmp = data.savedEmployeesCount !== undefined ? data.savedEmployeesCount : (data.savedCount || 0);
+        const errEmp = data.errorEmployeesCount !== undefined ? data.errorEmployeesCount : (data.errorCount || 0);
+        const errDetails = Array.isArray(data.errors) && data.errors.length > 0
+          ? `\nErrors:\n${data.errors.map(e => `- ${e.staff_name}: ${e.error}`).join('\n')}`
+          : '';
+        const msg = data.message || `Duty Register saved: ${savedEmp} employee(s) saved successfully, ${errEmp} had an error.${errDetails}`;
+        setTaNdaToast(msg);
+        setTimeout(() => setTaNdaToast(null), 5000);
+        alert(msg);
         fetchRegisterForDate(registerDate);
+      })
+      .catch(err => {
+        alert(`Error saving duty register: ${err.message}`);
       });
   };
 
@@ -2866,8 +3107,9 @@ export default function App() {
 
       // 5. Working cyclic train link
       if (d.link_number !== null && d.link_number !== undefined) {
-        // If it's a spare non-daily pool link (60, 61, 62) and no extra train is assigned, staff is available at HQ!
-        if ([60, 61, 62].includes(parseInt(d.link_number, 10)) && !d.extra_train_no && d.shifted_place !== 'NON_DAILY_RETURN') {
+        // If it's a spare non-daily pool link (53, 54, 55 from Oct 2026; 60, 61, 62 before Oct 2026) and no extra train is assigned, staff is available at HQ!
+        const nonDailyLinksForDate = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+        if ((nonDailyLinksForDate.includes(parseInt(d.link_number, 10)) || (d.train_numbers && String(d.train_numbers).toUpperCase().includes('NON DAILY'))) && !d.extra_train_no && d.shifted_place !== 'NON_DAILY_RETURN') {
           return null; // Spare in Non-Daily Pool!
         }
         const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.train_numbers)
@@ -3094,7 +3336,13 @@ export default function App() {
       alert('Could not determine employee to assign.');
       return;
     }
-    const staffName = dragData.staffName || 'Employee';
+    const staffObj = (allStaffList || []).find(s => String(s.id) === String(staffId));
+    const catId = dragData.sourceCategoryId != null ? parseInt(dragData.sourceCategoryId, 10) : (staffObj ? parseInt(staffObj.category_id, 10) : null);
+    if (catId === 1) {
+      alert('Conductors (COR) cannot be assigned to Non-Daily trains. Please assign a Sleeper TTI, Non-Daily Pool, or LR staff member.');
+      return;
+    }
+    const staffName = dragData.staffName || (staffObj ? staffObj.name : 'Employee');
     const trainNo = trainItem.train_number;
 
     const currentWorkingTrain = getStaffCurrentWorkingTrain(staffId);
@@ -4789,6 +5037,35 @@ export default function App() {
           </div>
         )}
 
+        {/* Live Module Data-Flow Bar: Shows which Backend Endpoint & SQLite Table handles the active screen */}
+        <ModuleDataFlowBar
+          moduleKey={
+            activeTab === 'daily' || activeTab === 'daily-summary' || activeTab === 'availability'
+              ? 'daily-summary'
+              : activeTab === 'roster'
+              ? 'monthly-movement'
+              : activeTab === 'muster'
+              ? 'muster-roll'
+              : activeTab === 'lr-list'
+              ? 'lr-sheet'
+              : activeTab === 'ta-approvals'
+              ? 'ta-approvals'
+              : activeTab === 'documents'
+              ? docSubTab === 'ta'
+                ? 'ta-journal'
+                : docSubTab === 'nda'
+                ? 'nda-journal'
+                : docSubTab === 'diary'
+                ? 'staff-diary'
+                : docSubTab === 'earnings'
+                ? 'daily-earnings'
+                : docSubTab === 'muster'
+                ? 'muster-roll'
+                : null
+              : null
+          }
+        />
+
         {/* Global Controls Filter Panel */}
         {!['documents', 'audit', 'user-management', 'muster', 'lr-list', 'ta-approvals'].includes(activeTab) && (
         <div className="filters-panel">
@@ -5481,11 +5758,14 @@ export default function App() {
                       <table className="roster-table" style={{ width: '100%' }}>
                         <thead>
                           <tr>
-                            <th style={{ width: '120px' }}>Date</th>
-                            <th style={{ width: '120px' }}>Link No</th>
+                            <th style={{ width: '115px' }}>Date</th>
+                            <th style={{ width: '115px' }}>Link No</th>
                             <th>Train Numbers</th>
                             <th>Route</th>
-                            <th style={{ width: '100px' }}>Coaches</th>
+                            <th style={{ width: '95px' }}>Coaches</th>
+                            <th style={{ minWidth: '270px', background: 'rgba(212, 161, 92, 0.08)', borderLeft: '2px solid rgba(212, 161, 92, 0.35)', borderRight: '2px solid rgba(212, 161, 92, 0.35)', color: 'var(--primary)' }}>
+                              ⚡ Actually Worked Link &amp; Duty Performed (TA Basis)
+                            </th>
                             <th>Status / Remarks</th>
                             {isAdmin && <th style={{ width: '80px', textAlign: 'center' }}>Action</th>}
                           </tr>
@@ -5500,6 +5780,8 @@ export default function App() {
                               const dayName = dateObj.toLocaleDateString('en-GB', { weekday: 'short' }).toLowerCase();
                               return (
                                 (cell.train_numbers && cell.train_numbers.toLowerCase().includes(q)) ||
+                                (cell.original_train_numbers && cell.original_train_numbers.toLowerCase().includes(q)) ||
+                                (cell.actual_train_numbers && cell.actual_train_numbers.toLowerCase().includes(q)) ||
                                 (cell.from_station && cell.from_station.toLowerCase().includes(q)) ||
                                 (cell.to_station && cell.to_station.toLowerCase().includes(q)) ||
                                 (cell.status && cell.status.toLowerCase().includes(q)) ||
@@ -5513,14 +5795,14 @@ export default function App() {
                             if (filteredCells.length === 0) {
                               return (
                                 <tr>
-                                  <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
+                                  <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
                                     No duty movements match "<strong>{movementSearchQuery}</strong>" in the selected period.
                                   </td>
                                 </tr>
                               );
                             }
 
-                            return filteredCells.map((cell, idx) => {
+                            return filteredCells.map((cell) => {
                             const isMusterLeave = cell.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH'].includes(cell.muster_code);
                             const isMusterOd = cell.muster_code === 'OD' || cell.leave_type === 'OD';
                             const isMusterSick = cell.muster_code === 'SICK';
@@ -5528,9 +5810,10 @@ export default function App() {
                             const isMusterRest = cell.muster_code === 'R';
                             const isMusterAbsent = cell.muster_code === 'O';
 
+                            const workedTrainRaw = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
                             const isWorkingTrain = (cell.status === 'DUTY' || cell.status === 'SUBSTITUTE' || cell.status === 'CHANGED_LINK' || cell.status === 'EXTRA_CREW') &&
-                              (cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers) &&
-                              !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers);
+                              workedTrainRaw &&
+                              !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'REASON LATER'].includes(workedTrainRaw);
 
                             const isSick = cell.status === 'SICK' || isMusterSick;
                             const isLeave = (cell.status === 'LEAVE' || cell.isLeave || isMusterLeave) && !isMusterOd;
@@ -5538,33 +5821,97 @@ export default function App() {
                             const isAbsent = cell.status === 'ABSENT' || isMusterAbsent;
                             const isAvailableForBooking = cell.status === 'AVAILABLE_FOR_BOOKING';
                             const isCat4 = parseInt(selectedCatId, 10) === 4;
+                            const staffBaseCatId = parseInt(selectedCatId, 10) || 1;
                             const lrInfo = cell.lr_rest_info;
                             const isRest = !isWorkingTrain && (isMusterRest || (!isAvailableForBooking && !isMusterOd && (cell.isRest || (cell.actualLinkNumber === null && !cell.train_numbers) || cell.status === 'REST')));
-                            const isOverridden = cell.isOverridden;
 
+                            const targetCatId = parseInt(cell.target_category_id || staffBaseCatId, 10);
+                            const isUpgradedToCor = !isCat4 && staffBaseCatId !== 1 && targetCatId === 1 && cell.actualLinkNumber !== null;
+
+                            // Determine if the actually worked link/duty differs from the scheduled cyclic roster link
+                            const isLinkNumberChanged = !isCat4 &&
+                              cell.calculatedLinkNumber !== null &&
+                              cell.calculatedLinkNumber !== undefined &&
+                              cell.actualLinkNumber !== null &&
+                              cell.actualLinkNumber !== undefined &&
+                              (parseInt(cell.actualLinkNumber, 10) !== parseInt(cell.calculatedLinkNumber, 10) || isUpgradedToCor);
+
+                            const isExtraOrNonDailyWork = isWorkingTrain && (cell.actualLinkNumber === null || cell.actualLinkNumber === undefined);
                             const isCondition4 = (cell.condition_applied === 4) || (cell.original_is_rest && isWorkingTrain);
-                            const isCondition2 = (cell.condition_applied === 2) || (!cell.original_is_rest && isWorkingTrain && cell.actual_train_numbers && cell.original_train_numbers && cell.actual_train_numbers !== cell.original_train_numbers);
+                            const isCondition2 = (cell.condition_applied === 2) || isLinkNumberChanged || isExtraOrNonDailyWork ||
+                              (!cell.original_is_rest && isWorkingTrain && cell.actual_train_numbers && cell.original_train_numbers && cell.actual_train_numbers !== cell.original_train_numbers);
+                            const isDutyChanged = isCondition4 || isCondition2 || isSick || isLeave || isCr || isAbsent || isAvailableForBooking || isMusterOd || (isRest && !cell.original_is_rest);
 
-                            let linkLabel = cell.actualLinkNumber 
-                              ? (isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber))
-                              : (cell.set_type && cell.set_type !== 'Other / REST' ? cell.set_type : (isWorkingTrain ? 'Non-Daily' : ''));
-                            let cellBg = 'transparent';
-                            let badgeStyle = { fontWeight: 700, borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' };
-                            let trainNoDisplay = cell.original_train_numbers || (cell.original_is_rest ? 'REST' : (cell.isRest ? 'REST' : (cell.train_numbers || '-')));
-                            if (cell.original_is_rest || isRest) {
-                              trainNoDisplay = 'REST';
+                            // 1. SCHEDULED COLUMNS (Link No, Train Numbers, Route, Coaches)
+                            const schedIsRest = Boolean(cell.original_is_rest);
+                            let schedLinkLabel = '';
+                            let schedBadgeStyle = { fontWeight: 700, borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' };
+                            if (isCat4) {
+                              schedLinkLabel = schedIsRest ? '😴 REST' : '⚡ LR Standby';
+                              schedBadgeStyle.background = schedIsRest ? 'rgba(107, 114, 128, 0.15)' : 'rgba(16, 185, 129, 0.12)';
+                              schedBadgeStyle.color = schedIsRest ? '#9ca3af' : '#10b981';
+                            } else if (schedIsRest) {
+                              schedLinkLabel = cell.calculatedLinkNumber ? `😴 REST (#${cell.calculatedLinkNumber})` : '😴 REST';
+                              schedBadgeStyle.background = 'rgba(107, 114, 128, 0.15)';
+                              schedBadgeStyle.color = '#9ca3af';
+                            } else if (cell.calculatedLinkNumber) {
+                              schedLinkLabel = getLinkDisplayLabel(selectedCatId, cell.calculatedLinkNumber);
+                              schedBadgeStyle.background = 'rgba(16, 185, 129, 0.14)';
+                              schedBadgeStyle.color = '#10b981';
+                              schedBadgeStyle.border = '1px solid rgba(16, 185, 129, 0.3)';
+                            } else {
+                              schedLinkLabel = cell.original_set_type || 'Scheduled';
+                              schedBadgeStyle.background = 'rgba(16, 185, 129, 0.14)';
+                              schedBadgeStyle.color = '#10b981';
                             }
-                            let routeDisplay = (cell.from_station || '-') + ' ➔ ' + (cell.to_station || '-');
-                            let coachDisplay = cell.coaches || '-';
+
+                            const trainNoDisplay = schedIsRest
+                              ? 'REST'
+                              : (cell.original_train_numbers || (isCat4 ? 'SPARE (HQ)' : '-'));
+                            const routeDisplay = schedIsRest
+                              ? '-'
+                              : ((cell.original_from_station && cell.original_from_station !== '-') || (cell.original_to_station && cell.original_to_station !== '-')
+                                  ? `${cell.original_from_station || 'GNT'} ➔ ${cell.original_to_station || '---'}`
+                                  : (isCat4 ? 'GNT ➔ GNT' : '-'));
+                            const coachDisplay = schedIsRest
+                              ? '-'
+                              : (cell.original_coaches || '-');
+
+                            // 2. ACTUALLY WORKED LINK & DUTY PERFORMED COLUMN + STATUS/REMARKS COLUMN
+                            const workedTrainName = workedTrainRaw || '-';
+                            const workedRoute = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
+                            const workedCoaches = cell.coaches || '-';
+                            const workedLinkBadgeText = cell.actualLinkNumber
+                              ? (isUpgradedToCor
+                                  ? `⭐ COR Link #${cell.actualLinkNumber} (Upgraded)`
+                                  : (isCat4
+                                      ? `🔄 ${(cell.target_category_id === 1 ? 'COR ' : 'SL ')}Link #${cell.actualLinkNumber}`
+                                      : `🔄 Link #${getLinkDisplayLabel(targetCatId, cell.actualLinkNumber)}`))
+                              : (cell.set_type && cell.set_type !== 'Other / REST' ? `🚆 ${cell.set_type}` : '🚆 Extra / Non-Daily Train');
+
+                            let cellBg = 'transparent';
+                            let actuallyWorkedElement = null;
                             let remarksElement = null;
 
                             if (isSick) {
-                              linkLabel = `🤒 SICK${cell.muster_code ? ' (Muster)' : ''}`;
-                              badgeStyle.background = 'rgba(239, 68, 68, 0.15)';
-                              badgeStyle.color = '#ef4444';
-                              trainNoDisplay = '-';
-                              routeDisplay = '-';
-                              coachDisplay = '-';
+                              cellBg = 'rgba(239, 68, 68, 0.03)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      🤒 SICK — Duty Not Performed
+                                    </span>
+                                    <span style={{ background: 'rgba(107, 114, 128, 0.18)', color: '#9ca3af', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                                      No TA Claimed
+                                    </span>
+                                  </div>
+                                  {cell.substituteName && (
+                                    <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                                      Covered by Sub: <strong style={{ color: '#e2e8f0' }}>{cell.substituteName}</strong>
+                                    </span>
+                                  )}
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {cell.muster_code && (
@@ -5578,13 +5925,17 @@ export default function App() {
                                 </div>
                               );
                             } else if (isMusterOd) {
-                              linkLabel = '📋 OD (On Duty)';
-                              badgeStyle.background = 'rgba(16, 185, 129, 0.15)';
-                              badgeStyle.color = '#10b981';
-                              badgeStyle.border = '1px solid rgba(16, 185, 129, 0.35)';
-                              trainNoDisplay = '-';
-                              routeDisplay = 'OFFICIAL / OTHER DUTY';
-                              coachDisplay = '-';
+                              cellBg = 'rgba(16, 185, 129, 0.03)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                  <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700, width: 'fit-content' }}>
+                                    📋 OD (Official / Other Duty)
+                                  </span>
+                                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                                    Route: <strong>OFFICIAL / OTHER DUTY</strong>
+                                  </span>
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
@@ -5596,12 +5947,25 @@ export default function App() {
                                 </div>
                               );
                             } else if (isLeave) {
-                              linkLabel = `🏖️ ${cell.muster_code || cell.leave_type || 'LEAVE'}`;
-                              badgeStyle.background = 'rgba(245, 158, 11, 0.15)';
-                              badgeStyle.color = '#f59e0b';
-                              trainNoDisplay = '-';
-                              routeDisplay = '-';
-                              coachDisplay = '-';
+                              const lvCode = cell.muster_code || cell.leave_type || 'LEAVE';
+                              cellBg = 'rgba(245, 158, 11, 0.03)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ background: 'rgba(245, 158, 11, 0.18)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      🏖️ On Leave ({lvCode}) — Not Worked
+                                    </span>
+                                    <span style={{ background: 'rgba(107, 114, 128, 0.18)', color: '#9ca3af', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                                      No TA Claimed
+                                    </span>
+                                  </div>
+                                  {cell.substituteName && (
+                                    <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                                      Covered by Sub: <strong style={{ color: '#e2e8f0' }}>{cell.substituteName}</strong>
+                                    </span>
+                                  )}
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {cell.muster_code && (
@@ -5615,12 +5979,17 @@ export default function App() {
                                 </div>
                               );
                             } else if (isCr) {
-                              linkLabel = '💤 CR';
-                              badgeStyle.background = 'rgba(139, 92, 246, 0.15)';
-                              badgeStyle.color = '#a78bfa';
-                              trainNoDisplay = '-';
-                              routeDisplay = '-';
-                              coachDisplay = '-';
+                              cellBg = 'rgba(139, 92, 246, 0.03)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ background: 'rgba(139, 92, 246, 0.18)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                    💤 Compensatory Rest (CR)
+                                  </span>
+                                  <span style={{ background: 'rgba(107, 114, 128, 0.18)', color: '#9ca3af', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                                    No TA Claimed
+                                  </span>
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {cell.muster_code && (
@@ -5634,12 +6003,17 @@ export default function App() {
                                 </div>
                               );
                             } else if (isAbsent) {
-                              linkLabel = '❌ ABSENT (O)';
-                              badgeStyle.background = 'rgba(239, 68, 68, 0.15)';
-                              badgeStyle.color = '#ef4444';
-                              trainNoDisplay = '-';
-                              routeDisplay = '-';
-                              coachDisplay = '-';
+                              cellBg = 'rgba(239, 68, 68, 0.03)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                    ❌ ABSENT (O) — Not Worked
+                                  </span>
+                                  <span style={{ background: 'rgba(107, 114, 128, 0.18)', color: '#9ca3af', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                                    No TA Claimed
+                                  </span>
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '1px solid #ef4444', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
@@ -5651,16 +6025,25 @@ export default function App() {
                                 </div>
                               );
                             } else if (isAvailableForBooking) {
-                              linkLabel = (cell.set_type && cell.set_type.includes('3-Day')) 
-                                ? `⚡ Available (${cell.set_type})` 
-                                : (cell.reason && cell.reason.includes('Removed from Link') ? '⚡ Available (Removed from Link)' : '⚡ Available for Booking');
-                              badgeStyle.background = 'rgba(16, 185, 129, 0.18)';
-                              badgeStyle.color = '#10b981';
-                              badgeStyle.border = '1px solid #10b981';
                               cellBg = 'rgba(16, 185, 129, 0.03)';
-                              trainNoDisplay = (cell.train_numbers && cell.train_numbers !== 'SPARE (HQ)' && cell.train_numbers !== '-') ? cell.train_numbers : 'SPARE (HQ)';
-                              routeDisplay = (cell.from_station && cell.to_station && cell.from_station !== '-') ? (cell.from_station + ' ➔ ' + cell.to_station) : 'GNT ➔ GNT';
-                              coachDisplay = (cell.coaches && cell.coaches !== '-') ? cell.coaches : '-';
+                              const avlTitle = (cell.set_type && cell.set_type.includes('3-Day'))
+                                ? `⚡ HQ Rest / Available (${cell.set_type})`
+                                : '⚡ Standby at HQ (Available for Booking)';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ background: 'rgba(16, 185, 129, 0.16)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      {avlTitle}
+                                    </span>
+                                    <span style={{ background: 'rgba(107, 114, 128, 0.18)', color: '#9ca3af', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                                      No Train Duty / No TA
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                                    Station: <strong>GNT (HQ)</strong> {cell.substituteName ? `• Sub on Link: ${cell.substituteName}` : ''}
+                                  </span>
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
@@ -5674,12 +6057,16 @@ export default function App() {
                                 </div>
                               );
                             } else if (isRest) {
-                              linkLabel = '😴 REST';
-                              badgeStyle.background = 'rgba(107, 114, 128, 0.15)';
-                              badgeStyle.color = '#9ca3af';
-                              trainNoDisplay = 'REST';
-                              routeDisplay = '-';
-                              coachDisplay = '-';
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ background: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 600 }}>
+                                    😴 Weekly Rest (No Duty)
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                                    No TA
+                                  </span>
+                                </div>
+                              );
                               remarksElement = (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {cell.muster_code && (
@@ -5693,168 +6080,108 @@ export default function App() {
                                 </div>
                               );
                             } else if (isWorkingTrain) {
-                              if (isCondition4) {
-                                linkLabel = cell.actualLinkNumber ? `#${cell.actualLinkNumber} (Rest Duty)` : (cell.set_type || 'Rest Day Duty');
-                                badgeStyle.background = 'rgba(245, 158, 11, 0.18)';
-                                badgeStyle.color = '#f59e0b';
-                                badgeStyle.border = '1px solid #f59e0b';
-                                trainNoDisplay = 'REST';
-                              } else if (cell.actualLinkNumber) {
-                                linkLabel = isCat4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
-                                badgeStyle.background = 'rgba(59, 130, 246, 0.15)';
-                                badgeStyle.color = '#60a5fa';
-                                badgeStyle.border = '1px solid rgba(59, 130, 246, 0.4)';
-                              } else {
-                                linkLabel = cell.set_type || 'Train Duty';
-                                badgeStyle.background = 'rgba(16, 185, 129, 0.15)';
-                                badgeStyle.color = '#10b981';
-                                badgeStyle.border = '1px solid rgba(16, 185, 129, 0.4)';
-                              }
-                              routeDisplay = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
-                              coachDisplay = cell.coaches || '-';
-                              cellBg = isOverridden ? 'rgba(59, 130, 246, 0.02)' : 'transparent';
-                              
-                              if (isCondition4) {
-                                const actualTrainName = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
-                                remarksElement = (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    {cell.muster_code && (
-                                      <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: '1px solid #f59e0b', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                        📋 Muster: {cell.muster_code}
+                              if (isCondition4 || isCondition2) {
+                                const accentColor = isCondition4 ? '#f59e0b' : (isUpgradedToCor ? '#eab308' : '#60a5fa');
+                                const accentBg = isCondition4 ? 'rgba(245, 158, 11, 0.16)' : (isUpgradedToCor ? 'rgba(234, 179, 8, 0.18)' : 'rgba(59, 130, 246, 0.16)');
+                                const accentBorder = isCondition4 ? 'rgba(245, 158, 11, 0.45)' : (isUpgradedToCor ? 'rgba(234, 179, 8, 0.5)' : 'rgba(59, 130, 246, 0.45)');
+                                cellBg = isCondition4 ? 'rgba(245, 158, 11, 0.04)' : 'rgba(59, 130, 246, 0.04)';
+
+                                actuallyWorkedElement = (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '4px 6px', borderRadius: '6px', background: 'rgba(15, 23, 42, 0.45)', border: `1px solid ${accentBorder}` }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ background: accentBg, color: accentColor, border: `1px solid ${accentBorder}`, borderRadius: '5px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 800 }}>
+                                        {isCondition4
+                                          ? (cell.actualLinkNumber ? `⚡ Link #${cell.actualLinkNumber} (Rest Day Duty)` : `⚡ ${cell.set_type || 'Rest Day Train Duty'}`)
+                                          : workedLinkBadgeText}
                                       </span>
-                                    )}
-                                    <span style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.85rem' }}>
-                                      ⚡ Working Train {actualTrainName} (Rest Day Duty) {cell.overrideReason ? `• ${cell.overrideReason}` : ''}
-                                    </span>
-                                  </div>
-                                );
-                              } else if (isCondition2) {
-                                const actualTrainName = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
-                                remarksElement = (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    {cell.muster_code && (
-                                      <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid #60a5fa', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                        📋 Muster: {cell.muster_code}
+                                      <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>
+                                        💰 TA Claimed on Worked Duty
                                       </span>
-                                    )}
-                                    <span style={{ color: '#60a5fa', fontWeight: 600, fontSize: '0.85rem' }}>
-                                      🔄 Working Train {actualTrainName} {cell.overrideReason ? `• ${cell.overrideReason}` : ''}
-                                    </span>
-                                  </div>
-                                );
-                              } else {
-                                remarksElement = (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    {cell.muster_code && (
-                                      <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                        📋 Muster: {cell.muster_code}
-                                      </span>
-                                    )}
-                                    <span style={{ color: isOverridden ? '#60a5fa' : 'var(--color-text-primary)', fontSize: '0.85rem' }}>
-                                      {cell.overrideReason || (cell.actualLinkNumber ? `Assigned to Link #${cell.actualLinkNumber}` : `Working Train ${cell.train_numbers}`)}
-                                    </span>
-                                  </div>
-                                );
-                              }
-                            } else if (isCat4 && lrInfo && !isOverridden) {
-                              if (lrInfo.restStatus === 'IN_HQ_REST') {
-                                linkLabel = '⏳ In HQ Rest';
-                                badgeStyle.background = 'rgba(245, 158, 11, 0.18)';
-                                badgeStyle.color = '#f59e0b';
-                                badgeStyle.border = '1px solid #f59e0b';
-                                cellBg = 'rgba(245, 158, 11, 0.03)';
-                                trainNoDisplay = lrInfo.lastTrainNo ? `Last: ${lrInfo.lastTrainNo}` : 'SPARE (HQ)';
-                                routeDisplay = 'GNT ➔ GNT';
-                                coachDisplay = '-';
-                                remarksElement = (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                    <span style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.85rem' }}>
-                                      ⏳ {lrInfo.remarksText}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                                      <span>Min 8h Rest: <strong>{lrInfo.rest8hTime}</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '0.78rem', color: '#e2e8f0' }}>
+                                      <span>🚆 Train: <strong style={{ color: accentColor }}>{workedTrainName}</strong></span>
                                       <span>•</span>
-                                      <span>Full 12h: <strong>{lrInfo.rest12hTime}</strong></span>
+                                      <span>📍 Route: <strong>{workedRoute}</strong></span>
+                                      {workedCoaches && workedCoaches !== '-' && (
+                                        <>
+                                          <span>•</span>
+                                          <span>🚃 Coaches: <strong>{workedCoaches}</strong></span>
+                                        </>
+                                      )}
                                     </div>
                                   </div>
                                 );
-                              } else if (lrInfo.restStatus === 'REST_COMPLETED_8H') {
-                                linkLabel = '⚡ Available (Min 8h Rest)';
-                                badgeStyle.background = 'rgba(5, 150, 105, 0.18)';
-                                badgeStyle.color = '#059669';
-                                badgeStyle.border = '1px solid #059669';
-                                cellBg = 'rgba(5, 150, 105, 0.03)';
-                                trainNoDisplay = lrInfo.lastTrainNo ? `Last: ${lrInfo.lastTrainNo}` : 'SPARE (HQ)';
-                                routeDisplay = 'GNT ➔ GNT';
-                                coachDisplay = '-';
+
                                 remarksElement = (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                    <span style={{ color: '#059669', fontWeight: 600, fontSize: '0.85rem' }}>
-                                      ⚡ {lrInfo.remarksText}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {cell.muster_code && (
+                                      <span className="badge" style={{ background: accentBg, color: accentColor, border: `1px solid ${accentColor}`, fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                        📋 Muster: {cell.muster_code}
+                                      </span>
+                                    )}
+                                    <span style={{ color: accentColor, fontWeight: 600, fontSize: '0.85rem' }}>
+                                      {isCondition4
+                                        ? `⚡ Worked Train ${workedTrainName} on Rest Day ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`
+                                        : `🔄 Daily Summary Change: Worked ${cell.actualLinkNumber ? `${isUpgradedToCor ? 'COR ' : ''}Link #${cell.actualLinkNumber} ` : ''}(Tr. ${workedTrainName}) ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`}
                                     </span>
-                                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                                      <span>8h Rest: <strong>{lrInfo.rest8hTime}</strong></span>
-                                      <span>•</span>
-                                      <span>Full 12h: <strong>{lrInfo.rest12hTime}</strong></span>
-                                    </div>
                                   </div>
                                 );
-                              } else if (lrInfo.restStatus === 'REST_COMPLETED_12H') {
-                                linkLabel = '⚡ Available (12h Rest Complete)';
-                                badgeStyle.background = 'rgba(16, 185, 129, 0.18)';
-                                badgeStyle.color = '#10b981';
-                                badgeStyle.border = '1px solid #10b981';
-                                cellBg = 'rgba(16, 185, 129, 0.03)';
-                                trainNoDisplay = lrInfo.lastTrainNo ? `Last: ${lrInfo.lastTrainNo}` : 'SPARE (HQ)';
-                                routeDisplay = 'GNT ➔ GNT';
-                                coachDisplay = '-';
-                                remarksElement = (
-                                  <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
-                                    ⚡ {lrInfo.remarksText}
-                                  </span>
-                                );
                               } else {
-                                linkLabel = '⚡ Available for Booking';
-                                badgeStyle.background = 'rgba(16, 185, 129, 0.15)';
-                                badgeStyle.color = '#10b981';
-                                badgeStyle.border = '1px solid #10b981';
-                                trainNoDisplay = 'SPARE (HQ)';
-                                routeDisplay = 'GNT ➔ GNT';
-                                coachDisplay = '-';
+                                // Worked scheduled duty without change
+                                actuallyWorkedElement = (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ background: 'rgba(16, 185, 129, 0.14)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '5px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                                        ✅ Same as Scheduled ({cell.actualLinkNumber ? `Link #${getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber)}` : 'Scheduled Duty'})
+                                      </span>
+                                      <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>
+                                        💰 TA Claimed
+                                      </span>
+                                    </div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                                      Tr. <strong>{workedTrainName}</strong> • {workedRoute} {workedCoaches && workedCoaches !== '-' ? `• ${workedCoaches}` : ''}
+                                    </span>
+                                  </div>
+                                );
                                 remarksElement = (
-                                  <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
-                                    ⚡ {lrInfo.remarksText || 'Available for Booking Duty at HQ (Standby)'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {cell.muster_code && (
+                                      <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
+                                        📋 Muster: {cell.muster_code}
+                                      </span>
+                                    )}
+                                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+                                      Regular Cyclic Duty (Performed as Scheduled)
+                                    </span>
+                                  </div>
                                 );
                               }
-                            } else if (isOverridden) {
-                              badgeStyle.background = 'rgba(59, 130, 246, 0.15)';
-                              badgeStyle.color = '#60a5fa';
-                              cellBg = 'rgba(59, 130, 246, 0.02)';
-                              remarksElement = (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {cell.muster_code && (
-                                    <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.2)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                      📋 Muster: {cell.muster_code}
-                                    </span>
-                                  )}
-                                  <span style={{ color: '#60a5fa', fontSize: '0.85rem' }}>
-                                    🔄 Override: <em>{cell.overrideReason || 'Changed duty'}</em>
+                            } else if (isCat4 && lrInfo) {
+                              actuallyWorkedElement = (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ background: 'rgba(16, 185, 129, 0.14)', color: '#10b981', borderRadius: '5px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700, width: 'fit-content' }}>
+                                    ⚡ LR Standby at HQ (Not Booked)
+                                  </span>
+                                  <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
+                                    {lrInfo.lastTrainNo ? `Last Worked: Tr. ${lrInfo.lastTrainNo} • No TA Today` : 'Available at GNT HQ • No TA Today'}
                                   </span>
                                 </div>
                               );
-                            } else {
-                              badgeStyle.background = 'rgba(16, 185, 129, 0.15)';
-                              badgeStyle.color = '#10b981';
                               remarksElement = (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {cell.muster_code && (
-                                    <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid #10b981', fontSize: '0.72rem', padding: '1px 6px', fontWeight: 700 }}>
-                                      📋 Muster: {cell.muster_code}
-                                    </span>
-                                  )}
-                                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>Regular Cyclic Duty</span>
-                                </div>
+                                <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
+                                  ⚡ {lrInfo.remarksText || 'Available for Booking Duty at HQ (Standby)'}
+                                </span>
+                              );
+                            } else {
+                              actuallyWorkedElement = (
+                                <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
+                                  -
+                                </span>
+                              );
+                              remarksElement = (
+                                <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+                                  {cell.overrideReason || 'Regular Cyclic Duty'}
+                                </span>
                               );
                             }
 
@@ -5869,8 +6196,8 @@ export default function App() {
                                   <strong>{formattedDate}</strong> <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginLeft: '4px' }}>({dayName})</span>
                                 </td>
                                 <td>
-                                  <span style={badgeStyle}>
-                                    {linkLabel}
+                                  <span style={schedBadgeStyle}>
+                                    {schedLinkLabel}
                                   </span>
                                 </td>
                                 <td>
@@ -5887,6 +6214,9 @@ export default function App() {
                                   <span style={{ color: 'var(--color-text-secondary)' }}>
                                     {coachDisplay}
                                   </span>
+                                </td>
+                                <td style={{ borderLeft: '2px solid rgba(212, 161, 92, 0.2)', borderRight: '2px solid rgba(212, 161, 92, 0.2)', background: isDutyChanged ? 'rgba(212, 161, 92, 0.04)' : 'transparent' }}>
+                                  {actuallyWorkedElement}
                                 </td>
                                 <td>
                                   {remarksElement}
@@ -6035,13 +6365,15 @@ export default function App() {
                       let linkFirstTrain = '';
                       let linkLastTrain = '';
                       let linkCoach = '';
-                      if (matchedLink && matchedLink.train_numbers && matchedLink.train_numbers.trim() && matchedLink.train_numbers.toUpperCase() !== 'REST') {
+                      const cId = parseInt(lDef.categoryId, 10);
+                      const lNum = parseInt(lDef.linkNum, 10);
+                      const isDynamicAmaravatiSlot = (cId === 1 && lNum === 15) || (cId === 2 && (lNum === 50 || lNum === 57));
+                      if (isDynamicAmaravatiSlot) {
+                        linkFirstTrain = is18047Day(selectedDate) ? '18047' : '17225';
+                        linkLastTrain = is18048Day(selectedDate) ? '18048' : '17226';
+                      } else if (matchedLink && matchedLink.train_numbers && matchedLink.train_numbers.trim() && matchedLink.train_numbers.toUpperCase() !== 'REST') {
                         let dynamicTrainNums = matchedLink.train_numbers;
-                        const cId = parseInt(lDef.categoryId, 10);
-                        const lNum = parseInt(lDef.linkNum, 10);
-                        if (cId === 1 && lNum === 15) {
-                          dynamicTrainNums = is18047Day(selectedDate) ? '67230, 18047' : '67230, 17225';
-                        } else if (cId === 1 && lNum === 16) {
+                        if (cId === 1 && lNum === 16) {
                           const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
                           const dow = d.getDay();
                           const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
@@ -6050,8 +6382,6 @@ export default function App() {
                         } else if (cId === 1 && lNum === 17) {
                           const retT = is18048Day(selectedDate) ? '18048' : '17226';
                           dynamicTrainNums = `${retT}, 57201`;
-                        } else if (cId === 2 && lNum === 50) {
-                          dynamicTrainNums = is18047Day(selectedDate) ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
                         } else if (cId === 2 && lNum === 51) {
                           const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
                           const dow = d.getDay();
@@ -6071,8 +6401,8 @@ export default function App() {
                         linkCoach = matchedLink.coaches.trim();
                       }
 
-                      const baselineFirstTrain = lDef.firstTrain || slot.firstTrain || linkFirstTrain || effectiveSlotFirstTrain;
-                      const baselineLastTrain = lDef.lastTrain || slot.lastTrain || effectiveSlotLastTrain || linkLastTrain;
+                      const baselineFirstTrain = isDynamicAmaravatiSlot ? linkFirstTrain : (lDef.firstTrain || slot.firstTrain || linkFirstTrain || effectiveSlotFirstTrain);
+                      const baselineLastTrain = isDynamicAmaravatiSlot ? linkLastTrain : (lDef.lastTrain || slot.lastTrain || effectiveSlotLastTrain || linkLastTrain);
                       const baselineFirstCoach = lDef.firstCoach || linkCoach || slot.firstCoach;
                       const baselineLastCoach = lDef.lastCoach || slot.lastCoach || linkCoach || '-';
 
@@ -6107,14 +6437,14 @@ export default function App() {
                       let regularStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) && 
-                        (parseInt(d.link_number, 10) === parseInt(lDef.linkNum, 10) || (Array.isArray(lDef.altLinkNums) && lDef.altLinkNums.some(alt => parseInt(alt, 10) === parseInt(d.link_number, 10)))) &&
+                        parseInt(d.link_number, 10) === parseInt(lDef.linkNum, 10) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
                       // 3. Or original staff who is SICK/LEAVE/CR or AVAILABLE_FOR_BOOKING or SUBSTITUTE or UTILISED_ADVANCE or CHANGED_LINK or EXTRA_CREW on this link
                       let originalSickOrLeaveDuty = staffDuties.find(d =>
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) &&
-                        (parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) || (Array.isArray(lDef.altLinkNums) && lDef.altLinkNums.some(alt => parseInt(alt, 10) === parseInt(d.original_link_number, 10)))) &&
+                        parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                         (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
                       );
@@ -6162,7 +6492,7 @@ export default function App() {
 
                       let staffDuty = overriddenStaffDuty || (subId 
                         ? staffDuties.find(s => !activeWorkedStaffIds.has(s.staffId) && s.staffId === subId && s.name && !s.name.includes('VACANT') && s.name.trim() !== 'V' && !s.isVacant) 
-                        : (regularStaffDuty && (regularStaffDuty.status === 'AVAILABLE_FOR_BOOKING' || regularStaffDuty.status === 'SUBSTITUTE' || regularStaffDuty.status === 'UTILISED_ADVANCE') ? null : regularStaffDuty));
+                        : (originalSickOrLeaveDuty ? null : (regularStaffDuty && (regularStaffDuty.status === 'AVAILABLE_FOR_BOOKING' || regularStaffDuty.status === 'SUBSTITUTE' || regularStaffDuty.status === 'UTILISED_ADVANCE') ? null : regularStaffDuty)));
 
                       const isRealHumanStaff = staffDuty && staffDuty.name && !staffDuty.name.includes('VACANT') && staffDuty.name.trim() !== 'V' && !staffDuty.isVacant;
 
@@ -7299,7 +7629,7 @@ export default function App() {
                                               )}
                                               {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && d.originalStaffName && (
                                                 <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                  Sub for {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
+                                                  {d.isVacant ? 'Vacated by' : 'Sub for'} {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
                                                 </span>
                                               )}
                                               {d.muster_code && (
@@ -7753,8 +8083,10 @@ export default function App() {
                       </table>
                     </div>
 
-                    {/* Non-Daily Links Roster Section (Links #60, #61, #62) */}
+                    {/* Non-Daily Links Roster Section (Links #53, #54, #55 from 01/10/2026) */}
                     {(() => {
+                      const isOctNonDaily = !selectedDate || selectedDate >= '2026-10-01';
+                      const nonDailyHeaderLinks = isOctNonDaily ? 'Links #53, #54, #55' : 'Links #60, #61, #62';
                       const filteredNonDailySlotRows = !dailyStaffSearch.trim()
                         ? nonDailySlotRows
                         : nonDailySlotRows.filter(slot => {
@@ -7783,14 +8115,16 @@ export default function App() {
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  🚆 Non-Daily Links Roster (Links #60, #61, #62)
+                                  🚆 Non-Daily Links Roster ({nonDailyHeaderLinks})
                                 </h3>
                                 <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', fontWeight: 700, fontSize: '0.78rem', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
                                   3 Cyclic Links
                                 </span>
                               </div>
                               <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', margin: '4px 0 0 0' }}>
-                                Dedicated 4-day non-daily sleeper links (Trains 22882/22881, 17221/17222, 17069/17262) and Weekly Rest cycle.
+                                {isOctNonDaily
+                                  ? 'Dedicated 4-day non-daily sleeper links (Links #53, #54, #55 and Link #56 Weekly Rest cycle).'
+                                  : 'Dedicated 4-day non-daily sleeper links (Trains 22882/22881, 17221/17222, 17069/17262) and Weekly Rest cycle.'}
                               </p>
                             </div>
                           </div>
@@ -8101,7 +8435,7 @@ export default function App() {
                                                 )}
                                                 {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && d.originalStaffName && (
                                                   <span className="badge" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--primary)', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                    Sub for {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
+                                                    {d.isVacant ? 'Vacated by' : 'Sub for'} {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
                                                   </span>
                                                 )}
                                                 {d.muster_code && (
@@ -8625,8 +8959,10 @@ export default function App() {
                       const cat2 = (dailyDuties.categories || []).find(c => c.categoryId === 2);
                       const cat2Staff = cat2 ? (cat2.staff || []) : [];
 
-                      // 3 cyclic links: 60, 61, 62
-                      const cyclicPoolLinks = [60, 61, 62];
+                      // 3 cyclic links: 53, 54, 55 from Oct 1, 2026 (60, 61, 62 before Oct 1, 2026)
+                      const isOctNonDailyPool = !selectedDate || selectedDate >= '2026-10-01';
+                      const cyclicPoolLinks = isOctNonDailyPool ? [53, 54, 55] : [60, 61, 62];
+                      const cyclicPoolLinksLabel = isOctNonDailyPool ? '#53, #54, #55' : '#60, #61, #62';
                       const evaluatedPoolDuties = cyclicPoolLinks.map(linkNum => {
                         const duty = cat2Staff.find(s => 
                           parseInt(s.original_link_number, 10) === linkNum || 
@@ -8672,12 +9008,70 @@ export default function App() {
                       const busyMultiDayStaff = evaluatedPoolDuties.filter(item => item.duty && !item.isVacant && (item.isReturnLeg || item.isHqRestLeg || item.isShiftedOther || item.isAssignedExtra));
                       const displayPoolItems = poolFilterMode === 'available' ? availablePoolItems : evaluatedPoolDuties;
 
+                      const prevDateObj = new Date(dObj.getTime());
+                      prevDateObj.setDate(prevDateObj.getDate() - 1);
+                      const prevSelectedDay = weekdayNames[isNaN(prevDateObj.getDay()) ? 0 : prevDateObj.getDay()] || 'SUNDAY';
+                      const prevShortDay = prevSelectedDay.slice(0, 3);
+
+                      const findAssignedStaffForNonDailyTrain = (item) => {
+                        if (!item) return null;
+                        const t1 = String(item.train_number || '').trim();
+                        const t2 = String(item.last_day_train_number || '').trim();
+                        const itemDay = String(item.day_of_week || '').toUpperCase().trim();
+
+                        return staffDuties.find(s => {
+                          // 1. Conductors (COR, Category 1) NEVER work Non-Daily Sleeper trains
+                          if (parseInt(s.categoryId, 10) === 1) return false;
+
+                          // 2. Must have an explicit Non-Daily / Extra Train assignment (never match regular daily link train_numbers!)
+                          const extra = String(s.extra_train_no || '').trim();
+                          if (!extra) return false;
+
+                          const isNonDailyAssignment =
+                            s.shifted_place === 'NON_DAILY_TRAIN' ||
+                            s.shifted_place === 'NON_DAILY_RETURN' ||
+                            s.is_extra === 1 ||
+                            s.status === 'EXTRA_CREW';
+                          if (!isNonDailyAssignment) return false;
+
+                          const ovReason = String(s.overrideReason || s.reason || '').trim();
+                          const isReturnLeg = s.shifted_place === 'NON_DAILY_RETURN' || /day\s*2\s*return/i.test(ovReason);
+
+                          // Exclude Extra Crew assigned to a regular Daily Train slot (e.g. shifted_place = 'Train 12604')
+                          if (
+                            s.shifted_place &&
+                            s.shifted_place !== 'NON_DAILY_TRAIN' &&
+                            s.shifted_place !== 'NON_DAILY_RETURN' &&
+                            !/non-daily|special/i.test(ovReason) &&
+                            ['12603', '12604', '17261', '17262', '20629', '20630', '12733', '12734', '17225', '17226', '18047', '18048'].includes(extra)
+                          ) {
+                            return false;
+                          }
+
+                          if (isReturnLeg) {
+                            if (itemDay && !(itemDay === prevSelectedDay || itemDay === prevShortDay || itemDay.includes(prevSelectedDay) || itemDay.includes(prevShortDay))) {
+                              return false;
+                            }
+                            if (t1 && ovReason.includes(t1)) return true;
+                            if (t2 && (extra === t2 || extra.split(/[/,\s]+/).includes(t2)) && !/return\s+of/i.test(ovReason)) return true;
+                            return false;
+                          }
+
+                          if (itemDay && !(itemDay === currentSelectedDay || itemDay === shortDay || itemDay.includes(currentSelectedDay) || itemDay.includes(shortDay))) {
+                            return false;
+                          }
+
+                          const extraParts = extra.split(/[/,\s]+/).map(p => p.trim()).filter(Boolean);
+                          if (t1 && t2 && (extra === `${t1}/${t2}` || (extraParts.includes(t1) && extraParts.includes(t2)))) return true;
+                          if (t1 && (extra === t1 || extraParts.includes(t1))) return true;
+                          return false;
+                        }) || null;
+                      };
+
                       const searchedTrains = displayTrains.filter(item => {
                         if (!dailyNonDailySearch.trim()) return true;
                         const q = dailyNonDailySearch.toLowerCase().trim();
-                        const staffOnTrain = staffDuties.find(s => 
-                          s.extra_train_no && String(s.extra_train_no).trim() === String(item.train_number).trim()
-                        );
+                        const staffOnTrain = findAssignedStaffForNonDailyTrain(item);
                         const staffName = staffOnTrain ? staffOnTrain.name : '';
                         const trainMatch = item.train_number && item.train_number.toLowerCase().includes(q);
                         const stnMatch = (item.departure_station && item.departure_station.toLowerCase().includes(q)) || 
@@ -8690,7 +9084,7 @@ export default function App() {
 
                       return (
                         <div style={{ marginBottom: '28px' }}>
-                          {/* 1. NON-DAILY CYCLIC STAFF POOL (LINKS #60 - #62) */}
+                          {/* 1. NON-DAILY CYCLIC STAFF POOL */}
                           {false && (
                           <div className="card" style={{ 
                             display: 'none',
@@ -8704,14 +9098,14 @@ export default function App() {
                               <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    🚆 Non-Daily Cyclic Staff Pool (Links #60, #61, #62)
+                                    🚆 Non-Daily Cyclic Staff Pool (Links {cyclicPoolLinksLabel})
                                   </h3>
                                   <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', fontWeight: 700, fontSize: '0.78rem', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
                                     {availablePoolItems.length} Available / 3 Total
                                   </span>
                                 </div>
                                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', margin: '5px 0 0 0' }}>
-                                  These 3 employees rotate through Non-Daily Duty Links (#60, #61, #62) on <strong>{currentSelectedDay} ({selectedDate})</strong>. Drag any available employee below to assign them to a scheduled service.
+                                  These 3 employees rotate through Non-Daily Duty Links ({cyclicPoolLinksLabel}) on <strong>{currentSelectedDay} ({selectedDate})</strong>. Drag any available employee below to assign them to a scheduled service.
                                 </p>
                               </div>
                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -8799,7 +9193,7 @@ export default function App() {
                                   ℹ️ No Cyclic Pool Staff Available for Assignment Today
                                 </div>
                                 <div style={{ fontSize: '0.84rem', maxWidth: '600px', margin: '0 auto', color: 'var(--color-text-muted)' }}>
-                                  All employees rotating through Links #60, #61, and #62 are currently outstation working multi-day legs, availing statutory HQ rest, or assigned to other beats.
+                                  All employees rotating through Links {cyclicPoolLinksLabel} are currently outstation working multi-day legs, availing statutory HQ rest, or assigned to other beats.
                                 </div>
                                 <button
                                   type="button"
@@ -9198,22 +9592,16 @@ export default function App() {
                                 </thead>
                                 <tbody>
                                   {searchedTrains.map((item, idx) => {
-                                    // Live assigned staff check on selectedDate (matches 1st day or return train)
-                                    const staffOnTrain = staffDuties.find(s => {
-                                      const t1 = String(item.train_number || '').trim();
-                                      const t2 = String(item.last_day_train_number || '').trim();
-                                      const extra = String(s.extra_train_no || '').trim();
-                                      const dutyCode = String(s.dutyCode || s.code || s.train_numbers || s.trainNo || '').trim();
-                                      const reason = String(s.reason || s.remarks || '').trim();
-
-                                      if (t1 && (extra === t1 || extra.includes(t1) || dutyCode === t1 || dutyCode.includes(t1) || reason.includes(t1))) return true;
-                                      if (t2 && (extra === t2 || extra.includes(t2) || dutyCode === t2 || dutyCode.includes(t2) || reason.includes(t2))) return true;
-                                      return false;
-                                    });
+                                    // Live assigned staff check on selectedDate (only explicit Non-Daily assignments, never COR or daily links)
+                                    const staffOnTrain = findAssignedStaffForNonDailyTrain(item);
+                                    const fallbackStaffObj = (!staffOnTrain && item.assigned_staff_id)
+                                      ? (allStaffList || []).find(st => String(st.id) === String(item.assigned_staff_id))
+                                      : null;
+                                    const isFallbackCor = fallbackStaffObj && parseInt(fallbackStaffObj.category_id, 10) === 1;
                                     const assignedStaff = staffOnTrain || null;
-                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : (item.assigned_staff_name || null);
-                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : (item.assigned_staff_name ? 'TTI' : '');
-                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : (item.assigned_staff_id || null);
+                                    const assignedStaffName = staffOnTrain ? staffOnTrain.name : (!isFallbackCor ? (item.assigned_staff_name || null) : null);
+                                    const assignedStaffDesg = staffOnTrain ? (staffOnTrain.designation || 'TTI') : (!isFallbackCor && item.assigned_staff_name ? 'TTI' : '');
+                                    const assignedStaffId = staffOnTrain ? staffOnTrain.staffId : (!isFallbackCor ? (item.assigned_staff_id || null) : null);
 
                                     const isRowOver = dragOverNonDailyId === item.id;
 
@@ -9295,100 +9683,53 @@ export default function App() {
                                           )}
                                         </td>
 
-                                        {/* ASSIGNED CREW / INTERACTIVE DRAG & DROP ZONE */}
-                                        <td style={{ padding: '8px' }}>
-                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                            {assignedStaffName ? (
-                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                                                <span className="badge badge-approved" style={{ fontSize: '0.84rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                                  👤 <strong>{assignedStaffName}</strong> ({assignedStaffDesg})
-                                                </span>
-                                                {isAdmin && (
-                                                  <button
-                                                    type="button"
-                                                    className="btn btn-secondary"
-                                                    onClick={() => handleUnassignStaffFromNonDailyTrain(assignedStaffId, item.id)}
-                                                    style={{
-                                                      padding: '3px 8px',
-                                                      fontSize: '0.72rem',
-                                                      fontWeight: 700,
-                                                      borderRadius: '6px',
-                                                      background: 'rgba(239, 68, 68, 0.15)',
-                                                      color: '#ef4444',
-                                                      border: '1px solid rgba(239, 68, 68, 0.35)',
-                                                      cursor: 'pointer'
-                                                    }}
-                                                    title="Remove employee from this service"
-                                                  >
-                                                    ↩️ Unassign
-                                                  </button>
-                                                )}
-                                              </div>
-                                            ) : (
-                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                                                <span className="badge" style={{ 
-                                                  fontSize: '0.78rem', 
-                                                  padding: '4px 8px', 
-                                                  background: 'rgba(239, 68, 68, 0.1)', 
-                                                  color: '#f87171', 
-                                                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                                                  fontWeight: 600
-                                                }}>
-                                                  ⚠️ Vacant / Unassigned
-                                                </span>
-                                                {isAdmin && (
-                                                  <button
-                                                    type="button"
-                                                    className="btn btn-primary"
-                                                    onClick={() => {
-                                                      setQuickAssignNonDailyTrain(item);
-                                                      setQuickAssignSearch('');
-                                                      setQuickAssignShowBusy(false);
-                                                      setQuickAssignCatId('ALL');
-                                                    }}
-                                                    style={{
-                                                      padding: '4px 10px',
-                                                      fontSize: '0.74rem',
-                                                      fontWeight: 700,
-                                                      borderRadius: '6px',
-                                                      cursor: 'pointer',
-                                                      display: 'inline-flex',
-                                                      alignItems: 'center',
-                                                      gap: '4px'
-                                                    }}
-                                                    title={`Assign staff to Train ${item.train_number}`}
-                                                  >
-                                                    ➕ Assign Staff
-                                                  </button>
-                                                )}
-                                              </div>
-                                            )}
-
-                                            {/* Drop Target Box */}
-                                            {isAdmin && (
-                                              <div 
-                                                className="no-print"
-                                                style={{
-                                                  padding: assignedStaffName ? '3px 8px' : '6px 12px',
-                                                  border: isRowOver ? '2px dashed #10b981' : (draggedStaff ? '1.5px dashed rgba(59, 130, 246, 0.6)' : (assignedStaffName ? '1px dashed rgba(255,255,255,0.1)' : '1.5px dashed rgba(212, 161, 92, 0.4)')),
-                                                  borderRadius: '6px',
-                                                  textAlign: 'center',
-                                                  fontSize: '0.74rem',
-                                                  fontWeight: 600,
-                                                  color: isRowOver ? '#10b981' : (draggedStaff ? '#60a5fa' : (assignedStaffName ? 'var(--color-text-muted)' : 'var(--primary)')),
-                                                  background: isRowOver ? 'rgba(16, 185, 129, 0.2)' : (draggedStaff ? 'rgba(59, 130, 246, 0.08)' : (assignedStaffName ? 'transparent' : 'rgba(212, 161, 92, 0.06)')),
-                                                  cursor: draggedStaff ? 'copy' : 'default',
-                                                  transition: 'all 0.15s ease'
-                                                }}
-                                              >
-                                                {isRowOver
-                                                  ? `🟢 Release to assign ${draggedStaff?.staffName || 'employee'} to Train ${item.train_number}!`
-                                                  : (draggedStaff
-                                                    ? `📥 Drop here to assign ${draggedStaff.staffName}`
-                                                    : (assignedStaffName ? '⇄ Drag new employee here to reassign' : `📥 Drop employee here to assign Train ${item.train_number}`))}
-                                              </div>
-                                            )}
-                                          </div>
+                                        {/* ASSIGNED CREW */}
+                                        <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                                          {assignedStaffName ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                              <span className="badge badge-approved" style={{ fontSize: '0.84rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                                👤 <strong>{assignedStaffName}</strong> ({assignedStaffDesg})
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                              <span className="badge" style={{ 
+                                                fontSize: '0.78rem', 
+                                                padding: '4px 8px', 
+                                                background: 'rgba(239, 68, 68, 0.1)', 
+                                                color: '#f87171', 
+                                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                                fontWeight: 600
+                                              }}>
+                                                ⚠️ Vacant / Unassigned
+                                              </span>
+                                              {isAdmin && (
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-primary no-print"
+                                                  onClick={() => {
+                                                    setQuickAssignNonDailyTrain(item);
+                                                    setQuickAssignSearch('');
+                                                    setQuickAssignShowBusy(false);
+                                                    setQuickAssignCatId('ALL');
+                                                  }}
+                                                  style={{
+                                                    padding: '4px 10px',
+                                                    fontSize: '0.74rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                  }}
+                                                  title={`Assign staff to Train ${item.train_number}`}
+                                                >
+                                                  ➕ Assign Staff
+                                                </button>
+                                              )}
+                                            </div>
+                                          )}
                                         </td>
 
                                         <td>
@@ -13545,142 +13886,380 @@ export default function App() {
         {/* ----------------------------------------------------
             TAB 7: AUDIT LOGS
             ---------------------------------------------------- */}
-        {activeTab === 'audit' && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div>
-                <div className="card-title" style={{ margin: 0 }}>System Audit Trail & History</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                  Track, monitor, and instantly undo any past roster modifications, link edits, or duty assignments.
+        {activeTab === 'audit' && (() => {
+          const moduleFilterOptions = [
+            { id: 'ALL', label: '🌐 All Modules' },
+            { id: 'Daily Summary', label: '📋 Daily Summary / Roster' },
+            { id: 'Monthly Movement', label: '📅 Monthly Movement' },
+            { id: 'Muster Roll', label: '📑 Muster Roll' },
+            { id: 'TA', label: '🚆 TA Journal & Approvals' },
+            { id: 'NDA', label: '🌙 NDA Journal' },
+            { id: 'Diary', label: '📔 Staff Diary' },
+            { id: 'Daily Earnings', label: '💰 Daily Earnings' },
+            { id: 'Leave / Swap', label: '🔄 Leave / Swap / Duty Change' },
+            { id: 'LR Sheet', label: '🗂️ LR Sheet' },
+            { id: 'Staff', label: '👤 Staff & Master Data' }
+          ];
+
+          const filteredAuditLogs = auditLogs.filter((log) => {
+            const whereInfo = log.where_saved || {};
+            const endpointStr = String(whereInfo.endpoint || '');
+            const callerStr = String(whereInfo.frontend_caller || '');
+            const sourceModule = String(whereInfo.source_module || '');
+            const savedTables = Array.isArray(whereInfo.saved_tables) ? whereInfo.saved_tables.join(' ') : '';
+            const linkedModules = Array.isArray(whereInfo.linked_modules) ? whereInfo.linked_modules.join(' ') : '';
+            const whatSaved = String(log.what_saved || log.description || '');
+            const desc = String(log.description || '');
+            const act = String(log.action_type || '');
+
+            if (auditModuleFilter && auditModuleFilter !== 'ALL') {
+              const modQuery = auditModuleFilter.toLowerCase();
+              const combinedMod = `${endpointStr} ${callerStr} ${sourceModule} ${savedTables} ${linkedModules} ${act} ${desc}`.toLowerCase();
+              if (!combinedMod.includes(modQuery)) return false;
+            }
+
+            if (auditSearch && auditSearch.trim()) {
+              const q = auditSearch.trim().toLowerCase();
+              const combined = `${log.timestamp || ''} ${log.user_role || ''} ${act} ${endpointStr} ${callerStr} ${sourceModule} ${savedTables} ${linkedModules} ${whatSaved} ${desc}`.toLowerCase();
+              if (!combined.includes(q)) return false;
+            }
+            return true;
+          });
+
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div className="card-title" style={{ margin: 0 }}>System Audit Trail — What Is Saved & Where It Is Saved</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                    Complete real-time record of every save, edit, sync, and reset — showing the exact API Endpoint, Frontend Source, Primary DB Table, and Synced Modules.
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {isAdmin && auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type)) && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => {
-                      const latestAction = auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type));
-                      if (latestAction) handleUndoAuditLog(latestAction);
-                    }}
+                    onClick={() => setShowEndpointExplorer(!showEndpointExplorer)}
                     style={{
                       fontSize: '0.82rem',
                       padding: '6px 14px',
                       fontWeight: 700,
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      color: '#f87171',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      background: showEndpointExplorer ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.1)',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(56, 189, 248, 0.45)',
                       cursor: 'pointer'
                     }}
-                    title="Instantly undo the most recent action"
                   >
-                    ↩️ Undo Last Action
+                    {showEndpointExplorer ? '🔼 Hide Endpoint & Data-Flow Map' : '🗺️ View Endpoint & Data-Flow Map'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={fetchAuditLogs}
-                  style={{ fontSize: '0.82rem', padding: '6px 14px' }}
-                >
-                  🔄 Refresh Logs
-                </button>
+                  <input
+                    type="text"
+                    placeholder="🔍 Search endpoint, employee, date, train, table..."
+                    value={auditSearch}
+                    onChange={(e) => setAuditSearch(e.target.value)}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '0.82rem',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-border)',
+                      background: 'rgba(15, 23, 42, 0.7)',
+                      color: 'var(--color-text-primary)',
+                      minWidth: '250px'
+                    }}
+                  />
+                  {isAdmin && auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type)) && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const latestAction = auditLogs.find(l => l.is_undone !== 1 && l.action_type !== 'UNDO' && !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER'].includes(l.action_type) && !/^\d{4}-\d{2}-\d{2}$/.test(l.action_type));
+                        if (latestAction) handleUndoAuditLog(latestAction);
+                      }}
+                      style={{
+                        fontSize: '0.82rem',
+                        padding: '6px 14px',
+                        fontWeight: 700,
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        color: '#f87171',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        cursor: 'pointer'
+                      }}
+                      title="Instantly undo the most recent action"
+                    >
+                      ↩️ Undo Last Action
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={fetchAuditLogs}
+                    style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                  >
+                    🔄 Refresh Logs ({filteredAuditLogs.length}/{auditLogs.length})
+                  </button>
+                </div>
               </div>
-            </div>
-            
-            <div className="data-table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '150px' }}>Timestamp (UTC)</th>
-                    <th style={{ width: '100px' }}>User Role</th>
-                    <th style={{ width: '160px' }}>Action Type</th>
-                    <th>Description / Details</th>
-                    {isAdmin && <th style={{ width: '110px', textAlign: 'center' }}>Action</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLogs.map((log) => {
-                    const isUndone = log.is_undone === 1;
-                    const isReversionLog = log.action_type === 'UNDO';
-                    const isEligibleForUndo = !isReversionLog && (
-                      !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER', 'UNDO'].includes(log.action_type) &&
-                      !/^\d{4}-\d{2}-\d{2}$/.test(log.action_type)
-                    );
 
-                    return (
-                      <tr key={log.id} style={{ opacity: isUndone ? 0.6 : 1, background: isUndone ? 'rgba(0,0,0,0.1)' : 'transparent' }}>
-                        <td style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>{log.timestamp}</td>
-                        <td>
-                          <span className="badge badge-approved" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--color-text-primary)' }}>
-                            {log.user_role}
-                          </span>
-                        </td>
-                        <td>
-                          <strong style={{ color: log.action_type === 'EXCHANGE_STAFF' ? '#06b6d4' : log.action_type === 'UNDO' ? '#94a3b8' : 'inherit' }}>
-                            {log.action_type}
-                          </strong>
-                          {isUndone && (
-                            <span className="badge" style={{ marginLeft: '6px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid #ef4444', fontSize: '0.68rem', padding: '1px 6px' }}>
-                              ↩️ UNDONE
+              {/* Interactive Backend & Frontend Endpoint Data-Flow Explorer */}
+              {showEndpointExplorer && <BackendEndpointExplorer />}
+
+              {/* Module Filter Bar */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+                {moduleFilterOptions.map((opt) => {
+                  const isActive = auditModuleFilter === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setAuditModuleFilter(opt.id)}
+                      style={{
+                        padding: '5px 11px',
+                        fontSize: '0.75rem',
+                        fontWeight: isActive ? 700 : 500,
+                        borderRadius: '999px',
+                        border: isActive ? '1px solid #38bdf8' : '1px solid rgba(148, 163, 184, 0.25)',
+                        background: isActive ? 'rgba(56, 189, 248, 0.18)' : 'rgba(15, 23, 42, 0.5)',
+                        color: isActive ? '#38bdf8' : 'var(--color-text-secondary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '145px' }}>Timestamp (UTC)</th>
+                      <th style={{ width: '90px' }}>Role</th>
+                      <th style={{ width: '165px' }}>Action Type</th>
+                      <th style={{ width: '320px' }}>Where It Is Saved (Endpoint, Source, DB & Linked Modules)</th>
+                      <th>What Is Saved (Change Summary, Values & Counts)</th>
+                      {isAdmin && <th style={{ width: '95px', textAlign: 'center' }}>Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAuditLogs.map((log) => {
+                      const isUndone = log.is_undone === 1;
+                      const isReversionLog = log.action_type === 'UNDO';
+                      const isEligibleForUndo = !isReversionLog && (
+                        !['USER_LOGIN', 'USER_LOGOUT', 'USER_REGISTER', 'EXPORT_REPORT', 'VIEW_ROSTER', 'UNDO'].includes(log.action_type) &&
+                        !/^\d{4}-\d{2}-\d{2}$/.test(log.action_type)
+                      );
+
+                      const whereInfo = log.where_saved || {
+                        endpoint: 'POST /api/...',
+                        source_module: 'System',
+                        saved_tables: ['audit_logs'],
+                        linked_modules: []
+                      };
+                      const savedTables = Array.isArray(whereInfo.saved_tables) ? whereInfo.saved_tables : [];
+                      const linkedModules = Array.isArray(whereInfo.linked_modules) ? whereInfo.linked_modules : [];
+
+                      let parsedMeta = null;
+                      if (log.undo_data) {
+                        try {
+                          parsedMeta = typeof log.undo_data === 'string' ? JSON.parse(log.undo_data) : log.undo_data;
+                        } catch (e) {
+                          parsedMeta = null;
+                        }
+                      }
+
+                      return (
+                        <tr key={log.id} style={{ opacity: isUndone ? 0.6 : 1, background: isUndone ? 'rgba(0,0,0,0.1)' : 'transparent', verticalAlign: 'top' }}>
+                          <td style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                            {log.timestamp}
+                          </td>
+                          <td>
+                            <span className="badge badge-approved" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-primary)', fontSize: '0.73rem' }}>
+                              {log.user_role}
                             </span>
-                          )}
-                        </td>
-                        <td style={{ textDecoration: isUndone ? 'line-through' : 'none', color: isUndone ? 'var(--color-text-secondary)' : 'inherit' }}>
-                          {log.description}
-                        </td>
-                        {isAdmin && (
-                          <td style={{ textAlign: 'center' }}>
-                            {isUndone ? (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-                                Undone
-                              </span>
-                            ) : isReversionLog ? (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                                -
-                              </span>
-                            ) : isEligibleForUndo ? (
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => handleUndoAuditLog(log)}
-                                style={{
-                                  padding: '4px 10px',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700,
-                                  borderRadius: '6px',
-                                  background: 'rgba(239, 68, 68, 0.12)',
-                                  color: '#f87171',
-                                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                                  cursor: 'pointer',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                title="Undo this action and restore previous state"
-                              >
-                                ↩️ Undo
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                                -
-                              </span>
+                          </td>
+                          <td>
+                            <strong style={{
+                              fontSize: '0.8rem',
+                              color: log.action_type === 'EXCHANGE_STAFF'
+                                ? '#06b6d4'
+                                : log.action_type === 'UNDO'
+                                ? '#94a3b8'
+                                : log.action_type?.includes('SAVE') || log.action_type?.includes('APPROVE')
+                                ? '#34d399'
+                                : log.action_type?.includes('RESET') || log.action_type?.includes('DELETE') || log.action_type?.includes('REJECT')
+                                ? '#f87171'
+                                : '#60a5fa'
+                            }}>
+                              {log.action_type}
+                            </strong>
+                            {isUndone && (
+                              <div style={{ marginTop: '4px' }}>
+                                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid #ef4444', fontSize: '0.66rem', padding: '1px 6px' }}>
+                                  ↩️ UNDONE
+                                </span>
+                              </div>
                             )}
                           </td>
-                        )}
+
+                          {/* WHERE IT IS SAVED */}
+                          <td style={{ fontSize: '0.78rem', lineHeight: 1.45 }}>
+                            {whereInfo.endpoint && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Endpoint: </span>
+                                <code
+                                  style={{
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(245, 158, 11, 0.15)',
+                                    color: '#fbbf24',
+                                    fontWeight: 700,
+                                    fontSize: '0.71rem'
+                                  }}
+                                >
+                                  {whereInfo.endpoint}
+                                </code>
+                              </div>
+                            )}
+                            <div style={{ marginBottom: '4px' }}>
+                              <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Source: </span>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '1px 7px',
+                                borderRadius: '4px',
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                color: '#38bdf8',
+                                fontWeight: 700,
+                                fontSize: '0.74rem'
+                              }}>
+                                {whereInfo.source_module || 'System'}
+                              </span>
+                            </div>
+                            {savedTables.length > 0 && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>DB Tables: </span>
+                                <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '3px' }}>
+                                  {savedTables.map((tbl, idx) => (
+                                    <code
+                                      key={idx}
+                                      style={{
+                                        padding: '1px 5px',
+                                        borderRadius: '3px',
+                                        background: 'rgba(16, 185, 129, 0.14)',
+                                        color: '#6ee7b7',
+                                        fontSize: '0.7rem'
+                                      }}
+                                    >
+                                      {tbl}
+                                    </code>
+                                  ))}
+                                </span>
+                              </div>
+                            )}
+                            {linkedModules.length > 0 && (
+                              <div>
+                                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Synced To: </span>
+                                <span style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>
+                                  {linkedModules.join(' • ')}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* WHAT IS SAVED */}
+                          <td style={{ textDecoration: isUndone ? 'line-through' : 'none', color: isUndone ? 'var(--color-text-secondary)' : 'inherit', fontSize: '0.82rem', lineHeight: 1.45 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                              {log.what_saved || log.description}
+                            </div>
+                            {log.what_saved && log.description && log.what_saved !== log.description && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                {log.description}
+                              </div>
+                            )}
+                            {parsedMeta && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '5px' }}>
+                                {parsedMeta.saved_count !== undefined && (
+                                  <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.16)', color: '#34d399', fontSize: '0.7rem', fontWeight: 700 }}>
+                                    ✅ Saved: {parsedMeta.saved_count}
+                                  </span>
+                                )}
+                                {parsedMeta.error_count !== undefined && Number(parsedMeta.error_count) > 0 && (
+                                  <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.18)', color: '#f87171', fontSize: '0.7rem', fontWeight: 700 }}>
+                                    ⚠️ Errors: {parsedMeta.error_count}
+                                  </span>
+                                )}
+                                {parsedMeta.staff_name && (
+                                  <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(148, 163, 184, 0.14)', color: '#e2e8f0', fontSize: '0.7rem' }}>
+                                    👤 {parsedMeta.staff_name} {parsedMeta.staff_id ? `(#${parsedMeta.staff_id})` : ''}
+                                  </span>
+                                )}
+                                {!parsedMeta.staff_name && parsedMeta.staff_id && (
+                                  <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(148, 163, 184, 0.14)', color: '#e2e8f0', fontSize: '0.7rem' }}>
+                                    👤 Staff #{parsedMeta.staff_id}
+                                  </span>
+                                )}
+                                {(parsedMeta.date || parsedMeta.date_str || parsedMeta.month) && (
+                                  <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.16)', color: '#a5b4fc', fontSize: '0.7rem' }}>
+                                    📅 {parsedMeta.date || parsedMeta.date_str || parsedMeta.month}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {isAdmin && (
+                            <td style={{ textAlign: 'center' }}>
+                              {isUndone ? (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                                  Undone
+                                </span>
+                              ) : isReversionLog ? (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                                  -
+                                </span>
+                              ) : isEligibleForUndo ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => handleUndoAuditLog(log)}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    background: 'rgba(239, 68, 68, 0.12)',
+                                    color: '#f87171',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Undo this action and restore previous state"
+                                >
+                                  ↩️ Undo
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                                  -
+                                </span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                    {filteredAuditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={isAdmin ? 6 : 5} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '20px' }}>
+                          No audit logs matching your current filter.
+                        </td>
                       </tr>
-                    );
-                  })}
-                  {auditLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={isAdmin ? 5 : 4} style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                        No audit logs available.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ----------------------------------------------------
             TAB 8: USER VERIFICATION & ADMIN APPROVAL PORTAL
@@ -14901,10 +15480,10 @@ export default function App() {
       {quickAssignNonDailyTrain && (() => {
         const q = quickAssignSearch.toLowerCase().trim();
 
-        // 1. Gather all non-vacant running staff (exclude Depot Incharges MV PRASAD & P PRATHAP who supervise depot and do not work train duties)
+        // 1. Gather all non-vacant running staff eligible for Non-Daily trains (exclude Conductors/COR Category 1 and Depot Incharges)
         const validStaff = (allStaffList || []).filter(s => 
           s.name && !s.name.toUpperCase().includes('VACANT') &&
-          s.category_id !== null && s.category_id !== undefined && s.row_position > 0 &&
+          s.category_id !== null && s.category_id !== undefined && parseInt(s.category_id, 10) !== 1 && s.row_position > 0 &&
           !['MV PRASAD', 'P PRATHAP'].includes(s.name.trim().toUpperCase())
         );
 
@@ -14928,7 +15507,8 @@ export default function App() {
 
           const isLR = s.category_id === 4;
           const linkNum = d ? parseInt(d.link_number, 10) : null;
-          const isNonDailyLink = (linkNum && [60, 61, 62].includes(linkNum)) || (s.category_id === 2 && [60, 61, 62].includes(s.row_position));
+          const nonDailyLinksForDate = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
+          const isNonDailyLink = (linkNum && nonDailyLinksForDate.includes(linkNum)) || (d && d.train_numbers && String(d.train_numbers).toUpperCase().includes('NON DAILY'));
           const isWeeklyRest = d && (d.isRest || d.status === 'REST' || d.train_numbers === 'REST') && !isLR;
           const isReleasedHq = d && d.status === 'AVAILABLE_FOR_BOOKING';
 
@@ -15107,11 +15687,10 @@ export default function App() {
                 {[
                   { id: 'ALL', label: '🟢 All Available' },
                   { id: '4', label: '📋 LR Relief Pool' },
-                  { id: 'NON_DAILY', label: '⚡ Non-Daily (60, 61, 62)' },
-                  { id: '1', label: '🚆 Conductors (COR)' },
+                  { id: 'NON_DAILY', label: '⚡ Non-Daily Pool' },
                   { id: '2', label: '🛌 Sleeper / TTI' },
                   { id: '3', label: '👩 Ladies / TTE' },
-                  { id: 'ENTIRE_ROSTER', label: '👥 All Employees' }
+                  { id: 'ENTIRE_ROSTER', label: '👥 All Non-COR Staff' }
                 ].map(cat => {
                   const isSelected = quickAssignCatId === cat.id;
                   return (

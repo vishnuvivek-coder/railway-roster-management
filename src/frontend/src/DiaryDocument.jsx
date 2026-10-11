@@ -235,13 +235,26 @@ export default function DiaryDocument({
 
   // Real-time synchronization across all tabs and documents
   useEffect(() => {
-    const handleRosterUpdate = () => {
+    const handleRosterUpdate = (e) => {
+      if (e?.detail?.source === 'diary_doc_save') return;
       if (selectedStaffId && startDate && endDate) {
         fetchDiary();
       }
     };
     window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
-    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+    window.addEventListener('railway_schedule_updated', handleRosterUpdate);
+    window.addEventListener('railway_muster_updated', handleRosterUpdate);
+    window.addEventListener('railway_ta_updated', handleRosterUpdate);
+    window.addEventListener('railway_lr_updated', handleRosterUpdate);
+    window.addEventListener('railway_earnings_updated', handleRosterUpdate);
+    return () => {
+      window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+      window.removeEventListener('railway_schedule_updated', handleRosterUpdate);
+      window.removeEventListener('railway_muster_updated', handleRosterUpdate);
+      window.removeEventListener('railway_ta_updated', handleRosterUpdate);
+      window.removeEventListener('railway_lr_updated', handleRosterUpdate);
+      window.removeEventListener('railway_earnings_updated', handleRosterUpdate);
+    };
   }, [selectedStaffId, startDate, endDate]);
 
   // Global Ctrl+S Shortcut to Save
@@ -517,6 +530,8 @@ export default function DiaryDocument({
         setHasUnsavedChanges(false);
         const timeStr = new Date().toLocaleTimeString();
         setStatusMsg(`Changes saved automatically (${timeStr})`);
+        window.dispatchEvent(new CustomEvent('railway_earnings_updated', { detail: { source: 'diary_doc_save', staffId: selectedStaffId } }));
+        window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail: { source: 'diary_doc_save', staffId: selectedStaffId } }));
         setTimeout(() => setStatusMsg(''), 4500);
       } else {
         if (!silent) alert(data.error || 'Failed to save Diary statement.');
@@ -583,6 +598,8 @@ export default function DiaryDocument({
       if (res.ok) {
         setStatusMsg('Reset to auto-generated master timetable.');
         fetchDiary();
+        window.dispatchEvent(new CustomEvent('railway_earnings_updated', { detail: { source: 'diary_doc_reset', staffId: selectedStaffId } }));
+        window.dispatchEvent(new CustomEvent('railway_audit_updated', { detail: { source: 'diary_doc_reset', staffId: selectedStaffId } }));
         setTimeout(() => setStatusMsg(''), 4000);
       } else {
         alert('Failed to reset statement.');

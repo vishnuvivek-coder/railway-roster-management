@@ -66,7 +66,9 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     // Determine roster duty for this staff member on dateStr
     const dayOffset = getDayOffset(staff.anchor_date, dateStr);
     const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
+    const subOverride = await get('SELECT * FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff.id, dateStr]);
     const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
+    const lrRecord = staff.category_id === 4 ? await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]) : null;
 
     let activeLink = null;
     let isOverridden = false;
@@ -79,9 +81,28 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     } else if (override) {
       activeLink = override.overridden_link_number;
       isOverridden = true;
-      if (override.status && override.status !== 'DUTY') {
-        dutyText = override.status;
+      if (override.extra_train_no) {
+        dutyText = override.extra_train_no;
+      } else if (override.advance_train_no) {
+        dutyText = override.advance_train_no;
+      } else if (override.status && override.status !== 'DUTY' && override.status !== 'CHANGED_LINK' && override.status !== 'SUBSTITUTE') {
+        dutyText = override.leave_type || override.status;
       }
+    } else if (subOverride && subOverride.status !== 'AVAILABLE_FOR_BOOKING') {
+      activeLink = subOverride.overridden_link_number !== null && subOverride.overridden_link_number !== undefined
+        ? subOverride.overridden_link_number
+        : subOverride.original_link_number;
+      isOverridden = true;
+      if (!activeLink) {
+        dutyText = subOverride.extra_train_no || 'SUBSTITUTE';
+      }
+    } else if (lrRecord && lrRecord.duty_code) {
+      activeLink = null;
+      isOverridden = true;
+      dutyText = lrRecord.duty_code === 'R' ? 'REST' : lrRecord.duty_code;
+    } else if (staff.category_id === 4) {
+      activeLink = null;
+      dutyText = 'SPARE (HQ)';
     } else {
       activeLink = getBaseLinkNumber(staff.row_position, dayOffset, staff.cycle_length);
       const d1 = new Date(dateStr);

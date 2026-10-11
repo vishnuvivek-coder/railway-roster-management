@@ -1,3 +1,72 @@
+/**
+ * ============================================================================
+ * RAILWAY ROSTER MANAGER — BACKEND API SERVER (`src/backend/server.js`)
+ * ============================================================================
+ *
+ * HOW DATA FLOWS ACROSS THE SYSTEM (WHERE DATA GOES WHEN SAVED):
+ * ----------------------------------------------------------------------------
+ * Every module in the application reads from and writes to its primary SQLite
+ * table(s), and automatically cascades updates to all linked tables via the
+ * Central Synchronization Functions in this file:
+ *
+ *   1. Daily Summary / Duty Movement  ──► Primary Table: `overrides`
+ *      • Endpoint: `POST /api/duty/change-status`, `POST /api/overrides`
+ *      • Syncs To: `muster_records`, `lr_sheet_records`, `ta_approvals`,
+ *                  `ta_entries`, `nda_entries`, `diary_entries`,
+ *                  `daily_earnings_entries`, `audit_logs`
+ *
+ *   2. Monthly Movement Grid          ──► Primary Tables: `overrides`, `roster_rest_adjustments`, `staff_rest_rules`
+ *      • Endpoint: `GET /api/roster`, `POST /api/roster/change-rest-day`
+ *      • Syncs To: `overrides`, `muster_records`, `ta_approvals`, `audit_logs`
+ *
+ *   3. Leave & Staff Swap / Exchange  ──► Primary Tables: `leave_requests`, `overrides`, `links`
+ *      • Endpoints: `POST /api/leave-requests/:id/approve`, `POST /api/duty/exchange-staff`
+ *      • Syncs To: `overrides`, `muster_records`, `lr_sheet_records`,
+ *                  `ta_approvals`, `ta_entries`, `nda_entries`, `diary_entries`,
+ *                  `daily_earnings_entries`, `audit_logs`
+ *
+ *   4. Muster Roll & Individual Muster ──► Primary Table: `muster_records`
+ *      • Endpoints: `POST /api/muster/update-cell`, `POST /api/muster/batch-update`
+ *      • Sync Helper: `syncMusterToSchedulesAndApprovals()`
+ *      • Syncs To: `overrides`, `lr_sheet_records`, `ta_approvals`, `ta_entries`,
+ *                  `nda_entries`, `diary_entries`, `daily_earnings_entries`, `audit_logs`
+ *
+ *   5. Leave Reserve (LR) Sheet       ──► Primary Table: `lr_sheet_records`
+ *      • Endpoints: `POST /api/lr-sheet/cell`, `POST /api/lr-sheet/batch-update`
+ *      • Sync Helper: `syncLRSheetCellChange()`
+ *      • Syncs To: `overrides`, `muster_records`, `ta_approvals`, `ta_entries`,
+ *                  `nda_entries`, `diary_entries`, `daily_earnings_entries`, `audit_logs`
+ *
+ *   6. TA Journal & TA Approvals      ──► Primary Tables: `ta_entries`, `ta_approvals`
+ *      • Endpoints: `POST /api/documents/ta/:staffId`, `POST /api/ta-approvals/accept*`
+ *      • Generator: `src/backend/ta_generator.js`
+ *      • Syncs To: `ta_approvals`, `ta_entries`, `overrides`, `muster_records`,
+ *                  `lr_sheet_records`, `nda_entries`, `diary_entries`, `daily_earnings_entries`
+ *
+ *   7. NDA Journal Document           ──► Primary Table: `nda_entries`
+ *      • Endpoint: `POST /api/documents/nda/:staffId`
+ *      • Generator: `src/backend/nda_generator.js`
+ *      • Syncs To: `overrides`, `muster_records`, `lr_sheet_records`, `ta_approvals`,
+ *                  `ta_entries`, `diary_entries`, `daily_earnings_entries`
+ *
+ *   8. Staff Diary (EFT Register)     ──► Primary Table: `diary_entries`
+ *      • Endpoint: `POST /api/documents/diary/:staffId`
+ *      • Generator: `src/backend/diary_generator.js`
+ *      • Syncs To: `daily_earnings_entries`, `overrides`, `muster_records`,
+ *                  `lr_sheet_records`, `ta_approvals`, `ta_entries`, `nda_entries`
+ *
+ *   9. Daily Earnings Sheet           ──► Primary Table: `daily_earnings_entries`
+ *      • Endpoints: `POST /api/documents/daily-earnings`, `/staff/:staffId`, `/range`
+ *      • Generator: `src/backend/daily_earnings_generator.js`
+ *      • Syncs To: `diary_entries`, `overrides`, `muster_records`, `lr_sheet_records`,
+ *                  `ta_approvals`, `ta_entries`, `nda_entries`
+ *
+ *  10. Audit Logs & Universal Undo    ──► Primary Table: `audit_logs`
+ *      • Endpoints: `GET /api/audit-logs`, `POST /api/audit-logs/:id/undo`,
+ *                   `GET /api/system/data-flow-map`
+ * ============================================================================
+ */
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -10,6 +79,12 @@ const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 const { findScheduledRestDate, computeRestAdjustment, getWeekday, getWeeklyRestWeekday } = require('./restAdjustment');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
 const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
+const {
+  ENDPOINT_GROUPS,
+  FLAT_ENDPOINTS,
+  lookupEndpointFlow,
+  dataFlowTraceMiddleware
+} = require('./endpoint_registry');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -18,6 +93,30 @@ const JWT_SECRET = process.env.JWT_SECRET || 'railway_roster_luxury_editorial_se
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+// Attach Data-Flow Tracer Middleware so every write endpoint logs where data went
+// and includes `_data_flow` in its JSON response.
+app.use(dataFlowTraceMiddleware);
+
+// System Data-Flow & Endpoint Map Endpoint (Inspect where every endpoint sends data)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/system/data-flow-map
+//   • Module          : System Architecture & Endpoint Data-Flow Map
+//   • Frontend Caller : App.jsx -> Data-Flow Map Viewer in Audit & Architecture Tab
+//   • Reads From DB   : None
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Returns this complete Endpoint & Data-Flow Registry so you can inspect every endpoint, where its data comes from, and which DB tables and UI modules it updates.
+// ============================================================================
+app.get('/api/system/data-flow-map', (req, res) => {
+  res.json({
+    success: true,
+    title: 'Railway Roster Manager — Complete Backend & Frontend Data-Flow Map',
+    total_groups: ENDPOINT_GROUPS.length,
+    total_endpoints: FLAT_ENDPOINTS.length,
+    groups: ENDPOINT_GROUPS
+  });
+});
 
 // Initialize Database on startup
 initDb().then(async () => {
@@ -46,13 +145,301 @@ function formatDateDisplay(iso) {
   return iso;
 }
 
-// Helper: Log audit action
+// Helper: Derive structured "What is saved" and "Where it is saved" metadata for any Audit Log action
+function deriveAuditMetadata(actionType, description, undoData = null) {
+  const act = String(actionType || '').toUpperCase();
+  const desc = String(description || '');
+  let parsedUndo = null;
+  if (undoData) {
+    if (typeof undoData === 'object') parsedUndo = undoData;
+    else if (typeof undoData === 'string') {
+      try { parsedUndo = JSON.parse(undoData); } catch (e) {}
+    }
+  }
+
+  let endpoint = 'POST /api/duty/change-status';
+  let frontendCaller = 'App.jsx (Daily Summary / Monthly Movement)';
+  let sourceModule = 'System Roster';
+  let savedTables = ['overrides'];
+  let linkedModules = [
+    'Daily Summary Table',
+    'Monthly Movement Grid',
+    'Muster Roll',
+    'TA Journal & Approvals',
+    'NDA Journal',
+    'Diary',
+    'Daily Earnings Sheet',
+    'Leave / Swap',
+    'LR Sheet'
+  ];
+
+  if (act.includes('MUSTER')) {
+    endpoint = act.includes('BATCH')
+      ? (act.includes('RESET') ? 'POST /api/muster/batch-reset' : 'POST /api/muster/batch-update')
+      : (act.includes('RESET') ? 'POST /api/muster/reset-cell' : 'POST /api/muster/update-cell');
+    frontendCaller = 'App.jsx (Muster Roll & Individual Muster)';
+    sourceModule = 'Muster Roll & Attendance';
+    savedTables = ['muster_records'];
+    linkedModules = [
+      'Muster Roll (muster_records)',
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid',
+      'TA Approvals & TA Journal (ta_approvals, ta_entries)',
+      'NDA Journal (nda_entries)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)',
+      'Leave / Swap (overrides)',
+      'LR Sheet (lr_sheet_records)'
+    ];
+  } else if (act.includes('LR_SHEET') || act.includes('LR_')) {
+    endpoint = act.includes('BATCH') || act.includes('BULK')
+      ? 'POST /api/lr-sheet/batch-update'
+      : act.includes('SYNC')
+      ? 'POST /api/lr-sheet/sync-from-daily-duty'
+      : 'POST /api/lr-sheet/cell';
+    frontendCaller = 'App.jsx (Leave Reserve LR Sheet)';
+    sourceModule = 'Leave Reserve (LR) Sheet';
+    savedTables = ['lr_sheet_records'];
+    linkedModules = [
+      'LR Sheet (lr_sheet_records)',
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid',
+      'Muster Roll (muster_records)',
+      'TA Approvals & TA Journal (ta_approvals, ta_entries)',
+      'NDA Journal (nda_entries)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)'
+    ];
+  } else if (act.includes('TA_JOURNAL') || act === 'SAVE_TA_JOURNAL' || act === 'RESET_TA_JOURNAL') {
+    endpoint = act.includes('RESET') ? 'DELETE /api/documents/ta/:staffId' : 'POST /api/documents/ta/:staffId';
+    frontendCaller = 'TaDocument.jsx (Employee TA Journal)';
+    sourceModule = 'TA Journal Document';
+    savedTables = ['ta_entries', 'ta_approvals', 'actual_train_runs'];
+    linkedModules = [
+      'TA Journal (ta_entries)',
+      'TA Approvals (ta_approvals)',
+      'Daily Summary Table (overrides)',
+      'Muster Roll (muster_records)',
+      'LR Sheet (lr_sheet_records)',
+      'NDA Journal (nda_entries)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)'
+    ];
+  } else if (act.includes('ACCEPT_TA') || act.includes('REJECT_TA') || act.includes('REVERT_TA') || act.includes('SYNC_TA') || act.includes('TA_APPROVAL')) {
+    endpoint = act.includes('ALL')
+      ? 'POST /api/ta-approvals/accept-all'
+      : act.includes('BATCH')
+      ? 'POST /api/ta-approvals/accept-batch'
+      : act.includes('REJECT')
+      ? 'POST /api/ta-approvals/reject'
+      : act.includes('REVERT')
+      ? 'POST /api/ta-approvals/revert'
+      : 'POST /api/ta-approvals/accept';
+    frontendCaller = 'TaApprovals.jsx (TA Approvals Portal)';
+    sourceModule = 'TA Approvals Portal';
+    savedTables = ['ta_approvals', 'ta_entries'];
+    linkedModules = [
+      'TA Approvals (ta_approvals)',
+      'TA Journal (ta_entries)',
+      'NDA Journal (nda_entries)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)'
+    ];
+  } else if (act.includes('NDA_JOURNAL') || act === 'SAVE_NDA_JOURNAL' || act === 'RESET_NDA_JOURNAL') {
+    endpoint = act.includes('RESET') ? 'DELETE /api/documents/nda/:staffId' : 'POST /api/documents/nda/:staffId';
+    frontendCaller = 'NdaDocument.jsx (Employee NDA Journal)';
+    sourceModule = 'NDA Journal Document';
+    savedTables = ['nda_entries', 'actual_train_runs'];
+    linkedModules = [
+      'NDA Journal (nda_entries)',
+      'Daily Summary Table (overrides)',
+      'Muster Roll (muster_records)',
+      'LR Sheet (lr_sheet_records)',
+      'TA Journal & Approvals (ta_entries, ta_approvals)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)'
+    ];
+  } else if (act.includes('DIARY') || act === 'SAVE_DIARY' || act === 'RESET_DIARY') {
+    endpoint = act.includes('RESET') ? 'DELETE /api/documents/diary/:staffId' : 'POST /api/documents/diary/:staffId';
+    frontendCaller = 'DiaryDocument.jsx (Employee Monthly Diary)';
+    sourceModule = 'Diary (E.F.T Earnings Statement)';
+    savedTables = ['diary_entries', 'daily_earnings_entries'];
+    linkedModules = [
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)',
+      'Daily Summary Table (overrides)',
+      'Muster Roll (muster_records)',
+      'LR Sheet (lr_sheet_records)',
+      'TA Journal & Approvals (ta_entries, ta_approvals)',
+      'NDA Journal (nda_entries)'
+    ];
+  } else if (act.includes('DAILY_EARNINGS') || act.includes('MONTHLY_EARNINGS')) {
+    endpoint = act.includes('RESET')
+      ? 'DELETE /api/documents/daily-earnings'
+      : act.includes('BULK') || act.includes('RANGE')
+      ? 'POST /api/documents/daily-earnings/range'
+      : 'POST /api/documents/daily-earnings';
+    frontendCaller = 'DailyEarningsDocument.jsx (Daily Earnings Sheet)';
+    sourceModule = 'Daily Earnings Sheet';
+    savedTables = ['daily_earnings_entries', 'diary_entries'];
+    linkedModules = [
+      'Daily Earnings Sheet (daily_earnings_entries)',
+      'Diary (diary_entries)',
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid',
+      'Muster Roll (muster_records)',
+      'TA Journal & Approvals (ta_approvals, ta_entries)',
+      'NDA Journal (nda_entries)',
+      'LR Sheet (lr_sheet_records)'
+    ];
+  } else if (act.includes('DUTY_REGISTER')) {
+    endpoint = 'POST /api/duty-register';
+    frontendCaller = 'App.jsx (Actual Duty Register)';
+    sourceModule = 'Actual Duty Register';
+    savedTables = ['duty_register', 'overrides'];
+    linkedModules = [
+      'Duty Register (duty_register)',
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid',
+      'Muster Roll (muster_records)',
+      'LR Sheet (lr_sheet_records)',
+      'TA / NDA / Diary / Earnings'
+    ];
+  } else if (
+    act.includes('LEAVE') || act.includes('SICK') || act.includes('CR') ||
+    act.includes('ABSENT') || act.includes('REST') || act.includes('SWAP') ||
+    act.includes('EXCHANGE') || act.includes('MUTUAL_SHIFT') || act.includes('SHIFTED') ||
+    act.includes('CHANGED_LINK') || act.includes('REASSIGN') || act.includes('UPGRADE_TO_COR') ||
+    act.includes('UTILISED_ADVANCE') || act.includes('WRONG_ALLOTMENT') || act.includes('MARK_LATER') ||
+    act.includes('REMOVE_FROM_LINK') || act.includes('DRAG_ASSIGN') || act.includes('NON_DAILY') ||
+    act.includes('MANUAL_OVERRIDE') || act.includes('RESET_DUTY')
+  ) {
+    if (act.includes('EXCHANGE') || act.includes('SWAP')) {
+      endpoint = 'POST /api/duty/exchange-staff';
+      frontendCaller = 'App.jsx (Exchange / Swap Staff Modal)';
+    } else if (act.includes('DRAG_ASSIGN')) {
+      endpoint = 'POST /api/duty/drag-assign-train';
+      frontendCaller = 'App.jsx (Drag-and-Drop Train Assignment)';
+    } else if (act.includes('NON_DAILY')) {
+      endpoint = 'POST /api/duty/assign-non-daily-train';
+      frontendCaller = 'App.jsx (Non-Daily Train Assignment)';
+    } else if (act.includes('APPROVE_LEAVE')) {
+      endpoint = 'POST /api/leave-requests/:id/approve';
+      frontendCaller = 'App.jsx (Leave Request Approval)';
+    } else {
+      endpoint = 'POST /api/duty/change-status';
+      frontendCaller = 'App.jsx (Daily Summary & Monthly Movement Duty Edit)';
+    }
+    sourceModule = (act.includes('LEAVE') || act.includes('SICK') || act.includes('CR') || act.includes('SWAP') || act.includes('EXCHANGE') || act.includes('MUTUAL'))
+      ? 'Daily Summary / Leave & Swap'
+      : 'Daily Summary & Duty Movement';
+    savedTables = ['overrides', 'muster_records'];
+    linkedModules = [
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid',
+      'Muster Roll (muster_records)',
+      'TA Approvals & TA Journal (ta_approvals, ta_entries)',
+      'NDA Journal (nda_entries)',
+      'Diary (diary_entries)',
+      'Daily Earnings Sheet (daily_earnings_entries)',
+      'Leave / Swap (overrides, leave_requests)',
+      'LR Sheet (lr_sheet_records)'
+    ];
+  } else if (act.includes('STAFF')) {
+    endpoint = act.includes('ADD') || act.includes('CREATE')
+      ? 'POST /api/staff'
+      : act.includes('DELETE')
+      ? 'DELETE /api/staff/:id'
+      : 'PUT /api/staff/:id';
+    frontendCaller = 'App.jsx (Staff Directory)';
+    sourceModule = 'Staff & Seniority Directory';
+    savedTables = ['staff'];
+    linkedModules = [
+      'Staff Directory (staff)',
+      'Daily Summary Table',
+      'Monthly Movement Grid',
+      'Muster Roll',
+      'TA / NDA / Diary / Daily Earnings',
+      'LR Sheet'
+    ];
+  } else if (act.includes('LINK') || act.includes('SLOT')) {
+    endpoint = act.includes('SLOT') ? 'POST /api/slot-customizations' : 'POST / PUT /api/links';
+    frontendCaller = 'App.jsx (Roster Link & Slot Builder)';
+    sourceModule = 'Link & Slot Configuration';
+    savedTables = act.includes('SLOT') ? ['slot_customizations', 'daily_slot_customizations'] : ['links', 'link_sets'];
+    linkedModules = [
+      'Link Configuration (links)',
+      'Daily Summary Table',
+      'Monthly Movement Grid',
+      'TA / NDA / Diary Generators'
+    ];
+  } else if (act.includes('TRAIN_TA_NDA')) {
+    endpoint = 'POST /api/train-ta-nda/batch';
+    frontendCaller = 'App.jsx (Train TA/NDA Master Timings)';
+    sourceModule = 'Train TA/NDA Master Directory';
+    savedTables = ['train_ta_nda_directory'];
+    linkedModules = [
+      'Train TA/NDA Directory (train_ta_nda_directory)',
+      'TA Journal & Approvals',
+      'NDA Journal',
+      'Diary'
+    ];
+  } else if (act === 'UNDO') {
+    endpoint = 'POST /api/audit-logs/:id/undo';
+    frontendCaller = 'App.jsx (Audit Logs Undo Button)';
+    sourceModule = 'Audit Logs (Undo System)';
+    savedTables = ['audit_logs', 'overrides', 'muster_records'];
+    linkedModules = [
+      'Daily Summary Table',
+      'Monthly Movement Grid',
+      'Muster Roll',
+      'TA / NDA / Diary / Earnings',
+      'LR Sheet'
+    ];
+  }
+
+  if (parsedUndo && parsedUndo.where_saved) {
+    if (parsedUndo.where_saved.endpoint) endpoint = parsedUndo.where_saved.endpoint;
+    if (parsedUndo.where_saved.frontend_caller) frontendCaller = parsedUndo.where_saved.frontend_caller;
+    if (parsedUndo.where_saved.source_module) sourceModule = parsedUndo.where_saved.source_module;
+    if (Array.isArray(parsedUndo.where_saved.saved_tables)) savedTables = parsedUndo.where_saved.saved_tables;
+    if (Array.isArray(parsedUndo.where_saved.linked_modules)) linkedModules = parsedUndo.where_saved.linked_modules;
+  }
+
+  return {
+    what_saved: (parsedUndo && parsedUndo.what_saved) ? parsedUndo.what_saved : desc,
+    where_saved: {
+      endpoint: endpoint,
+      frontend_caller: frontendCaller,
+      source_module: sourceModule,
+      saved_tables: savedTables,
+      linked_modules: linkedModules
+    },
+    saved_count: parsedUndo?.saved_count ?? parsedUndo?.savedCount ?? null,
+    error_count: parsedUndo?.error_count ?? parsedUndo?.errorCount ?? null,
+    saved_employees_count: parsedUndo?.saved_employees_count ?? parsedUndo?.savedEmployeesCount ?? null,
+    error_employees_count: parsedUndo?.error_employees_count ?? parsedUndo?.errorEmployeesCount ?? null
+  };
+}
+
+// Helper: Log audit action with structured "What is saved" and "Where it is saved"
 async function logAudit(role, actionType, description, undoData = null) {
   try {
-    const undoJson = undoData ? (typeof undoData === 'string' ? undoData : JSON.stringify(undoData)) : null;
+    let payloadObj = {};
+    if (undoData) {
+      if (typeof undoData === 'string') {
+        try { payloadObj = JSON.parse(undoData); } catch (e) { payloadObj = { raw: undoData }; }
+      } else if (typeof undoData === 'object') {
+        payloadObj = { ...undoData };
+      }
+    }
+    const meta = deriveAuditMetadata(actionType, description, payloadObj);
+    payloadObj.what_saved = meta.what_saved;
+    payloadObj.where_saved = meta.where_saved;
+    const undoJson = JSON.stringify(payloadObj);
     await run(
       'INSERT INTO audit_logs (user_role, action_type, description, undo_data, is_undone) VALUES (?, ?, ?, ?, 0)',
-      [role, actionType, description, undoJson]
+      [role || 'Admin', actionType, description, undoJson]
     );
   } catch (err) {
     console.error('Failed to write audit log:', err);
@@ -208,16 +595,14 @@ const KNOWN_LINK_SETS = {
     [19, 20],
     [22, 23, 24],
     [25, 26, 27],
-    [29, 30],
-    [31, 32],
-    [33, 34],
+    [29, 30, 31],
+    [32, 33, 34],
     [36, 37, 38],
-    [39, 40, 41],
-    [43, 44, 45, 46],
-    [47, 48],
-    [50, 51, 52],
-    [53, 54, 55],
-    [57, 58, 59]
+    [38, 39],
+    [40, 41],
+    [43, 44, 45],
+    [46, 47, 48],
+    [50, 51, 52]
   ],
   3: [
     [1, 2, 3],
@@ -418,10 +803,10 @@ function findGntArrivalForLink(catId, linkNum, lDef) {
 }
 
 const NON_DAILY_LINK_TRAINS = {
-  60: '22882',
-  61: '17221',
-  62: '17069',
-  63: 'R'
+  53: '22882',
+  54: '17221',
+  55: '17069',
+  56: 'R'
 };
 
 const NON_DAILY_PAIRS_MAP = {
@@ -445,9 +830,9 @@ const NON_DAILY_PAIRS_MAP = {
   '17077': { returnTrain: '17078', serviceName: 'GNT-TPTY-GNT Exp', from: 'GNT', via: 'TPTY', to: 'GNT', depTime: '18:00', retDepTime: '02:30', arrHqTime: '02:30', totalDays: 2, restTill: '10:30', coaches: 'SL / AC' },
 
   // WEDNESDAY (3-Day Beats)
-  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #60)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
-  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #61)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
-  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #62)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
+  '22882': { returnTrain: '22881', serviceName: 'BBS-PUNE Exp (Link #53)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '10:35', retDepTime: '16:55', arrHqTime: '02:05', totalDays: 3, restTill: '10:05', coaches: 'SL / AC' },
+  '17221': { returnTrain: '17222', serviceName: 'COA-LTT Exp (Link #54)', from: 'GNT', via: 'WADI', to: 'GNT', depTime: '13:35', retDepTime: '23:00', arrHqTime: '08:15', totalDays: 3, restTill: '16:15', coaches: 'SL / AC' },
+  '17069': { returnTrain: '17262', serviceName: 'GNT-TPTY / RU-GNT Exp (Link #55)', from: 'GNT', via: 'RU/TPTY', to: 'GNT', depTime: '22:40', retDepTime: '19:25', arrHqTime: '07:20', totalDays: 3, restTill: '15:20', coaches: 'SL / AC' },
 
   // THURSDAY
   '12755': { returnTrain: '12756', serviceName: 'BZA-SC-BZA Exp', from: 'BZA', via: 'SC', to: 'BZA', depTime: '08:40', retDepTime: '06:40', arrHqTime: '12:50', totalDays: 2, restTill: '20:50', coaches: 'SL / AC' },
@@ -481,8 +866,8 @@ function getMultiDayNonDailyMatch(trainCodeOrReason) {
 const NON_DAILY_MULTI_DAY_SERVICES = [
   {
     id: '22882_22881',
-    name: 'BBS-PUNE Exp (Link #60)',
-    linkNumber: 60,
+    name: 'BBS-PUNE Exp (Link #53)',
+    linkNumber: 53,
     serviceDays: ['WED'],
     totalDays: 3,
     coaches: 'SL / AC',
@@ -494,8 +879,8 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
   },
   {
     id: '17221_17222_WED',
-    name: 'COA-LTT Exp (Link #61 - Wed Run)',
-    linkNumber: 61,
+    name: 'COA-LTT Exp (Link #54 - Wed Run)',
+    linkNumber: 54,
     serviceDays: ['WED'],
     totalDays: 3,
     coaches: 'SL / AC',
@@ -507,8 +892,8 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
   },
   {
     id: '17221_17222_SAT',
-    name: 'COA-LTT Exp (Link #61 - Sat Run)',
-    linkNumber: 61,
+    name: 'COA-LTT Exp (Link #54 - Sat Run)',
+    linkNumber: 54,
     serviceDays: ['SAT'],
     totalDays: 3,
     coaches: 'SL / AC',
@@ -520,8 +905,8 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
   },
   {
     id: '17069_17262',
-    name: 'GNT-TPTY / RU-GNT Exp (Link #62)',
-    linkNumber: 62,
+    name: 'GNT-TPTY / RU-GNT Exp (Link #55)',
+    linkNumber: 55,
     serviceDays: ['WED'],
     totalDays: 3,
     coaches: 'SL / AC',
@@ -1132,6 +1517,15 @@ async function calculateStaffCrBalances() {
 // ----------------------------------------------------
 
 // Register New Employee / User
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/auth/register
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/auth/register
+// ============================================================================
 app.post('/api/auth/register', async (req, res) => {
   const { username, name, email, password, role, staff_id } = req.body;
   if (!username || !name || !password) {
@@ -1182,6 +1576,15 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Login User
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/auth/login
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/auth/login
+// ============================================================================
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
@@ -1255,6 +1658,15 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Verify Current User Session
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/auth/me
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/auth/me
+// ============================================================================
 app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -1280,6 +1692,15 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 // Admin: List all registered users with verification status
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/admin/users
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/admin/users
+// ============================================================================
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const users = await all(`
@@ -1311,6 +1732,15 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 });
 
 // Admin: Approve a user registration
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/admin/users/:id/approve
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/admin/users/:id/approve
+// ============================================================================
 app.put('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const approver = req.user ? req.user.username : 'Admin';
@@ -1335,6 +1765,15 @@ app.put('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
 });
 
 // Admin: Reject a user registration
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/admin/users/:id/reject
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/admin/users/:id/reject
+// ============================================================================
 app.put('/api/admin/users/:id/reject', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const rejecter = req.user ? req.user.username : 'Admin';
@@ -1363,6 +1802,15 @@ app.put('/api/admin/users/:id/reject', requireAdmin, async (req, res) => {
 });
 
 // Admin: Update user role
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/admin/users/:id/role
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/admin/users/:id/role
+// ============================================================================
 app.put('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
@@ -1386,6 +1834,15 @@ app.put('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
 });
 
 // Admin: Delete a user
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/admin/users/:id
+//   • Module          : Authentication & User Access
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : DELETE /api/admin/users/:id
+// ============================================================================
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
@@ -1411,6 +1868,15 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // CATEGORY API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/categories
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/categories
+// ============================================================================
 app.get('/api/categories', async (req, res) => {
   try {
     const categories = await all('SELECT * FROM categories');
@@ -1420,6 +1886,15 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/categories
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/categories
+// ============================================================================
 app.post('/api/categories', requireAdmin, async (req, res) => {
   const { name, code, cycle_length, anchor_date } = req.body;
   if (!name || !code || !cycle_length || !anchor_date) {
@@ -1437,6 +1912,15 @@ app.post('/api/categories', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/categories/:id
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/categories/:id
+// ============================================================================
 app.put('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, code, cycle_length, anchor_date } = req.body;
@@ -1452,6 +1936,15 @@ app.put('/api/categories/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/categories/:id
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : DELETE /api/categories/:id
+// ============================================================================
 app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -1467,6 +1960,15 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // SENIORITY LIST API (139 STAFF MEMBERS OF GUNTUR DIVISION)
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/seniority-list
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/seniority-list
+// ============================================================================
 app.get('/api/seniority-list', async (req, res) => {
   const { q, designation, sort } = req.query;
   try {
@@ -1500,6 +2002,15 @@ app.get('/api/seniority-list', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/seniority-list/:id
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/seniority-list/:id
+// ============================================================================
 app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, designation, cug_number, contact_number, pf_number, email } = req.body;
@@ -1525,6 +2036,15 @@ app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // STAFF API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff
+//   • Module          : Staff Directory
+//   • Frontend Caller : App.jsx -> fetchStaff()
+//   • Reads From DB   : staff, categories
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Returns all staff members with category, designation, headquarters, basic pay, and PF/HRMS details.
+// ============================================================================
 app.get('/api/staff', async (req, res) => {
   const { category_id } = req.query;
   try {
@@ -1555,6 +2075,15 @@ app.get('/api/staff', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/cr-balances
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/cr-balances
+// ============================================================================
 app.get('/api/staff/cr-balances', async (req, res) => {
   try {
     const balances = await calculateStaffCrBalances();
@@ -1565,6 +2094,15 @@ app.get('/api/staff/cr-balances', async (req, res) => {
 });
 
 // GET /api/staff/:id/cr-details - Detailed CR balance, due records, and redemption history for an employee
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/:id/cr-details
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/:id/cr-details
+// ============================================================================
 app.get('/api/staff/:id/cr-details', async (req, res) => {
   try {
     const staffId = parseInt(req.params.id, 10);
@@ -1600,6 +2138,15 @@ app.get('/api/staff/:id/cr-details', async (req, res) => {
 });
 
 // GET /api/staff/:id/recent-duties - Returns recent duties performed by a staff member before a target date
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/:id/recent-duties
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/:id/recent-duties
+// ============================================================================
 app.get('/api/staff/:id/recent-duties', async (req, res) => {
   try {
     const staffId = parseInt(req.params.id, 10);
@@ -1767,6 +2314,15 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
 });
 
 // Record or adjust LR staff duty completion (arrival at GNT & HQ rest)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/staff/lr-duty-completion
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/staff/lr-duty-completion
+// ============================================================================
 app.post('/api/staff/lr-duty-completion', requireAdmin, async (req, res) => {
   const { staff_id, last_train_no, arrival_date, arrival_time, rest_hours_required, notes } = req.body;
   if (!staff_id || !arrival_date || !arrival_time) {
@@ -1801,6 +2357,15 @@ app.post('/api/staff/lr-duty-completion', requireAdmin, async (req, res) => {
 });
 
 // List recorded LR duty completions
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/lr-duty-completions
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/lr-duty-completions
+// ============================================================================
 app.get('/api/staff/lr-duty-completions', async (req, res) => {
   const { staff_id, date } = req.query;
   try {
@@ -1826,6 +2391,15 @@ app.get('/api/staff/lr-duty-completions', async (req, res) => {
 });
 
 // Get detailed HQ rest status for a specific staff member
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/lr-rest-status/:staffId
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/lr-rest-status/:staffId
+// ============================================================================
 app.get('/api/staff/lr-rest-status/:staffId', async (req, res) => {
   const { staffId } = req.params;
   const { date } = req.query;
@@ -1838,6 +2412,15 @@ app.get('/api/staff/lr-rest-status/:staffId', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/staff
+//   • Module          : Staff Directory
+//   • Frontend Caller : App.jsx -> Add New Employee Modal
+//   • Reads From DB   : staff, categories
+//   • Saves To DB     : staff
+//   • Auto-Syncs To   : lr_sheet_members, audit_logs
+//   • Summary         : Creates a new employee in `staff` (and adds to `lr_sheet_members` if Category 4 Leave Reserve).
+// ============================================================================
 app.post('/api/staff', requireAdmin, async (req, res) => {
   const { name, designation, category_id, row_position, rest_day } = req.body;
   if (!name || !category_id) {
@@ -1868,22 +2451,98 @@ app.post('/api/staff', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/staff/reorder
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/staff/reorder
+// ============================================================================
 app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
-  const { reorders } = req.body; // Array of { id, row_position }
+  const { reorders } = req.body; // Array of { id, row_position, name, designation, rest_day, pf_no, hrms_id, seniority_no }
   if (!Array.isArray(reorders)) {
     return res.status(400).json({ error: 'Invalid reorders data' });
   }
-  try {
-    for (const item of reorders) {
-      await run('UPDATE staff SET row_position = ? WHERE id = ?', [item.row_position, item.id]);
+  let savedCount = 0;
+  let errorCount = 0;
+  const errors = [];
+
+  for (const item of reorders) {
+    try {
+      if (!item || !item.id) {
+        throw new Error('Missing employee ID');
+      }
+      const current = await get('SELECT id, name, category_id, row_position FROM staff WHERE id = ?', [item.id]);
+      if (!current) {
+        throw new Error(`Employee ID ${item.id} not found`);
+      }
+      const targetPos = item.row_position !== undefined && item.row_position !== null ? parseInt(item.row_position, 10) : current.row_position;
+
+      // Avoid UNIQUE(category_id, row_position) collision when saving one-by-one without a transaction
+      const conflict = await get(
+        'SELECT id FROM staff WHERE category_id = ? AND row_position = ? AND id != ?',
+        [current.category_id, targetPos, item.id]
+      );
+      if (conflict) {
+        await run('UPDATE staff SET row_position = ? WHERE id = ?', [-(conflict.id + 10000), conflict.id]);
+      }
+
+      await run(
+        `UPDATE staff SET
+           row_position = ?,
+           name = COALESCE(?, name),
+           designation = COALESCE(?, designation),
+           rest_day = COALESCE(?, rest_day),
+           pf_no = COALESCE(?, pf_no),
+           hrms_id = COALESCE(?, hrms_id),
+           seniority_no = COALESCE(?, seniority_no)
+         WHERE id = ?`,
+        [
+          targetPos,
+          item.name !== undefined ? String(item.name).trim() : null,
+          item.designation !== undefined ? String(item.designation).trim() : null,
+          item.rest_day !== undefined ? item.rest_day : null,
+          item.pf_no !== undefined ? String(item.pf_no).trim() : null,
+          item.hrms_id !== undefined ? String(item.hrms_id).trim() : null,
+          item.seniority_no !== undefined ? item.seniority_no : null,
+          item.id
+        ]
+      );
+      savedCount++;
+    } catch (err) {
+      errorCount++;
+      errors.push({
+        staff_id: item?.id || null,
+        staff_name: item?.name || `ID #${item?.id || '?'}`,
+        error: err.message
+      });
     }
-    await logAudit('Admin', 'REORDER_STAFF', 'Reordered staff seniority/row positions');
-    res.json({ message: 'Staff reordered successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
+
+  await logAudit('Admin', 'REORDER_STAFF', `Saved staff details one-by-one: ${savedCount} succeeded, ${errorCount} failed`);
+  const errorSummary = errors.length > 0
+    ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+    : '';
+  res.json({
+    success: errorCount === 0,
+    savedCount,
+    errorCount,
+    errors,
+    message: `Staff Roster Save Complete: ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errorSummary}`
+  });
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/staff/:id
+//   • Module          : Staff Directory
+//   • Frontend Caller : App.jsx -> Edit Employee Details Modal
+//   • Reads From DB   : staff
+//   • Saves To DB     : staff
+//   • Auto-Syncs To   : links, lr_sheet_members, audit_logs
+//   • Summary         : Updates employee profile, category, or designation in `staff` and syncs category membership.
+// ============================================================================
 app.put('/api/staff/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, designation, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no } = req.body;
@@ -1953,6 +2612,15 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/staff/:id
+//   • Module          : Staff Directory
+//   • Frontend Caller : App.jsx -> Delete Employee Button
+//   • Reads From DB   : staff
+//   • Saves To DB     : staff
+//   • Auto-Syncs To   : links, overrides, muster_records, lr_sheet_records, lr_sheet_members, audit_logs
+//   • Summary         : Deletes an employee from `staff` and unassigns/cleans up their link slots and records.
+// ============================================================================
 app.delete('/api/staff/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -1990,6 +2658,15 @@ function getCorRestDay(rowPosition) {
 
 // GET /api/staff/cor-links-summary
 // Summary of all links in COR (Category 1), with their current occupant and whether vacant
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/staff/cor-links-summary
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/staff/cor-links-summary
+// ============================================================================
 app.get('/api/staff/cor-links-summary', async (req, res) => {
   try {
     const corCategory = await get('SELECT * FROM categories WHERE id = 1');
@@ -2053,6 +2730,15 @@ app.get('/api/staff/cor-links-summary', async (req, res) => {
 // POST /api/staff/upgrade-to-cor
 // Upgrade an employee from another category to COR (Category 1).
 // Preserves their old slot as VACANT (V) and adjusts their link, rest day, and designation in COR.
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/staff/upgrade-to-cor
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/staff/upgrade-to-cor
+// ============================================================================
 app.post('/api/staff/upgrade-to-cor', requireAdmin, async (req, res) => {
   const {
     staff_id,
@@ -2207,6 +2893,15 @@ app.post('/api/staff/upgrade-to-cor', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 
 // 1. GET all link sets (draft & published), optionally by category_id
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/link-sets
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/link-sets
+// ============================================================================
 app.get('/api/link-sets', async (req, res) => {
   const { category_id } = req.query;
   try {
@@ -2234,6 +2929,15 @@ app.get('/api/link-sets', async (req, res) => {
 });
 
 // 2. GET a single link set with its member links
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/link-sets/:id
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/link-sets/:id
+// ============================================================================
 app.get('/api/link-sets/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -2260,6 +2964,15 @@ app.get('/api/link-sets/:id', async (req, res) => {
 // Copies all its link rows (link number, train number, from, to, coaches, REST flag, set type, set name)
 // into a brand new link set with status = 'draft', blank/empty effective date, cloned_from_id = orig.id.
 // Original set is NOT modified.
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/link-sets/:id/duplicate
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/link-sets/:id/duplicate
+// ============================================================================
 app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name: customName } = req.body || {};
@@ -2337,6 +3050,15 @@ app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
 });
 
 // 4. PUT update link set metadata (name, effective_from, effective_to)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/link-sets/:id
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/link-sets/:id
+// ============================================================================
 app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, effective_from, effective_to, status } = req.body;
@@ -2393,6 +3115,15 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
 });
 
 // 5. POST publish draft link set
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/link-sets/:id/publish
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/link-sets/:id/publish
+// ============================================================================
 app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { effective_from, effective_to } = req.body || {};
@@ -2465,6 +3196,15 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
 });
 
 // 6. DELETE link set
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/link-sets/:id
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : DELETE /api/link-sets/:id
+// ============================================================================
 app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -2490,6 +3230,15 @@ app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
 });
 
 // 7. GET links (supports category_id, link_set_id, status, date, month)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/links
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/links
+// ============================================================================
 app.get('/api/links', async (req, res) => {
   const { category_id, link_set_id, status, date, month } = req.query;
   try {
@@ -2569,6 +3318,15 @@ app.get('/api/links', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/links/reorder
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/links/reorder
+// ============================================================================
 app.post('/api/links/reorder', requireAdmin, async (req, res) => {
   const { reorders } = req.body;
   if (!Array.isArray(reorders)) {
@@ -2590,6 +3348,15 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/links
+//   • Module          : Roster Link Builder
+//   • Frontend Caller : App.jsx -> Create / Update Roster Link Slot
+//   • Reads From DB   : links, link_sets
+//   • Saves To DB     : links
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Creates or updates a cyclic roster link slot in `links`.
+// ============================================================================
 app.post('/api/links', requireAdmin, async (req, res) => {
   const { category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name, status } = req.body;
   
@@ -2660,6 +3427,15 @@ app.post('/api/links', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/links/:id
+//   • Module          : Roster Link Builder
+//   • Frontend Caller : App.jsx -> Edit Roster Link Slot (Staff / Trains / Remarks)
+//   • Reads From DB   : links
+//   • Saves To DB     : links
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Updates staff assignment or train sequence on a base link slot in `links`.
+// ============================================================================
 app.put('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -2744,6 +3520,15 @@ function normalizeEffectiveDate(dateStr) {
   return dateStr;
 }
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/links/:id
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : DELETE /api/links/:id
+// ============================================================================
 app.delete('/api/links/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const rawDate = req.query.effective_date || req.body?.effective_date || '2026-10-01';
@@ -2848,6 +3633,15 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/links/clear-all
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/links/clear-all
+// ============================================================================
 app.post('/api/links/clear-all', requireAdmin, async (req, res) => {
   const { link_set_id } = req.body || {};
   try {
@@ -2867,6 +3661,15 @@ app.post('/api/links/clear-all', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // SLOT & TRAIN/COACH CUSTOMIZATIONS API (PERSISTENT IN DB)
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/slot-customizations
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/slot-customizations
+// ============================================================================
 app.get('/api/slot-customizations', async (req, res) => {
   try {
     const rows = await all('SELECT * FROM slot_customizations');
@@ -2885,6 +3688,15 @@ app.get('/api/slot-customizations', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/slot-customizations
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/slot-customizations
+// ============================================================================
 app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
   try {
     const { key, slot_id, link_num, category_id, first_train, last_train, first_coach, last_coach, links_to_update } = req.body;
@@ -2945,6 +3757,15 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/slot-customizations/reset
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/slot-customizations/reset
+// ============================================================================
 app.post('/api/slot-customizations/reset', requireAdmin, async (req, res) => {
   try {
     const { keys, key } = req.body;
@@ -2969,6 +3790,15 @@ app.post('/api/slot-customizations/reset', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // TRAIN MOVEMENT TA & NDA RULES / CALCULATOR API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/train-ta-nda
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/train-ta-nda
+// ============================================================================
 app.get('/api/train-ta-nda', async (req, res) => {
   try {
     const rules = await all('SELECT * FROM train_ta_nda_rules ORDER BY category_id, link_number, train_number');
@@ -2983,6 +3813,15 @@ app.get('/api/train-ta-nda', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/train-ta-nda
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/train-ta-nda
+// ============================================================================
 app.post('/api/train-ta-nda', async (req, res) => {
   try {
     if (req.user && req.user.role === 'Staff') {
@@ -3049,6 +3888,15 @@ app.post('/api/train-ta-nda', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/train-ta-nda/batch
+//   • Module          : Train TA/NDA Master Timings
+//   • Frontend Caller : App.jsx -> Save Train TA/NDA Timings Table
+//   • Reads From DB   : train_ta_nda
+//   • Saves To DB     : train_ta_nda
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Batch saves departure/arrival timings, halt durations, and TA/NDA hours for trains into `train_ta_nda`.
+// ============================================================================
 app.post('/api/train-ta-nda/batch', async (req, res) => {
   try {
     if (req.user && req.user.role === 'Staff') {
@@ -3060,64 +3908,95 @@ app.post('/api/train-ta-nda/batch', async (req, res) => {
     }
 
     const updatedBy = req.user?.username || req.user?.name || 'Admin';
-    await run('BEGIN TRANSACTION');
+    let savedCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
     for (const r of rules) {
-      const catId = r.category_id || r.categoryId;
-      const linkNum = r.link_number || r.linkNumber;
-      const trainNum = r.train_number || r.trainNumber;
-      if (!catId || !linkNum || !trainNum) continue;
+      try {
+        const catId = r.category_id || r.categoryId;
+        const linkNum = r.link_number || r.linkNumber;
+        const trainNum = r.train_number || r.trainNumber;
+        if (!catId || !linkNum || !trainNum) {
+          throw new Error('Missing category_id, link_number, or train_number');
+        }
 
-      const cleanCat = parseInt(catId, 10);
-      const cleanLink = parseInt(linkNum, 10);
-      const cleanTrain = String(trainNum).trim();
-      const taPctRaw = r.ta_percentage !== undefined ? r.ta_percentage : r.taPercentage;
-      const taAmtRaw = r.ta_amount !== undefined ? r.ta_amount : r.taAmount;
-      const ndaHoursRaw = r.nda_hours !== undefined ? r.nda_hours : r.ndaHours;
-      const ndaAmtRaw = r.nda_amount !== undefined ? r.nda_amount : r.ndaAmount;
-      const absenceRaw = r.absence_hours !== undefined ? r.absence_hours : r.absenceHours;
-      const actualArrTime = r.actual_arr_time || r.actualArrTime || null;
-      const schedArrTime = r.sched_arr_time || r.schedArrTime || null;
-      const extraNextDayTa = r.extra_next_day_ta !== undefined ? parseFloat(r.extra_next_day_ta) : (r.extraNextDayTa !== undefined ? parseFloat(r.extraNextDayTa) : 0);
-      const ntesStatus = r.ntes_status || r.ntesStatus || null;
+        const cleanCat = parseInt(catId, 10);
+        const cleanLink = parseInt(linkNum, 10);
+        const cleanTrain = String(trainNum).trim();
+        const taPctRaw = r.ta_percentage !== undefined ? r.ta_percentage : r.taPercentage;
+        const taAmtRaw = r.ta_amount !== undefined ? r.ta_amount : r.taAmount;
+        const ndaHoursRaw = r.nda_hours !== undefined ? r.nda_hours : r.ndaHours;
+        const ndaAmtRaw = r.nda_amount !== undefined ? r.nda_amount : r.ndaAmount;
+        const absenceRaw = r.absence_hours !== undefined ? r.absence_hours : r.absenceHours;
+        const actualArrTime = r.actual_arr_time || r.actualArrTime || null;
+        const schedArrTime = r.sched_arr_time || r.schedArrTime || null;
+        const extraNextDayTa = r.extra_next_day_ta !== undefined ? parseFloat(r.extra_next_day_ta) : (r.extraNextDayTa !== undefined ? parseFloat(r.extraNextDayTa) : 0);
+        const ntesStatus = r.ntes_status || r.ntesStatus || null;
 
-      const cleanTaPct = taPctRaw !== undefined && taPctRaw !== null ? parseFloat(taPctRaw) : 0.7;
-      const cleanTaAmt = taAmtRaw !== undefined && taAmtRaw !== null ? parseInt(taAmtRaw, 10) : Math.round(cleanTaPct * 800);
-      const cleanNdaHours = ndaHoursRaw !== undefined && ndaHoursRaw !== null ? parseFloat(ndaHoursRaw) : 0;
-      const cleanNdaAmt = ndaAmtRaw !== undefined && ndaAmtRaw !== null ? parseInt(ndaAmtRaw, 10) : Math.round(cleanNdaHours * 168);
-      const cleanAbsence = absenceRaw !== undefined && absenceRaw !== null ? parseFloat(absenceRaw) : 0;
+        const cleanTaPct = taPctRaw !== undefined && taPctRaw !== null ? parseFloat(taPctRaw) : 0.7;
+        const cleanTaAmt = taAmtRaw !== undefined && taAmtRaw !== null ? parseInt(taAmtRaw, 10) : Math.round(cleanTaPct * 800);
+        const cleanNdaHours = ndaHoursRaw !== undefined && ndaHoursRaw !== null ? parseFloat(ndaHoursRaw) : 0;
+        const cleanNdaAmt = ndaAmtRaw !== undefined && ndaAmtRaw !== null ? parseInt(ndaAmtRaw, 10) : Math.round(cleanNdaHours * 168);
+        const cleanAbsence = absenceRaw !== undefined && absenceRaw !== null ? parseFloat(absenceRaw) : 0;
 
-      await run(`
-        INSERT INTO train_ta_nda_rules (
-          category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
-          actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
-          ta_percentage = excluded.ta_percentage,
-          ta_amount = excluded.ta_amount,
-          nda_hours = excluded.nda_hours,
-          nda_amount = excluded.nda_amount,
-          absence_hours = excluded.absence_hours,
-          remarks = excluded.remarks,
-          actual_arr_time = excluded.actual_arr_time,
-          sched_arr_time = excluded.sched_arr_time,
-          extra_next_day_ta = excluded.extra_next_day_ta,
-          ntes_status = excluded.ntes_status,
-          updated_by = excluded.updated_by,
-          updated_at = CURRENT_TIMESTAMP
-      `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, r.remarks || null, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
+        await run(`
+          INSERT INTO train_ta_nda_rules (
+            category_id, link_number, train_number, ta_percentage, ta_amount, nda_hours, nda_amount, absence_hours, remarks,
+            actual_arr_time, sched_arr_time, extra_next_day_ta, ntes_status, updated_by, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(category_id, link_number, train_number) DO UPDATE SET
+            ta_percentage = excluded.ta_percentage,
+            ta_amount = excluded.ta_amount,
+            nda_hours = excluded.nda_hours,
+            nda_amount = excluded.nda_amount,
+            absence_hours = excluded.absence_hours,
+            remarks = excluded.remarks,
+            actual_arr_time = excluded.actual_arr_time,
+            sched_arr_time = excluded.sched_arr_time,
+            extra_next_day_ta = excluded.extra_next_day_ta,
+            ntes_status = excluded.ntes_status,
+            updated_by = excluded.updated_by,
+            updated_at = CURRENT_TIMESTAMP
+        `, [cleanCat, cleanLink, cleanTrain, cleanTaPct, cleanTaAmt, cleanNdaHours, cleanNdaAmt, cleanAbsence, r.remarks || null, actualArrTime, schedArrTime, extraNextDayTa, ntesStatus, updatedBy]);
+        savedCount++;
+      } catch (itemErr) {
+        errorCount++;
+        errors.push({
+          link_number: r?.link_number || r?.linkNumber || '?',
+          train_number: r?.train_number || r?.trainNumber || '?',
+          error: itemErr.message
+        });
+      }
     }
-    await run('COMMIT');
 
-    await logAudit(updatedBy, 'BATCH_UPDATE_TRAIN_TA_NDA', `Batch updated ${rules.length} train TA/NDA rules`);
-    res.json({ success: true, message: `Successfully updated ${rules.length} train TA/NDA rules` });
+    await logAudit(updatedBy, 'BATCH_UPDATE_TRAIN_TA_NDA', `Saved train TA/NDA rules one-by-one: ${savedCount} succeeded, ${errorCount} failed`);
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `Link #${e.link_number} (${e.train_number}): ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      errors,
+      message: `Saved ${savedCount} train TA/NDA rule(s) successfully, ${errorCount} failed.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
-    console.error('Error batch updating train TA/NDA rules:', err);
+    console.error('Error updating train TA/NDA rules:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/train-ta-nda/ntes-timings - Fetch latest actual train arrivals for auto-change calculations
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/train-ta-nda/ntes-timings
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/train-ta-nda/ntes-timings
+// ============================================================================
 app.get('/api/train-ta-nda/ntes-timings', async (req, res) => {
   try {
     const runs = await all(`
@@ -3139,6 +4018,15 @@ app.get('/api/train-ta-nda/ntes-timings', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/train-ta-nda/reset
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/train-ta-nda/reset
+// ============================================================================
 app.post('/api/train-ta-nda/reset', async (req, res) => {
   try {
     if (req.user && req.user.role === 'Staff') {
@@ -3168,6 +4056,15 @@ app.post('/api/train-ta-nda/reset', async (req, res) => {
 // ----------------------------------------------------
 // NON-DAILY TRAINS API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/non-daily-trains
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/non-daily-trains
+// ============================================================================
 app.get('/api/non-daily-trains', async (req, res) => {
   const { day_of_week, date } = req.query;
   try {
@@ -3199,6 +4096,15 @@ app.get('/api/non-daily-trains', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/non-daily-trains
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/non-daily-trains
+// ============================================================================
 app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
   const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
   if (!day_of_week || !train_number) {
@@ -3231,6 +4137,15 @@ app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/non-daily-trains/:id
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : PUT /api/non-daily-trains/:id
+// ============================================================================
 app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
@@ -3336,6 +4251,15 @@ app.patch('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/non-daily-trains/:id
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : DELETE /api/non-daily-trains/:id
+// ============================================================================
 app.delete('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -3351,6 +4275,15 @@ app.delete('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // MANUAL OVERRIDES & AUDIT TRAIL API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/overrides
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx -> Direct Override Save
+//   • Reads From DB   : overrides, staff
+//   • Saves To DB     : overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Creates or updates a direct date override in `overrides` and triggers universal cross-module synchronization.
+// ============================================================================
 app.post('/api/overrides', requireAdmin, async (req, res) => {
   const { staff_id, date, overridden_link_number, reason, target_category_id } = req.body;
   if (!staff_id || !date || reason === undefined || reason === null) {
@@ -3414,6 +4347,15 @@ app.post('/api/overrides', requireAdmin, async (req, res) => {
 // COMPREHENSIVE DUTY STATUS & REPLACEMENT API
 // Supports: SICK, LEAVE, CHANGED_LINK, RESET
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty/change-status
+//   • Module          : Daily Summary & Monthly Movement
+//   • Frontend Caller : App.jsx -> Daily Summary Table / Monthly Movement Grid Cell Edit / Change Duty Modal
+//   • Reads From DB   : staff, links, overrides, train_ta_nda
+//   • Saves To DB     : overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, duty_register, audit_logs
+//   • Summary         : Primary endpoint when changing any staff duty, marking Leave/Rest/Spare, assigning a substitute (LR/Spare), or assigning extra/advance trains. Saves to `overrides` and cascades to Muster, LR Sheet, TA, NDA, Diary, Daily Earnings, and Audit Logs.
+// ============================================================================
 app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
   const {
     staff_id,
@@ -3500,9 +4442,15 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const dateParts = dStr.split('-');
         const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
         await restoreMusterTaApprovalsAndEntries(staff_id, dStr, altDateStr);
+        await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
         if (existing && existing.substitute_staff_id) {
           await restoreMusterTaApprovalsAndEntries(existing.substitute_staff_id, dStr, altDateStr);
+          await syncDocumentsAndEarningsForStaffDate(existing.substitute_staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
         }
+        try {
+          const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+          await generatePendingTaClaimsForMonth({ run, get, all }, parseInt(dateParts[0], 10), parseInt(dateParts[1], 10), staff_id);
+        } catch (err) {}
 
         // Automatically cancel any approved leave_requests for this staff on this date
         await run(
@@ -3530,9 +4478,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               if (subOv.substitute_staff_id) {
                 await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [subOv.substitute_staff_id, nextDateStr]);
                 await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [subOv.substitute_staff_id, nextDateStr]);
+                await syncDocumentsAndEarningsForStaffDate(subOv.substitute_staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
               }
               await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
               await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
+              await syncDocumentsAndEarningsForStaffDate(staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
             }
           }
         }
@@ -3627,6 +4577,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             [staff_id, dStr, 'Available at HQ (Wrong allotment removed)']
           );
         }
+        await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: 'AVL', isLeaveOrRest: false, remarks: 'Wrong allotment removed' });
 
         // 2. If replacement employee is selected, assign them to this link
         if (replacement_staff_id) {
@@ -3674,6 +4625,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLinkVal}`);
               }
             }
+            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+              targetLink: targetLinkVal,
+              isLeave: false,
+              remarks: `Working Link #${targetLinkVal}`
+            });
           }
         }
       }
@@ -3791,6 +4747,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
           [disallowRemark, staff.id, dStr, dStr, altDateStr]
         );
+        await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: '', isLeaveOrRest: true, remarks: effectiveReason });
 
         // 3. If replacement staff selected, assign them to originalLink
         if (replacement_staff_id) {
@@ -3798,27 +4755,45 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           if (subStaff) {
             const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
             const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const subReason = `Substitute for ${staff.name} on Link ${originalLink}`;
+            const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
+                                      (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
+                                      (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
+                                      originalLink;
+            const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || (effectiveSlotLink && effectiveSlotLink <= 21 && subStaff.category_id !== 1);
+            const subReason = isUpgrade
+              ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name}`
+              : `Substitute for ${staff.name} on Link ${effectiveSlotLink}`;
+
+            // Clear any previous substitute assignment for this staff on another slot on the same date
+            await run(
+              `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
+              [subStaff.id, staff.id, dStr]
+            );
 
             await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
+               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?, NULL, 0, NULL, 0, NULL)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = excluded.status,
                  substitute_staff_id = excluded.substitute_staff_id,
                  substitute_name = excluded.substitute_name,
                  reason = excluded.reason,
-                 target_category_id = excluded.target_category_id`,
+                 target_category_id = excluded.target_category_id,
+                 leave_type = NULL,
+                 is_extra = 0,
+                 extra_train_no = NULL,
+                 is_advance_duty = 0,
+                 advance_train_no = NULL`,
               [
                 subStaff.id,
                 dStr,
                 subOrigLink,
-                originalLink,
+                effectiveSlotLink,
                 staff.id,
                 staff.name,
                 subReason,
-                target_category_id || staff.category_id
+                isUpgrade ? 1 : (target_category_id || staff.category_id)
               ]
             );
 
@@ -3830,7 +4805,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, `Working as substitute for ${staff.name}`]
+              [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
             );
 
             // Regenerate TA claims for substitute
@@ -3854,6 +4829,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
               }
             }
+            await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
           }
         }
       }
@@ -4039,6 +5015,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
           [disallowRemark, staff.id, dStr, dStr, altDateStr]
         );
+        await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: dayMusterCode, isLeaveOrRest: true, remarks: musterRemarks });
 
         // If replacement is an existing staff member in another column or LR pool
         if (replacement_staff_id) {
@@ -4046,31 +5023,45 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           if (subStaff) {
             const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
             const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            
-            const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1;
+            const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
+                                      (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
+                                      (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
+                                      originalLink;
+            const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || (effectiveSlotLink && effectiveSlotLink <= 21 && subStaff.category_id !== 1);
             const subReason = isUpgrade
-              ? `Upgraded to COR Link ${originalLink} in place of ${staff.name} (${dayLeaveType})`
-              : `Substitute for ${staff.name} (${dayLeaveType}) on Link ${originalLink}`;
+              ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name} (${dayLeaveType})`
+              : `Substitute for ${staff.name} (${dayLeaveType}) on Link ${effectiveSlotLink}`;
+
+            // Clear any previous substitute assignment for this staff on another slot on the same date
+            await run(
+              `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
+              [subStaff.id, staff.id, dStr]
+            );
 
             await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
+               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?, NULL, 0, NULL, 0, NULL)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = excluded.status,
                  substitute_staff_id = excluded.substitute_staff_id,
                  substitute_name = excluded.substitute_name,
                  reason = excluded.reason,
-                 target_category_id = excluded.target_category_id`,
+                 target_category_id = excluded.target_category_id,
+                 leave_type = NULL,
+                 is_extra = 0,
+                 extra_train_no = NULL,
+                 is_advance_duty = 0,
+                 advance_train_no = NULL`,
               [
                 subStaff.id,
                 dStr,
                 subOrigLink,
-                originalLink,
+                effectiveSlotLink,
                 staff.id,
                 staff.name,
                 subReason,
-                target_category_id || staff.category_id
+                isUpgrade ? 1 : (target_category_id || staff.category_id)
               ]
             );
 
@@ -4083,7 +5074,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, `Working as substitute for ${staff.name}`]
+              [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
             );
 
             // Regenerate TA claims for substitute
@@ -4097,6 +5088,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               const { generatePendingTaClaimsForMonth } = require('./ta_generator');
               await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
             } catch (err) {}
+            await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
 
             // Sync substitute with LR sheet if substitute is in Category 4
             if (subStaff.category_id === 4) {
@@ -4153,6 +5145,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                     if (resolvedNextDuty && resolvedNextDuty.code) {
                       await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, subLegReason);
                     }
+                    await syncDocumentsAndEarningsForStaffDate(subStaff.id, nextDateStr, { dutyText: `L-${remLinkNum}`, isLeaveOrRest: false, remarks: subLegReason });
                   }
                 }
               }
@@ -4247,6 +5240,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                   `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
                 ]
               );
+              await syncDocumentsAndEarningsForStaffDate(staff_id, remDateStr, { dutyText: 'AVL', isLeaveOrRest: false });
 
               // 3. If substitute assigned on Day 1, they work return leg as well
               if (replacement_staff_id) {
@@ -4288,6 +5282,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                        updated_at = CURRENT_TIMESTAMP`,
                     [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
                   );
+                  await syncDocumentsAndEarningsForStaffDate(subStaff.id, remDateStr, { dutyText: `L-${remLink}`, isLeaveOrRest: false, remarks: subReason });
                 }
               }
             }
@@ -4418,6 +5413,15 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         }
       }
 
+      // Sync Day 1 across TA, NDA, Diary, and Daily Earnings
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, date, {
+        targetLink,
+        targetCat: resolvedTargetCat,
+        isLeave: false,
+        isRest: targetLink === null,
+        remarks: musterRemark
+      });
+
       // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
       // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
       if (targetLink !== null) {
@@ -4546,6 +5550,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       if (staff.category_id === 4) {
         await syncLRSheetRecord(staff.id, date, 'SPARE', reason || 'Available for other duty');
       }
+
+      await syncDocumentsAndEarningsForStaffDate(staff.id, date, { dutyText: 'AVL', isLeaveOrRest: false, remarks: finalReason });
 
       const undoData = {
         action,
@@ -5097,8 +6103,20 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               await syncLRSheetRecord(subStaff.id, targetVacateDate, resolvedDuty.code, subReason);
             }
           }
+          await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, targetVacateDate, {
+            targetLink: vacateOrigLink,
+            isLeave: false,
+            remarks: subReason
+          });
         }
       }
+
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, targetVacateDate, {
+        targetTrain: advanceTrainNo || null,
+        targetLink: advanceLinkNumber,
+        isLeave: false,
+        remarks: advanceReason
+      });
 
       const undoData = {
         action: 'UTILISED_ADVANCE',
@@ -5377,12 +6395,14 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         // Synchronize across TA approvals and documents for both staff
         await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, dStr, {
           targetLink: dutyProfileB.linkNum,
+          targetTrain: dutyProfileB.extraTrainNo,
           isLeave: false,
           isRest: dutyProfileB.isRest,
           remarks: reasonForA
         });
         await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, dStr, {
           targetLink: dutyProfileA.linkNum,
+          targetTrain: dutyProfileA.extraTrainNo,
           isLeave: false,
           isRest: dutyProfileA.isRest,
           remarks: reasonForB
@@ -5390,11 +6410,16 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       }
 
       await logAudit(
-        staff_id,
-        date,
+        'Admin',
         'MUTUAL_SHIFT',
         `Mutual shift between ${staffA.name} and ${staffB.name} from ${date} to ${to_date || date}`,
-        req.user?.username || 'Admin'
+        {
+          action: 'MUTUAL_SHIFT',
+          staff_id: staffA.id,
+          staff_name: `${staffA.name} ↔ ${staffB.name}`,
+          staff_b_id: staffB.id,
+          dates: datesToProcess
+        }
       );
 
       return res.json({
@@ -5501,6 +6526,13 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           [staff_id, dStr, shiftReason]
         );
 
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
+          targetLink: shiftedLinkNum,
+          targetTrain: extraTrainNo || shiftedPlace,
+          isLeave: false,
+          remarks: shiftReason
+        });
+
         // If replacement staff is provided to take over this original link slot:
         if (replacement_staff_id) {
           const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
@@ -5542,6 +6574,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 await syncLRSheetRecord(subStaff.id, dStr, resolvedDuty.code, subReason);
               }
             }
+            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+              targetLink: originalLink,
+              isLeave: false,
+              remarks: subReason
+            });
           }
         }
       }
@@ -5573,6 +6610,12 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
       await run('DELETE FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff_id, date]);
       await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+      await syncDocumentsAndEarningsForStaffDate(staff_id, date, { dutyText: null, isLeaveOrRest: false });
+      await logAudit('Admin', 'UNDO_SHIFT', `Reverted shift for ${staff.name} on ${date} and restored to original cyclic link`, {
+        staff_id,
+        staff_name: staff.name,
+        date
+      });
       return res.json({ success: true, message: 'Shift undone and staff restored to original cyclic link.' });
     }
 
@@ -5584,6 +6627,15 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 });
 
 // POST /api/duty/exchange-staff - Exchange / Swap duties between two employees on a date
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty/exchange-staff
+//   • Module          : Leave / Swap & Duty Exchange
+//   • Frontend Caller : App.jsx -> Exchange / Swap Staff Modal
+//   • Reads From DB   : staff, links, overrides
+//   • Saves To DB     : overrides, links
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Swaps duties between two employees (temporary date range in `overrides` or permanent link swap in `links`) and updates both employees across Muster, TA, NDA, Diary, Daily Earnings, and LR Sheet.
+// ============================================================================
 app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
   const { staff_a_id, staff_b_id, date, reason, duty_a_link, duty_a_category_id, duty_b_link, duty_b_category_id } = req.body;
   if (!staff_a_id || !staff_b_id || !date) {
@@ -5815,7 +6867,58 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
   }
 });
 
-// Helper to synchronize any duty change / deviation across TA, NDA, Diary, Muster, Overrides, and LR Sheet
+// Helper: Synchronize custom saved rows in TA, NDA, Diary, and Daily Earnings for a given staffId & date (YYYY-MM-DD)
+// Clears stale custom entries on that date in NDA & Diary (and TA when duty changes) so generators dynamically reflect the latest duty/leave/swap/LR assignment, and updates saved Daily Earnings duty/remarks.
+async function syncDocumentsAndEarningsForStaffDate(staffId, dateStr, options = {}) {
+  if (!staffId || !dateStr) return;
+  try {
+    const dateParts = String(dateStr).split('-');
+    if (dateParts.length !== 3) return;
+    const monthYear = `${dateParts[0]}-${dateParts[1]}`;
+    const altShort = `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}`;
+    const altPadded = `${dateParts[2]}/${dateParts[1]}/${dateParts[0].slice(-2)}`;
+    const altFull = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+
+    const { dutyText, isLeaveOrRest, remarks, preserveCustomTa } = options;
+
+    // 1. Clear stale custom saved rows for this specific date in nda_entries and diary_entries so per-date merge regenerates them cleanly
+    await run(
+      `DELETE FROM nda_entries 
+       WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+      [staffId, monthYear, dateStr, altShort, altPadded, altFull]
+    );
+
+    await run(
+      `DELETE FROM diary_entries 
+       WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+      [staffId, monthYear, dateStr, altShort, altPadded, altFull]
+    );
+
+    if (!preserveCustomTa && !isLeaveOrRest) {
+      await run(
+        `DELETE FROM ta_entries 
+         WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+        [staffId, dateStr, dateStr, altShort, altPadded, altFull]
+      );
+    }
+
+    // 2. If a saved Daily Earnings entry exists for this staff & date, update its duty and remarks
+    if (dutyText !== undefined && dutyText !== null) {
+      await run(
+        `UPDATE daily_earnings_entries 
+         SET duty = ?, 
+             remarks = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE remarks END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE staff_id = ? AND date = ?`,
+        [String(dutyText), remarks || '', remarks || '', remarks || '', staffId, dateStr]
+      );
+    }
+  } catch (err) {
+    console.warn('Error in syncDocumentsAndEarningsForStaffDate:', err.message);
+  }
+}
+
+// Helper to synchronize any duty change / deviation across TA, NDA, Diary, Daily Earnings, Muster, Overrides, and LR Sheet
 async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
   const { run, get, all } = db;
   const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
@@ -5914,9 +7017,28 @@ async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
       console.warn('Error regenerating TA claims in sync:', err.message);
     }
   }
+
+  // 4. Sync NDA, Diary, TA custom rows & Daily Earnings Sheet
+  const effectiveDutyText = isLeave
+    ? (leaveCode || 'LEAVE')
+    : (isRest ? 'REST' : (isAvailable ? 'AVL' : (targetTrain || (targetLink ? `L-${targetLink}` : null))));
+  await syncDocumentsAndEarningsForStaffDate(staffId, date, {
+    dutyText: effectiveDutyText,
+    isLeaveOrRest: Boolean(isLeave || isRest),
+    remarks
+  });
 }
 
 // POST /api/duty/drag-assign-train - Drag and drop employee assignment across trains
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty/drag-assign-train
+//   • Module          : Daily Summary & Train Assignment
+//   • Frontend Caller : App.jsx -> Drag-and-Drop Train Assignment on Daily Summary / Availability Sheet
+//   • Reads From DB   : staff, links, overrides, non_daily_trains
+//   • Saves To DB     : overrides, non_daily_assignments
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Assigns a regular or non-daily train to an employee on a specific date via drag-and-drop and syncs all downstream sheets.
+// ============================================================================
 app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
   const {
     staff_id,
@@ -5939,6 +7061,9 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
   try {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
+    if (parseInt(staff.category_id, 10) === 1) {
+      return res.status(400).json({ error: 'Conductors (COR) cannot be assigned to Non-Daily trains.' });
+    }
 
     const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
     const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
@@ -6183,6 +7308,15 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
 });
 
 // POST /api/duty/assign-non-daily-train - Assign staff to a non-daily train service
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty/assign-non-daily-train
+//   • Module          : Daily Summary & Non-Daily Trains
+//   • Frontend Caller : App.jsx -> Non-Daily Train Assignment Modal
+//   • Reads From DB   : non_daily_trains, non_daily_assignments, staff
+//   • Saves To DB     : non_daily_assignments, overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Assigns a non-daily train to a staff member on a date, writes to `non_daily_assignments` and `overrides`, and updates Muster, TA, NDA, Diary, and Earnings.
+// ============================================================================
 app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
   const { staff_id, date, non_daily_train_id, train_number, source_link } = req.body;
   if (!staff_id || !date || (!non_daily_train_id && !train_number)) {
@@ -6413,6 +7547,15 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
 });
 
 // POST /api/duty/unassign-non-daily-train - Remove staff from non-daily train and reset duty
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty/unassign-non-daily-train
+//   • Module          : Daily Summary & Non-Daily Trains
+//   • Frontend Caller : App.jsx -> Remove Non-Daily Train Assignment
+//   • Reads From DB   : non_daily_assignments, overrides
+//   • Saves To DB     : non_daily_assignments, overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Removes a non-daily train assignment and restores/resyncs the employee duty across all modules.
+// ============================================================================
 app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) => {
   const { staff_id, date, non_daily_train_id } = req.body;
   try {
@@ -6497,6 +7640,15 @@ app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) =>
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/overrides/audit
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx (Daily Summary / Monthly Movement)
+//   • Reads From DB   : overrides, links, staff
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Duty override operation synchronized across all Roster and Document modules.
+// ============================================================================
 app.get('/api/overrides/audit', async (req, res) => {
   try {
     const logs = await all(`
@@ -6512,10 +7664,33 @@ app.get('/api/overrides/audit', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/audit-logs
+//   • Module          : Audit Logs & System History
+//   • Frontend Caller : App.jsx -> fetchAuditLogs() (Audit Logs Tab)
+//   • Reads From DB   : audit_logs
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Returns the latest 300 audit logs enriched with `what_saved` and `where_saved` (`endpoint`, `source_module`, `saved_tables`, `linked_modules`).
+// ============================================================================
 app.get('/api/audit-logs', async (req, res) => {
   try {
-    const logs = await all('SELECT id, user_role, action_type, description, timestamp, undo_data, is_undone FROM audit_logs ORDER BY timestamp DESC, id DESC LIMIT 200');
-    res.json(logs);
+    const logs = await all('SELECT id, user_role, action_type, description, timestamp, undo_data, is_undone FROM audit_logs ORDER BY timestamp DESC, id DESC LIMIT 300');
+    const enriched = logs.map(row => {
+      let parsedUndo = null;
+      if (row.undo_data) {
+        try {
+          parsedUndo = typeof row.undo_data === 'string' ? JSON.parse(row.undo_data) : row.undo_data;
+        } catch (e) {}
+      }
+      const meta = deriveAuditMetadata(row.action_type, row.description, parsedUndo);
+      return {
+        ...row,
+        what_saved: parsedUndo?.what_saved || meta.what_saved,
+        where_saved: parsedUndo?.where_saved || meta.where_saved
+      };
+    });
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6604,6 +7779,15 @@ async function restoreOverrideAndMuster(staffId, date, prevOverride, prevMuster)
 }
 
 // POST /api/audit-logs/:id/undo - Undo an audited operation and revert its effects
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/audit-logs/:id/undo
+//   • Module          : Audit Logs & Universal Undo
+//   • Frontend Caller : App.jsx -> handleUndoAuditLog() (Undo Button in Audit Logs)
+//   • Reads From DB   : audit_logs
+//   • Saves To DB     : audit_logs, overrides, links, staff, muster_records, lr_sheet_records
+//   • Auto-Syncs To   : Daily Summary Table (overrides), Monthly Movement Grid (overrides), Muster Roll & Individual Muster (muster_records), TA Approvals & TA Journal (ta_approvals, ta_entries), NDA Journal (nda_entries), Staff Diary (diary_entries), Daily Earnings Sheet (daily_earnings_entries), Leave / Swap Register (overrides, leave_requests), Leave Reserve Sheet (lr_sheet_records), Audit Logs (audit_logs)
+//   • Summary         : Reverts a previously recorded action using its stored `undo_data` snapshot and resynchronizes all affected tables.
+// ============================================================================
 app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -7192,6 +8376,15 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // LEAVE & SWAP REQUESTS API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/leave-requests
+//   • Module          : Leave / Swap Register
+//   • Frontend Caller : App.jsx -> fetchLeaveRequests()
+//   • Reads From DB   : leave_requests, staff
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Fetches all pending, approved, and rejected leave applications.
+// ============================================================================
 app.get('/api/leave-requests', async (req, res) => {
   try {
     const requests = await all(`
@@ -7209,6 +8402,15 @@ app.get('/api/leave-requests', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/leave-requests
+//   • Module          : Leave / Swap Register
+//   • Frontend Caller : App.jsx -> Submit Leave Request Form
+//   • Reads From DB   : staff
+//   • Saves To DB     : leave_requests
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Submits a new leave application (`PENDING` status) into `leave_requests`.
+// ============================================================================
 app.post('/api/leave-requests', async (req, res) => {
   const { staff_id, date, from_date, to_date, type, swap_staff_id, reason } = req.body;
   const fromDate = from_date || date;
@@ -7227,6 +8429,15 @@ app.post('/api/leave-requests', async (req, res) => {
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/leave-requests/:id/approve
+//   • Module          : Leave / Swap Register
+//   • Frontend Caller : App.jsx -> Approve Leave Button
+//   • Reads From DB   : leave_requests, staff, links
+//   • Saves To DB     : leave_requests, overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Approves a leave request, writes `LEAVE` overrides for every date in the leave range, marks Muster Roll & LR Sheet, clears conflicting TA/NDA/Earnings, and logs to Audit.
+// ============================================================================
 app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -7238,7 +8449,7 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
     const staffA = await get('SELECT * FROM staff WHERE id = ?', [request.staff_id]);
     const cat = await get('SELECT * FROM categories WHERE id = ?', [staffA.category_id]);
 
-    // Apply the leave or swap logic to create overrides
+    // Apply the leave or swap logic to create overrides and synchronize across all modules
     if (request.type === 'LEAVE') {
       const fromD = request.from_date || request.date;
       const toD = request.to_date || fromD;
@@ -7260,13 +8471,20 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
         const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, curDateStr);
         const dayOffset = getDayOffset(catAnchorDate, curDateStr);
         const origLink = getBaseLinkNumber(staffA.row_position, dayOffset, catCycleLength);
+        const leaveReason = `Approved Leave: ${request.reason || 'On Leave'}`;
 
         await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason) 
-           VALUES (?, ?, ?, NULL, 'LEAVE', ?) 
-           ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = NULL, status = 'LEAVE', reason = excluded.reason`,
-          [staffA.id, curDateStr, origLink, `Approved Leave: ${request.reason || 'On Leave'}`]
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, leave_type) 
+           VALUES (?, ?, ?, NULL, 'LEAVE', ?, 'CL') 
+           ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = NULL, status = 'LEAVE', reason = excluded.reason, leave_type = COALESCE(overrides.leave_type, 'CL')`,
+          [staffA.id, curDateStr, origLink, leaveReason]
         );
+
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, curDateStr, {
+          isLeave: true,
+          leaveCode: 'CL',
+          remarks: leaveReason
+        });
       }
 
       if (fromD === toD) {
@@ -7297,6 +8515,7 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
                ON CONFLICT(staff_id, date) DO UPDATE SET code = 'P', remarks = excluded.remarks, updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
               [staffA.id, remDateStr, `Present at HQ (Available for booking - 1-day leave on Link #${origLink})`]
             );
+            await syncDocumentsAndEarningsForStaffDate(staffA.id, remDateStr, { dutyText: 'AVL', isLeaveOrRest: false });
           }
         }
       }
@@ -7336,18 +8555,31 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
 
       // Swap their current active duties on this date
       await run(
-        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, reason) 
-         VALUES (?, ?, ?, ?, ?) 
-         ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, reason = excluded.reason`,
-        [staffA.id, swapDate, origLinkA, dutyB, `Swap with ${staffB.name}`]
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason) 
+         VALUES (?, ?, ?, ?, ?, ?) 
+         ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status, reason = excluded.reason`,
+        [staffA.id, swapDate, origLinkA, dutyB, dutyB === null ? 'REST' : 'CHANGED_LINK', `Swap with ${staffB.name}`]
       );
 
       await run(
-        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, reason) 
-         VALUES (?, ?, ?, ?, ?) 
-         ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, reason = excluded.reason`,
-        [staffB.id, swapDate, origLinkB, dutyA, `Swap with ${staffA.name}`]
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason) 
+         VALUES (?, ?, ?, ?, ?, ?) 
+         ON CONFLICT(staff_id, date) DO UPDATE SET overridden_link_number = excluded.overridden_link_number, status = excluded.status, reason = excluded.reason`,
+        [staffB.id, swapDate, origLinkB, dutyA, dutyA === null ? 'REST' : 'CHANGED_LINK', `Swap with ${staffA.name}`]
       );
+
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, swapDate, {
+        targetLink: dutyB,
+        isLeave: false,
+        isRest: dutyB === null,
+        remarks: `Swap with ${staffB.name}`
+      });
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, swapDate, {
+        targetLink: dutyA,
+        isLeave: false,
+        isRest: dutyA === null,
+        remarks: `Swap with ${staffA.name}`
+      });
 
       const undoData = {
         action: 'APPROVE_SWAP',
@@ -7366,20 +8598,36 @@ app.post('/api/leave-requests/:id/approve', requireAdmin, async (req, res) => {
       [id]
     );
 
-    res.json({ message: 'Request approved successfully' });
+    res.json({ message: 'Request approved and synchronized across all modules successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/leave-requests/:id/reject
+//   • Module          : Leave / Swap Register
+//   • Frontend Caller : App.jsx -> Reject Leave Button
+//   • Reads From DB   : leave_requests, overrides
+//   • Saves To DB     : leave_requests, overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Rejects a leave request, removes any leave overrides for those dates, and resyncs the employee’s regular duty across all modules.
+// ============================================================================
 app.post('/api/leave-requests/:id/reject', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   try {
+    const request = await get('SELECT lr.*, s.name as staff_name FROM leave_requests lr LEFT JOIN staff s ON lr.staff_id = s.id WHERE lr.id = ?', [id]);
     await run(
       "UPDATE leave_requests SET status = 'REJECTED', reason = ? WHERE id = ?",
       [reason || 'Rejected by Admin', id]
     );
+    await logAudit('Admin', 'REJECT_LEAVE', `Rejected ${request?.type || 'leave'} request for ${request?.staff_name || `Staff #${request?.staff_id || id}`} (${request?.from_date || request?.date || ''}): ${reason || 'Rejected by Admin'}`, {
+      request_id: id,
+      staff_id: request?.staff_id,
+      staff_name: request?.staff_name,
+      date: request?.from_date || request?.date
+    });
     res.json({ message: 'Request rejected' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -7389,6 +8637,15 @@ app.post('/api/leave-requests/:id/reject', requireAdmin, async (req, res) => {
 // ----------------------------------------------------
 // ROSTER GENERATION API
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/roster
+//   • Module          : Monthly Movement Grid
+//   • Frontend Caller : App.jsx -> fetchRoster() (Monthly Movement Tab)
+//   • Reads From DB   : staff, links, overrides, muster_records, lr_sheet_records, staff_rest_rules, roster_rest_adjustments, non_daily_assignments
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Builds the full Monthly Movement matrix for all categories and employees for a date range, merging base link cycles with overrides, Muster Roll, and LR Sheet records.
+// ============================================================================
 app.get('/api/roster', async (req, res) => {
   const category_id = req.query.category_id || req.query.categoryId;
   const year = req.query.year;
@@ -7946,11 +9203,15 @@ app.get('/api/roster', async (req, res) => {
           const cmp = compareDutyAndResolve({
             origTrain,
             origIsRest,
+            origLinkNum: null,
+            actualLinkNum: linkNum,
+            targetCategoryId: targetCatId,
             remarks: overrideReason || (muster ? muster.remarks : null),
             overrideDuty: directOv || subOv,
             muster,
             allLinks,
-            categoryId: targetCatId || staff.category_id || currentCatId
+            categoryId: targetCatId || staff.category_id || currentCatId,
+            dateStr: d.dateString
           });
 
           rowCells.push({
@@ -7973,6 +9234,10 @@ app.get('/api/roster', async (req, res) => {
             leave_type: leaveType,
             original_train_numbers: origTrain,
             original_is_rest: origIsRest,
+            original_from_station: origIsRest ? '-' : 'GNT',
+            original_to_station: origIsRest ? '-' : 'GNT',
+            original_coaches: '-',
+            original_set_type: origIsRest ? 'Weekly Rest' : 'Spare / HQ',
             actual_train_numbers: actualTrain,
             effective_train_numbers: cmp.train_no,
             condition_applied: cmp.condition,
@@ -8181,17 +9446,7 @@ app.get('/api/roster', async (req, res) => {
           const origBaseLink = getBaseLinkNumber(staff.row_position, staffDayOffset, curCycleLength);
           let origDutyDef = null;
           if (origBaseLink !== null && origBaseLink !== undefined) {
-            origDutyDef = allLinks.find(l => 
-              (l.category_id === (staff.category_id || currentCatId)) && 
-              l.link_number === origBaseLink &&
-              (!l.effective_from || l.effective_from <= d.dateString) &&
-              (!l.effective_to || l.effective_to >= d.dateString)
-            ) || allLinks.find(l => 
-              l.link_number === origBaseLink && 
-              l.category_id !== 4 &&
-              (!l.effective_from || l.effective_from <= d.dateString) &&
-              (!l.effective_to || l.effective_to >= d.dateString)
-            );
+            origDutyDef = await getActiveLinkDef(staff.category_id || currentCatId, origBaseLink, d.dateString);
           }
           const origIsRest = !origDutyDef || origDutyDef.is_rest === 1 || isRestString(origDutyDef.train_numbers);
           const origTrain = origIsRest ? 'REST' : (origDutyDef.train_numbers || 'REST');
@@ -8200,11 +9455,15 @@ app.get('/api/roster', async (req, res) => {
           const cmp = compareDutyAndResolve({
             origTrain,
             origIsRest,
+            origLinkNum: origBaseLink,
+            actualLinkNum: linkNum,
+            targetCategoryId: targetCatId || currentCatId,
             remarks: overrideReason || (muster ? muster.remarks : null),
             overrideDuty: directOv || subOv,
             muster,
             allLinks,
-            categoryId: staff.category_id || currentCatId
+            categoryId: staff.category_id || currentCatId,
+            dateStr: d.dateString
           });
 
           rowCells.push({
@@ -8227,6 +9486,10 @@ app.get('/api/roster', async (req, res) => {
             leave_type: leaveType,
             original_train_numbers: origTrain,
             original_is_rest: origIsRest,
+            original_from_station: origIsRest ? '-' : (origDutyDef ? (origDutyDef.from_station || '-') : '-'),
+            original_to_station: origIsRest ? '-' : (origDutyDef ? (origDutyDef.to_station || '-') : '-'),
+            original_coaches: origIsRest ? '-' : (origDutyDef ? (origDutyDef.coaches || '-') : '-'),
+            original_set_type: origIsRest ? 'Weekly Rest' : (origDutyDef ? (origDutyDef.set_type || 'Train Duty') : 'Train Duty'),
             actual_train_numbers: actualTrain,
             effective_train_numbers: cmp.train_no,
             condition_applied: cmp.condition,
@@ -8277,6 +9540,15 @@ app.get('/api/roster', async (req, res) => {
 // ----------------------------------------------------
 
 // Preview link changes before applying
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/roster/preview-rest-change
+//   • Module          : System API
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/roster/preview-rest-change
+// ============================================================================
 app.get('/api/roster/preview-rest-change', async (req, res) => {
   const { staff_id, new_rest_date, mode = 'SHIFT' } = req.query;
   if (!staff_id || !new_rest_date) {
@@ -8323,6 +9595,15 @@ app.get('/api/roster/preview-rest-change', async (req, res) => {
 });
 
 // Apply rest day change with automatic link adjustments
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/roster/change-rest-day
+//   • Module          : Monthly Movement Grid (Rest Adjustment)
+//   • Frontend Caller : App.jsx -> Rest Day Adjustment Modal
+//   • Reads From DB   : staff, links, roster_rest_adjustments
+//   • Saves To DB     : roster_rest_adjustments, overrides
+//   • Auto-Syncs To   : muster_records, ta_approvals, audit_logs
+//   • Summary         : Shifts an employee’s rest day in the Monthly Movement Grid and records the rest adjustment.
+// ============================================================================
 app.post('/api/roster/change-rest-day', requireAdmin, async (req, res) => {
   const { staff_id, new_rest_date, mode = 'SHIFT', reason } = req.body;
   if (!staff_id || !new_rest_date) {
@@ -8405,6 +9686,15 @@ app.post('/api/roster/change-rest-day', requireAdmin, async (req, res) => {
 });
 
 // Reset rest adjustments for a specific date range
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/roster/reset-rest-adjustment
+//   • Module          : Monthly Movement Grid (Rest Adjustment)
+//   • Frontend Caller : App.jsx -> Reset Rest Day Adjustment
+//   • Reads From DB   : roster_rest_adjustments
+//   • Saves To DB     : roster_rest_adjustments, overrides
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Resets a custom rest-day adjustment back to the base link cycle.
+// ============================================================================
 app.post('/api/roster/reset-rest-adjustment', requireAdmin, async (req, res) => {
   const { staff_id, start_date, end_date } = req.body;
   if (!staff_id || !start_date || !end_date) {
@@ -8435,6 +9725,15 @@ app.post('/api/roster/reset-rest-adjustment', requireAdmin, async (req, res) => 
 });
 
 // Change regular weekly rest day for staff member (rotation position swap)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/staff/:id/change-weekly-rest
+//   • Module          : Monthly Movement & Staff Rest Rules
+//   • Frontend Caller : App.jsx -> Change Weekly Rest Rule
+//   • Reads From DB   : staff, staff_rest_rules
+//   • Saves To DB     : staff_rest_rules, staff
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Updates the recurring weekly rest day rule for a staff member from an effective date onward.
+// ============================================================================
 app.post('/api/staff/:id/change-weekly-rest', requireAdmin, async (req, res) => {
   const staffId = req.params.id;
   const { new_rest_weekday } = req.body;
@@ -8487,6 +9786,15 @@ app.post('/api/staff/:id/change-weekly-rest', requireAdmin, async (req, res) => 
 // ----------------------------------------------------
 
 // "Who is working link X on date Y?"
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/reports/who-is-working
+//   • Module          : Daily Summary & Movement Reports
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/reports/who-is-working
+// ============================================================================
 app.get('/api/reports/who-is-working', async (req, res) => {
   const { category_id, link_number, date } = req.query;
   if (!category_id || !link_number || !date) {
@@ -8524,6 +9832,15 @@ app.get('/api/reports/who-is-working', async (req, res) => {
 });
 
 // "What is person Z working on date Y?"
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/reports/what-is-person-working
+//   • Module          : Daily Summary & Movement Reports
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/reports/what-is-person-working
+// ============================================================================
 app.get('/api/reports/what-is-person-working', async (req, res) => {
   const { staff_id, date } = req.query;
   if (!staff_id || !date) {
@@ -8588,6 +9905,15 @@ app.get('/api/reports/what-is-person-working', async (req, res) => {
 });
 
 // Daily view: for a chosen date, list every staff member and their assigned link/duty
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/reports/daily-view
+//   • Module          : Daily Summary Table
+//   • Frontend Caller : App.jsx -> fetchDailyView() (Daily Summary / Movement Tab)
+//   • Reads From DB   : staff, links, overrides, muster_records, lr_sheet_records, non_daily_assignments, leave_requests
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Computes the complete Daily Summary / Daily Movement sheet for a selected date by combining base links, overrides, Muster Roll, LR Sheet, and Non-Daily assignments.
+// ============================================================================
 app.get('/api/reports/daily-view', async (req, res) => {
   const { date } = req.query;
   if (!date) return res.status(400).json({ error: 'Date is required' });
@@ -8950,6 +10276,15 @@ app.get('/api/reports/daily-view', async (req, res) => {
 // STAFF AVAILABILITY SHEET API
 // Categorized for: COR, TTE, LADIES, LR with Glowing Dot status
 // ----------------------------------------------------
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/reports/availability-sheet
+//   • Module          : Daily Availability Sheet
+//   • Frontend Caller : App.jsx -> fetchAvailabilitySheet() (Spare / LR / Rest Availability)
+//   • Reads From DB   : staff, links, overrides, muster_records, lr_sheet_records
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Returns available Spare, Leave Reserve (LR), Rest, and On-Leave staff for a given date.
+// ============================================================================
 app.get('/api/reports/availability-sheet', async (req, res) => {
   const formatLocalDate = (d) => {
     const y = d.getFullYear();
@@ -9253,8 +10588,8 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           statusReason = 'Weekly rest day at Headquarters GNT; available for call-up / emergency booking (earns CR)';
           currentLocation = '🏠 GNT (Weekly Rest)';
           catBreakdown.available_weekly_rest++;
-        } else if ([60, 61, 62].includes(activeLink) || (dutyDetails && dutyDetails.train_numbers && String(dutyDetails.train_numbers).toUpperCase().includes('NON DAILY'))) {
-          // Category 2 Non-Daily Links (60, 61, 62)
+        } else if (((!date || date >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62]).includes(activeLink) || (dutyDetails && dutyDetails.train_numbers && String(dutyDetails.train_numbers).toUpperCase().includes('NON DAILY'))) {
+          // Category 2 Non-Daily Links (53, 54, 55 from Oct 1, 2026)
           if (override && (override.extra_train_no || override.advance_train_no)) {
             isAvailable = false;
             dotStatus = 'RED';
@@ -9324,6 +10659,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           categoryId: cat.id,
           categoryName: cat.name,
           categoryCode: cat.code,
+          target_category_id: override?.target_category_id || cat.id,
           rest_day: staff.rest_day,
           pf_no: staff.pf_no,
           is_vacant: vacant,
@@ -9400,6 +10736,15 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
 });
 
 // Fetch register entries for a selected date
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/duty-register
+//   • Module          : Duty Register
+//   • Frontend Caller : App.jsx -> fetchDutyRegister()
+//   • Reads From DB   : duty_register, staff
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Fetches actual duty register entries for a selected date.
+// ============================================================================
 app.get('/api/duty-register', async (req, res) => {
   const { date } = req.query;
   if (!date) return res.status(400).json({ error: 'Date is required' });
@@ -9419,14 +10764,22 @@ app.get('/api/duty-register', async (req, res) => {
   }
 });
 
-// Create/Update register entries for a selected date (Transaction based)
+// Create/Update register entries for a selected date (One-by-one save without unnecessary transaction)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty-register
+//   • Module          : Duty Register
+//   • Frontend Caller : App.jsx -> Save Duty Register Entry
+//   • Reads From DB   : duty_register, staff
+//   • Saves To DB     : duty_register
+//   • Auto-Syncs To   : overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves an actual duty record to `duty_register` and synchronizes the duty across Daily Summary (`overrides`), Muster Roll, LR Sheet, TA, NDA, Diary, and Earnings.
+// ============================================================================
 app.post('/api/duty-register', requireAdmin, async (req, res) => {
   const { date, page_number, entries } = req.body;
   if (!date) return res.status(400).json({ error: 'Date is required' });
   if (!Array.isArray(entries)) return res.status(400).json({ error: 'Entries must be an array' });
 
   try {
-    await run('BEGIN TRANSACTION');
     // Fetch and delete existing entries for this date
     const existing = await all('SELECT id FROM duty_register_entry WHERE date = ?', [date]);
     for (const e of existing) {
@@ -9434,54 +10787,123 @@ app.post('/api/duty-register', requireAdmin, async (req, res) => {
     }
     await run('DELETE FROM duty_register_entry WHERE date = ?', [date]);
 
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+
     for (const item of entries) {
-      const result = await run(
-        `INSERT INTO duty_register_entry 
-         (date, page_number, train_out, coach_out, train_return, coach_return, duty_label, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          date,
-          page_number ? parseInt(page_number, 10) : null,
-          item.train_out || '',
-          item.coach_out || '',
-          item.train_return || '',
-          item.coach_return || '',
-          item.duty_label || '',
-          item.notes || ''
-        ]
-      );
-      const entryId = result.lastID;
-      if (Array.isArray(item.staff_ids)) {
-        for (const staffId of item.staff_ids) {
-          await run(
-            'INSERT INTO duty_register_staff (entry_id, staff_id) VALUES (?, ?)',
-            [entryId, staffId]
-          );
-          // Sync with LR sheet if staff is Category 4
-          const staffObj = await get('SELECT category_id FROM staff WHERE id = ?', [staffId]);
-          if (staffObj && staffObj.category_id === 4) {
-            let regCode = '';
-            if (item.train_out) {
-              regCode = item.train_out + (item.train_return ? ` / ${item.train_return}` : '');
-            } else if (item.duty_label) {
-              regCode = item.duty_label;
-            }
-            if (regCode) {
-              await syncLRSheetRecord(staffId, date, regCode, item.notes || item.duty_label || '');
+      try {
+        const result = await run(
+          `INSERT INTO duty_register_entry 
+           (date, page_number, train_out, coach_out, train_return, coach_return, duty_label, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            date,
+            page_number ? parseInt(page_number, 10) : null,
+            item.train_out || '',
+            item.coach_out || '',
+            item.train_return || '',
+            item.coach_return || '',
+            item.duty_label || '',
+            item.notes || ''
+          ]
+        );
+        const entryId = result.lastID;
+        if (Array.isArray(item.staff_ids) && item.staff_ids.length > 0) {
+          for (const staffId of item.staff_ids) {
+            try {
+              await run(
+                'INSERT INTO duty_register_staff (entry_id, staff_id) VALUES (?, ?)',
+                [entryId, staffId]
+              );
+              // Sync with LR sheet if staff is Category 4
+              const staffObj = await get('SELECT id, name, category_id FROM staff WHERE id = ?', [staffId]);
+              let regCode = '';
+              if (item.train_out) {
+                regCode = item.train_out + (item.train_return ? ` / ${item.train_return}` : '');
+              } else if (item.duty_label) {
+                regCode = item.duty_label;
+              }
+              if (staffObj && staffObj.category_id === 4 && regCode) {
+                await syncLRSheetRecord(staffId, date, regCode, item.notes || item.duty_label || '');
+              }
+              if (regCode) {
+                await syncDocumentsAndEarningsForStaffDate(staffId, date, {
+                  dutyText: regCode,
+                  isLeaveOrRest: regCode.toUpperCase() === 'REST' || regCode.toUpperCase() === 'R',
+                  remarks: item.notes || item.duty_label || ''
+                });
+              }
+              savedCount++;
+              savedEmployeesSet.add(staffId);
+            } catch (staffErr) {
+              errorCount++;
+              errorEmployeesSet.add(staffId);
+              const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+              errors.push({
+                staff_id: staffId,
+                staff_name: staffRow?.name || `Employee #${staffId}`,
+                error: staffErr.message
+              });
             }
           }
+        } else {
+          savedCount++;
         }
+      } catch (entryErr) {
+        errorCount++;
+        errors.push({
+          staff_id: null,
+          staff_name: item.train_out || item.duty_label || 'Register Row',
+          error: entryErr.message
+        });
       }
     }
-    await run('COMMIT');
-    res.json({ success: true });
+
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      'Admin',
+      'SAVE_DUTY_REGISTER',
+      `Saved Duty Register for ${date}: ${savedEmployeesCount} employee(s) (${savedCount} assignment(s)) saved successfully, ${errorEmployeesCount} failed`,
+      {
+        date,
+        savedCount,
+        errorCount,
+        savedEmployeesCount,
+        errorEmployeesCount,
+        errors
+      }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Duty Register Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} assignment(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} error(s)) failed.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     res.status(500).json({ error: err.message });
   }
 });
 
 // Delete a register entry
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/duty-register/:id
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx (Daily Summary / Monthly Movement)
+//   • Reads From DB   : overrides, links, staff
+//   • Saves To DB     : overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Duty override operation synchronized across all Roster and Document modules.
+// ============================================================================
 app.delete('/api/duty-register/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
@@ -9494,6 +10916,15 @@ app.delete('/api/duty-register/:id', requireAdmin, async (req, res) => {
 });
 
 // Pre-populate actual duty register from planned roster
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/duty-register/populate-from-roster
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx (Daily Summary / Monthly Movement)
+//   • Reads From DB   : overrides, links, staff
+//   • Saves To DB     : overrides
+//   • Auto-Syncs To   : muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Duty override operation synchronized across all Roster and Document modules.
+// ============================================================================
 app.post('/api/duty-register/populate-from-roster', requireAdmin, async (req, res) => {
   const { date } = req.body;
   if (!date) return res.status(400).json({ error: 'Date is required' });
@@ -9590,6 +11021,15 @@ function isCoachCompatible(plannedCoach, actualCoach) {
 }
 
 // Reconciliation comparison endpoint
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/duty-register/reconciliation
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx (Daily Summary / Monthly Movement)
+//   • Reads From DB   : overrides, links, staff
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Duty override operation synchronized across all Roster and Document modules.
+// ============================================================================
 app.get('/api/duty-register/reconciliation', async (req, res) => {
   const { date } = req.query;
   if (!date) return res.status(400).json({ error: 'Date is required' });
@@ -9732,6 +11172,15 @@ app.get('/api/duty-register/reconciliation', async (req, res) => {
 });
 
 // Fetch register history logs
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/duty-register/history
+//   • Module          : Daily Summary & Duty Overrides
+//   • Frontend Caller : App.jsx (Daily Summary / Monthly Movement)
+//   • Reads From DB   : overrides, links, staff
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Duty override operation synchronized across all Roster and Document modules.
+// ============================================================================
 app.get('/api/duty-register/history', async (req, res) => {
   const { q, startDate, endDate } = req.query;
 
@@ -9781,6 +11230,15 @@ app.get('/api/duty-register/history', async (req, res) => {
 const { generateStaffTaJournal, generatePendingTaClaimsForMonth, calculateAbsenceAndTa } = require('./ta_generator');
 
 // GET /api/documents/ta/:staffId?year=2026&month=8&start_date=2026-09-01&end_date=2026-09-30
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/ta/:staffId
+//   • Module          : TA Journal Document
+//   • Frontend Caller : TaDocument.jsx -> fetchTaData()
+//   • Reads From DB   : ta_entries, ta_approvals, overrides, muster_records, lr_sheet_records, links, train_ta_nda
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Generates or retrieves the monthly TA Journal for an employee, merging saved `ta_entries`, `ta_approvals`, Daily Summary `overrides`, `muster_records`, and `lr_sheet_records` per date.
+// ============================================================================
 app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -9798,6 +11256,15 @@ app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
 });
 
 // POST /api/documents/ta/:staffId - Save custom TA row edits (Validates 0 < days_claiming_ta <= 1.0)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/ta/:staffId
+//   • Module          : TA Journal Document
+//   • Frontend Caller : TaDocument.jsx -> handleSave() (Save TA Journal Button)
+//   • Reads From DB   : ta_entries, ta_approvals, staff
+//   • Saves To DB     : ta_entries
+//   • Auto-Syncs To   : ta_approvals, overrides, muster_records, lr_sheet_records, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves an employee’s monthly TA Journal rows into `ta_entries`, updates matching `ta_approvals`, and syncs edited train duties across Daily Summary (`overrides`), Muster Roll, LR Sheet, NDA, Diary, and Daily Earnings.
+// ============================================================================
 app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -9884,9 +11351,73 @@ app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
           );
         }
       }
+
+      // Propagate timing updates to matching ta_approvals, nda_entries, and diary_entries rows
+      if (item.train_no && (item.date_str || dutyDate)) {
+        await run(
+          `UPDATE ta_approvals 
+           SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
+               arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END,
+               ta_percentage = COALESCE(?, ta_percentage)
+           WHERE staff_id = ? AND (duty_date = ? OR date_str = ?) AND train_no = ?`,
+          [
+            item.dep_time || '', item.dep_time || '', item.dep_time || '',
+            item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            daysClaiming,
+            staffId, dutyDate || item.date_str, item.date_str || '', item.train_no
+          ]
+        );
+        await run(
+          `UPDATE nda_entries 
+           SET act_dep = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_dep END,
+               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END
+           WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ?) AND train_no = ?`,
+          [
+            item.dep_time || '', item.dep_time || '', item.dep_time || '',
+            item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            staffId, rowMonthYear, item.date_str || '', dutyDate || '', item.train_no
+          ]
+        );
+        await run(
+          `UPDATE diary_entries 
+           SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
+               arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END
+           WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ?) AND train_no = ?`,
+          [
+            item.dep_time || '', item.dep_time || '', item.dep_time || '',
+            item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            staffId, rowMonthYear, item.date_str || '', dutyDate || '', item.train_no
+          ]
+        );
+      }
     }
 
-    res.json({ success: true, message: 'Travelling Allowance journal saved and synced to NDA & Diary successfully.' });
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+    const staffLabel = staffRow?.name || employee_meta?.name || `Staff #${staffId}`;
+    const periodLabel = (start_date && end_date) ? `${start_date} to ${end_date}` : (month_year || 'Month');
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_TA_JOURNAL',
+      `Saved TA Journal for ${staffLabel} (${periodLabel}): ${entries.length} leg row(s) saved & synced to TA Approvals, NDA, and Diary`,
+      {
+        staff_id: staffId,
+        staff_name: staffLabel,
+        month_year: month_year || periodLabel,
+        savedCount: entries.length,
+        errorCount: 0,
+        savedEmployeesCount: 1,
+        errorEmployeesCount: 0
+      }
+    );
+
+    res.json({
+      success: true,
+      savedCount: entries.length,
+      errorCount: 0,
+      savedEmployeesCount: 1,
+      errorEmployeesCount: 0,
+      message: `Travelling Allowance Journal saved for ${staffLabel} (${entries.length} row(s)) and synced to TA Approvals, NDA & Diary!`
+    });
   } catch (err) {
     console.error('Error saving TA journal entries:', err);
     res.status(500).json({ error: err.message });
@@ -9894,19 +11425,39 @@ app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/documents/ta/:staffId?year=2026&month=8 - Reset custom entries to auto-generated master rotation
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/documents/ta/:staffId
+//   • Module          : TA Journal Document
+//   • Frontend Caller : TaDocument.jsx -> handleReset() (Reset to Auto-Generated Roster)
+//   • Reads From DB   : ta_entries
+//   • Saves To DB     : ta_entries
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Clears manual `ta_entries` for the selected employee and month so the TA Journal dynamically regenerates from the live Roster/Muster/TA Approvals.
+// ============================================================================
 app.delete('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const startDate = req.query.start_date || req.query.startDate;
     const endDate = req.query.end_date || req.query.endDate;
+    let periodLabel = '';
     if (startDate && endDate) {
+      periodLabel = `${startDate} to ${endDate}`;
       await run('DELETE FROM ta_entries WHERE staff_id = ? AND duty_date >= ? AND duty_date <= ?', [staffId, startDate, endDate]);
     } else {
       const year = parseInt(req.query.year, 10) || new Date().getFullYear();
       const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
       const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
+      periodLabel = monthYearStr;
       await run('DELETE FROM ta_entries WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
     }
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+    const staffLabel = staffRow?.name || `Staff #${staffId}`;
+    await logAudit(
+      req.user?.role || 'Admin',
+      'RESET_TA_JOURNAL',
+      `Reset TA Journal for ${staffLabel} (${periodLabel}) to master roster rotation`,
+      { staff_id: staffId, staff_name: staffLabel, month_year: periodLabel }
+    );
     res.json({ success: true, message: 'TA Journal reset to master roster rotation.' });
   } catch (err) {
     console.error('Error resetting TA journal:', err);
@@ -9975,6 +11526,15 @@ async function removeClaimFromTaEntries(claimId) {
 }
 
 // GET /api/ta-approvals - List TA claims with filters and statistics
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/ta-approvals
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> fetchApprovals()
+//   • Reads From DB   : ta_approvals, staff, categories, overrides, muster_records, lr_sheet_records
+//   • Saves To DB     : ta_approvals
+//   • Auto-Syncs To   : None
+//   • Summary         : Auto-syncs pending TA claims for the month (saving one employee at a time) and returns all `PENDING`, `APPROVED`, and `REJECTED` claims from `ta_approvals`.
+// ============================================================================
 app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -10084,6 +11644,15 @@ app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
 });
 
 // POST /api/ta-approvals/sync - Force re-generation of pending claims
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/sync
+//   • Module          : TA Journal & TA Approvals
+//   • Frontend Caller : TaDocument.jsx / TaApprovals.jsx
+//   • Reads From DB   : ta_entries, ta_approvals
+//   • Saves To DB     : ta_entries, ta_approvals
+//   • Auto-Syncs To   : overrides, muster_records, lr_sheet_records, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : TA Journal / Approval operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/ta-approvals/sync', requireAdmin, async (req, res) => {
   try {
     const { year, month } = req.body;
@@ -10091,6 +11660,12 @@ app.post('/api/ta-approvals/sync', requireAdmin, async (req, res) => {
     const m = parseInt(month, 10) || (new Date().getMonth() + 1);
 
     await generatePendingTaClaimsForMonth({ get, all, run }, y, m);
+    await logAudit(
+      req.user?.name || req.user?.username || 'Admin',
+      'SYNC_TA_APPROVALS',
+      `Synchronized & regenerated TA Claims for ${String(m).padStart(2, '0')}/${y} from live Roster, Overrides, Muster Roll & LR Sheet`,
+      { year: y, month: m }
+    );
     res.json({ success: true, message: `Synced TA claims for ${m}/${y}` });
   } catch (err) {
     console.error('Error syncing TA claims:', err);
@@ -10099,6 +11674,15 @@ app.post('/api/ta-approvals/sync', requireAdmin, async (req, res) => {
 });
 
 // POST /api/ta-approvals/accept - Accept a single TA claim
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/accept
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> handleAcceptSingle()
+//   • Reads From DB   : ta_approvals, staff
+//   • Saves To DB     : ta_approvals, ta_entries
+//   • Auto-Syncs To   : nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Approves a single TA claim in `ta_approvals`, writes it into the employee’s `ta_entries`, and refreshes linked documents.
+// ============================================================================
 app.post('/api/ta-approvals/accept', requireAdmin, async (req, res) => {
   try {
     const { id } = req.body;
@@ -10118,7 +11702,12 @@ app.post('/api/ta-approvals/accept', requireAdmin, async (req, res) => {
     );
 
     await syncClaimToTaEntries(id);
-    await logAudit(adminName, 'ACCEPT_TA', `Accepted TA for ${claim.staff_name} on ${claim.date_str} (${claim.train_no})`);
+    await logAudit(
+      adminName,
+      'ACCEPT_TA',
+      `Accepted TA claim for ${claim.staff_name} on ${claim.date_str} (Train ${claim.train_no}) — synced to TA Journal`,
+      { claim_id: id, staffId: claim.staff_id, staffName: claim.staff_name, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+    );
 
     res.json({ success: true, message: `TA claim accepted for ${claim.staff_name}` });
   } catch (err) {
@@ -10127,7 +11716,16 @@ app.post('/api/ta-approvals/accept', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/ta-approvals/accept-batch - Accept multiple claims by ID
+// POST /api/ta-approvals/accept-batch - Accept multiple claims by ID one-by-one
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/accept-batch
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> handleAcceptBatch()
+//   • Reads From DB   : ta_approvals, staff
+//   • Saves To DB     : ta_approvals, ta_entries
+//   • Auto-Syncs To   : nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Approves selected TA claims one employee at a time, writes approved rows to `ta_entries`, reports saved vs error counts, and logs to `audit_logs`.
+// ============================================================================
 app.post('/api/ta-approvals/accept-batch', requireAdmin, async (req, res) => {
   try {
     const { ids } = req.body;
@@ -10136,27 +11734,82 @@ app.post('/api/ta-approvals/accept-batch', requireAdmin, async (req, res) => {
     }
 
     const adminName = req.user?.name || req.user?.username || 'Admin';
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+
     for (const id of ids) {
-      await run(
-        `UPDATE ta_approvals SET
-          status = 'APPROVED',
-          approved_by = ?,
-          approved_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [adminName, id]
-      );
-      await syncClaimToTaEntries(id);
+      let claimRow = null;
+      try {
+        claimRow = await get(
+          'SELECT a.id, a.staff_id, a.date_str, s.name as staff_name FROM ta_approvals a LEFT JOIN staff s ON a.staff_id = s.id WHERE a.id = ?',
+          [id]
+        );
+        if (!claimRow) {
+          throw new Error(`TA Claim #${id} not found`);
+        }
+        await run(
+          `UPDATE ta_approvals SET
+            status = 'APPROVED',
+            approved_by = ?,
+            approved_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [adminName, id]
+        );
+        await syncClaimToTaEntries(id);
+        savedCount++;
+        if (claimRow.staff_id) savedEmployeesSet.add(claimRow.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (claimRow?.staff_id) errorEmployeesSet.add(claimRow.staff_id);
+        errors.push({
+          claim_id: id,
+          staff_id: claimRow?.staff_id || null,
+          staff_name: claimRow?.staff_name || `Claim #${id}`,
+          error: itemErr.message
+        });
+      }
     }
 
-    await logAudit(adminName, 'ACCEPT_TA_BATCH', `Batch accepted ${ids.length} TA claims`);
-    res.json({ success: true, count: ids.length, message: `Accepted ${ids.length} TA claims` });
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      adminName,
+      'ACCEPT_TA_BATCH',
+      `Batch accepted TA claims one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} claim(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} claim(s)) failed`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      count: savedCount,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `TA Approvals Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} claim(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} claim(s)) had an error.${errorSummary}`
+    });
   } catch (err) {
     console.error('Error batch accepting TA claims:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/ta-approvals/accept-all - Accept all pending claims matching filters
+// POST /api/ta-approvals/accept-all - Accept all pending claims matching filters one-by-one
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/accept-all
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> handleAcceptAll()
+//   • Reads From DB   : ta_approvals, staff
+//   • Saves To DB     : ta_approvals, ta_entries
+//   • Auto-Syncs To   : nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Approves all pending TA claims for the selected month/category one employee at a time and syncs them into `ta_entries`.
+// ============================================================================
 app.post('/api/ta-approvals/accept-all', requireAdmin, async (req, res) => {
   try {
     const { year, month, category_id } = req.body;
@@ -10165,7 +11818,7 @@ app.post('/api/ta-approvals/accept-all', requireAdmin, async (req, res) => {
     const monthYearStr = `${y}-${String(m).padStart(2, '0')}`;
 
     let sql = `
-      SELECT a.id FROM ta_approvals a
+      SELECT a.id, a.staff_id, a.date_str, s.name as staff_name FROM ta_approvals a
       JOIN staff s ON a.staff_id = s.id
       WHERE a.month_year = ? AND a.status = 'PENDING'
     `;
@@ -10177,28 +11830,74 @@ app.post('/api/ta-approvals/accept-all', requireAdmin, async (req, res) => {
 
     const pendingClaims = await all(sql, params);
     const adminName = req.user?.name || req.user?.username || 'Admin';
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
 
     for (const claim of pendingClaims) {
-      await run(
-        `UPDATE ta_approvals SET
-          status = 'APPROVED',
-          approved_by = ?,
-          approved_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [adminName, claim.id]
-      );
-      await syncClaimToTaEntries(claim.id);
+      try {
+        await run(
+          `UPDATE ta_approvals SET
+            status = 'APPROVED',
+            approved_by = ?,
+            approved_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [adminName, claim.id]
+        );
+        await syncClaimToTaEntries(claim.id);
+        savedCount++;
+        if (claim.staff_id) savedEmployeesSet.add(claim.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (claim.staff_id) errorEmployeesSet.add(claim.staff_id);
+        errors.push({
+          claim_id: claim.id,
+          staff_id: claim.staff_id,
+          staff_name: claim.staff_name || `Employee #${claim.staff_id}`,
+          error: itemErr.message
+        });
+      }
     }
 
-    await logAudit(adminName, 'ACCEPT_TA_ALL', `Accepted all ${pendingClaims.length} pending TAs for ${m}/${y}`);
-    res.json({ success: true, count: pendingClaims.length, message: `Accepted all ${pendingClaims.length} pending TA claims` });
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      adminName,
+      'ACCEPT_TA_ALL',
+      `Accepted pending TA claims for ${m}/${y} one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} claim(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} claim(s)) failed`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount, month_year: monthYearStr }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      count: savedCount,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `TA Approvals Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} claim(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} claim(s)) had an error.${errorSummary}`
+    });
   } catch (err) {
     console.error('Error accepting all TA claims:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/ta-approvals/reject - Reject single or batch claims
+// POST /api/ta-approvals/reject - Reject single or batch claims one-by-one
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/reject
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> handleReject()
+//   • Reads From DB   : ta_approvals
+//   • Saves To DB     : ta_approvals, ta_entries
+//   • Auto-Syncs To   : nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Marks a TA claim as `REJECTED` in `ta_approvals` and removes it from `ta_entries`.
+// ============================================================================
 app.post('/api/ta-approvals/reject', requireAdmin, async (req, res) => {
   try {
     const { id, ids, reason } = req.body;
@@ -10208,21 +11907,64 @@ app.post('/api/ta-approvals/reject', requireAdmin, async (req, res) => {
     }
 
     const adminName = req.user?.name || req.user?.username || 'Admin';
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+
     for (const claimId of targetIds) {
-      await run(
-        `UPDATE ta_approvals SET
-          status = 'REJECTED',
-          rejection_reason = ?,
-          approved_by = ?,
-          approved_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        [reason || 'Rejected by Admin', adminName, claimId]
-      );
-      await removeClaimFromTaEntries(claimId);
+      let claimRow = null;
+      try {
+        claimRow = await get(
+          'SELECT a.id, a.staff_id, s.name as staff_name FROM ta_approvals a LEFT JOIN staff s ON a.staff_id = s.id WHERE a.id = ?',
+          [claimId]
+        );
+        await run(
+          `UPDATE ta_approvals SET
+            status = 'REJECTED',
+            rejection_reason = ?,
+            approved_by = ?,
+            approved_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [reason || 'Rejected by Admin', adminName, claimId]
+        );
+        await removeClaimFromTaEntries(claimId);
+        savedCount++;
+        if (claimRow?.staff_id) savedEmployeesSet.add(claimRow.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (claimRow?.staff_id) errorEmployeesSet.add(claimRow.staff_id);
+        errors.push({
+          claim_id: claimId,
+          staff_id: claimRow?.staff_id || null,
+          staff_name: claimRow?.staff_name || `Claim #${claimId}`,
+          error: itemErr.message
+        });
+      }
     }
 
-    await logAudit(adminName, 'REJECT_TA', `Rejected ${targetIds.length} TA claims: ${reason || 'No reason specified'}`);
-    res.json({ success: true, count: targetIds.length, message: `Rejected ${targetIds.length} TA claims` });
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      adminName,
+      'REJECT_TA',
+      `Rejected ${savedCount} TA claim(s) across ${savedEmployeesCount} employee(s) (${errorCount} failed): ${reason || 'No reason specified'}`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount, reason }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      count: savedCount,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Rejected ${savedCount} TA claim(s) across ${savedEmployeesCount} employee(s), ${errorCount} failed.${errorSummary}`
+    });
   } catch (err) {
     console.error('Error rejecting TA claims:', err);
     res.status(500).json({ error: err.message });
@@ -10230,10 +11972,21 @@ app.post('/api/ta-approvals/reject', requireAdmin, async (req, res) => {
 });
 
 // POST /api/ta-approvals/revert - Revert claim back to PENDING
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/ta-approvals/revert
+//   • Module          : TA Approvals Portal
+//   • Frontend Caller : TaApprovals.jsx -> handleRevert()
+//   • Reads From DB   : ta_approvals
+//   • Saves To DB     : ta_approvals, ta_entries
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Reverts an approved/rejected TA claim back to `PENDING` in `ta_approvals`.
+// ============================================================================
 app.post('/api/ta-approvals/revert', requireAdmin, async (req, res) => {
   try {
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: 'Claim id required' });
+
+    const claim = await get('SELECT a.*, s.name as staff_name FROM ta_approvals a LEFT JOIN staff s ON a.staff_id = s.id WHERE a.id = ?', [id]);
 
     await run(
       `UPDATE ta_approvals SET
@@ -10246,6 +11999,12 @@ app.post('/api/ta-approvals/revert', requireAdmin, async (req, res) => {
     );
 
     await removeClaimFromTaEntries(id);
+    await logAudit(
+      req.user?.name || req.user?.username || 'Admin',
+      'REVERT_TA',
+      `Reverted TA claim for ${claim?.staff_name || `Claim #${id}`} on ${claim?.date_str || ''} (${claim?.train_no || ''}) back to PENDING`,
+      { claim_id: id, staffId: claim?.staff_id, staffName: claim?.staff_name, savedCount: 1, errorCount: 0 }
+    );
     res.json({ success: true, message: 'Claim reverted to PENDING' });
   } catch (err) {
     console.error('Error reverting TA claim:', err);
@@ -10259,6 +12018,15 @@ app.post('/api/ta-approvals/revert', requireAdmin, async (req, res) => {
 const { generateStaffNdaJournal } = require('./nda_generator');
 
 // GET /api/documents/nda/:staffId?year=2026&month=8
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/nda/:staffId
+//   • Module          : NDA Journal Document
+//   • Frontend Caller : NdaDocument.jsx -> fetchNdaData()
+//   • Reads From DB   : nda_entries, overrides, muster_records, lr_sheet_records, daily_earnings_entries, links, train_ta_nda
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Generates or retrieves the monthly NDA Journal for an employee, merging saved `nda_entries` per date with live Roster, Overrides, Muster, LR Sheet, and Daily Earnings duties.
+// ============================================================================
 app.get('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10283,7 +12051,64 @@ app.get('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper to convert DD/MM/YY or DD/MM/YYYY + month_year (YYYY-MM) into YYYY-MM-DD
+function resolveIsoDateFromDocRow(monthYear, dateStr, fallbackIso) {
+  if (fallbackIso && /^\d{4}-\d{2}-\d{2}$/.test(String(fallbackIso).trim())) {
+    return String(fallbackIso).trim();
+  }
+  const s = String(dateStr || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const slashParts = s.split('/');
+  if (slashParts.length >= 2 && monthYear && /^\d{4}-\d{2}$/.test(monthYear)) {
+    const dayNum = parseInt(slashParts[0], 10);
+    if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
+      return `${monthYear}-${String(dayNum).padStart(2, '0')}`;
+    }
+  }
+  return null;
+}
+
+// Helper to sync a saved Daily Earnings entry into custom-saved diary_entries (if any exist for that date)
+async function syncDailyEarningsItemToDiary(staffId, dateStr, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_amt, oc_amt, dutyStr) {
+  if (!staffId || !dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+  const monthYear = dateStr.slice(0, 7);
+  const parts = dateStr.split('-');
+  const dNum = parseInt(parts[2], 10);
+  const mNum = parseInt(parts[1], 10);
+  const yy = parts[0].slice(-2);
+  const ddPad = `${String(dNum).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${yy}`;
+  const ddShort = `${dNum}/${mNum}/${yy}`;
+  const ddFull = `${String(dNum).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${parts[0]}`;
+
+  const totalCases = (twt_nc || 0) + (ir_nc || 0) + (ubl_nc || 0);
+  const collectedRs = Math.round(((twt_fare || 0) + (twt_penalty || 0) + (ir_fare || 0) + (ir_penalty || 0) + (ubl_amt || 0) + (z652_amt || 0) + (oc_amt || 0)) * 100) / 100;
+  const gstAmt = Math.round((gst || 0) * 100) / 100;
+  const totalAmt = Math.round((collectedRs + gstAmt) * 100) / 100;
+
+  if (totalCases > 0 || collectedRs > 0 || gstAmt > 0) {
+    await run(
+      `UPDATE diary_entries
+       SET no_of_cases = ?,
+           collected_rs = ?,
+           gst_amount = ?,
+           total_amount = ?,
+           train_no = CASE WHEN (train_no IS NULL OR train_no = '' OR train_no = '---') AND ? != '' THEN ? ELSE train_no END
+       WHERE staff_id = ? AND month_year = ? AND date_str IN (?, ?, ?, ?)`,
+      [totalCases, collectedRs, gstAmt, totalAmt, dutyStr || '', dutyStr || '', staffId, monthYear, dateStr, ddPad, ddShort, ddFull]
+    ).catch(() => {});
+  }
+}
+
 // POST /api/documents/nda/:staffId - Save custom NDA row edits
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/nda/:staffId
+//   • Module          : NDA Journal Document
+//   • Frontend Caller : NdaDocument.jsx -> handleSave() (Save NDA Journal Button)
+//   • Reads From DB   : nda_entries, staff
+//   • Saves To DB     : nda_entries
+//   • Auto-Syncs To   : overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves manual edits in the NDA Journal to `nda_entries` and synchronizes any duty/train modifications across Daily Summary, Muster, LR Sheet, TA, Diary, and Daily Earnings.
+// ============================================================================
 app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10309,6 +12134,9 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
         [name, designation, pay, pf_no, bill_unit, doa, hq, staffId]
       );
     }
+
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]);
+    const staffName = staffRow?.name || employee_meta?.name || `Staff #${staffId}`;
 
     // Clear previous entries for this staff & month
     await run('DELETE FROM nda_entries WHERE staff_id = ? AND month_year = ?', [staffId, month_year]);
@@ -10344,25 +12172,27 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
         ]
       );
 
+      const resolvedIso = resolveIsoDateFromDocRow(month_year, item.date_str, item.date_iso);
+
       // Save to actual_train_runs cache so TA and Diary pick it up
-      if (item.train_no && item.date_iso) {
+      if (item.train_no && resolvedIso) {
         if (item.from_station && item.act_dep && item.act_dep !== '---') {
           await run(
             `INSERT OR REPLACE INTO actual_train_runs (train_no, run_date, station_code, sched_arr, sched_dep, act_arr, act_dep, delay_arr_mins, delay_dep_mins, source)
              VALUES (?, ?, ?, '---', ?, '---', ?, 0, 0, 'NDA_SYNC')`,
-            [item.train_no, item.date_iso, item.from_station, item.sched_dep || item.act_dep, item.act_dep]
+            [item.train_no, resolvedIso, item.from_station, item.sched_dep || item.act_dep, item.act_dep]
           );
         }
         if (item.to_station && item.act_arr && item.act_arr !== '---') {
           await run(
             `INSERT OR REPLACE INTO actual_train_runs (train_no, run_date, station_code, sched_arr, sched_dep, act_arr, act_dep, delay_arr_mins, delay_dep_mins, source)
              VALUES (?, ?, ?, ?, '---', ?, '---', 0, 0, 'NDA_SYNC')`,
-            [item.train_no, item.date_iso, item.to_station, item.sched_arr || item.act_arr, item.act_arr]
+            [item.train_no, resolvedIso, item.to_station, item.sched_arr || item.act_arr, item.act_arr]
           );
         }
       }
 
-      // Update matching ta_entries row if present
+      // Update matching ta_entries, ta_approvals, and diary_entries rows if present
       await run(
         `UPDATE ta_entries 
          SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
@@ -10374,7 +12204,33 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
           staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
         ]
       );
+      await run(
+        `UPDATE diary_entries 
+         SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
+             arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END
+         WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
+        [
+          item.act_dep || '', item.act_dep || '', item.act_dep || '',
+          item.act_arr || '', item.act_arr || '', item.act_arr || '',
+          staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
+        ]
+      ).catch(() => {});
     }
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_NDA_JOURNAL',
+      `Saved NDA Journal for ${staffName} (${month_year}): ${entries.length} row(s) saved and synchronized to TA Journal & Diary`,
+      {
+        staffId,
+        staffName,
+        month_year,
+        savedCount: entries.length,
+        errorCount: 0,
+        savedEmployeesCount: 1,
+        errorEmployeesCount: 0
+      }
+    );
 
     res.json({ success: true, message: 'Night Duty Allowance journal saved and synced to TA & Diary successfully.' });
   } catch (err) {
@@ -10384,6 +12240,15 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/documents/nda/:staffId?year=2026&month=8 - Reset custom entries to auto-generated master rotation
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/documents/nda/:staffId
+//   • Module          : NDA Journal Document
+//   • Frontend Caller : NdaDocument.jsx -> handleReset() (Reset NDA Journal)
+//   • Reads From DB   : nda_entries
+//   • Saves To DB     : nda_entries
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Deletes saved `nda_entries` for the employee/month so NDA recalculates dynamically from live Roster/Muster/Override data.
+// ============================================================================
 app.delete('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10391,7 +12256,16 @@ app.delete('/api/documents/nda/:staffId', authenticateToken, async (req, res) =>
     const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
     const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]);
+    const staffName = staffRow?.name || `Staff #${staffId}`;
+
     await run('DELETE FROM nda_entries WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
+    await logAudit(
+      req.user?.role || 'Admin',
+      'RESET_NDA_JOURNAL',
+      `Reset NDA Journal for ${staffName} (${monthYearStr}) to live synchronized roster, Muster & LR state`,
+      { staffId, staffName, month_year: monthYearStr }
+    );
     res.json({ success: true, message: 'NDA Journal reset to master roster rotation.' });
   } catch (err) {
     console.error('Error resetting NDA journal:', err);
@@ -10405,6 +12279,15 @@ app.delete('/api/documents/nda/:staffId', authenticateToken, async (req, res) =>
 const { generateStaffDiary } = require('./diary_generator');
 
 // GET /api/documents/diary/:staffId?year=2026&month=6
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/diary/:staffId
+//   • Module          : Staff Diary Document
+//   • Frontend Caller : DiaryDocument.jsx -> fetchDiaryData()
+//   • Reads From DB   : diary_entries, daily_earnings_entries, overrides, muster_records, lr_sheet_records, links
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Generates or retrieves the monthly Staff Diary for an employee, merging saved `diary_entries` per date with live Roster, Overrides, Muster, LR Sheet, and EFT figures from `daily_earnings_entries`.
+// ============================================================================
 app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10430,6 +12313,15 @@ app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => 
 });
 
 // POST /api/documents/diary/:staffId - Save custom Diary row edits
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/diary/:staffId
+//   • Module          : Staff Diary Document
+//   • Frontend Caller : DiaryDocument.jsx -> handleSave() (Save Diary Button)
+//   • Reads From DB   : diary_entries, staff
+//   • Saves To DB     : diary_entries
+//   • Auto-Syncs To   : daily_earnings_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Saves the employee’s monthly Diary into `diary_entries`, cross-updates EFT cases/amounts in `daily_earnings_entries`, and syncs duty changes across Roster, Muster, TA, and NDA.
+// ============================================================================
 app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10454,6 +12346,9 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
         [name, designation, pay, pf_no, bill_unit, t_code_no, staffId]
       );
     }
+
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]);
+    const staffName = staffRow?.name || employee_meta?.name || `Staff #${staffId}`;
 
     // Clear previous entries for this staff & month
     await run('DELETE FROM diary_entries WHERE staff_id = ? AND month_year = ?', [staffId, month_year]);
@@ -10488,9 +12383,50 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
           i + 1
         ]
       );
+
+      // Sync timings to ta_entries and nda_entries if present
+      if ((item.dep_time && item.dep_time !== '---') || (item.arr_time && item.arr_time !== '---')) {
+        await run(
+          `UPDATE ta_entries 
+           SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
+               arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END
+           WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
+          [
+            item.dep_time || '', item.dep_time || '', item.dep_time || '',
+            item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
+          ]
+        ).catch(() => {});
+        await run(
+          `UPDATE nda_entries 
+           SET act_dep = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_dep END,
+               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END
+           WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
+          [
+            item.dep_time || '', item.dep_time || '', item.dep_time || '',
+            item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
+          ]
+        ).catch(() => {});
+      }
     }
 
-    res.json({ success: true, message: 'Diary entries saved successfully.' });
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_DIARY',
+      `Saved EFT Diary Statement for ${staffName} (${month_year}): ${entries.length} row(s) saved and synchronized to TA, NDA & Daily Earnings`,
+      {
+        staffId,
+        staffName,
+        month_year,
+        savedCount: entries.length,
+        errorCount: 0,
+        savedEmployeesCount: 1,
+        errorEmployeesCount: 0
+      }
+    );
+
+    res.json({ success: true, message: 'Diary entries saved and synchronized successfully.' });
   } catch (err) {
     console.error('Error saving Diary entries:', err);
     res.status(500).json({ error: err.message });
@@ -10498,6 +12434,15 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
 });
 
 // DELETE /api/documents/diary/:staffId?year=2026&month=6 - Reset custom entries to auto-generated master rotation
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/documents/diary/:staffId
+//   • Module          : Staff Diary Document
+//   • Frontend Caller : DiaryDocument.jsx -> handleReset() (Reset Diary)
+//   • Reads From DB   : diary_entries
+//   • Saves To DB     : diary_entries
+//   • Auto-Syncs To   : audit_logs
+//   • Summary         : Clears saved `diary_entries` for the month so the Staff Diary regenerates from live Roster, Muster, and Daily Earnings.
+// ============================================================================
 app.delete('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10505,7 +12450,16 @@ app.delete('/api/documents/diary/:staffId', authenticateToken, async (req, res) 
     const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
     const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]);
+    const staffName = staffRow?.name || `Staff #${staffId}`;
+
     await run('DELETE FROM diary_entries WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
+    await logAudit(
+      req.user?.role || 'Admin',
+      'RESET_DIARY',
+      `Reset EFT Diary Statement for ${staffName} (${monthYearStr}) to live synchronized roster & Daily Earnings state`,
+      { staffId, staffName, month_year: monthYearStr }
+    );
     res.json({ success: true, message: 'Diary reset to master roster rotation.' });
   } catch (err) {
     console.error('Error resetting Diary:', err);
@@ -10519,6 +12473,15 @@ app.delete('/api/documents/diary/:staffId', authenticateToken, async (req, res) 
 const { generateDailyBookingChart } = require('./daily_booking_generator');
 
 // GET /api/documents/daily-booking-chart?date=2026-09-22&category_id=all
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/daily-booking-chart
+//   • Module          : System API
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/documents/daily-booking-chart
+// ============================================================================
 app.get('/api/documents/daily-booking-chart', authenticateToken, async (req, res) => {
   try {
     const { date, category_id } = req.query;
@@ -10536,6 +12499,15 @@ app.get('/api/documents/daily-booking-chart', authenticateToken, async (req, res
 const { generateDailyEarnings, generateStaffMonthlyEarnings, generateRangeDailyEarnings } = require('./daily_earnings_generator');
 
 // GET /api/documents/daily-earnings?date=2026-08-01&category_id=all
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/daily-earnings
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx -> fetchDailyEarnings() (Single Date Mode)
+//   • Reads From DB   : daily_earnings_entries, staff, links, overrides, muster_records, lr_sheet_records
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Fetches the Daily Earnings sheet for all staff on a single date, merging saved `daily_earnings_entries` with live duties from Roster, Overrides, Muster, and LR Sheet.
+// ============================================================================
 app.get('/api/documents/daily-earnings', authenticateToken, async (req, res) => {
   try {
     const { date, category_id } = req.query;
@@ -10548,6 +12520,15 @@ app.get('/api/documents/daily-earnings', authenticateToken, async (req, res) => 
 });
 
 // GET /api/documents/daily-earnings/range?start_date=2026-08-28&end_date=2026-08-30&category_id=all - Continuous multi-day register
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/daily-earnings/range
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx
+//   • Reads From DB   : daily_earnings_entries
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
+// ============================================================================
 app.get('/api/documents/daily-earnings/range', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date, category_id } = req.query;
@@ -10562,7 +12543,16 @@ app.get('/api/documents/daily-earnings/range', authenticateToken, async (req, re
   }
 });
 
-// POST /api/documents/daily-earnings/range - Save entries across multiple days
+// POST /api/documents/daily-earnings/range - Save entries across multiple days one-by-one without transaction
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/daily-earnings/range
+//   • Module          : Daily Earnings Sheet (Date Range Mode)
+//   • Frontend Caller : DailyEarningsDocument.jsx -> handleSave() (Date Range Mode)
+//   • Reads From DB   : daily_earnings_entries, staff
+//   • Saves To DB     : daily_earnings_entries
+//   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Saves Daily Earnings across a multi-day range one employee at a time into `daily_earnings_entries` and cascades changes to all linked modules.
+// ============================================================================
 app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, res) => {
   try {
     const { days } = req.body;
@@ -10570,14 +12560,185 @@ app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, r
       return res.status(400).json({ error: 'days array is required.' });
     }
 
-    await run('BEGIN TRANSACTION');
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+    const dateSet = new Set();
 
     for (const day of days) {
       if (!day.date || !Array.isArray(day.entries)) continue;
+      dateSet.add(day.date);
       for (let i = 0; i < day.entries.length; i++) {
         const item = day.entries[i];
         if (!item.staff_id) continue;
 
+        try {
+          const twt_nc = parseInt(item.twt_nc, 10) || 0;
+          const twt_fare = parseFloat(item.twt_fare) || 0;
+          const twt_penalty = parseFloat(item.twt_penalty) || 0;
+
+          const ir_nc = parseInt(item.ir_nc, 10) || 0;
+          const ir_fare = parseFloat(item.ir_fare) || 0;
+          const ir_penalty = parseFloat(item.ir_penalty) || 0;
+
+          const ubl_nc = parseInt(item.ubl_nc, 10) || 0;
+          const ubl_amt = parseFloat(item.ubl_amt) || 0;
+
+          const gst = parseFloat(item.gst) || 0;
+
+          const z652_nc = parseInt(item.z652_nc, 10) || 0;
+          const z652_amt = parseFloat(item.z652_amt) || 0;
+
+          const oc_nc = parseInt(item.oc_nc, 10) || 0;
+          const oc_amt = parseFloat(item.oc_amt) || 0;
+
+          await run(
+            `INSERT OR REPLACE INTO daily_earnings_entries 
+             (date, category_id, staff_id, staff_name, designation, depot_title, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_nc, z652_amt, oc_nc, oc_amt, duty, remarks, row_order, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+            [
+              day.date,
+              item.category_id || null,
+              item.staff_id,
+              item.staff_name || '',
+              item.designation || 'TTI',
+              item.depot_title || 'GNT ATY-1D2',
+              twt_nc,
+              twt_fare,
+              twt_penalty,
+              ir_nc,
+              ir_fare,
+              ir_penalty,
+              ubl_nc,
+              ubl_amt,
+              gst,
+              z652_nc,
+              z652_amt,
+              oc_nc,
+              oc_amt,
+              item.duty || '',
+              item.remarks || '',
+              i + 1
+            ]
+          );
+
+          await syncDailyEarningsItemToDiary(
+            item.staff_id, day.date,
+            twt_nc, twt_fare, twt_penalty,
+            ir_nc, ir_fare, ir_penalty,
+            ubl_nc, ubl_amt, gst, z652_amt, oc_amt,
+            item.duty || ''
+          );
+
+          savedCount++;
+          savedEmployeesSet.add(item.staff_id);
+        } catch (itemErr) {
+          errorCount++;
+          errorEmployeesSet.add(item.staff_id);
+          errors.push({
+            staff_id: item.staff_id,
+            staff_name: item.staff_name || `Employee #${item.staff_id}`,
+            date: day.date,
+            error: itemErr.message
+          });
+        }
+      }
+    }
+
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    const sortedDates = Array.from(dateSet).sort();
+    const rangeLabel = sortedDates.length > 0 ? `${sortedDates[0]} to ${sortedDates[sortedDates.length - 1]}` : 'Range';
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_DAILY_EARNINGS_RANGE',
+      `Saved Multi-Day Daily Earnings (${rangeLabel}) one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} record(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} record(s)) failed`,
+      {
+        rangeLabel,
+        savedCount,
+        errorCount,
+        savedEmployeesCount,
+        errorEmployeesCount
+      }
+    );
+
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name} (${e.date}): ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Daily Earnings Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} record(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} record(s)) had an error.${errorSummary}`
+    });
+  } catch (err) {
+    console.error('Error saving Multi-Day Daily Earnings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/documents/daily-earnings/staff/:staffId?year=2026&month=9 - Fetch whole month earnings for one staff member
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/daily-earnings/staff/:staffId
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx
+//   • Reads From DB   : daily_earnings_entries
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
+// ============================================================================
+app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
+
+    const monthlyEarnings = await generateStaffMonthlyEarnings({ get, all, run }, staffId, year, month);
+    res.json(monthlyEarnings);
+  } catch (err) {
+    console.error('Error generating Staff Monthly Earnings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/documents/daily-earnings/staff/:staffId - Save staff member's monthly earnings entries one-by-one
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/daily-earnings/staff/:staffId
+//   • Module          : Daily Earnings Sheet (Employee Monthly Mode)
+//   • Frontend Caller : DailyEarningsDocument.jsx -> handleSave() (Employee Monthly Mode)
+//   • Reads From DB   : daily_earnings_entries, staff
+//   • Saves To DB     : daily_earnings_entries
+//   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Saves a full month of Daily Earnings for a single employee into `daily_earnings_entries` and syncs with Staff Diary, TA, NDA, Muster, and Roster.
+// ============================================================================
+app.post('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const { entries, year, month } = req.body;
+    if (!Array.isArray(entries)) {
+      return res.status(400).json({ error: 'Entries array is required.' });
+    }
+
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found.' });
+    }
+
+    let savedCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const item = entries[i];
+      if (!item.date) continue;
+
+      try {
         const twt_nc = parseInt(item.twt_nc, 10) || 0;
         const twt_fare = parseFloat(item.twt_fare) || 0;
         const twt_penalty = parseFloat(item.twt_penalty) || 0;
@@ -10602,11 +12763,11 @@ app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, r
            (date, category_id, staff_id, staff_name, designation, depot_title, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_nc, z652_amt, oc_nc, oc_amt, duty, remarks, row_order, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           [
-            day.date,
-            item.category_id || null,
-            item.staff_id,
-            item.staff_name || '',
-            item.designation || 'TTI',
+            item.date,
+            staff.category_id,
+            staff.id,
+            staff.name,
+            staff.designation || 'TTI',
             item.depot_title || 'GNT ATY-1D2',
             twt_nc,
             twt_fare,
@@ -10626,113 +12787,74 @@ app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, r
             i + 1
           ]
         );
+
+        await syncDailyEarningsItemToDiary(
+          staff.id, item.date,
+          twt_nc, twt_fare, twt_penalty,
+          ir_nc, ir_fare, ir_penalty,
+          ubl_nc, ubl_amt, gst, z652_amt, oc_amt,
+          item.duty || ''
+        );
+
+        savedCount++;
+      } catch (itemErr) {
+        errorCount++;
+        errors.push({
+          staff_id: staff.id,
+          staff_name: staff.name,
+          date: item.date,
+          error: itemErr.message
+        });
       }
     }
 
-    await run('COMMIT');
-    res.json({ success: true, message: 'Multi-day earnings saved successfully.' });
+    const savedEmployeesCount = savedCount > 0 ? 1 : 0;
+    const errorEmployeesCount = errorCount > 0 ? 1 : 0;
+    const monthLabel = year && month ? `${year}-${String(month).padStart(2, '0')}` : 'Month';
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_STAFF_MONTHLY_EARNINGS',
+      `Saved Monthly Earnings for ${staff.name} (${monthLabel}): ${savedCount} day(s) saved, ${errorCount} day(s) failed`,
+      {
+        staffId: staff.id,
+        staffName: staff.name,
+        month_year: monthLabel,
+        savedCount,
+        errorCount,
+        savedEmployeesCount,
+        errorEmployeesCount
+      }
+    );
+
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Monthly Earnings for ${staff.name}: ${savedCount} day(s) saved successfully, ${errorCount} day(s) had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
-    console.error('Error saving Multi-Day Daily Earnings:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/documents/daily-earnings/staff/:staffId?year=2026&month=9 - Fetch whole month earnings for one staff member
-app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
-  try {
-    const staffId = parseInt(req.params.staffId, 10);
-    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
-    const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
-
-    const monthlyEarnings = await generateStaffMonthlyEarnings({ get, all, run }, staffId, year, month);
-    res.json(monthlyEarnings);
-  } catch (err) {
-    console.error('Error generating Staff Monthly Earnings:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/documents/daily-earnings/staff/:staffId - Save staff member's monthly earnings entries (seamless 2-way sync with daily sheet)
-app.post('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
-  try {
-    const staffId = parseInt(req.params.staffId, 10);
-    const { entries, year, month } = req.body;
-    if (!Array.isArray(entries)) {
-      return res.status(400).json({ error: 'Entries array is required.' });
-    }
-
-    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-    if (!staff) {
-      return res.status(404).json({ error: 'Staff member not found.' });
-    }
-
-    await run('BEGIN TRANSACTION');
-
-    for (let i = 0; i < entries.length; i++) {
-      const item = entries[i];
-      if (!item.date) continue;
-
-      const twt_nc = parseInt(item.twt_nc, 10) || 0;
-      const twt_fare = parseFloat(item.twt_fare) || 0;
-      const twt_penalty = parseFloat(item.twt_penalty) || 0;
-
-      const ir_nc = parseInt(item.ir_nc, 10) || 0;
-      const ir_fare = parseFloat(item.ir_fare) || 0;
-      const ir_penalty = parseFloat(item.ir_penalty) || 0;
-
-      const ubl_nc = parseInt(item.ubl_nc, 10) || 0;
-      const ubl_amt = parseFloat(item.ubl_amt) || 0;
-
-      const gst = parseFloat(item.gst) || 0;
-
-      const z652_nc = parseInt(item.z652_nc, 10) || 0;
-      const z652_amt = parseFloat(item.z652_amt) || 0;
-
-      const oc_nc = parseInt(item.oc_nc, 10) || 0;
-      const oc_amt = parseFloat(item.oc_amt) || 0;
-
-      await run(
-        `INSERT OR REPLACE INTO daily_earnings_entries 
-         (date, category_id, staff_id, staff_name, designation, depot_title, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_nc, z652_amt, oc_nc, oc_amt, duty, remarks, row_order, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        [
-          item.date,
-          staff.category_id,
-          staff.id,
-          staff.name,
-          staff.designation || 'TTI',
-          item.depot_title || 'GNT ATY-1D2',
-          twt_nc,
-          twt_fare,
-          twt_penalty,
-          ir_nc,
-          ir_fare,
-          ir_penalty,
-          ubl_nc,
-          ubl_amt,
-          gst,
-          z652_nc,
-          z652_amt,
-          oc_nc,
-          oc_amt,
-          item.duty || '',
-          item.remarks || '',
-          i + 1
-        ]
-      );
-    }
-
-    await run('COMMIT');
-    res.json({ success: true, message: 'Monthly earnings saved and synced to daily sheets successfully.' });
-  } catch (err) {
-    await run('ROLLBACK');
     console.error('Error saving Staff Monthly Earnings:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // DELETE /api/documents/daily-earnings/staff/:staffId?year=2026&month=9 - Reset staff entries for month
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/documents/daily-earnings/staff/:staffId
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx
+//   • Reads From DB   : daily_earnings_entries
+//   • Saves To DB     : daily_earnings_entries
+//   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
+// ============================================================================
 app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
@@ -10742,9 +12864,19 @@ app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, as
     const startDateStr = `${year}-${monthStr}-01`;
     const endDateStr = `${year}-${monthStr}-31`;
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]);
+    const staffName = staffRow?.name || `Staff #${staffId}`;
+
     await run(
       'DELETE FROM daily_earnings_entries WHERE staff_id = ? AND date >= ? AND date <= ?',
       [staffId, startDateStr, endDateStr]
+    );
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'RESET_STAFF_MONTHLY_EARNINGS',
+      `Reset Monthly Earnings for ${staffName} (${year}-${monthStr}) to live roster duties`,
+      { staffId, staffName, month_year: `${year}-${monthStr}` }
     );
 
     res.json({ success: true, message: 'Staff monthly earnings reset to roster duties.' });
@@ -10754,7 +12886,16 @@ app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, as
   }
 });
 
-// POST /api/documents/daily-earnings - Save/Update all row entries for a given date
+// POST /api/documents/daily-earnings - Save/Update all row entries for a given date one-by-one without transaction
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/daily-earnings
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx -> handleSave() (Single Date Save)
+//   • Reads From DB   : daily_earnings_entries, staff
+//   • Saves To DB     : daily_earnings_entries
+//   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Saves Daily Earnings rows one employee at a time into `daily_earnings_entries`, syncs EFT figures into `diary_entries`, and propagates duty/train updates across all modules.
+// ============================================================================
 app.post('/api/documents/daily-earnings', authenticateToken, async (req, res) => {
   try {
     const { date, depot_title, entries } = req.body;
@@ -10762,72 +12903,132 @@ app.post('/api/documents/daily-earnings', authenticateToken, async (req, res) =>
       return res.status(400).json({ error: 'Date and entries array are required.' });
     }
 
-    await run('BEGIN TRANSACTION');
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
 
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i];
       if (!item.staff_id) continue;
 
-      const twt_nc = parseInt(item.twt_nc, 10) || 0;
-      const twt_fare = parseFloat(item.twt_fare) || 0;
-      const twt_penalty = parseFloat(item.twt_penalty) || 0;
+      try {
+        const twt_nc = parseInt(item.twt_nc, 10) || 0;
+        const twt_fare = parseFloat(item.twt_fare) || 0;
+        const twt_penalty = parseFloat(item.twt_penalty) || 0;
 
-      const ir_nc = parseInt(item.ir_nc, 10) || 0;
-      const ir_fare = parseFloat(item.ir_fare) || 0;
-      const ir_penalty = parseFloat(item.ir_penalty) || 0;
+        const ir_nc = parseInt(item.ir_nc, 10) || 0;
+        const ir_fare = parseFloat(item.ir_fare) || 0;
+        const ir_penalty = parseFloat(item.ir_penalty) || 0;
 
-      const ubl_nc = parseInt(item.ubl_nc, 10) || 0;
-      const ubl_amt = parseFloat(item.ubl_amt) || 0;
+        const ubl_nc = parseInt(item.ubl_nc, 10) || 0;
+        const ubl_amt = parseFloat(item.ubl_amt) || 0;
 
-      const gst = parseFloat(item.gst) || 0;
+        const gst = parseFloat(item.gst) || 0;
 
-      const z652_nc = parseInt(item.z652_nc, 10) || 0;
-      const z652_amt = parseFloat(item.z652_amt) || 0;
+        const z652_nc = parseInt(item.z652_nc, 10) || 0;
+        const z652_amt = parseFloat(item.z652_amt) || 0;
 
-      const oc_nc = parseInt(item.oc_nc, 10) || 0;
-      const oc_amt = parseFloat(item.oc_amt) || 0;
+        const oc_nc = parseInt(item.oc_nc, 10) || 0;
+        const oc_amt = parseFloat(item.oc_amt) || 0;
 
-      await run(
-        `INSERT OR REPLACE INTO daily_earnings_entries 
-         (date, category_id, staff_id, staff_name, designation, depot_title, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_nc, z652_amt, oc_nc, oc_amt, duty, remarks, row_order, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        [
+        await run(
+          `INSERT OR REPLACE INTO daily_earnings_entries 
+           (date, category_id, staff_id, staff_name, designation, depot_title, twt_nc, twt_fare, twt_penalty, ir_nc, ir_fare, ir_penalty, ubl_nc, ubl_amt, gst, z652_nc, z652_amt, oc_nc, oc_amt, duty, remarks, row_order, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [
+            date,
+            item.category_id || null,
+            item.staff_id,
+            item.staff_name || '',
+            item.designation || 'TTI',
+            depot_title || item.depot_title || 'GNT ATY-1D2',
+            twt_nc,
+            twt_fare,
+            twt_penalty,
+            ir_nc,
+            ir_fare,
+            ir_penalty,
+            ubl_nc,
+            ubl_amt,
+            gst,
+            z652_nc,
+            z652_amt,
+            oc_nc,
+            oc_amt,
+            item.duty || '',
+            item.remarks || '',
+            i + 1
+          ]
+        );
+
+        await syncDailyEarningsItemToDiary(
+          item.staff_id, date,
+          twt_nc, twt_fare, twt_penalty,
+          ir_nc, ir_fare, ir_penalty,
+          ubl_nc, ubl_amt, gst, z652_amt, oc_amt,
+          item.duty || ''
+        );
+
+        savedCount++;
+        savedEmployeesSet.add(item.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        errorEmployeesSet.add(item.staff_id);
+        errors.push({
+          staff_id: item.staff_id,
+          staff_name: item.staff_name || `Employee #${item.staff_id}`,
           date,
-          item.category_id || null,
-          item.staff_id,
-          item.staff_name || '',
-          item.designation || 'TTI',
-          depot_title || item.depot_title || 'GNT ATY-1D2',
-          twt_nc,
-          twt_fare,
-          twt_penalty,
-          ir_nc,
-          ir_fare,
-          ir_penalty,
-          ubl_nc,
-          ubl_amt,
-          gst,
-          z652_nc,
-          z652_amt,
-          oc_nc,
-          oc_amt,
-          item.duty || '',
-          item.remarks || '',
-          i + 1
-        ]
-      );
+          error: itemErr.message
+        });
+      }
     }
 
-    await run('COMMIT');
-    res.json({ success: true, message: 'Daily Earnings Sheet saved successfully.' });
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'SAVE_DAILY_EARNINGS',
+      `Saved Daily Earnings Sheet (${date}) one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} record(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} record(s)) failed`,
+      {
+        date,
+        savedCount,
+        errorCount,
+        savedEmployeesCount,
+        errorEmployeesCount
+      }
+    );
+
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Daily Earnings Sheet (${date}): ${savedEmployeesCount} employee(s) saved successfully, ${errorEmployeesCount} employee(s) had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     console.error('Error saving Daily Earnings entries:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // DELETE /api/documents/daily-earnings?date=2026-08-01 - Reset custom entries for date
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/documents/daily-earnings
+//   • Module          : Daily Earnings Sheet
+//   • Frontend Caller : DailyEarningsDocument.jsx
+//   • Reads From DB   : daily_earnings_entries
+//   • Saves To DB     : daily_earnings_entries
+//   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
+//   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
+// ============================================================================
 app.delete('/api/documents/daily-earnings', authenticateToken, async (req, res) => {
   try {
     const { date, category_id } = req.query;
@@ -10838,6 +13039,13 @@ app.delete('/api/documents/daily-earnings', authenticateToken, async (req, res) 
     } else {
       await run('DELETE FROM daily_earnings_entries WHERE date = ?', [date]);
     }
+
+    await logAudit(
+      req.user?.role || 'Admin',
+      'RESET_DAILY_EARNINGS',
+      `Reset Daily Earnings Sheet for ${date} (Category: ${category_id || 'ALL'}) to live roster rotation`,
+      { date, category_id: category_id || 'all' }
+    );
 
     res.json({ success: true, message: 'Daily Earnings Sheet reset to master roster rotation.' });
   } catch (err) {
@@ -10854,6 +13062,15 @@ const { syncJourneyLegsMultiSource, fetchMultiSourceTrainTimings } = require('./
 const { syncJourneyLegsWithNtes, fetchTrainRunningFromNtes } = require('./services/ntes_service');
 
 // Multi-Source Live Sync Endpoint
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/train-timings/sync-multi
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/train-timings/sync-multi
+// ============================================================================
 app.post('/api/train-timings/sync-multi', authenticateToken, async (req, res) => {
   try {
     const { legs, forceRefresh } = req.body;
@@ -10871,6 +13088,15 @@ app.post('/api/train-timings/sync-multi', authenticateToken, async (req, res) =>
 });
 
 // Dedicated /api/train-timings/sync-ntes route
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/train-timings/sync-ntes
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/train-timings/sync-ntes
+// ============================================================================
 app.post('/api/train-timings/sync-ntes', authenticateToken, async (req, res) => {
   try {
     const { legs, forceRefresh } = req.body;
@@ -10888,6 +13114,15 @@ app.post('/api/train-timings/sync-ntes', authenticateToken, async (req, res) => 
 });
 
 // Query single train running status
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/train-timings/multi/:trainNo
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/train-timings/multi/:trainNo
+// ============================================================================
 app.get('/api/train-timings/multi/:trainNo', authenticateToken, async (req, res) => {
   try {
     const { trainNo } = req.params;
@@ -10901,6 +13136,15 @@ app.get('/api/train-timings/multi/:trainNo', authenticateToken, async (req, res)
 });
 
 // Query single train running status on Official NTES
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/train-timings/ntes/:trainNo
+//   • Module          : Train Timings & TA/NDA Master
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/train-timings/ntes/:trainNo
+// ============================================================================
 app.get('/api/train-timings/ntes/:trainNo', authenticateToken, async (req, res) => {
   try {
     const { trainNo } = req.params;
@@ -10986,6 +13230,15 @@ function getMusterCycleDates(cycleStartStr) {
 }
 
 // GET /api/muster - Fetch complete muster details for a cycle
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/muster
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx -> fetchMusterData() (Muster Roll Tab & Individual Muster Modal)
+//   • Reads From DB   : staff, muster_records, overrides, links, lr_sheet_records, ta_approvals
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Loads the monthly Muster Roll grid for all staff (or a single employee), merging explicit `muster_records` with Daily Summary overrides, base link duties, and LR Sheet duties.
+// ============================================================================
 app.get('/api/muster', async (req, res) => {
   try {
     const { cycle_start, category_id } = req.query;
@@ -11201,6 +13454,8 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
       [disallowRemark, staffId, dateStr, dateStr, altDateStr]
     );
 
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: 'BLANK', remarks: reason });
+
     if (staff && staff.category_id === 4) {
       await syncLRSheetRecord(staffId, dateStr, '', remarks);
     }
@@ -11246,7 +13501,10 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
       [disallowRemark, staffId, dateStr, dateStr, altDateStr]
     );
 
-    // 4. If staff is Category 4 (LR), synchronize to lr_sheet_records
+    // 4. Sync NDA, Diary, and Daily Earnings for this date
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: cleanCode, remarks: reason });
+
+    // 5. If staff is Category 4 (LR), synchronize to lr_sheet_records
     if (staff && staff.category_id === 4) {
       const lrCode = cleanCode === 'SICK' ? 'S' : cleanCode;
       await syncLRSheetRecord(staffId, dateStr, lrCode, reason, 'Muster Roll Sync');
@@ -11255,12 +13513,13 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
     // If an automated muster override existed, clean it up so regular duty resumes
     await run(
       `DELETE FROM overrides 
-       WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%')`,
+       WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%' OR reason LIKE 'Muster Blank%')`,
       [staffId, dateStr]
     );
 
     await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
 
+    let resolvedDutyCode = '';
     // If staff is Category 4 (LR), resolve duty or set available
     if (staff && staff.category_id === 4) {
       const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -11268,11 +13527,15 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
       const dayOfWeek = dayNames[dObj.getDay()];
       const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
       if (resolved && resolved.code) {
+        resolvedDutyCode = resolved.code;
         await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Muster: Present', 'Muster Roll Sync');
       } else {
+        resolvedDutyCode = 'AVL';
         await syncLRSheetRecord(staffId, dateStr, 'AVL', 'Present at HQ', 'Muster Roll Sync');
       }
     }
+
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedDutyCode, remarks: remarks || 'Muster: Present' });
   }
 }
 
@@ -11323,26 +13586,39 @@ async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
 
   await run(
     `DELETE FROM overrides 
-     WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%')`,
+     WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%' OR reason LIKE 'Muster Blank%')`,
     [staffId, dateStr]
   );
   await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
 
   // If staff is Category 4 (LR), resolve baseline or delete override record
+  let resolvedCode = '';
   if (staff && staff.category_id === 4) {
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const dObj = new Date(dateStr + 'T12:00:00');
     const dayOfWeek = dayNames[dObj.getDay()];
     const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
     if (resolved && resolved.code) {
+      resolvedCode = resolved.code;
       await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Baseline', 'Muster Roll Sync');
     } else {
       await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
     }
   }
+
+  await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedCode, remarks: '' });
 }
 
 // POST /api/muster/update-cell - Update or assign code for a single employee cell
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/update-cell
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx -> handleMusterCellSave() (Single Cell Edit in Muster Roll)
+//   • Reads From DB   : muster_records, staff, links
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves a single Muster cell (`muster_records`) and runs `syncMusterToSchedulesAndApprovals()` to update Daily Summary (`overrides`), Monthly Movement, LR Sheet, TA, NDA, Diary, and Daily Earnings.
+// ============================================================================
 app.post('/api/muster/update-cell', requireAdmin, async (req, res) => {
   try {
     const { staff_id, date, code, remarks } = req.body;
@@ -11355,6 +13631,9 @@ app.post('/api/muster/update-cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: `Invalid code. Must be one of: ${ALLOWED_MUSTER_CODES.join(', ')} or blank` });
     }
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+    const staffName = staffRow?.name || `Staff #${staff_id}`;
+
     await run(
       `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
        VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
@@ -11366,11 +13645,16 @@ app.post('/api/muster/update-cell', requireAdmin, async (req, res) => {
       [staff_id, date, cleanCode, remarks || null]
     );
 
-    // Synchronize to Overrides, Daily View, and TA Approvals
+    // Synchronize to Overrides, Daily View, TA Approvals, NDA, Diary, Daily Earnings, and LR Sheet
     await syncMusterToSchedulesAndApprovals(staff_id, date, cleanCode, remarks);
 
     const auditActionDesc = cleanCode === '' ? 'Cleared muster code to blank' : `Assigned muster code '${cleanCode}'`;
-    await logAudit('Admin', 'MUSTER_CELL_UPDATE', `${auditActionDesc} for staff ID ${staff_id} on ${date}`);
+    await logAudit(
+      'Admin',
+      'MUSTER_CELL_UPDATE',
+      `${auditActionDesc} for ${staffName} (ID ${staff_id}) on ${date} — synchronized to Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
+      { staffId: staff_id, staffName, date, code: cleanCode, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+    );
     res.json({ success: true, message: cleanCode === '' ? 'Muster cell kept blank to fill later' : `Muster cell updated to ${cleanCode} and synchronized across all sheets & documents` });
   } catch (err) {
     console.error('Error updating muster cell:', err);
@@ -11379,6 +13663,15 @@ app.post('/api/muster/update-cell', requireAdmin, async (req, res) => {
 });
 
 // POST /api/muster/reset-cell - Reset muster cell back to cyclic baseline
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/reset-cell
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx -> Reset Single Muster Cell
+//   • Reads From DB   : muster_records
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Deletes a custom Muster cell override and reverts linked `overrides`, `lr_sheet_records`, `ta_approvals`, and document entries back to default.
+// ============================================================================
 app.post('/api/muster/reset-cell', requireAdmin, async (req, res) => {
   try {
     const { staff_id, date } = req.body;
@@ -11386,10 +13679,18 @@ app.post('/api/muster/reset-cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+    const staffName = staffRow?.name || `Staff #${staff_id}`;
+
     await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
     await revertMusterFromSchedulesAndApprovals(staff_id, date);
 
-    await logAudit('Admin', 'MUSTER_CELL_RESET', `Reset muster cell for staff ID ${staff_id} on ${date} to baseline`);
+    await logAudit(
+      'Admin',
+      'MUSTER_CELL_RESET',
+      `Reset muster cell for ${staffName} (ID ${staff_id}) on ${date} to baseline — synchronized across Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
+      { staffId: staff_id, staffName, date, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+    );
     res.json({ success: true, message: 'Cell reset to cyclic baseline and synchronized' });
   } catch (err) {
     console.error('Error resetting muster cell:', err);
@@ -11397,7 +13698,16 @@ app.post('/api/muster/reset-cell', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/muster/batch-update - Batch update multiple cells
+// POST /api/muster/batch-update - Batch update multiple cells one-by-one without transaction
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/batch-update
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx -> handleMusterBatchSave() (Save All / Employee Row Save in Muster Roll)
+//   • Reads From DB   : muster_records, staff, links
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves multiple Muster cells one employee at a time into `muster_records`, syncing each changed date across Daily Summary, Monthly Movement, LR Sheet, TA, NDA, Diary, and Daily Earnings.
+// ============================================================================
 app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
   try {
     const { updates } = req.body;
@@ -11405,37 +13715,94 @@ app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Array of updates required' });
     }
 
-    await run('BEGIN TRANSACTION');
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+    const staffNameCache = {};
+
+    const getStaffName = async (staffId) => {
+      if (!staffId) return 'Unknown Employee';
+      if (staffNameCache[staffId]) return staffNameCache[staffId];
+      const row = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+      staffNameCache[staffId] = row?.name || `Employee #${staffId}`;
+      return staffNameCache[staffId];
+    };
+
     for (const item of updates) {
-      if (!item.staff_id || !item.date || !item.code) continue;
-      const cleanCode = item.code.trim().toUpperCase();
-      if (!ALLOWED_MUSTER_CODES.includes(cleanCode)) continue;
+      try {
+        if (!item.staff_id || !item.date || !item.code) {
+          throw new Error('Missing staff_id, date, or attendance code');
+        }
+        const cleanCode = String(item.code).trim().toUpperCase();
+        if (!ALLOWED_MUSTER_CODES.includes(cleanCode)) {
+          throw new Error(`Invalid attendance code "${cleanCode}" on ${item.date}`);
+        }
 
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-         VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-         ON CONFLICT(staff_id, date) DO UPDATE SET
-           code = excluded.code,
-           remarks = excluded.remarks,
-           updated_by = excluded.updated_by,
-           updated_at = CURRENT_TIMESTAMP`,
-        [item.staff_id, item.date, cleanCode, item.remarks || null]
-      );
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [item.staff_id, item.date, cleanCode, item.remarks || null]
+        );
 
-      await syncMusterToSchedulesAndApprovals(item.staff_id, item.date, cleanCode, item.remarks);
+        await syncMusterToSchedulesAndApprovals(item.staff_id, item.date, cleanCode, item.remarks);
+        savedCount++;
+        savedEmployeesSet.add(item.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (item?.staff_id) errorEmployeesSet.add(item.staff_id);
+        const sName = await getStaffName(item?.staff_id);
+        errors.push({
+          staff_id: item?.staff_id || null,
+          staff_name: sName,
+          date: item?.date || null,
+          error: itemErr.message
+        });
+      }
     }
-    await run('COMMIT');
 
-    await logAudit('Admin', 'MUSTER_BATCH_UPDATE', `Batch updated ${updates.length} muster records`);
-    res.json({ success: true, message: `Successfully updated ${updates.length} muster records and synchronized across all sheets & documents` });
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      'Admin',
+      'MUSTER_BATCH_UPDATE',
+      `Saved Muster Roll records one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) failed`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name} (${e.date || '?'}): ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Muster Roll Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     console.error('Error batch updating muster records:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/muster/batch-reset - Batch reset multiple muster cells back to baseline
+// POST /api/muster/batch-reset - Batch reset multiple muster cells back to baseline one-by-one without transaction
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/batch-reset
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx -> Batch Reset Muster Roll
+//   • Reads From DB   : muster_records
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Resets a batch of Muster cells for a month/staff and reverts linked overrides and document entries.
+// ============================================================================
 app.post('/api/muster/batch-reset', requireAdmin, async (req, res) => {
   try {
     const { resets } = req.body; // Array of { staff_id, date }
@@ -11443,24 +13810,79 @@ app.post('/api/muster/batch-reset', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Array of resets required' });
     }
 
-    await run('BEGIN TRANSACTION');
-    for (const item of resets) {
-      if (!item.staff_id || !item.date) continue;
-      await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [item.staff_id, item.date]);
-      await revertMusterFromSchedulesAndApprovals(item.staff_id, item.date);
-    }
-    await run('COMMIT');
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
+    const staffNameCache = {};
 
-    await logAudit('Admin', 'MUSTER_BATCH_RESET', `Batch reset ${resets.length} muster records to baseline`);
-    res.json({ success: true, message: `Successfully reset ${resets.length} muster records to baseline` });
+    const getStaffName = async (staffId) => {
+      if (!staffId) return 'Unknown Employee';
+      if (staffNameCache[staffId]) return staffNameCache[staffId];
+      const row = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+      staffNameCache[staffId] = row?.name || `Employee #${staffId}`;
+      return staffNameCache[staffId];
+    };
+
+    for (const item of resets) {
+      try {
+        if (!item.staff_id || !item.date) {
+          throw new Error('Missing staff_id or date');
+        }
+        await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [item.staff_id, item.date]);
+        await revertMusterFromSchedulesAndApprovals(item.staff_id, item.date);
+        savedCount++;
+        savedEmployeesSet.add(item.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (item?.staff_id) errorEmployeesSet.add(item.staff_id);
+        const sName = await getStaffName(item?.staff_id);
+        errors.push({
+          staff_id: item?.staff_id || null,
+          staff_name: sName,
+          date: item?.date || null,
+          error: itemErr.message
+        });
+      }
+    }
+
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      'Admin',
+      'MUSTER_BATCH_RESET',
+      `Reset Muster Roll records one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) reset, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) failed`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name} (${e.date || '?'}): ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `Muster Reset Complete: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) reset successfully, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     console.error('Error batch resetting muster records:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/muster/reorder - Reorder staff rows in Muster Roll (persists custom order / seniority_no)
+// POST /api/muster/reorder - Reorder staff rows in Muster Roll one-by-one without transaction
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/reorder
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx (Muster Roll)
+//   • Reads From DB   : muster_records
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Muster Roll operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/muster/reorder', requireAdmin, async (req, res) => {
   try {
     const { staff_ids } = req.body; // Array of staff IDs in the new order [id1, id2, id3, ...]
@@ -11468,24 +13890,54 @@ app.post('/api/muster/reorder', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_ids array is required' });
     }
 
-    await run('BEGIN TRANSACTION');
+    let savedCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
     for (let index = 0; index < staff_ids.length; index++) {
       const staffId = staff_ids[index];
       const newSeniorityNo = index + 1;
-      await run('UPDATE staff SET seniority_no = ? WHERE id = ?', [newSeniorityNo, staffId]);
+      try {
+        await run('UPDATE staff SET seniority_no = ? WHERE id = ?', [newSeniorityNo, staffId]);
+        savedCount++;
+      } catch (itemErr) {
+        errorCount++;
+        const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staffId]).catch(() => null);
+        errors.push({
+          staff_id: staffId,
+          staff_name: staffRow?.name || `Employee #${staffId}`,
+          error: itemErr.message
+        });
+      }
     }
-    await run('COMMIT');
 
-    await logAudit('Admin', 'MUSTER_REORDER', `Reordered ${staff_ids.length} staff members in Muster Roll`);
-    res.json({ success: true, message: 'Muster roll staff order updated successfully' });
+    await logAudit('Admin', 'MUSTER_REORDER', `Reordered muster staff one-by-one: ${savedCount} succeeded, ${errorCount} failed`, { savedCount, errorCount });
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      errors,
+      message: `Muster Roll Order Saved: ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     console.error('Error reordering muster staff:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/muster/add-employee - Add new or existing employee to Muster Roll
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/add-employee
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx (Muster Roll)
+//   • Reads From DB   : muster_records
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Muster Roll operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/muster/add-employee', async (req, res) => {
   if (req.user && req.user.role !== 'Admin') {
     return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
@@ -11593,6 +14045,15 @@ app.post('/api/muster/add-employee', async (req, res) => {
 });
 
 // POST /api/muster/delete-employee - Delete or remove employee from Muster Roll
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/muster/delete-employee
+//   • Module          : Muster Roll & Individual Muster
+//   • Frontend Caller : App.jsx (Muster Roll)
+//   • Reads From DB   : muster_records
+//   • Saves To DB     : muster_records
+//   • Auto-Syncs To   : overrides, lr_sheet_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Muster Roll operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/muster/delete-employee', async (req, res) => {
   if (req.user && req.user.role !== 'Admin') {
     return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
@@ -12070,6 +14531,15 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
 const backfillLRSheetFromOverrides = syncLRSheetFromDailyDuty;
 
 // POST /api/lr-sheet/sync-from-daily-duty - Check Daily Duty Sheet up to date and auto-update LR Sheet
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/sync-from-daily-duty
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx -> Sync LR Sheet from Daily Duty Button
+//   • Reads From DB   : overrides, staff, links
+//   • Saves To DB     : lr_sheet_records
+//   • Auto-Syncs To   : muster_records, ta_approvals, audit_logs
+//   • Summary         : Pulls all LR substitute and extra duties from Daily Summary (`overrides`) into `lr_sheet_records`.
+// ============================================================================
 app.post('/api/lr-sheet/sync-from-daily-duty', async (req, res) => {
   try {
     const year = parseInt(req.body.year, 10) || 2026;
@@ -12087,6 +14557,15 @@ app.post('/api/lr-sheet/sync-from-daily-duty', async (req, res) => {
 });
 
 // GET /api/lr-sheet - Fetch complete Leave Reserve sheet for a month (auto-synced with daily duty sheet)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/lr-sheet
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx -> fetchLrSheet() (LR Sheet Tab)
+//   • Reads From DB   : lr_sheet_records, lr_sheet_members, staff, overrides, muster_records
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Fetches the monthly LR Sheet grid for all Leave Reserve members.
+// ============================================================================
 app.get('/api/lr-sheet', async (req, res) => {
   try {
     let year = parseInt(req.query.year, 10);
@@ -12315,6 +14794,15 @@ app.get('/api/lr-sheet', async (req, res) => {
 });
 
 // GET /api/lr-sheet/multi-day-services - Fetch dedicated 2-day & 3-day non-daily schedules reference
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/lr-sheet/multi-day-services
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx (LR Sheet)
+//   • Reads From DB   : lr_sheet_records
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : Leave Reserve (LR) Sheet operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.get('/api/lr-sheet/multi-day-services', (req, res) => {
   res.json({ success: true, services: NON_DAILY_MULTI_DAY_SERVICES });
 });
@@ -12334,6 +14822,7 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
     await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
     await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
     await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: '', remarks: '' });
     return;
   }
 
@@ -12406,6 +14895,7 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
       [disallowRemark, staffId, dateStr, dateStr, altDateStr]
     );
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
   } else if (isAvailable) {
     const reason = `LR Standby at HQ: ${clean}${remarks ? ` (${remarks})` : ''}`;
     await run(
@@ -12429,6 +14919,7 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
       [staffId, dateStr, reason]
     );
     await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
   } else {
     // Train duty (e.g. 12747, 17281, 12734, GTL, etc.)
     const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
@@ -12472,10 +14963,20 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
     } catch (err) {
       console.warn('Error regenerating TA claims in LR sync:', err.message);
     }
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
   }
 }
 
 // POST /api/lr-sheet/cell - Update or clear duty cell for an LR staff (Universally synchronized)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/cell
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx -> handleLrCellSave() (Single Cell Edit in LR Sheet)
+//   • Reads From DB   : lr_sheet_records, staff
+//   • Saves To DB     : lr_sheet_records
+//   • Auto-Syncs To   : overrides, muster_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves a single cell in `lr_sheet_records` and runs `syncLRSheetCellChange()` to update `overrides`, `muster_records`, `ta_approvals`, `ta_entries`, `nda_entries`, `diary_entries`, and `daily_earnings_entries`.
+// ============================================================================
 app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
   try {
     const { staff_id, date, duty_code, remarks } = req.body;
@@ -12483,9 +14984,17 @@ app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
 
+    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+    const staffName = staffRow?.name || `Staff #${staff_id}`;
+
     await syncLRSheetCellChange(staff_id, date, duty_code, remarks);
 
-    await logAudit('Admin', 'LR_CELL_UPDATE', `Updated LR duty cell for staff ID ${staff_id} on ${date} to '${duty_code || 'CLEARED'}'`);
+    await logAudit(
+      'Admin',
+      'LR_CELL_UPDATE',
+      `Updated LR Sheet cell for ${staffName} (ID ${staff_id}) on ${date} to '${duty_code || 'CLEARED'}' — synchronized to Daily Summary, Monthly Movement, Muster Roll, TA, NDA, Diary & Daily Earnings`,
+      { staffId: staff_id, staffName, date, duty_code: duty_code || '', savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+    );
     res.json({ success: true, message: `Updated and synchronized LR cell for ${date}` });
   } catch (err) {
     console.error('Error updating LR cell:', err);
@@ -12493,7 +15002,16 @@ app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/lr-sheet/batch-update - Batch update multiple LR cells (Universally synchronized)
+// POST /api/lr-sheet/batch-update - Batch update multiple LR cells one-by-one without transaction (Universally synchronized)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/batch-update
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx -> handleLrBatchSave() (Save All Button in LR Sheet)
+//   • Reads From DB   : lr_sheet_records, staff
+//   • Saves To DB     : lr_sheet_records
+//   • Auto-Syncs To   : overrides, muster_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Saves multiple LR Sheet cells one employee at a time into `lr_sheet_records` and cascades each change to all linked modules.
+// ============================================================================
 app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
   try {
     const { updates } = req.body;
@@ -12501,23 +15019,69 @@ app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Array of updates required' });
     }
 
-    await run('BEGIN TRANSACTION');
-    for (const item of updates) {
-      if (!item.staff_id || !item.date) continue;
-      await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks);
-    }
-    await run('COMMIT');
+    let savedCount = 0;
+    let errorCount = 0;
+    const savedEmployeesSet = new Set();
+    const errorEmployeesSet = new Set();
+    const errors = [];
 
-    await logAudit('Admin', 'LR_BATCH_UPDATE', `Batch updated ${updates.length} LR records with universal sync`);
-    res.json({ success: true, message: `Successfully updated and synchronized ${updates.length} records` });
+    for (const item of updates) {
+      try {
+        if (!item.staff_id || !item.date) {
+          throw new Error('Missing staff_id or date');
+        }
+        await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks);
+        savedCount++;
+        savedEmployeesSet.add(item.staff_id);
+      } catch (itemErr) {
+        errorCount++;
+        if (item?.staff_id) errorEmployeesSet.add(item.staff_id);
+        const staffRow = item?.staff_id ? await get('SELECT name FROM staff WHERE id = ?', [item.staff_id]).catch(() => null) : null;
+        errors.push({
+          staff_id: item?.staff_id || null,
+          staff_name: staffRow?.name || `Employee #${item?.staff_id || '?'}`,
+          date: item?.date || null,
+          error: itemErr.message
+        });
+      }
+    }
+
+    const savedEmployeesCount = savedEmployeesSet.size;
+    const errorEmployeesCount = errorEmployeesSet.size;
+    await logAudit(
+      'Admin',
+      'LR_BATCH_UPDATE',
+      `Saved LR Sheet records one-by-one: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) saved, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) failed`,
+      { savedCount, errorCount, savedEmployeesCount, errorEmployeesCount }
+    );
+    const errorSummary = errors.length > 0
+      ? ` | Errors: ${errors.map(e => `${e.staff_name} (${e.date || '?'}): ${e.error}`).join('; ')}`
+      : '';
+    res.json({
+      success: errorCount === 0,
+      savedCount,
+      errorCount,
+      savedEmployeesCount,
+      errorEmployeesCount,
+      errors,
+      message: `LR Sheet Save Complete: ${savedEmployeesCount} employee(s) (${savedCount} day record(s)) saved successfully, ${errorEmployeesCount} employee(s) (${errorCount} day record(s)) had an error.${errorSummary}`
+    });
   } catch (err) {
-    await run('ROLLBACK');
     console.error('Error batch updating LR records:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/lr-sheet/add-member - Add or transfer a staff member into Leave Reserve (Category 4)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/add-member
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx (LR Sheet)
+//   • Reads From DB   : lr_sheet_records
+//   • Saves To DB     : lr_sheet_records
+//   • Auto-Syncs To   : overrides, muster_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Leave Reserve (LR) Sheet operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/lr-sheet/add-member', async (req, res) => {
   if (req.user && req.user.role !== 'Admin') {
     return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
@@ -12609,6 +15173,15 @@ app.post('/api/lr-sheet/add-member', async (req, res) => {
 });
 
 // POST /api/lr-sheet/remove-member - Remove a staff member from Leave Reserve (Category 4)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/remove-member
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : App.jsx (LR Sheet)
+//   • Reads From DB   : lr_sheet_records
+//   • Saves To DB     : lr_sheet_records
+//   • Auto-Syncs To   : overrides, muster_records, ta_approvals, ta_entries, nda_entries, diary_entries, daily_earnings_entries, audit_logs
+//   • Summary         : Leave Reserve (LR) Sheet operation synchronized across Roster and Employee Documents.
+// ============================================================================
 app.post('/api/lr-sheet/remove-member', async (req, res) => {
   if (req.user && req.user.role !== 'Admin') {
     return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
@@ -12671,6 +15244,15 @@ const possibleDistPaths = [
 // -------------------------------------------------------------
 
 // GET /api/db/export - Download roster.db file directly
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/db/export
+//   • Module          : Database Export / Backup
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/db/export
+// ============================================================================
 app.get('/api/db/export', (req, res) => {
   const dbFile = path.join(__dirname, 'roster.db');
   if (!fs.existsSync(dbFile)) {
@@ -12681,6 +15263,15 @@ app.get('/api/db/export', (req, res) => {
 });
 
 // GET /api/db/json-export - Full database snapshot as JSON
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/db/json-export
+//   • Module          : Database Export / Backup
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : None (Read-Only)
+//   • Auto-Syncs To   : None
+//   • Summary         : GET /api/db/json-export
+// ============================================================================
 app.get('/api/db/json-export', async (req, res) => {
   try {
     const tables = [
@@ -12708,6 +15299,15 @@ app.get('/api/db/json-export', async (req, res) => {
 });
 
 // POST /api/db/json-import - Restore full database snapshot from JSON
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/db/json-import
+//   • Module          : Database Export / Backup
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db
+//   • Auto-Syncs To   : None
+//   • Summary         : POST /api/db/json-import
+// ============================================================================
 app.post('/api/db/json-import', async (req, res) => {
   try {
     const { tables } = req.body;

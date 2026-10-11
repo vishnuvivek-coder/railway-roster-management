@@ -575,7 +575,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
         body: JSON.stringify({ updates })
       });
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!res.ok) {
         throw new Error(data.error || 'Failed to assign multi-day service');
       }
 
@@ -590,8 +590,15 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
         };
       });
 
-      setSyncNotice(`⚡ Successfully booked ${service.name} (${service.totalDays} Days) for ${editModal.staff.name}!`);
-      setTimeout(() => setSyncNotice(null), 6000);
+      const savedDays = data.savedCount !== undefined ? data.savedCount : service.totalDays;
+      const errDays = data.errorCount || 0;
+      const errText = Array.isArray(data.errors) && data.errors.length > 0
+        ? ` | Errors: ${data.errors.map(e => `${e.date}: ${e.error}`).join('; ')}`
+        : '';
+      const msg = `⚡ LR Sheet Save for ${editModal.staff.name} (${service.name}): ${savedDays} day(s) saved successfully, ${errDays} had an error.${errText}`;
+      setSyncNotice(msg);
+      if (errDays > 0) alert(msg);
+      setTimeout(() => setSyncNotice(null), errDays > 0 ? 8000 : 6000);
       setEditModal(null);
       setSelectedService(null);
 
