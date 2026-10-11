@@ -2,20 +2,257 @@ import React, { useState, useEffect } from 'react';
 
 /**
  * ============================================================================
- * FRONTEND & BACKEND DATA-FLOW MAP (`src/frontend/src/apiDataFlowMap.jsx`)
+ * FRONTEND URL ROUTER & BACKEND DATA-FLOW MAP (`src/frontend/src/apiDataFlowMap.jsx`)
  * ============================================================================
  *
- * Clearly documents and visually displays for every screen/module:
- *   1. Which Backend API Endpoint(s) are called when reading or saving
- *   2. Which Primary SQLite Database Table(s) receive the saved data
- *   3. Which Linked Modules & Database Tables are automatically synchronized
+ * 1. Maps every single Frontend Tab & Document Sub-Tab to a dedicated URL path:
+ *    - `/daily`                -> Staff Movement / Schedule (`activeTab = 'daily'`)
+ *    - `/daily-summary`        -> Daily Summary Table (`activeTab = 'daily-summary'`)
+ *    - `/roster`               -> Roster Grid / Monthly Movement (`activeTab = 'roster'`)
+ *    - `/links`                -> Train Roster / Link Sets (`activeTab = 'links'`)
+ *    - `/staff`                -> Staff Roster (`activeTab = 'staff'`)
+ *    - `/leaves`               -> Leave / Swap (`activeTab = 'leaves'`)
+ *    - `/ta-approvals`         -> TA Approvals (`activeTab = 'ta-approvals'`)
+ *    - `/documents/ta`         -> TA Journal Document (`activeTab = 'documents', docSubTab = 'ta'`)
+ *    - `/documents/nda`        -> NDA Journal Document (`activeTab = 'documents', docSubTab = 'nda'`)
+ *    - `/documents/diary`      -> Diary (E.F.T) Document (`activeTab = 'documents', docSubTab = 'diary'`)
+ *    - `/documents/earnings`   -> Daily Earnings Sheet (`activeTab = 'documents', docSubTab = 'earnings'`)
+ *    - `/documents/muster`     -> Individual Muster (`activeTab = 'documents', docSubTab = 'muster'`)
+ *    - `/documents/amenity`    -> Amenity Booking Chart (`activeTab = 'documents', docSubTab = 'amenity'`)
+ *    - `/muster`               -> Muster Details / Attendance Roll (`activeTab = 'muster'`)
+ *    - `/lr-list`              -> LR List / Leave Reserve Sheet (`activeTab = 'lr-list'`)
+ *    - `/availability`         -> Staff Availability Sheet (`activeTab = 'availability'`)
+ *    - `/seniority`            -> Seniority List (`activeTab = 'seniority'`)
+ *    - `/audit`                -> Audit Logs (`activeTab = 'audit'`)
+ *    - `/user-management`      -> User Approvals (`activeTab = 'user-management'`)
+ *
+ * 2. Clearly documents and visually displays for every screen/module:
+ *    - Frontend URL Path (e.g. `localhost:5173/muster`)
+ *    - Backend API Endpoint(s) called when reading or saving
+ *    - Primary SQLite Database Table(s)
+ *    - Linked Modules & Database Tables automatically synchronized
  * ============================================================================
  */
+
+export const TAB_ROUTE_DIRECTORY = [
+  {
+    path: '/daily',
+    aliases: ['/', '/movement', '/staff-movement', '/schedule'],
+    activeTab: 'daily',
+    docSubTab: null,
+    label: 'Staff Movement / Schedule',
+    icon: '👤'
+  },
+  {
+    path: '/daily-summary',
+    aliases: ['/summary', '/daily-table'],
+    activeTab: 'daily-summary',
+    docSubTab: null,
+    label: 'Daily Summary Table',
+    icon: '📋'
+  },
+  {
+    path: '/roster',
+    aliases: ['/roster-grid', '/monthly-movement', '/grid'],
+    activeTab: 'roster',
+    docSubTab: null,
+    label: 'Roster Grid (Monthly Movement)',
+    icon: '📅'
+  },
+  {
+    path: '/links',
+    aliases: ['/train-roster', '/trains', '/link-sets'],
+    activeTab: 'links',
+    docSubTab: null,
+    label: 'Train Roster & Link Sets',
+    icon: '🚆'
+  },
+  {
+    path: '/staff',
+    aliases: ['/staff-roster', '/employees'],
+    activeTab: 'staff',
+    docSubTab: null,
+    label: 'Staff Roster',
+    icon: '👥'
+  },
+  {
+    path: '/leaves',
+    aliases: ['/leave', '/swap', '/leave-swap'],
+    activeTab: 'leaves',
+    docSubTab: null,
+    label: 'Leave / Swap',
+    icon: '✉️'
+  },
+  {
+    path: '/ta-approvals',
+    aliases: ['/approvals'],
+    activeTab: 'ta-approvals',
+    docSubTab: null,
+    label: 'TA Approvals',
+    icon: '✅'
+  },
+  {
+    path: '/documents/ta',
+    aliases: ['/documents', '/ta', '/ta-document', '/ta-journal'],
+    activeTab: 'documents',
+    docSubTab: 'ta',
+    label: 'TA Document (Documents Hub)',
+    icon: '📄'
+  },
+  {
+    path: '/documents/nda',
+    aliases: ['/nda', '/nda-document', '/nda-journal'],
+    activeTab: 'documents',
+    docSubTab: 'nda',
+    label: 'NDA Document (Documents Hub)',
+    icon: '🌙'
+  },
+  {
+    path: '/documents/diary',
+    aliases: ['/diary', '/staff-diary', '/eft'],
+    activeTab: 'documents',
+    docSubTab: 'diary',
+    label: 'Diary E.F.T (Documents Hub)',
+    icon: '📔'
+  },
+  {
+    path: '/documents/earnings',
+    aliases: ['/earnings', '/daily-earnings'],
+    activeTab: 'documents',
+    docSubTab: 'earnings',
+    label: 'Daily Earnings (Documents Hub)',
+    icon: '💰'
+  },
+  {
+    path: '/documents/muster',
+    aliases: ['/individual-muster', '/documents/individual-muster'],
+    activeTab: 'documents',
+    docSubTab: 'muster',
+    label: 'Individual Muster (Documents Hub)',
+    icon: '📋'
+  },
+  {
+    path: '/documents/amenity',
+    aliases: ['/amenity', '/booking-chart', '/amenity-booking'],
+    activeTab: 'documents',
+    docSubTab: 'amenity',
+    label: 'Amenity Booking Chart (Documents Hub)',
+    icon: '📊'
+  },
+  {
+    path: '/muster',
+    aliases: ['/muster-roll', '/muster-details', '/attendance'],
+    activeTab: 'muster',
+    docSubTab: null,
+    label: 'Muster Details (Attendance Roll)',
+    icon: '📅'
+  },
+  {
+    path: '/lr-list',
+    aliases: ['/lr', '/lr-sheet', '/leave-reserve'],
+    activeTab: 'lr-list',
+    docSubTab: null,
+    label: 'LR List (Leave Reserve Sheet)',
+    icon: '📋'
+  },
+  {
+    path: '/availability',
+    aliases: ['/staff-availability', '/available'],
+    activeTab: 'availability',
+    docSubTab: null,
+    label: 'Staff Availability Sheet',
+    icon: '🟢'
+  },
+  {
+    path: '/seniority',
+    aliases: ['/seniority-list'],
+    activeTab: 'seniority',
+    docSubTab: null,
+    label: 'Seniority List',
+    icon: '🏅'
+  },
+  {
+    path: '/audit',
+    aliases: ['/audit-logs', '/logs', '/history'],
+    activeTab: 'audit',
+    docSubTab: null,
+    label: 'Audit Logs',
+    icon: '📜'
+  },
+  {
+    path: '/user-management',
+    aliases: ['/users', '/user-approvals', '/admin/users'],
+    activeTab: 'user-management',
+    docSubTab: null,
+    label: 'User Approvals',
+    icon: '🛡️'
+  },
+  {
+    path: '/register',
+    aliases: ['/duty-register'],
+    activeTab: 'register',
+    docSubTab: null,
+    label: 'Actual Duty Register',
+    icon: '📝'
+  }
+];
+
+/**
+ * Given the browser `window.location.pathname` (e.g. `/muster` or `/documents/nda`),
+ * returns `{ activeTab, docSubTab, routeEntry }`.
+ */
+export function parseRouteFromPathname(rawPathname) {
+  const clean = String(rawPathname || '/')
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '') || '/';
+
+  for (const entry of TAB_ROUTE_DIRECTORY) {
+    if (entry.path.toLowerCase() === clean) {
+      return {
+        activeTab: entry.activeTab,
+        docSubTab: entry.docSubTab || 'ta',
+        routeEntry: entry
+      };
+    }
+    if (Array.isArray(entry.aliases) && entry.aliases.some((a) => a.toLowerCase() === clean)) {
+      return {
+        activeTab: entry.activeTab,
+        docSubTab: entry.docSubTab || 'ta',
+        routeEntry: entry
+      };
+    }
+  }
+
+  return {
+    activeTab: 'daily',
+    docSubTab: 'ta',
+    routeEntry: TAB_ROUTE_DIRECTORY[0]
+  };
+}
+
+/**
+ * Returns the canonical URL path (e.g. `/muster`, `/documents/nda`, `/lr-list`)
+ * for the given `activeTab` and `docSubTab`.
+ */
+export function getCanonicalPathForTab(activeTab, docSubTab = 'ta') {
+  if (activeTab === 'documents') {
+    const sub = docSubTab || 'ta';
+    const foundDoc = TAB_ROUTE_DIRECTORY.find(
+      (r) => r.activeTab === 'documents' && r.docSubTab === sub
+    );
+    return foundDoc ? foundDoc.path : `/documents/${sub}`;
+  }
+
+  const found = TAB_ROUTE_DIRECTORY.find((r) => r.activeTab === activeTab);
+  return found ? found.path : `/${activeTab || 'daily'}`;
+}
 
 export const MODULE_DATA_FLOW_INFO = {
   'daily-summary': {
     title: 'Daily Summary / Daily Duty Movement',
     icon: '📋',
+    frontendRoute: '/daily & /daily-summary',
     frontendSource: 'App.jsx (Daily Summary Tab)',
     readEndpoints: ['GET /api/reports/daily-view', 'GET /api/reports/availability-sheet'],
     writeEndpoints: [
@@ -40,6 +277,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'monthly-movement': {
     title: 'Monthly Movement (30/31-Day Roster Grid)',
     icon: '📅',
+    frontendRoute: '/roster',
     frontendSource: 'App.jsx (Monthly Movement Tab)',
     readEndpoints: ['GET /api/roster'],
     writeEndpoints: [
@@ -63,7 +301,8 @@ export const MODULE_DATA_FLOW_INFO = {
   'muster-roll': {
     title: 'Muster Roll & Individual Attendance',
     icon: '📑',
-    frontendSource: 'App.jsx (Muster Roll Tab & Individual Muster)',
+    frontendRoute: '/muster (and /documents/muster)',
+    frontendSource: 'MusterRoll.jsx & IndividualMusterDocument.jsx',
     readEndpoints: ['GET /api/muster'],
     writeEndpoints: [
       'POST /api/muster/update-cell',
@@ -87,7 +326,8 @@ export const MODULE_DATA_FLOW_INFO = {
   'lr-sheet': {
     title: 'Leave Reserve (LR) Sheet',
     icon: '🗂️',
-    frontendSource: 'App.jsx (LR Sheet Modal / Tab)',
+    frontendRoute: '/lr-list (alias: /lr)',
+    frontendSource: 'LRList.jsx',
     readEndpoints: ['GET /api/lr-sheet'],
     writeEndpoints: [
       'POST /api/lr-sheet/cell',
@@ -110,6 +350,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'ta-approvals': {
     title: 'TA Approvals (Claim Verification Portal)',
     icon: '🚆',
+    frontendRoute: '/ta-approvals',
     frontendSource: 'TaApprovals.jsx',
     readEndpoints: ['GET /api/ta-approvals'],
     writeEndpoints: [
@@ -132,6 +373,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'ta-journal': {
     title: 'Employee TA Journal Document',
     icon: '🧾',
+    frontendRoute: '/documents/ta (alias: /ta)',
     frontendSource: 'TaDocument.jsx',
     readEndpoints: ['GET /api/documents/ta/:staffId'],
     writeEndpoints: [
@@ -154,6 +396,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'nda-journal': {
     title: 'Employee NDA (Night Duty Allowance) Journal',
     icon: '🌙',
+    frontendRoute: '/documents/nda (alias: /nda)',
     frontendSource: 'NdaDocument.jsx',
     readEndpoints: ['GET /api/documents/nda/:staffId'],
     writeEndpoints: [
@@ -175,6 +418,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'staff-diary': {
     title: 'Staff Diary (Monthly Work & EFT Statement)',
     icon: '📔',
+    frontendRoute: '/documents/diary (alias: /diary)',
     frontendSource: 'DiaryDocument.jsx',
     readEndpoints: ['GET /api/documents/diary/:staffId'],
     writeEndpoints: [
@@ -196,6 +440,7 @@ export const MODULE_DATA_FLOW_INFO = {
   'daily-earnings': {
     title: 'Daily Earnings & EFT Checking Sheet',
     icon: '💰',
+    frontendRoute: '/documents/earnings (alias: /earnings)',
     frontendSource: 'DailyEarningsDocument.jsx',
     readEndpoints: [
       'GET /api/documents/daily-earnings',
@@ -220,17 +465,99 @@ export const MODULE_DATA_FLOW_INFO = {
       'Audit Logs (audit_logs)'
     ],
     summary: 'Saving Daily Earnings writes to `daily_earnings_entries` one employee at a time, syncs EFT figures with `diary_entries`, and updates working duties across Roster, Muster, TA, and NDA.'
+  },
+  'links-master': {
+    title: 'Train Roster & Cyclic Link Sets',
+    icon: '🚆',
+    frontendRoute: '/links',
+    frontendSource: 'App.jsx (Train Roster Tab)',
+    readEndpoints: ['GET /api/links', 'GET /api/link-sets', 'GET /api/train-ta-nda'],
+    writeEndpoints: ['POST /api/links', 'PUT /api/links/:id', 'POST /api/train-ta-nda/batch'],
+    primaryTables: ['links', 'link_sets', 'train_ta_nda'],
+    syncedTargets: [
+      'Daily Summary Table',
+      'Monthly Movement Grid',
+      'Muster Roll',
+      'TA Approvals & Journal',
+      'NDA Journal',
+      'Audit Logs (audit_logs)'
+    ],
+    summary: 'Edits to base link slots or train TA/NDA timings save to `links` / `train_ta_nda` and recalculate schedules across all connected modules.'
+  },
+  'staff-master': {
+    title: 'Staff Directory & Category Roster',
+    icon: '👥',
+    frontendRoute: '/staff',
+    frontendSource: 'App.jsx (Staff Roster Tab)',
+    readEndpoints: ['GET /api/staff', 'GET /api/categories'],
+    writeEndpoints: ['POST /api/staff', 'PUT /api/staff/:id', 'DELETE /api/staff/:id'],
+    primaryTables: ['staff', 'categories'],
+    syncedTargets: [
+      'Daily Summary Table',
+      'Monthly Movement Grid',
+      'Muster Roll',
+      'LR Sheet (lr_sheet_members)',
+      'All Employee Documents',
+      'Audit Logs (audit_logs)'
+    ],
+    summary: 'Adding, editing, or reordering employees updates `staff` and immediately reflects across all rosters, Muster Roll, LR Sheet, and Documents.'
+  },
+  'leaves-swap': {
+    title: 'Leave Requests & Staff Duty Swaps',
+    icon: '✉️',
+    frontendRoute: '/leaves',
+    frontendSource: 'App.jsx (Leave / Swap Tab)',
+    readEndpoints: ['GET /api/leave-requests'],
+    writeEndpoints: [
+      'POST /api/leave-requests',
+      'POST /api/leave-requests/:id/approve',
+      'POST /api/leave-requests/:id/reject',
+      'POST /api/duty/exchange-staff'
+    ],
+    primaryTables: ['leave_requests', 'overrides'],
+    syncedTargets: [
+      'Daily Summary Table (overrides)',
+      'Monthly Movement Grid (overrides)',
+      'Muster Roll (muster_records)',
+      'LR Sheet (lr_sheet_records)',
+      'TA / NDA / Diary / Earnings',
+      'Audit Logs (audit_logs)'
+    ],
+    summary: 'Approving leaves or swapping staff writes to `leave_requests` and `overrides` and cascades across Muster Roll, LR Sheet, TA, NDA, Diary, and Daily Earnings.'
+  },
+  'seniority-list': {
+    title: 'Seniority List',
+    icon: '🏅',
+    frontendRoute: '/seniority',
+    frontendSource: 'SeniorityList.jsx',
+    readEndpoints: ['GET /api/seniority-list'],
+    writeEndpoints: ['PUT /api/seniority-list/:id'],
+    primaryTables: ['seniority_list', 'staff'],
+    syncedTargets: ['Staff Directory', 'Coach Allocation', 'Audit Logs (audit_logs)'],
+    summary: 'Updates employee seniority rank and details in `seniority_list`.'
   }
 };
 
 /**
  * Compact, collapsible banner that can be placed at the top of any module or document
- * so the user immediately sees WHICH endpoint is called and WHERE the data goes.
+ * so the user immediately sees the Direct URL Path, Backend Endpoint, and Database Flow.
  */
-export function ModuleDataFlowBar({ moduleKey, style = {} }) {
+export function ModuleDataFlowBar({ moduleKey, currentPath, style = {} }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const info = MODULE_DATA_FLOW_INFO[moduleKey];
   if (!info) return null;
+
+  const displayPath = currentPath || (typeof window !== 'undefined' ? window.location.pathname : info.frontendRoute);
+
+  const handleCopyUrl = (e) => {
+    e.stopPropagation();
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div
@@ -256,11 +583,28 @@ export function ModuleDataFlowBar({ moduleKey, style = {} }) {
           cursor: 'pointer'
         }}
         onClick={() => setExpanded(!expanded)}
-        title="Click to inspect full Backend Endpoint & Database Flow for this screen"
+        title="Click to inspect full URL Route, Backend Endpoint & Database Flow for this screen"
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span
+            onClick={handleCopyUrl}
+            title="Click to copy full URL for this tab"
+            style={{
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: 'rgba(245, 158, 11, 0.16)',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              color: '#fbbf24',
+              fontWeight: 700,
+              fontFamily: 'monospace',
+              fontSize: '0.73rem',
+              cursor: 'pointer'
+            }}
+          >
+            🔗 {copied ? 'Copied URL!' : displayPath}
+          </span>
           <span style={{ fontWeight: 700, color: '#38bdf8' }}>
-            🧭 Data Flow ({info.icon} {info.title}):
+            {info.icon} {info.title}:
           </span>
           <span>
             <strong style={{ color: '#94a3b8' }}>Saves via:</strong>{' '}
@@ -294,8 +638,8 @@ export function ModuleDataFlowBar({ moduleKey, style = {} }) {
           <span>→</span>
           <span style={{ color: '#cbd5e1' }}>
             <strong style={{ color: '#94a3b8' }}>Auto-Syncs:</strong>{' '}
-            {info.syncedTargets.slice(0, 4).join(' • ')}
-            {info.syncedTargets.length > 4 ? ` +${info.syncedTargets.length - 4} more` : ''}
+            {info.syncedTargets.slice(0, 3).join(' • ')}
+            {info.syncedTargets.length > 3 ? ` +${info.syncedTargets.length - 3} more` : ''}
           </span>
         </div>
         <button
@@ -315,7 +659,7 @@ export function ModuleDataFlowBar({ moduleKey, style = {} }) {
             cursor: 'pointer'
           }}
         >
-          {expanded ? '▲ Hide Endpoint Map' : '▼ View Where Data Goes'}
+          {expanded ? '▲ Hide Route & Endpoint Map' : '▼ View Route & Where Data Goes'}
         </button>
       </div>
 
@@ -333,10 +677,14 @@ export function ModuleDataFlowBar({ moduleKey, style = {} }) {
         >
           <div>
             <div style={{ color: '#94a3b8', fontWeight: 700, marginBottom: '3px' }}>
-              1. Frontend Component & Read Endpoints:
+              1. Frontend Route, Component & Read Endpoints:
             </div>
             <div style={{ marginBottom: '4px' }}>
-              <span style={{ color: '#cbd5e1' }}>UI Source: </span>
+              <span style={{ color: '#cbd5e1' }}>Direct Tab URL: </span>
+              <code style={{ color: '#fbbf24', fontWeight: 700 }}>{info.frontendRoute}</code>
+            </div>
+            <div style={{ marginBottom: '4px' }}>
+              <span style={{ color: '#cbd5e1' }}>UI Component: </span>
               <code style={{ color: '#f8fafc' }}>{info.frontendSource}</code>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -431,10 +779,10 @@ export function ModuleDataFlowBar({ moduleKey, style = {} }) {
 }
 
 /**
- * Interactive Explorer showing every Backend API Endpoint, Frontend Caller,
+ * Interactive Explorer showing every Frontend URL Route, Backend API Endpoint,
  * Primary SQLite Database Table, and Cascaded/Synced Modules.
  */
-export function BackendEndpointExplorer() {
+export function BackendEndpointExplorer({ onNavigateRoute }) {
   const [mapData, setMapData] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('ALL');
@@ -472,6 +820,44 @@ export function BackendEndpointExplorer() {
         border: '1px solid rgba(56, 189, 248, 0.35)'
       }}
     >
+      {/* Frontend Direct URL Routes Directory */}
+      <div style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid rgba(148, 163, 184, 0.2)' }}>
+        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#fbbf24', marginBottom: '6px' }}>
+          🔗 Direct Frontend URL Paths for Every Tab (Click any path to open)
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {TAB_ROUTE_DIRECTORY.map((r) => (
+            <a
+              key={r.path}
+              href={r.path}
+              onClick={(e) => {
+                if (onNavigateRoute) {
+                  e.preventDefault();
+                  onNavigateRoute(r.activeTab, r.docSubTab);
+                }
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 9px',
+                borderRadius: '6px',
+                background: 'rgba(30, 41, 59, 0.9)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                color: '#f8fafc',
+                textDecoration: 'none',
+                fontSize: '0.73rem'
+              }}
+              title={`Aliases: ${(r.aliases || []).join(', ')}`}
+            >
+              <span>{r.icon}</span>
+              <code style={{ color: '#fbbf24', fontWeight: 700 }}>{r.path}</code>
+              <span style={{ color: '#94a3b8' }}>({r.label})</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
       <div
         style={{
           display: 'flex',

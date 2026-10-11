@@ -1160,13 +1160,24 @@ function dataFlowTraceMiddleware(req, res, next) {
   const flow = lookupEndpointFlow(req.method, req.path);
   req.dataFlow = flow;
 
-  const isWriteMethod = ['POST', 'PUT', 'DELETE'].includes(req.method.toUpperCase());
-  if (isWriteMethod && flow) {
-    const savesTo = (flow.saves_to_tables || []).join(', ') || 'none';
+  if (flow) {
+    const readsFrom = (flow.reads_from_tables || []).join(', ') || 'none';
+    const savesTo = (flow.saves_to_tables || []).join(', ') || 'none (read-only)';
     const cascadesTo = (flow.cascades_to_tables || []).join(', ') || 'none';
-    console.log(
-      `[DATA-FLOW] ${req.method} ${req.path} | Module: ${flow.module} | Saves To DB: [${savesTo}] | Auto-Syncs: [${cascadesTo}]`
-    );
+
+    // Expose clear headers in Chrome DevTools -> Network -> Headers
+    res.setHeader('X-Data-Module', String(flow.module || 'System'));
+    res.setHeader('X-Frontend-Caller', String(flow.frontend_caller || 'App.jsx'));
+    res.setHeader('X-Reads-From-DB', readsFrom);
+    res.setHeader('X-Saves-To-DB', savesTo);
+    res.setHeader('X-Auto-Syncs-To-DB', cascadesTo);
+
+    const isWriteMethod = ['POST', 'PUT', 'DELETE'].includes(req.method.toUpperCase());
+    if (isWriteMethod) {
+      console.log(
+        `[DATA-FLOW] ${req.method} ${req.path} | Module: ${flow.module} | Saves To DB: [${savesTo}] | Auto-Syncs: [${cascadesTo}]`
+      );
+    }
 
     const originalJson = res.json.bind(res);
     res.json = function (body) {
@@ -1176,6 +1187,7 @@ function dataFlowTraceMiddleware(req, res, next) {
           actual_path: `${req.method} ${req.path}`,
           module: flow.module,
           frontend_caller: flow.frontend_caller,
+          reads_from_tables: flow.reads_from_tables,
           saves_to_tables: flow.saves_to_tables,
           cascades_to_tables: flow.cascades_to_tables,
           synced_ui_modules: flow.synced_ui_modules

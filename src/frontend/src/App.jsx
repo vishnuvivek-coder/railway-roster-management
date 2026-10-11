@@ -62,7 +62,12 @@ import AvailabilitySheet from './AvailabilitySheet';
 import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
-import { ModuleDataFlowBar, BackendEndpointExplorer } from './apiDataFlowMap';
+import {
+  ModuleDataFlowBar,
+  BackendEndpointExplorer,
+  parseRouteFromPathname,
+  getCanonicalPathForTab
+} from './apiDataFlowMap';
 import { applySeniorityCoachAllocation, getSeniorityRank } from './seniorityData';
 import { useDevice } from './useDevice';
 import useDragAutoScroll from './useDragAutoScroll';
@@ -1205,14 +1210,51 @@ export default function App() {
   const [userSearch, setUserSearch] = useState('');
   const [adminActionMsg, setAdminActionMsg] = useState('');
 
-  const [activeTab, setActiveTab] = useState('daily'); // default is daily duties view
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return parseRouteFromPathname(window.location.pathname).activeTab;
+    }
+    return 'daily';
+  });
+  const [docSubTab, setDocSubTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return parseRouteFromPathname(window.location.pathname).docSubTab || 'ta';
+    }
+    return 'ta';
+  });
+
+  // Two-way URL Path Router: Sync browser URL bar <-> activeTab / docSubTab
   useEffect(() => {
-    window.__setActiveTab = (tab) => {
+    window.__setActiveTab = (tab, subTab = null) => {
       setActiveTab(tab);
+      if (subTab) setDocSubTab(subTab);
       setIsMobileMenuOpen(false);
     };
+
+    const handlePopState = () => {
+      const parsed = parseRouteFromPathname(window.location.pathname);
+      setActiveTab(parsed.activeTab);
+      if (parsed.docSubTab) {
+        setDocSubTab(parsed.docSubTab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-  const [docSubTab, setDocSubTab] = useState('ta'); // 'ta' | 'nda' | 'diary'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const targetPath = getCanonicalPathForTab(activeTab, docSubTab);
+    const currentPath = window.location.pathname;
+    if (currentPath !== targetPath) {
+      if (currentPath === '/' && targetPath === '/daily') {
+        window.history.replaceState({ activeTab, docSubTab }, '', targetPath);
+      } else {
+        window.history.pushState({ activeTab, docSubTab }, '', targetPath);
+      }
+    }
+  }, [activeTab, docSubTab]);
   const [userRole, setUserRole] = useState(() => currentUser?.role || 'Admin');
   const [categories, setCategories] = useState([]);
   const [selectedCatId, setSelectedCatId] = useState('');
@@ -4756,54 +4798,63 @@ export default function App() {
           <li 
             className={`nav-item ${activeTab === 'daily' ? 'active' : ''}`}
             onClick={() => { setActiveTab('daily'); setIsMobileMenuOpen(false); }}
+            title="Path: /daily"
           >
             <span>👤</span> Staff Movement / Schedule
           </li>
           <li 
             className={`nav-item ${activeTab === 'daily-summary' ? 'active' : ''}`}
             onClick={() => { setActiveTab('daily-summary'); setIsMobileMenuOpen(false); }}
+            title="Path: /daily-summary"
           >
             <span>📋</span> Daily Summary Table
           </li>
           <li 
             className={`nav-item ${activeTab === 'roster' ? 'active' : ''}`}
             onClick={() => { setActiveTab('roster'); setIsMobileMenuOpen(false); }}
+            title="Path: /roster"
           >
             <span>📅</span> Roster Grid
           </li>
           <li 
             className={`nav-item ${activeTab === 'links' ? 'active' : ''}`}
             onClick={() => { setActiveTab('links'); setIsMobileMenuOpen(false); }}
+            title="Path: /links"
           >
             <span>🚆</span> Train Roster
           </li>
           <li 
             className={`nav-item ${activeTab === 'staff' ? 'active' : ''}`}
             onClick={() => { setActiveTab('staff'); setIsMobileMenuOpen(false); }}
+            title="Path: /staff"
           >
             <span>👥</span> Staff Roster
           </li>
           <li 
             className={`nav-item ${activeTab === 'leaves' ? 'active' : ''}`}
             onClick={() => { setActiveTab('leaves'); setIsMobileMenuOpen(false); }}
+            title="Path: /leaves"
           >
             <span>✉️</span> Leave / Swap
           </li>
           <li 
             className={`nav-item ${activeTab === 'ta-approvals' ? 'active' : ''}`}
             onClick={() => { setActiveTab('ta-approvals'); setIsMobileMenuOpen(false); }}
+            title="Path: /ta-approvals"
           >
             <span>✅</span> TA Approvals
           </li>
           <li 
             className={`nav-item ${activeTab === 'documents' ? 'active' : ''}`}
             onClick={() => { setActiveTab('documents'); setIsMobileMenuOpen(false); }}
+            title="Paths: /documents/ta, /documents/nda, /documents/diary, /documents/earnings, /documents/muster, /documents/amenity"
           >
             <span>📑</span> DOCUMENTS
           </li>
           <li 
             className={`nav-item ${activeTab === 'muster' ? 'active' : ''}`}
             onClick={() => { setActiveTab('muster'); setIsMobileMenuOpen(false); }}
+            title="Path: /muster"
           >
             <span>📅</span> Muster Details
           </li>
@@ -4811,24 +4862,28 @@ export default function App() {
             className={`nav-item ${activeTab === 'lr-list' ? 'active' : ''}`}
             onClick={() => { setActiveTab('lr-list'); setIsMobileMenuOpen(false); }}
             style={{ paddingLeft: '28px', fontSize: '0.86rem' }}
+            title="Path: /lr-list (or /lr)"
           >
             <span>📋</span> LR List (Leave Reserve)
           </li>
           <li 
             className={`nav-item ${activeTab === 'availability' ? 'active' : ''}`}
             onClick={() => { setActiveTab('availability'); setIsMobileMenuOpen(false); }}
+            title="Path: /availability"
           >
             <span>🟢</span> Staff Availability
           </li>
           <li 
             className={`nav-item ${activeTab === 'seniority' ? 'active' : ''}`}
             onClick={() => { setActiveTab('seniority'); setIsMobileMenuOpen(false); }}
+            title="Path: /seniority"
           >
             <span>🏅</span> Seniority List
           </li>
           <li 
             className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`}
             onClick={() => { setActiveTab('audit'); setIsMobileMenuOpen(false); }}
+            title="Path: /audit"
           >
             <span>📜</span> Audit Logs
           </li>
@@ -4838,6 +4893,7 @@ export default function App() {
             <li 
               className={`nav-item ${activeTab === 'user-management' ? 'active' : ''}`}
               onClick={() => { setActiveTab('user-management'); setIsMobileMenuOpen(false); }}
+              title="Path: /user-management"
               style={{
                 marginTop: '10px',
                 borderTop: '1px solid var(--border-subtle)',
@@ -5036,35 +5092,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {/* Live Module Data-Flow Bar: Shows which Backend Endpoint & SQLite Table handles the active screen */}
-        <ModuleDataFlowBar
-          moduleKey={
-            activeTab === 'daily' || activeTab === 'daily-summary' || activeTab === 'availability'
-              ? 'daily-summary'
-              : activeTab === 'roster'
-              ? 'monthly-movement'
-              : activeTab === 'muster'
-              ? 'muster-roll'
-              : activeTab === 'lr-list'
-              ? 'lr-sheet'
-              : activeTab === 'ta-approvals'
-              ? 'ta-approvals'
-              : activeTab === 'documents'
-              ? docSubTab === 'ta'
-                ? 'ta-journal'
-                : docSubTab === 'nda'
-                ? 'nda-journal'
-                : docSubTab === 'diary'
-                ? 'staff-diary'
-                : docSubTab === 'earnings'
-                ? 'daily-earnings'
-                : docSubTab === 'muster'
-                ? 'muster-roll'
-                : null
-              : null
-          }
-        />
 
         {/* Global Controls Filter Panel */}
         {!['documents', 'audit', 'user-management', 'muster', 'lr-list', 'ta-approvals'].includes(activeTab) && (
@@ -13932,29 +13959,13 @@ export default function App() {
                 <div>
                   <div className="card-title" style={{ margin: 0 }}>System Audit Trail — What Is Saved & Where It Is Saved</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                    Complete real-time record of every save, edit, sync, and reset — showing the exact API Endpoint, Frontend Source, Primary DB Table, and Synced Modules.
+                    Complete real-time record of every save, edit, sync, and reset across Daily Summary, Monthly Movement, Muster Roll, TA, NDA, Diary, Daily Earnings, Leave/Swap, and LR Sheet.
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowEndpointExplorer(!showEndpointExplorer)}
-                    style={{
-                      fontSize: '0.82rem',
-                      padding: '6px 14px',
-                      fontWeight: 700,
-                      background: showEndpointExplorer ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.1)',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.45)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {showEndpointExplorer ? '🔼 Hide Endpoint & Data-Flow Map' : '🗺️ View Endpoint & Data-Flow Map'}
-                  </button>
                   <input
                     type="text"
-                    placeholder="🔍 Search endpoint, employee, date, train, table..."
+                    placeholder="🔍 Search employee, date, train, module, table..."
                     value={auditSearch}
                     onChange={(e) => setAuditSearch(e.target.value)}
                     style={{
@@ -13999,9 +14010,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              {/* Interactive Backend & Frontend Endpoint Data-Flow Explorer */}
-              {showEndpointExplorer && <BackendEndpointExplorer />}
 
               {/* Module Filter Bar */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
