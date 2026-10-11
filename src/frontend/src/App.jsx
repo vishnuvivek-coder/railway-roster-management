@@ -63,8 +63,6 @@ import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
 import {
-  ModuleDataFlowBar,
-  BackendEndpointExplorer,
   parseRouteFromPathname,
   getCanonicalPathForTab
 } from './apiDataFlowMap';
