@@ -463,7 +463,7 @@ function authenticateToken(req, res, next) {
 
 // Middleware: Enforce Admin Role for Write/Edit Operations
 function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'Admin') {
+  if (!req.user || (req.user.role || '').toLowerCase() !== 'admin') {
     return res.status(403).json({ error: 'Permission denied: Administrator privileges required to modify data.' });
   }
   next();
@@ -2621,27 +2621,61 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
 //   • Auto-Syncs To   : links, overrides, muster_records, lr_sheet_records, lr_sheet_members, audit_logs
 //   • Summary         : Deletes an employee from `staff` and unassigns/cleans up their link slots and records.
 // ============================================================================
-app.delete('/api/staff/:id', requireAdmin, async (req, res) => {
-  const { id } = req.params;
+async function executeDeleteStaff(staffId, res) {
   try {
-    const staff = await get('SELECT * FROM staff WHERE id = ?', [id]);
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
     if (!staff) {
       return res.status(404).json({ error: 'Staff member not found' });
     }
 
-    await run('DELETE FROM staff WHERE id = ?', [id]);
-    
-    // Shift all subsequent staff up to close the gap
-    await run(
-      'UPDATE staff SET row_position = row_position - 1 WHERE category_id = ? AND row_position > ?',
-      [staff.category_id, staff.row_position]
-    );
+    const staffName = staff.name;
+    const catId = staff.category_id;
 
-    await logAudit('Admin', 'DELETE_STAFF', `Deleted staff member '${staff.name}'`);
-    res.json({ message: 'Staff member deleted' });
+    // Cascade delete across all linked tables to maintain absolute data integrity
+    try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staffId, staffId]); } catch (e) {}
+    try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staffId, staffId]); } catch (e) {}
+    try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staffId]); } catch (e) {}
+
+    await run('DELETE FROM staff WHERE id = ?', [staffId]);
+    
+    // Re-index remaining staff in category to keep contiguous positions 1, 2, 3...
+    if (catId) {
+      const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
+      for (let i = 0; i < remaining.length; i++) {
+        await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remaining[i].id]);
+      }
+      try {
+        await run('UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = ?) WHERE id = ?', [catId, catId]);
+      } catch (e) {}
+    }
+
+    await logAudit('Admin', 'DELETE_STAFF', `Deleted staff member '${staffName}' (ID: ${staffId})`);
+    return res.json({ success: true, message: `Staff member '${staffName}' permanently deleted from database.` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error deleting staff:', err);
+    return res.status(500).json({ error: err.message });
   }
+}
+
+app.delete('/api/staff/:id', requireAdmin, async (req, res) => {
+  const staffId = parseInt(req.params.id, 10);
+  await executeDeleteStaff(staffId, res);
+});
+
+// Alternative POST endpoint for staff deletion (useful if proxies/firewalls restrict DELETE method)
+app.post('/api/staff/delete', requireAdmin, async (req, res) => {
+  const staffId = parseInt(req.body.staff_id || req.body.id, 10);
+  if (!staffId) return res.status(400).json({ error: 'staff_id is required' });
+  await executeDeleteStaff(staffId, res);
 });
 
 // Helper: Formula for COR rest day by row position
@@ -15564,6 +15598,116 @@ app.post('/api/db/json-import', async (req, res) => {
     }
   } catch (err) {
     console.error('Error importing JSON backup:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// FEEDBACK & GRIEVANCE REPORTING SYSTEM
+// ============================================================================
+
+// POST /api/feedback - Submit feedback or grievance
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { category, subject, message, rating, contact_info, user_name } = req.body;
+    if (!subject || !message) {
+      return res.status(400).json({ error: 'Subject and message are required' });
+    }
+
+    const userId = req.user ? req.user.id : null;
+    const authorName = user_name || (req.user ? (req.user.name || req.user.username) : 'Anonymous Staff');
+    const userRole = req.user ? req.user.role : 'Staff';
+    const cleanCategory = category || 'General';
+    const numRating = parseInt(rating, 10) || 5;
+
+    const result = await run(`
+      INSERT INTO feedbacks (user_id, user_name, role, category, subject, message, rating, contact_info, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+    `, [userId, authorName, userRole, cleanCategory, subject.trim(), message.trim(), numRating, contact_info || null]);
+
+    await logAudit(
+      userRole,
+      'SUBMIT_FEEDBACK',
+      `Feedback submitted by '${authorName}' [${cleanCategory}]: ${subject.trim()}`
+    );
+
+    res.json({
+      success: true,
+      message: 'Thank you! Your feedback has been received and logged for administration review.',
+      feedbackId: result.lastID
+    });
+  } catch (err) {
+    console.error('Error submitting feedback:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/feedback - List all feedbacks
+app.get('/api/feedback', async (req, res) => {
+  try {
+    const { status, category } = req.query;
+    let sql = 'SELECT * FROM feedbacks WHERE 1=1';
+    const params = [];
+
+    if (status && status !== 'ALL') {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    if (category && category !== 'ALL') {
+      sql += ' AND category = ?';
+      params.push(category);
+    }
+    sql += ' ORDER BY created_at DESC LIMIT 100';
+
+    const rows = await all(sql, params);
+    res.json({ success: true, feedbacks: rows });
+  } catch (err) {
+    console.error('Error fetching feedbacks:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/feedback/:id/status - Update feedback status and administration response (Admin only)
+app.put('/api/feedback/:id/status', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, admin_response } = req.body;
+    if (!status) {
+      return res.status(400).json({ error: 'status is required' });
+    }
+
+    const existing = await get('SELECT * FROM feedbacks WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Feedback entry not found' });
+    }
+
+    await run(`
+      UPDATE feedbacks 
+      SET status = ?, admin_response = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [status, admin_response || existing.admin_response, id]);
+
+    await logAudit(
+      'Admin',
+      'RESOLVE_FEEDBACK',
+      `Feedback #${id} marked as '${status}' with response: ${admin_response || 'None'}`
+    );
+
+    res.json({ success: true, message: `Feedback marked as ${status}` });
+  } catch (err) {
+    console.error('Error updating feedback status:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/feedback/:id - Delete feedback entry (Admin only)
+app.delete('/api/feedback/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await run('DELETE FROM feedbacks WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Feedback entry deleted' });
+  } catch (err) {
+    console.error('Error deleting feedback:', err);
     res.status(500).json({ error: err.message });
   }
 });

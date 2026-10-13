@@ -465,6 +465,24 @@ async function initDb() {
   `);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS feedbacks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      user_name TEXT,
+      role TEXT DEFAULT 'Staff',
+      category TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      rating INTEGER DEFAULT 5,
+      contact_info TEXT,
+      status TEXT DEFAULT 'OPEN',
+      admin_response TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS ta_approvals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

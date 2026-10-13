@@ -230,6 +230,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const getAuthToken = () => authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
 
   // Links state: fallback fetch if not passed as prop
   const [internalLinksList, setInternalLinksList] = useState([]);
@@ -286,7 +287,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
   const fetchAvailableStaff = async () => {
     try {
       setLoadingStaffList(true);
-      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/staff`, {
         headers: {
           ...(token ? { 'Authorization': 'Bearer ' + token } : {})
@@ -331,7 +332,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
     if (e) e.preventDefault();
     try {
       setSavingMember(true);
-      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const token = getAuthToken();
       const payload = addMode === 'existing'
         ? {
             existing_staff_id: parseInt(newMemberForm.existing_staff_id, 10),
@@ -397,7 +398,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
     if (!memberToRemove) return;
     try {
       setRemovingStaffId(memberToRemove.staffId);
-      const token = authToken || localStorage.getItem('token') || localStorage.getItem('railway_roster_token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/lr-sheet/remove-member`, {
         method: 'POST',
         headers: {
@@ -495,7 +496,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
 
     try {
       setSaving(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/lr-sheet/cell`, {
         method: 'POST',
         headers: {
@@ -630,7 +631,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
 
     try {
       setSaving(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/lr-sheet/batch-update`, {
         method: 'POST',
         headers: {
@@ -717,7 +718,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
 
     try {
       setSaving(true);
-      const token = authToken || localStorage.getItem('token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/lr-sheet/batch-update`, {
         method: 'POST',
         headers: {

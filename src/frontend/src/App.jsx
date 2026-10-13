@@ -62,6 +62,7 @@ import AvailabilitySheet from './AvailabilitySheet';
 import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
+import FeedbackModal from './FeedbackModal';
 import {
   parseRouteFromPathname,
   getCanonicalPathForTab
@@ -1207,6 +1208,15 @@ export default function App() {
   const [userFilter, setUserFilter] = useState('ALL'); // ALL, PENDING, APPROVED, REJECTED
   const [userSearch, setUserSearch] = useState('');
   const [adminActionMsg, setAdminActionMsg] = useState('');
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [globalSaveNotice, setGlobalSaveNotice] = useState(null);
+
+  const showGlobalSaveNotice = (msg, duration = 5000) => {
+    setGlobalSaveNotice(msg);
+    setTimeout(() => {
+      setGlobalSaveNotice(null);
+    }, duration);
+  };
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -4133,19 +4143,34 @@ export default function App() {
     });
   };
 
-  const deleteStaff = (id) => {
+  const deleteStaff = async (id) => {
     if (!isAdmin) return;
-    const target = staffList.find(s => s.id === id);
+    const target = staffList.find(s => s.id === id) || allStaffList.find(s => s.id === id);
     const staffName = target ? target.name : 'this staff member';
-    if (confirm(`Are you sure you want to delete ${staffName}? This action cannot be undone.`)) {
-      fetch(`${API_BASE}/staff/${id}`, {
+    if (!confirm(`Are you sure you want to delete ${staffName}? This action cannot be undone.`)) return;
+    
+    try {
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/staff/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      }).then(async () => {
-        await notifyAllModulesUpdated('staff_delete');
-      }).catch(err => {
-        alert(`Failed to delete staff: ${err.message}`);
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete staff member');
+      }
+
+      // Optimistically update lists immediately
+      setStaffList(prev => prev.filter(s => s.id !== id));
+      setAllStaffList(prev => prev.filter(s => s.id !== id));
+
+      await notifyAllModulesUpdated('staff_delete');
+      showGlobalSaveNotice(`✓ Employee '${staffName}' permanently deleted from database.`);
+    } catch (err) {
+      alert(`Failed to delete staff: ${err.message}`);
     }
   };
 
@@ -4163,11 +4188,12 @@ export default function App() {
       if (!confirm(`Are you sure you want to mark ${targetName} (Row ${target?.row_position}) as (VACANT)?`)) return;
       try {
         setRemovingStaff(true);
+        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/staff/${removeStaffId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
           },
           body: JSON.stringify({
             name: '(VACANT)',
@@ -4183,6 +4209,7 @@ export default function App() {
         }
         setRemoveStaffId('');
         await notifyAllModulesUpdated('staff_vacant');
+        showGlobalSaveNotice(`✓ Slot on Row ${target?.row_position} marked as (VACANT).`);
         alert(`Slot on Row ${target?.row_position} marked as (VACANT).`);
       } catch (err) {
         alert(err.message);
@@ -4194,16 +4221,25 @@ export default function App() {
       if (!confirm(`Are you sure you want to delete ${targetName} permanently? This action cannot be undone.`)) return;
       try {
         setRemovingStaff(true);
+        const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/staff/${removeStaffId}`, {
           method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${authToken}` }
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
         });
+        const data = await res.json();
         if (!res.ok) {
-          const data = await res.json();
           throw new Error(data.error || 'Failed to delete staff');
         }
+        const removedId = parseInt(removeStaffId, 10);
+        setStaffList(prev => prev.filter(s => s.id !== removedId));
+        setAllStaffList(prev => prev.filter(s => s.id !== removedId));
+
         setRemoveStaffId('');
         await notifyAllModulesUpdated('staff_remove');
+        showGlobalSaveNotice(`✓ Successfully removed ${targetName} from the roster.`);
         alert(`Successfully removed ${targetName} from the roster.`);
       } catch (err) {
         alert(err.message);
@@ -4926,6 +4962,22 @@ export default function App() {
               )}
             </li>
           )}
+
+          <li 
+            className="nav-item"
+            onClick={() => { setIsFeedbackOpen(true); setIsMobileMenuOpen(false); }}
+            style={{
+              marginTop: '6px',
+              borderTop: '1px solid var(--border-subtle)',
+              paddingTop: '10px',
+              color: 'var(--primary, #d4a15c)',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            title="Feedback & Grievance Portal"
+          >
+            <span>💬</span> <strong>Feedback / Grievance</strong>
+          </li>
         </ul>
 
         {/* Sidebar Footer with Logged In User Profile & Logout */}
@@ -5034,6 +5086,26 @@ export default function App() {
                   }}
                 >
                   <span>🔄</span> Refresh App
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFeedbackOpen(true)}
+                  title="Submit Feedback, Suggestions, or Grievances"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(212, 161, 92, 0.22) 0%, rgba(212, 161, 92, 0.08) 100%)',
+                    border: '1px solid var(--border-gold, #d4a15c)',
+                    color: 'var(--primary, #d4a15c)',
+                    borderRadius: '8px',
+                    padding: '3px 10px',
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 700
+                  }}
+                >
+                  <span>💬</span> Feedback
                 </button>
               </div>
             </div>
@@ -15937,52 +16009,127 @@ export default function App() {
         />
       )}
   
-      {/* Floating Save & Database Sync Dock for Daily Movement, Links & Muster */}
-      {(activeTab === 'daily' || activeTab === 'links' || activeTab === 'muster') && (
-        <div className="no-print" style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          zIndex: 1100,
-          background: 'rgba(18, 24, 38, 0.95)',
-          backdropFilter: 'blur(10px)',
-          border: '1.5px solid var(--border-gold)',
-          borderRadius: '12px',
-          padding: '10px 16px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '1.1rem' }}>💾</span>
-            <div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary)' }}>
-                {activeTab === 'links' ? 'Links Database Sync Active' : activeTab === 'muster' ? 'Muster Database Sync Active' : 'Database Auto-Save Active'}
-              </div>
-              <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
-                ● All edits saved permanently
+      {/* Universal Floating Save & Database Sync Dock across ALL screens */}
+      {(() => {
+        let dockTitle = 'Database Auto-Save Active';
+        let buttonLabel = '💾 Save Changes';
+        let onSaveAction = async () => {
+          await notifyAllModulesUpdated('universal_save');
+          showGlobalSaveNotice('✓ All changes and data synced permanently to database.');
+        };
+
+        if (activeTab === 'daily' || activeTab === 'daily-summary') {
+          dockTitle = 'Daily Roster Database Sync';
+          buttonLabel = '💾 Save Daily Roster';
+          onSaveAction = handleSaveDailyRoster;
+        } else if (activeTab === 'roster') {
+          dockTitle = 'Monthly Roster Database Sync';
+          buttonLabel = '💾 Save Monthly Roster';
+          onSaveAction = handleSaveRosterGrid;
+        } else if (activeTab === 'links') {
+          dockTitle = 'Train Links Database Sync';
+          buttonLabel = '💾 Save Links';
+          onSaveAction = handleSaveLinks;
+        } else if (activeTab === 'muster') {
+          dockTitle = 'Muster Roll Database Sync';
+          buttonLabel = '💾 Save Muster';
+          onSaveAction = handleSaveMusterRoll;
+        } else if (activeTab === 'staff') {
+          dockTitle = 'Staff Roster Database Sync';
+          buttonLabel = '💾 Save Staff Order';
+          onSaveAction = handleSaveStaffRoster;
+        } else if (activeTab === 'lr-list') {
+          dockTitle = 'Leave Reserve Database Sync';
+          buttonLabel = '💾 Save LR Sheet';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('lr_manual_save');
+            showGlobalSaveNotice('✓ Leave Reserve (LR) sheet saved and synced to database.');
+          };
+        } else if (activeTab === 'leaves') {
+          dockTitle = 'Leave Management Database Sync';
+          buttonLabel = '💾 Save Leaves';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('leaves_manual_save');
+            showGlobalSaveNotice('✓ Leave and swap requests synced permanently to database.');
+          };
+        } else if (activeTab === 'ta-approvals') {
+          dockTitle = 'TA Approvals Database Sync';
+          buttonLabel = '💾 Sync TA Approvals';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('ta_manual_save');
+            showGlobalSaveNotice('✓ TA approvals synced permanently to database.');
+          };
+        } else if (activeTab === 'documents') {
+          dockTitle = 'Documents Database Sync';
+          buttonLabel = '💾 Save Document Data';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('documents_manual_save');
+            showGlobalSaveNotice('✓ Employee journal documents synced permanently.');
+          };
+        } else if (activeTab === 'seniority') {
+          dockTitle = 'Seniority List Database Sync';
+          buttonLabel = '💾 Sync Seniority';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('seniority_manual_save');
+            showGlobalSaveNotice('✓ Seniority lists synced permanently.');
+          };
+        } else if (activeTab === 'availability') {
+          dockTitle = 'Staff Availability Sync';
+          buttonLabel = '💾 Sync Availability';
+          onSaveAction = async () => {
+            await notifyAllModulesUpdated('avail_manual_save');
+            showGlobalSaveNotice('✓ Staff availability synced permanently.');
+          };
+        }
+
+        return (
+          <div className="no-print" style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 1100,
+            background: 'rgba(18, 24, 38, 0.95)',
+            backdropFilter: 'blur(10px)',
+            border: '1.5px solid var(--border-gold, #d4a15c)',
+            borderRadius: '12px',
+            padding: '10px 16px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.1rem' }}>💾</span>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary, #d4a15c)' }}>
+                  {dockTitle}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
+                  ● All edits saved permanently
+                </div>
               </div>
             </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onSaveAction}
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+              }}
+            >
+              {buttonLabel}
+            </button>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={activeTab === 'links' ? handleSaveLinks : activeTab === 'muster' ? handleSaveMusterRoll : handleSaveDailyRoster}
-            style={{
-              padding: '6px 14px',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            {activeTab === 'links' ? '💾 Save Links' : activeTab === 'muster' ? '💾 Save Muster' : '💾 Save Roster'}
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Duplicate Link Set Modal */}
       {duplicateModal && (
@@ -16268,6 +16415,39 @@ export default function App() {
           <span className="mobile-nav-label">Menu</span>
         </button>
       </div>
+
+      {/* Universal Feedback & Grievance Portal Modal */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        currentUser={currentUser}
+        authToken={authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token')}
+        API_BASE={API_BASE}
+      />
+
+      {/* Global Save Notice Floating Alert Toast */}
+      {globalSaveNotice && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 99999,
+          background: 'linear-gradient(135deg, #065f46 0%, #047857 100%)',
+          color: '#ffffff',
+          border: '1.5px solid #34d399',
+          borderRadius: '10px',
+          padding: '12px 20px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '0.88rem',
+          fontWeight: 700
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>💾</span>
+          <span>{globalSaveNotice}</span>
+        </div>
+      )}
     </div>
   );
 
