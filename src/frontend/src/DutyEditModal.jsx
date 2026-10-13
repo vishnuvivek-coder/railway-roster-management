@@ -1369,13 +1369,15 @@ export default function DutyEditModal({
   const doExecuteAssign = async (assignedStaffObj, linkNum, targetCatIdNum) => {
     setSubmitting(true);
     try {
+      const origId = dutyModal.originalStaffId || (dutyModal.staffId && isSlotVacant ? dutyModal.staffId : null);
       const assignPayload = {
         staff_id: assignedStaffObj.id,
         date: selectedDate,
         action: 'CHANGED_LINK',
         new_link_number: linkNum,
         target_category_id: targetCatIdNum,
-        reason: assignReason || (linkNum ? `Assigned to Link #${linkNum}` : 'Assigned duty link')
+        replaced_staff_id: (origId && origId !== assignedStaffObj.id) ? origId : null,
+        reason: assignReason || (linkNum ? `Assigned to Link #${linkNum}${dutyModal.originalStaffName ? ` (Relief for ${dutyModal.originalStaffName})` : ''}` : 'Assigned duty link')
       };
 
       const res = await fetch('/api/duty/change-status', {
@@ -1389,17 +1391,18 @@ export default function DutyEditModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to assign employee to duty link');
 
-      // If the slot had an original employee on leave/sick, link them as replacement
-      const origId = dutyModal.originalStaffId || (dutyModal.staffId && isSlotVacant ? dutyModal.staffId : null);
-      if (origId && origId !== assignedStaffObj.id) {
+      // If the slot had an original employee on leave/sick/CR/mark_later, link them as replacement
+      if (origId && origId !== assignedStaffObj.id && ['LEAVE', 'SICK', 'CR', 'MARK_LATER'].includes(dutyModal.status)) {
         await fetch('/api/duty/change-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
           body: JSON.stringify({
             staff_id: origId,
             date: selectedDate,
-            action: dutyModal.status || 'LEAVE',
+            action: dutyModal.status,
             leave_type: dutyModal.leave_type || null,
+            target_link: linkNum,
+            target_category_id: targetCatIdNum,
             replacement_type: 'OTHER_COLUMN',
             replacement_staff_id: assignedStaffObj.id,
             replacement_name: assignedStaffObj.name,

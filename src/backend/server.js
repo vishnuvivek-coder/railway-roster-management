@@ -5334,17 +5334,17 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       const dayOffset = getDayOffset(category.anchor_date, date);
       const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
       
-      // Resolve target_category_id
+      // Resolve target_category_id (never leave as 4 for LR staff when a link is assigned)
       let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
-      if (!resolvedTargetCat && targetLink !== null) {
-        const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staff.category_id, targetLink]);
+      if ((!resolvedTargetCat || resolvedTargetCat === 4) && targetLink !== null) {
+        const ownLink = staff.category_id !== 4 ? await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staff.category_id, targetLink]) : null;
         if (ownLink) {
           resolvedTargetCat = staff.category_id;
         } else {
-          const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [targetLink]);
+          const anyLink = await get('SELECT category_id FROM links WHERE category_id != 4 AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [targetLink]);
           if (anyLink) resolvedTargetCat = anyLink.category_id;
+          else resolvedTargetCat = targetLink > 21 ? 2 : 1;
         }
-
       }
       if (!resolvedTargetCat) resolvedTargetCat = staff.category_id;
 
@@ -5359,6 +5359,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            status = excluded.status,
            substitute_staff_id = NULL,
            substitute_name = NULL,
+           leave_type = NULL,
+           is_extra = 0,
+           extra_train_no = NULL,
+           is_advance_duty = 0,
+           advance_train_no = NULL,
            reason = excluded.reason,
            target_category_id = excluded.target_category_id`,
         [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
@@ -5369,6 +5374,14 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
         [staff_id, date]
       );
+
+      // If this staff is replacing an original occupant on this date, link substitute_staff_id on the original occupant's override row
+      if (req.body.replaced_staff_id && parseInt(req.body.replaced_staff_id, 10) !== parseInt(staff_id, 10) && targetLink !== null) {
+        await run(
+          'UPDATE overrides SET substitute_staff_id = ?, substitute_name = ? WHERE staff_id = ? AND date = ?',
+          [staff.id, staff.name, parseInt(req.body.replaced_staff_id, 10), date]
+        );
+      }
 
       // Keep non_daily_trains template table clean
       await run(
@@ -6972,11 +6985,25 @@ async function syncDutyChangeAcrossAllModules(db, staffId, date, details = {}) {
       await syncLRSheetRecord(staffId, date, lrCode, remarks || lrCode, 'Universal Sync');
     } else if (isRest) {
       await syncLRSheetRecord(staffId, date, 'R', remarks || 'Rest Day', 'Universal Sync');
-    } else if (isAvailable) {
-      await syncLRSheetRecord(staffId, date, 'AVL', remarks || 'Available at HQ', 'Universal Sync');
+    } else if (isAvailable || (!targetTrain && !targetLink)) {
+      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dObj = new Date(date + 'T12:00:00');
+      const dayOfWeek = dayNames[dObj.getDay()];
+      const resolved = await resolveDutyCodeForLRStaff(staffId, date, dayOfWeek, staff.rest_day);
+      if (resolved && resolved.code) {
+        await syncLRSheetRecord(staffId, date, resolved.code, remarks || resolved.remarks || 'Available at HQ', 'Universal Sync');
+      } else {
+        await syncLRSheetRecord(staffId, date, 'AVL', remarks || 'Available at HQ', 'Universal Sync');
+      }
     } else {
-      const train = targetTrain || (targetLink ? `Link ${targetLink}` : 'Duty');
-      await syncLRSheetRecord(staffId, date, train, remarks || 'UTILISED', 'Universal Sync');
+      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dObj = new Date(date + 'T12:00:00');
+      const dayOfWeek = dayNames[dObj.getDay()];
+      const resolved = await resolveDutyCodeForLRStaff(staffId, date, dayOfWeek, staff.rest_day);
+      const train = (resolved && resolved.code && !['R', 'AVL', 'P'].includes(resolved.code))
+        ? resolved.code
+        : (targetTrain || (targetLink ? `Link ${targetLink}` : 'AVL'));
+      await syncLRSheetRecord(staffId, date, train, remarks || (resolved && resolved.remarks) || 'UTILISED', 'Universal Sync');
     }
   }
 
@@ -7075,7 +7102,10 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     const isExtraCrew = is_extra === 1 || !target_link;
     const status = isExtraCrew ? 'EXTRA_CREW' : 'CHANGED_LINK';
     const effectiveLink = isExtraCrew ? null : parseInt(target_link, 10);
-    const effectiveTargetCat = isExtraCrew ? staff.category_id : (target_category_id || (target_link ? 2 : 1));
+    const parsedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
+    const effectiveTargetCat = isExtraCrew
+      ? staff.category_id
+      : ((parsedTargetCat && parsedTargetCat !== 4) ? parsedTargetCat : (effectiveLink && effectiveLink <= 21 ? 1 : 2));
     const shiftedPlace = isExtraCrew ? 'EXTRA_DOWN_BELOW' : `Link #${effectiveLink}`;
     const reason = isExtraCrew
       ? `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} as Extra Staff (down below)`
@@ -8864,8 +8894,29 @@ app.get('/api/roster', async (req, res) => {
           // ==========================================
           // LR STAFF FULL DUTY RESOLVER (Category 4)
           // ==========================================
-          // 1. Muster attendance
-          if (muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH', 'OD'].includes(musterCode)) {
+          const dayNameUpper = d.dayOfWeek.toUpperCase();
+          const isScheduledWeeklyRestDay = Boolean(
+            (staff.rest_day && staff.rest_day.toUpperCase() === dayNameUpper) ||
+            (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))
+          );
+
+          const hasDirectActiveDuty = Boolean(
+            directOv && (
+              (directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined) ||
+              directOv.extra_train_no ||
+              directOv.advance_train_no ||
+              directOv.status === 'EXTRA_CREW' ||
+              directOv.status === 'UTILISED_ADVANCE' ||
+              (directOv.status === 'SHIFTED' && directOv.shifted_place && directOv.shifted_place !== 'AVAILABLE_AT_HQ')
+            )
+          );
+          const hasSubActiveDuty = Boolean(
+            subOv && subOv.staff_id !== staff.id && subOv.status !== 'SUBSTITUTE'
+          );
+          const hasActiveOverrideDuty = hasDirectActiveDuty || hasSubActiveDuty;
+
+          // 1. Muster attendance (Note: if LR staff has an active duty booking in overrides, do not let a stale 'R' muster code hide the booked duty)
+          if (muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH', 'OD'].includes(musterCode) && !(musterCode === 'R' && hasActiveOverrideDuty)) {
             isOverridden = true;
             linkNum = null;
             lastAssignedLink = null;
@@ -8896,58 +8947,102 @@ app.get('/api/roster', async (req, res) => {
               status = 'ABSENT';
               overrideReason = `Muster: Absent (O)${muster.remarks ? ` (${muster.remarks})` : ''}`;
             }
-          } else if (directOv) {
+          } else if (directOv && !(directOv.status === 'AVAILABLE_FOR_BOOKING' && hasSubActiveDuty)) {
             isOverridden = true;
             substituteStaffId = directOv.substitute_staff_id;
             substituteName = directOv.substitute_name;
             overrideReason = directOv.reason;
             leaveType = directOv.leave_type;
 
-            if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT'].includes(directOv.status)) {
+            if (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOv.status)) {
               status = directOv.status;
               isRest = directOv.status === 'REST';
               linkNum = null;
               lastAssignedLink = null;
               lastAssignedNonDaily = null;
-            } else if (directOv.status === 'AVAILABLE_FOR_BOOKING') {
+            } else if (directOv.status === 'AVAILABLE_FOR_BOOKING' || directOv.shifted_place === 'NON_DAILY_REST') {
               status = 'AVAILABLE_FOR_BOOKING';
               isRest = true;
               linkNum = null;
+              if (directOv.shifted_place === 'NON_DAILY_REST') {
+                customFrom = 'GNT';
+                customTo = 'GNT';
+                customCoaches = '-';
+                customSetType = '3-Day Non-Daily (Day 3 HQ Rest)';
+              }
               lastAssignedLink = null;
               lastAssignedNonDaily = null;
             } else if (directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined) {
-              linkNum = directOv.overridden_link_number;
-              targetCatId = directOv.target_category_id || (linkNum > 21 ? 2 : 1);
+              linkNum = parseInt(directOv.overridden_link_number, 10);
+              const rawCat = directOv.target_category_id ? parseInt(directOv.target_category_id, 10) : null;
+              targetCatId = (rawCat && rawCat !== 4) ? rawCat : (linkNum > 21 ? 2 : 1);
               status = directOv.status || 'DUTY';
               lastAssignedLink = linkNum;
               lastTargetCat = targetCatId;
               lastAssignedNonDaily = null;
-            } else if (directOv.status === 'EXTRA_CREW' || directOv.extra_train_no) {
-              status = 'DUTY';
+            } else if (directOv.status === 'EXTRA_CREW' || directOv.extra_train_no || directOv.status === 'SHIFTED') {
+              status = directOv.status === 'SHIFTED' ? 'SHIFTED' : 'EXTRA_CREW';
               linkNum = null;
               lastAssignedLink = null;
-              const trainStr = directOv.extra_train_no || directOv.reason || 'EXTRA';
+              const trainStr = directOv.extra_train_no || directOv.shifted_place || directOv.reason || 'EXTRA';
               const ndMatch = getMultiDayNonDailyMatch(trainStr);
               if (ndMatch) {
-                customTrainNo = `${ndMatch.outTrain}/${ndMatch.returnTrain}`;
-                customFrom = ndMatch.from || 'GNT';
-                customTo = ndMatch.via || '---';
-                customCoaches = ndMatch.coaches || 'SL / AC';
-                customSetType = `${ndMatch.totalDays}-Day Non-Daily (Day 1 Out)`;
-                overrideReason = directOv.reason || `Day 1: ${ndMatch.serviceName} ${ndMatch.outTrain} (${ndMatch.from}-${ndMatch.via}) • SL / AC`;
-                lastAssignedNonDaily = {
-                  service: ndMatch,
-                  dayIndex: 1,
-                  totalDays: ndMatch.totalDays,
-                  pairNo: `${ndMatch.outTrain}/${ndMatch.returnTrain}`
-                };
+                if (ndMatch.isReturn || directOv.shifted_place === 'NON_DAILY_RETURN') {
+                  customTrainNo = `${ndMatch.outTrain}/${ndMatch.returnTrain}`;
+                  customFrom = ndMatch.via || 'WADI';
+                  customTo = ndMatch.to || 'GNT';
+                  customCoaches = ndMatch.coaches || 'SL / AC';
+                  customSetType = `${ndMatch.totalDays}-Day Non-Daily (Day 2 Return)`;
+                  overrideReason = directOv.reason || `Day 2 Return: ${ndMatch.serviceName} ${ndMatch.returnTrain} (${ndMatch.via} ➔ ${ndMatch.to}) • SL / AC`;
+                  lastAssignedNonDaily = {
+                    service: ndMatch,
+                    dayIndex: 2,
+                    totalDays: ndMatch.totalDays,
+                    pairNo: `${ndMatch.outTrain}/${ndMatch.returnTrain}`
+                  };
+                } else {
+                  customTrainNo = `${ndMatch.outTrain}/${ndMatch.returnTrain}`;
+                  customFrom = ndMatch.from || 'GNT';
+                  customTo = ndMatch.via || '---';
+                  customCoaches = ndMatch.coaches || 'SL / AC';
+                  customSetType = `${ndMatch.totalDays}-Day Non-Daily (Day 1 Out)`;
+                  overrideReason = directOv.reason || `Day 1: ${ndMatch.serviceName} ${ndMatch.outTrain} (${ndMatch.from}-${ndMatch.via}) • SL / AC`;
+                  lastAssignedNonDaily = {
+                    service: ndMatch,
+                    dayIndex: 1,
+                    totalDays: ndMatch.totalDays,
+                    pairNo: `${ndMatch.outTrain}/${ndMatch.returnTrain}`
+                  };
+                }
               } else {
-                customTrainNo = directOv.extra_train_no || 'EXTRA';
-                customFrom = 'GNT';
-                customTo = '---';
-                customCoaches = '-';
-                customSetType = 'Extra Crew';
-                overrideReason = directOv.reason || `Assigned to Extra Train ${customTrainNo}`;
+                const rawTr = String(directOv.extra_train_no || directOv.shifted_place || 'EXTRA').trim();
+                const ndt = nonDailyTrains.find(n => String(n.train_number).includes(rawTr) || rawTr.includes(String(n.train_number)));
+                const matchedLink = !ndt ? allLinks.find(l =>
+                  l.category_id !== 4 &&
+                  l.train_numbers &&
+                  (l.train_numbers.includes(rawTr) || rawTr.includes(l.train_numbers)) &&
+                  (!l.effective_from || l.effective_from <= d.dateString) &&
+                  (!l.effective_to || l.effective_to >= d.dateString)
+                ) : null;
+
+                customTrainNo = rawTr;
+                if (ndt) {
+                  customFrom = ndt.departure_station || ndt.from_station || 'GNT';
+                  customTo = ndt.arrival_station || ndt.to_station || '---';
+                  customCoaches = ndt.coaches || 'SL / AC';
+                  customSetType = 'Non-Daily Train';
+                } else if (matchedLink) {
+                  customFrom = matchedLink.from_station || 'GNT';
+                  customTo = matchedLink.to_station || '---';
+                  customCoaches = matchedLink.coaches || '-';
+                  customSetType = directOv.is_extra ? `Extra Crew (Link #${matchedLink.link_number})` : (matchedLink.set_type || `Link #${matchedLink.link_number}`);
+                } else {
+                  customFrom = 'GNT';
+                  customTo = '---';
+                  customCoaches = '-';
+                  customSetType = directOv.status === 'SHIFTED' ? 'Shifted Duty' : 'Extra Crew';
+                }
+                overrideReason = directOv.reason || `Assigned to Train ${customTrainNo}`;
                 lastAssignedNonDaily = null;
               }
             } else if (directOv.status === 'UTILISED_ADVANCE') {
@@ -8963,25 +9058,29 @@ app.get('/api/roster', async (req, res) => {
               overrideReason = directOv.reason || `Utilised in Advance on ${customTrainNo}`;
             } else {
               status = directOv.status || 'DUTY';
-              linkNum = directOv.overridden_link_number;
+              linkNum = directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined ? parseInt(directOv.overridden_link_number, 10) : null;
             }
-          } else if (subOv && subOv.status !== 'AVAILABLE_FOR_BOOKING') {
+          } else if (hasSubActiveDuty) {
             // Worked as substitute for regular staff
             isOverridden = true;
             const assignedLink = subOv.overridden_link_number !== null && subOv.overridden_link_number !== undefined
-              ? subOv.overridden_link_number
-              : subOv.original_link_number;
+              ? parseInt(subOv.overridden_link_number, 10)
+              : (subOv.original_link_number !== null && subOv.original_link_number !== undefined ? parseInt(subOv.original_link_number, 10) : null);
 
             if (assignedLink) {
               linkNum = assignedLink;
-              targetCatId = subOv.target_category_id || subOv.regular_staff_category || (linkNum > 21 ? 2 : 1);
-              status = 'DUTY';
+              const rawSubCat = subOv.target_category_id ? parseInt(subOv.target_category_id, 10) : null;
+              const rawRegCat = subOv.regular_staff_category ? parseInt(subOv.regular_staff_category, 10) : null;
+              targetCatId = (rawSubCat && rawSubCat !== 4)
+                ? rawSubCat
+                : ((rawRegCat && rawRegCat !== 4) ? rawRegCat : (linkNum > 21 ? 2 : 1));
+              status = 'SUBSTITUTE';
               overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'} on Link #${linkNum} (${subOv.leave_type || subOv.status || 'Leave'})`;
               lastAssignedLink = linkNum;
               lastTargetCat = targetCatId;
               lastAssignedNonDaily = null;
             } else {
-              status = 'DUTY';
+              status = 'SUBSTITUTE';
               overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'}`;
               lastAssignedLink = null;
               lastAssignedNonDaily = null;
@@ -9035,13 +9134,16 @@ app.get('/api/roster', async (req, res) => {
             }
           }
 
-          // If not yet assigned by Muster/Override/Continuation, check LR Sheet / Daily Earnings / Duty Register
-          if (linkNum === null && status === 'DUTY' && !customTrainNo && !isOverridden) {
+          // If not yet assigned a working train by Muster/Override/Continuation, check LR Sheet / Daily Earnings / Duty Register
+          const isUnbookedStandby = (linkNum === null && !customTrainNo && (!isOverridden || (directOv && directOv.status === 'AVAILABLE_FOR_BOOKING')));
+          if (isUnbookedStandby) {
             if (lrRec && lrRec.duty_code) {
               const code = lrRec.duty_code.trim();
+              const linkCodeMatch = code.match(/^(?:LINK\s*#?|L-)(\d+)$/i);
               const ndMatch = getMultiDayNonDailyMatch(code);
               if (ndMatch && !ndMatch.isReturn) {
                 isOverridden = true;
+                isRest = false;
                 status = 'DUTY';
                 customTrainNo = `${ndMatch.outTrain}/${ndMatch.returnTrain}`;
                 customFrom = ndMatch.from || 'GNT';
@@ -9062,10 +9164,10 @@ app.get('/api/roster', async (req, res) => {
                 overrideReason = lrRec.remarks || 'LR Sheet: Weekly Rest';
                 lastAssignedLink = null;
                 lastAssignedNonDaily = null;
-              } else if (code === 'AVL' || code === 'REST_HQ') {
+              } else if (['AVL', 'REST_HQ', 'SPARE', 'P', 'DUTY'].includes(code.toUpperCase())) {
                 status = 'AVAILABLE_FOR_BOOKING';
                 isRest = true;
-                overrideReason = lrRec.remarks || 'Available for Booking';
+                overrideReason = (directOv && directOv.reason) || lrRec.remarks || 'Available for Booking';
                 lastAssignedLink = null;
                 lastAssignedNonDaily = null;
               } else if (['CL', 'LAP', 'LHAP', 'CR', 'OD', 'S', 'SICK', 'CCL', 'SCL', 'NH'].includes(code.toUpperCase())) {
@@ -9074,8 +9176,8 @@ app.get('/api/roster', async (req, res) => {
                 overrideReason = lrRec.remarks || `LR Sheet: ${code}`;
                 lastAssignedLink = null;
                 lastAssignedNonDaily = null;
-              } else if (/^\d+$/.test(code)) {
-                linkNum = parseInt(code, 10);
+              } else if (linkCodeMatch || /^\d+$/.test(code)) {
+                linkNum = parseInt(linkCodeMatch ? linkCodeMatch[1] : code, 10);
                 const matchedLink = allLinks.find(l => 
                   l.link_number === linkNum && 
                   l.category_id !== 4 &&
@@ -9084,6 +9186,8 @@ app.get('/api/roster', async (req, res) => {
                 );
                 targetCatId = matchedLink ? matchedLink.category_id : (linkNum > 21 ? 2 : 1);
                 status = 'DUTY';
+                isRest = false;
+                isOverridden = true;
                 overrideReason = lrRec.remarks || `Daily Duty: Link #${linkNum}`;
                 lastAssignedLink = linkNum;
                 lastTargetCat = targetCatId;
@@ -9100,22 +9204,28 @@ app.get('/api/roster', async (req, res) => {
                   linkNum = matchedLink.link_number;
                   targetCatId = matchedLink.category_id;
                   status = 'DUTY';
+                  isRest = false;
+                  isOverridden = true;
                   overrideReason = lrRec.remarks || `Daily Duty: Train ${code} (Link #${linkNum})`;
                   lastAssignedLink = linkNum;
                   lastTargetCat = targetCatId;
                   lastAssignedNonDaily = null;
                 } else {
+                  const ndt = nonDailyTrains.find(n => String(n.train_number).includes(code) || code.includes(String(n.train_number)));
                   customTrainNo = code;
-                  customFrom = 'GNT';
-                  customTo = '---';
-                  customCoaches = '-';
+                  customFrom = ndt ? (ndt.departure_station || ndt.from_station || 'GNT') : 'GNT';
+                  customTo = ndt ? (ndt.arrival_station || ndt.to_station || '---') : '---';
+                  customCoaches = ndt ? (ndt.coaches || 'SL / AC') : '-';
+                  customSetType = ndt ? 'Non-Daily Train' : 'Train Duty';
                   status = 'DUTY';
+                  isRest = false;
+                  isOverridden = true;
                   overrideReason = lrRec.remarks || `Daily Duty: Train ${code}`;
                   lastAssignedLink = null;
                   lastAssignedNonDaily = null;
                 }
               }
-            } else if (earn && earn.duty) {
+            } else if (earn && earn.duty && !['AVL', 'SPARE', 'P'].includes(String(earn.duty).toUpperCase())) {
               isOverridden = true;
               if (earn.duty === 'REST') {
                 status = 'REST';
@@ -9124,17 +9234,37 @@ app.get('/api/roster', async (req, res) => {
                 lastAssignedLink = null;
                 lastAssignedNonDaily = null;
               } else {
-                status = 'DUTY';
-                customTrainNo = earn.duty;
-                customFrom = earn.from_station || 'GNT';
-                customTo = earn.to_station || '---';
-                customCoaches = earn.coaches || '-';
-                overrideReason = earn.remarks || `Daily Duty Allotment: ${earn.duty}`;
-                lastAssignedLink = null;
-                lastAssignedNonDaily = null;
+                const earnLinkMatch = String(earn.duty).trim().match(/^(?:LINK\s*#?|L-)(\d+)$/i);
+                if (earnLinkMatch) {
+                  linkNum = parseInt(earnLinkMatch[1], 10);
+                  const matchedLink = allLinks.find(l =>
+                    l.link_number === linkNum &&
+                    l.category_id !== 4 &&
+                    (!l.effective_from || l.effective_from <= d.dateString) &&
+                    (!l.effective_to || l.effective_to >= d.dateString)
+                  );
+                  targetCatId = matchedLink ? matchedLink.category_id : (linkNum > 21 ? 2 : 1);
+                  status = 'DUTY';
+                  isRest = false;
+                  overrideReason = earn.remarks || `Daily Duty Allotment: Link #${linkNum}`;
+                  lastAssignedLink = linkNum;
+                  lastTargetCat = targetCatId;
+                  lastAssignedNonDaily = null;
+                } else {
+                  status = 'DUTY';
+                  isRest = false;
+                  customTrainNo = earn.duty;
+                  customFrom = earn.from_station || 'GNT';
+                  customTo = earn.to_station || '---';
+                  customCoaches = earn.coaches || '-';
+                  overrideReason = earn.remarks || `Daily Duty Allotment: ${earn.duty}`;
+                  lastAssignedLink = null;
+                  lastAssignedNonDaily = null;
+                }
               }
             } else if (dreg && (dreg.train_out || dreg.duty_label)) {
               isOverridden = true;
+              isRest = false;
               status = 'DUTY';
               customTrainNo = (dreg.train_out ? (dreg.train_out + (dreg.train_return ? ` / ${dreg.train_return}` : '')) : dreg.duty_label);
               customFrom = 'GNT';
@@ -9143,11 +9273,9 @@ app.get('/api/roster', async (req, res) => {
               overrideReason = dreg.duty_label || dreg.notes || 'Duty Register Entry';
               lastAssignedLink = null;
               lastAssignedNonDaily = null;
-            } else {
+            } else if (!directOv) {
               // Check scheduled rest day
-              const dayNameUpper = d.dayOfWeek.toUpperCase();
-              if ((staff.rest_day && staff.rest_day.toUpperCase() === dayNameUpper) ||
-                  (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
+              if (isScheduledWeeklyRestDay) {
                 status = 'REST';
                 isRest = true;
                 overrideReason = 'Weekly Rest Day';
@@ -9176,6 +9304,9 @@ app.get('/api/roster', async (req, res) => {
                 (!l.effective_from || l.effective_from <= d.dateString) &&
                 (!l.effective_to || l.effective_to >= d.dateString)
               );
+              if (dutyDetails && targetCatId === 4) {
+                targetCatId = dutyDetails.category_id;
+              }
               if (!dutyDetails) {
                 dutyDetails = await getActiveLinkDef(targetCatId, linkNum, d.dateString);
               }
@@ -9183,8 +9314,8 @@ app.get('/api/roster', async (req, res) => {
               // linkNum is a train number (e.g. 7227, 12756, 22882)
               const ndt = nonDailyTrains.find(n => String(n.train_number).includes(String(linkNum)) || String(linkNum).includes(String(n.train_number)));
               customTrainNo = ndt ? ndt.train_number : String(linkNum);
-              customFrom = ndt ? (ndt.from_station || 'GNT') : 'GNT';
-              customTo = ndt ? (ndt.to_station || '---') : '---';
+              customFrom = ndt ? (ndt.departure_station || ndt.from_station || 'GNT') : 'GNT';
+              customTo = ndt ? (ndt.arrival_station || ndt.to_station || '---') : '---';
               customCoaches = ndt ? (ndt.coaches || '-') : '-';
               customSetType = 'Non-Daily Train';
               linkNum = null;
@@ -9196,7 +9327,7 @@ app.get('/api/roster', async (req, res) => {
             lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, d.dateString);
           }
 
-          let origIsRest = status === 'REST' || musterCode === 'R' || (directOv && directOv.status === 'REST');
+          let origIsRest = isScheduledWeeklyRestDay || status === 'REST' || musterCode === 'R' || (directOv && directOv.status === 'REST');
           let origTrain = origIsRest ? 'REST' : 'SPARE (HQ)';
           let actualTrain = customTrainNo || (dutyDetails ? dutyDetails.train_numbers : (status === 'REST' ? 'REST' : (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (leaveType || status))));
 
@@ -9214,10 +9345,17 @@ app.get('/api/roster', async (req, res) => {
             dateStr: d.dateString
           });
 
+          const resolvedTrainNumbers = customTrainNo || (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'MARK_LATER' ? 'REASON LATER' : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST'))));
+          const resolvedFromStation = customFrom || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : ''));
+          const resolvedToStation = customTo || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : ''));
+          const resolvedCoaches = customCoaches || (status === 'AVAILABLE_FOR_BOOKING' ? '-' : (dutyDetails ? dutyDetails.coaches : ''));
+          const resolvedSetType = customSetType || (status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : (status === 'MARK_LATER' ? 'Reason Later (Muster Blank)' : (status === 'REST' ? 'Weekly Rest' : 'Train Duty'))));
+          const hasBookedDuty = Boolean((linkNum !== null || customTrainNo) && status !== 'AVAILABLE_FOR_BOOKING' && status !== 'REST');
+
           rowCells.push({
             date: d.dateString,
             dayOffset: d.dayOffset,
-            calculatedLinkNumber: null,
+            calculatedLinkNumber: hasBookedDuty ? linkNum : null,
             actualLinkNumber: linkNum,
             target_category_id: targetCatId,
             isRest: status === 'REST' || (status === 'AVAILABLE_FOR_BOOKING' && !customTrainNo) || (linkNum === null && !customTrainNo && status !== 'DUTY'),
@@ -9232,21 +9370,22 @@ app.get('/api/roster', async (req, res) => {
             substituteName,
             overrideReason,
             leave_type: leaveType,
-            original_train_numbers: origTrain,
+            original_train_numbers: hasBookedDuty ? resolvedTrainNumbers : origTrain,
             original_is_rest: origIsRest,
-            original_from_station: origIsRest ? '-' : 'GNT',
-            original_to_station: origIsRest ? '-' : 'GNT',
-            original_coaches: '-',
-            original_set_type: origIsRest ? 'Weekly Rest' : 'Spare / HQ',
+            original_from_station: hasBookedDuty ? (resolvedFromStation || 'GNT') : (origIsRest ? '-' : 'GNT'),
+            original_to_station: hasBookedDuty ? (resolvedToStation || '---') : (origIsRest ? '-' : 'GNT'),
+            original_coaches: hasBookedDuty ? (resolvedCoaches || '-') : '-',
+            original_set_type: hasBookedDuty ? resolvedSetType : (origIsRest ? 'Weekly Rest' : 'Spare / HQ'),
             actual_train_numbers: actualTrain,
             effective_train_numbers: cmp.train_no,
             condition_applied: cmp.condition,
-            train_numbers: customTrainNo || (status === 'AVAILABLE_FOR_BOOKING' ? 'SPARE (HQ)' : (dutyDetails ? dutyDetails.train_numbers : (status === 'MARK_LATER' ? 'REASON LATER' : (status === 'SICK' ? 'SICK' : status === 'LEAVE' ? (leaveType || 'LEAVE') : status === 'CR' ? 'CR' : status === 'ABSENT' ? 'ABSENT' : 'REST')))),
-            from_station: customFrom || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.from_station : '')),
-            to_station: customTo || (status === 'AVAILABLE_FOR_BOOKING' ? 'GNT' : (dutyDetails ? dutyDetails.to_station : '')),
-            coaches: customCoaches || (status === 'AVAILABLE_FOR_BOOKING' ? '-' : (dutyDetails ? dutyDetails.coaches : '')),
-            set_type: customSetType || (status === 'AVAILABLE_FOR_BOOKING' ? 'Spare / HQ' : (dutyDetails ? dutyDetails.set_type : (status === 'MARK_LATER' ? 'Reason Later (Muster Blank)' : (status === 'REST' ? 'Weekly Rest' : 'Train Duty'))))
+            train_numbers: resolvedTrainNumbers,
+            from_station: resolvedFromStation,
+            to_station: resolvedToStation,
+            coaches: resolvedCoaches,
+            set_type: resolvedSetType
           });
+
 
         } else {
           // ==========================================
@@ -9506,6 +9645,7 @@ app.get('/api/roster', async (req, res) => {
         staffId: staff.id,
         staffName: staff.name,
         designation: staff.designation,
+        category_id: staff.category_id,
         pf_no: staff.pf_no,
         seniority_no: staff.seniority_no,
         rowPosition: staff.row_position,
@@ -14210,17 +14350,23 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
 
   // 1. Direct override on LR staff or where LR staff is the substitute
   const direct = overrides ? overrides.find(o => o.staff_id === staffId && o.date === dateStr) : null;
-  const sub = overrides ? overrides.find(o => o.substitute_staff_id === staffId && o.date === dateStr && o.status !== 'LEAVE' && o.status !== 'SICK') : null;
-  const ov = direct || sub;
+  const sub = overrides ? overrides.find(o => o.substitute_staff_id === staffId && o.staff_id !== staffId && o.date === dateStr && o.status !== 'SUBSTITUTE') : null;
+  const ov = (direct && !(direct.status === 'AVAILABLE_FOR_BOOKING' && sub)) ? direct : (sub || direct);
 
   if (ov) {
-    if (ov.status === 'REST') return { code: 'R', remarks: ov.reason || '' };
-    if (ov.status === 'SICK') return { code: 'S', remarks: ov.reason || '' };
-    if (ov.status === 'LEAVE') return { code: ov.leave_type || 'L', remarks: ov.reason || '' };
-    if (ov.status === 'CR') return { code: 'CR', remarks: ov.reason || '' };
-    if (ov.status === 'ABSENT') return { code: 'O', remarks: ov.reason || 'Absent' };
-    if (ov.status === 'AVAILABLE_FOR_BOOKING') return { code: 'AVL', remarks: ov.reason || 'Available for Duty' };
-    if (ov.status === 'UTILISED_ADVANCE') return { code: `ADV (${ov.advance_train_no || 'TR'})`, remarks: ov.reason || 'Utilised in Advance' };
+    if (ov === direct) {
+      if (ov.status === 'REST') return { code: 'R', remarks: ov.reason || '' };
+      if (ov.status === 'SICK') return { code: 'S', remarks: ov.reason || '' };
+      if (ov.status === 'LEAVE') return { code: ov.leave_type || 'L', remarks: ov.reason || '' };
+      if (ov.status === 'CR') return { code: 'CR', remarks: ov.reason || '' };
+      if (ov.status === 'ABSENT') return { code: 'O', remarks: ov.reason || 'Absent' };
+      if (ov.status === 'AVAILABLE_FOR_BOOKING') return { code: 'AVL', remarks: ov.reason || 'Available for Duty' };
+      if (ov.status === 'UTILISED_ADVANCE') return { code: `ADV (${ov.advance_train_no || 'TR'})`, remarks: ov.reason || 'Utilised in Advance' };
+    }
+
+    if (ov.extra_train_no) {
+      return { code: formatTrainString(ov.extra_train_no), remarks: ov.reason || '' };
+    }
 
     // Try extract train numbers from reason
     const fromReason = extractTrainsFromText(ov.reason);
@@ -14229,18 +14375,19 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     }
 
     // Try link number
-    const linkNum = ov.overridden_link_number !== null && ov.overridden_link_number !== undefined
-      ? ov.overridden_link_number
-      : (sub ? (sub.original_link_number || sub.overridden_link_number) : null);
+    const linkNum = ov === direct
+      ? (ov.overridden_link_number !== null && ov.overridden_link_number !== undefined ? ov.overridden_link_number : (sub ? (sub.original_link_number || sub.overridden_link_number) : null))
+      : (sub ? (sub.original_link_number || sub.overridden_link_number) : ov.overridden_link_number);
 
     if (linkNum !== null && linkNum !== undefined) {
       const num = parseInt(linkNum, 10);
       if (NON_DAILY_LINK_TRAINS[num]) {
         return { code: NON_DAILY_LINK_TRAINS[num], remarks: ov.reason || '' };
       }
-      const catId = ov.target_category_id || (sub ? (sub.staff_cat || sub.target_category_id || 2) : 2);
-      const link = links.find(l => l.category_id === catId && l.link_number === linkNum)
-                || links.find(l => l.link_number === linkNum);
+      const rawCat = ov.target_category_id ? parseInt(ov.target_category_id, 10) : null;
+      const catId = (rawCat && rawCat !== 4) ? rawCat : (sub ? (sub.staff_cat || sub.target_category_id || 2) : (num > 21 ? 2 : 1));
+      const link = links.find(l => l.category_id === catId && l.link_number === num)
+                || links.find(l => l.category_id !== 4 && l.link_number === num);
       if (link) {
         if (link.is_rest) return { code: 'R', remarks: ov.reason || '' };
         if (link.train_numbers && link.train_numbers.toUpperCase() !== 'NON DAILY') {
@@ -14259,7 +14406,7 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
       }
     }
 
-    if (ov.reason && ov.reason.toLowerCase().includes('rest')) {
+    if (ov === direct && ov.reason && ov.reason.toLowerCase().includes('rest')) {
       return { code: 'R', remarks: ov.reason };
     }
   }
@@ -14269,10 +14416,16 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     const dMinus1 = new Date(dateStr + 'T12:00:00');
     dMinus1.setDate(dMinus1.getDate() - 1);
     const dMinus1Str = dMinus1.toISOString().split('T')[0];
-    const prev1Ov = overrides.find(o => o.staff_id === staffId && o.date === dMinus1Str)
-                 || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus1Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
+    const prev1Direct = overrides.find(o => o.staff_id === staffId && o.date === dMinus1Str);
+    const prev1Sub = overrides.find(o => o.substitute_staff_id === staffId && o.staff_id !== staffId && o.date === dMinus1Str && o.status !== 'SUBSTITUTE');
+    const prev1Ov = (prev1Direct && prev1Direct.status !== 'AVAILABLE_FOR_BOOKING') ? prev1Direct : (prev1Sub || prev1Direct);
 
-    if (prev1Ov && prev1Ov.status !== 'REST' && prev1Ov.status !== 'SICK' && prev1Ov.status !== 'LEAVE' && prev1Ov.status !== 'CR' && prev1Ov.status !== 'ABSENT') {
+    const prev1IsWorked = prev1Ov && (
+      prev1Ov === prev1Sub ||
+      !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(prev1Ov.status)
+    );
+
+    if (prev1IsWorked) {
       // Check if prev1 was a non-daily multi-day train service
       const prev1TrainStr = prev1Ov.extra_train_no || prev1Ov.reason || (prev1Ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[prev1Ov.overridden_link_number] : '');
       const ndMatch1 = getMultiDayNonDailyMatch(prev1TrainStr);
@@ -14296,16 +14449,17 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
 
       // Check standard cyclic link sets
       if (links) {
-        const prev1Link = prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined
-          ? prev1Ov.overridden_link_number
-          : (prev1Ov.substitute_staff_id === staffId ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number) : null);
-        const prev1Cat = prev1Ov.target_category_id || 2;
+        const prev1Link = prev1Ov === prev1Sub
+          ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number)
+          : (prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined ? prev1Ov.overridden_link_number : null);
+        const rawPrev1Cat = prev1Ov.target_category_id ? parseInt(prev1Ov.target_category_id, 10) : null;
+        const prev1Cat = (rawPrev1Cat && rawPrev1Cat !== 4) ? rawPrev1Cat : (prev1Ov === prev1Sub ? (prev1Ov.staff_cat || 2) : (prev1Link && prev1Link <= 21 ? 1 : 2));
         const setInfo1 = getLinkSetDetails(prev1Cat, prev1Link);
         if (setInfo1 && setInfo1.dayIndexInSet < setInfo1.setLength) {
           const nextLegIndex = setInfo1.dayIndexInSet;
           const nextLegLinkNum = setInfo1.setLinks[nextLegIndex];
           const nextLink = links.find(l => l.category_id === prev1Cat && l.link_number === nextLegLinkNum)
-                        || links.find(l => l.link_number === nextLegLinkNum);
+                        || links.find(l => l.category_id !== 4 && l.link_number === nextLegLinkNum);
           if (nextLink && nextLink.train_numbers) {
             return { code: formatTrainString(nextLink.train_numbers), remarks: `Day ${nextLegIndex + 1} of Link #${setInfo1.setLinks[0]} (${setInfo1.setLength}-day link set)` };
           }
@@ -14316,10 +14470,16 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
     const dMinus2 = new Date(dateStr + 'T12:00:00');
     dMinus2.setDate(dMinus2.getDate() - 2);
     const dMinus2Str = dMinus2.toISOString().split('T')[0];
-    const prev2Ov = overrides.find(o => o.staff_id === staffId && o.date === dMinus2Str)
-                 || overrides.find(o => o.substitute_staff_id === staffId && o.date === dMinus2Str && o.status !== 'LEAVE' && o.status !== 'SICK' && o.status !== 'REST');
+    const prev2Direct = overrides.find(o => o.staff_id === staffId && o.date === dMinus2Str);
+    const prev2Sub = overrides.find(o => o.substitute_staff_id === staffId && o.staff_id !== staffId && o.date === dMinus2Str && o.status !== 'SUBSTITUTE');
+    const prev2Ov = (prev2Direct && prev2Direct.status !== 'AVAILABLE_FOR_BOOKING') ? prev2Direct : (prev2Sub || prev2Direct);
 
-    if (prev2Ov && prev2Ov.status !== 'REST' && prev2Ov.status !== 'SICK' && prev2Ov.status !== 'LEAVE' && prev2Ov.status !== 'CR' && prev2Ov.status !== 'ABSENT') {
+    const prev2IsWorked = prev2Ov && (
+      prev2Ov === prev2Sub ||
+      !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(prev2Ov.status)
+    );
+
+    if (prev2IsWorked) {
       // Check if prev2 was Day 1 of a 3-day non-daily train service
       const prev2TrainStr = prev2Ov.extra_train_no || prev2Ov.reason || (prev2Ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[prev2Ov.overridden_link_number] : '');
       const ndMatch2 = getMultiDayNonDailyMatch(prev2TrainStr);
@@ -14344,16 +14504,17 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
 
       // Check standard cyclic link sets (Day 3 / Leg 3)
       if (links) {
-        const prev2Link = prev2Ov.overridden_link_number !== null && prev2Ov.overridden_link_number !== undefined
-          ? prev2Ov.overridden_link_number
-          : (prev2Ov.substitute_staff_id === staffId ? (prev2Ov.original_link_number || prev2Ov.overridden_link_number) : null);
-        const prev2Cat = prev2Ov.target_category_id || 2;
+        const prev2Link = prev2Ov === prev2Sub
+          ? (prev2Ov.original_link_number || prev2Ov.overridden_link_number)
+          : (prev2Ov.overridden_link_number !== null && prev2Ov.overridden_link_number !== undefined ? prev2Ov.overridden_link_number : null);
+        const rawPrev2Cat = prev2Ov.target_category_id ? parseInt(prev2Ov.target_category_id, 10) : null;
+        const prev2Cat = (rawPrev2Cat && rawPrev2Cat !== 4) ? rawPrev2Cat : (prev2Ov === prev2Sub ? (prev2Ov.staff_cat || 2) : (prev2Link && prev2Link <= 21 ? 1 : 2));
         const setInfo2 = getLinkSetDetails(prev2Cat, prev2Link);
         if (setInfo2 && setInfo2.dayIndexInSet + 1 < setInfo2.setLength) {
           const leg3Index = setInfo2.dayIndexInSet + 1;
           const leg3LinkNum = setInfo2.setLinks[leg3Index];
           const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === leg3LinkNum)
-                     || links.find(l => l.link_number === leg3LinkNum);
+                     || links.find(l => l.category_id !== 4 && l.link_number === leg3LinkNum);
           if (link3 && link3.train_numbers) {
             return { code: formatTrainString(link3.train_numbers), remarks: `Day ${leg3Index + 1} of Link #${setInfo2.setLinks[0]} (${setInfo2.setLength}-day link set)` };
           }

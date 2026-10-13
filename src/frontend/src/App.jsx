@@ -3228,6 +3228,7 @@ export default function App() {
 
       setActiveMovingStaff(null);
       fetchDailyDuties();
+      fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
       alert(err.message);
@@ -3262,6 +3263,7 @@ export default function App() {
       setStaffDropActionModal(null);
       setActiveMovingStaff(null);
       fetchDailyDuties();
+      fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
       alert(err.message);
@@ -3360,6 +3362,7 @@ export default function App() {
       setTimeout(() => setDragNotice(null), 8000);
 
       fetchDailyDuties();
+      fetchRoster();
       fetchNonDailyTrains('ALL');
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
@@ -3426,6 +3429,7 @@ export default function App() {
       setTimeout(() => setDragNotice(null), 8000);
 
       fetchDailyDuties();
+      fetchRoster();
       fetchNonDailyTrains('ALL');
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
@@ -3450,6 +3454,7 @@ export default function App() {
       setInlineEditNonDailyTrainId(null);
       fetchNonDailyTrains(nonDailySelectedDay);
       fetchDailyDuties();
+      fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
       alert('Error updating non-daily train: ' + err.message);
@@ -3618,6 +3623,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to undo advance duty');
       alert(data.message || `Restored ${staffName} to Link #${d.link_number}`);
       fetchDailyDuties();
+      fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
       alert(err.message);
@@ -3658,6 +3664,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to revert upgrade');
       alert(data.message || `Restored ${staffName} to Link #${d.link_number}`);
       fetchDailyDuties();
+      fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
       alert(err.message);
@@ -4382,7 +4389,7 @@ export default function App() {
     if (cell.status === 'CR') return 'CR';
     if (cell.status === 'ABSENT') return 'ABSENT';
     if (cell.status === 'AVAILABLE_FOR_BOOKING') return '⚡ AVL';
-    if (cell.status === 'DUTY') {
+    if (['DUTY', 'CHANGED_LINK', 'SUBSTITUTE', 'EXTRA_CREW', 'SHIFTED', 'UTILISED_ADVANCE'].includes(cell.status)) {
       if (cell.actualLinkNumber) {
         return parseInt(selectedCatId, 10) === 4 ? `#${cell.actualLinkNumber}` : getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber);
       }
@@ -4411,7 +4418,7 @@ export default function App() {
     if (cell.status === 'SICK' || cell.status === 'ABSENT') return 'roster-cell cell-sick cell-override';
     if (cell.status === 'CR') return 'roster-cell cell-cr cell-override';
     if (cell.status === 'AVAILABLE_FOR_BOOKING') return 'roster-cell cell-available';
-    if (cell.status === 'DUTY' && cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers)) {
+    if (['DUTY', 'CHANGED_LINK', 'SUBSTITUTE', 'EXTRA_CREW', 'SHIFTED', 'UTILISED_ADVANCE'].includes(cell.status) && cell.train_numbers && !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(cell.train_numbers)) {
       return cell.isOverridden ? 'roster-cell cell-duty cell-override' : 'roster-cell cell-body cell-duty';
     }
     if (cell.isOverridden) {
@@ -5836,7 +5843,7 @@ export default function App() {
                             const isMusterAbsent = cell.muster_code === 'O';
 
                             const workedTrainRaw = cell.effective_train_numbers || cell.actual_train_numbers || cell.train_numbers;
-                            const isWorkingTrain = (cell.status === 'DUTY' || cell.status === 'SUBSTITUTE' || cell.status === 'CHANGED_LINK' || cell.status === 'EXTRA_CREW') &&
+                            const isWorkingTrain = ['DUTY', 'SUBSTITUTE', 'CHANGED_LINK', 'EXTRA_CREW', 'SHIFTED', 'UTILISED_ADVANCE'].includes(cell.status) &&
                               workedTrainRaw &&
                               !['REST', 'SPARE (HQ)', '-', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'REASON LATER'].includes(workedTrainRaw);
 
@@ -5845,8 +5852,8 @@ export default function App() {
                             const isCr = cell.status === 'CR' || isMusterCr;
                             const isAbsent = cell.status === 'ABSENT' || isMusterAbsent;
                             const isAvailableForBooking = cell.status === 'AVAILABLE_FOR_BOOKING';
-                            const isCat4 = parseInt(selectedCatId, 10) === 4;
-                            const staffBaseCatId = parseInt(selectedCatId, 10) || 1;
+                            const isCat4 = parseInt(staffRow.category_id || selectedCatId, 10) === 4;
+                            const staffBaseCatId = parseInt(staffRow.category_id || selectedCatId, 10) || 1;
                             const lrInfo = cell.lr_rest_info;
                             const isRest = !isWorkingTrain && (isMusterRest || (!isAvailableForBooking && !isMusterOd && (cell.isRest || (cell.actualLinkNumber === null && !cell.train_numbers) || cell.status === 'REST')));
 
@@ -5864,17 +5871,37 @@ export default function App() {
                             const isExtraOrNonDailyWork = isWorkingTrain && (cell.actualLinkNumber === null || cell.actualLinkNumber === undefined);
                             const isCondition4 = (cell.condition_applied === 4) || (cell.original_is_rest && isWorkingTrain);
                             const isCondition2 = (cell.condition_applied === 2) || isLinkNumberChanged || isExtraOrNonDailyWork ||
+                              (isCat4 && isWorkingTrain && !isCondition4) ||
                               (!cell.original_is_rest && isWorkingTrain && cell.actual_train_numbers && cell.original_train_numbers && cell.actual_train_numbers !== cell.original_train_numbers);
                             const isDutyChanged = isCondition4 || isCondition2 || isSick || isLeave || isCr || isAbsent || isAvailableForBooking || isMusterOd || (isRest && !cell.original_is_rest);
 
+                            // 2. ACTUALLY WORKED LINK & DUTY PERFORMED COLUMN + STATUS/REMARKS COLUMN
+                            const workedTrainName = workedTrainRaw || '-';
+                            const workedRoute = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
+                            const workedCoaches = cell.coaches || '-';
+
                             // 1. SCHEDULED COLUMNS (Link No, Train Numbers, Route, Coaches)
+                            // For LR (Cat 4) staff, since they do not have fixed schedules, show their booked duty details directly when booked!
                             const schedIsRest = Boolean(cell.original_is_rest);
                             let schedLinkLabel = '';
                             let schedBadgeStyle = { fontWeight: 700, borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' };
                             if (isCat4) {
-                              schedLinkLabel = schedIsRest ? '😴 REST' : '⚡ LR Standby';
-                              schedBadgeStyle.background = schedIsRest ? 'rgba(107, 114, 128, 0.15)' : 'rgba(16, 185, 129, 0.12)';
-                              schedBadgeStyle.color = schedIsRest ? '#9ca3af' : '#10b981';
+                              if (isWorkingTrain) {
+                                if (cell.actualLinkNumber) {
+                                  schedLinkLabel = `🚆 ${(cell.target_category_id === 1 ? 'COR ' : 'SL ')}Link #${cell.actualLinkNumber}`;
+                                } else if (cell.set_type && cell.set_type !== 'Other / REST') {
+                                  schedLinkLabel = `🚆 ${cell.set_type}`;
+                                } else {
+                                  schedLinkLabel = '🚆 Booked Duty';
+                                }
+                                schedBadgeStyle.background = 'rgba(59, 130, 246, 0.16)';
+                                schedBadgeStyle.color = '#60a5fa';
+                                schedBadgeStyle.border = '1px solid rgba(59, 130, 246, 0.4)';
+                              } else {
+                                schedLinkLabel = schedIsRest ? '😴 REST' : '⚡ LR Standby';
+                                schedBadgeStyle.background = schedIsRest ? 'rgba(107, 114, 128, 0.15)' : 'rgba(16, 185, 129, 0.12)';
+                                schedBadgeStyle.color = schedIsRest ? '#9ca3af' : '#10b981';
+                              }
                             } else if (schedIsRest) {
                               schedLinkLabel = cell.calculatedLinkNumber ? `😴 REST (#${cell.calculatedLinkNumber})` : '😴 REST';
                               schedBadgeStyle.background = 'rgba(107, 114, 128, 0.15)';
@@ -5890,29 +5917,33 @@ export default function App() {
                               schedBadgeStyle.color = '#10b981';
                             }
 
-                            const trainNoDisplay = schedIsRest
-                              ? 'REST'
-                              : (cell.original_train_numbers || (isCat4 ? 'SPARE (HQ)' : '-'));
-                            const routeDisplay = schedIsRest
-                              ? '-'
-                              : ((cell.original_from_station && cell.original_from_station !== '-') || (cell.original_to_station && cell.original_to_station !== '-')
-                                  ? `${cell.original_from_station || 'GNT'} ➔ ${cell.original_to_station || '---'}`
-                                  : (isCat4 ? 'GNT ➔ GNT' : '-'));
-                            const coachDisplay = schedIsRest
-                              ? '-'
-                              : (cell.original_coaches || '-');
+                            const trainNoDisplay = (isCat4 && isWorkingTrain)
+                              ? workedTrainName
+                              : (schedIsRest
+                                  ? 'REST'
+                                  : (cell.original_train_numbers || (isCat4 ? 'SPARE (HQ)' : '-')));
+                            const routeDisplay = (isCat4 && isWorkingTrain)
+                              ? workedRoute
+                              : (schedIsRest
+                                  ? '-'
+                                  : ((cell.original_from_station && cell.original_from_station !== '-') || (cell.original_to_station && cell.original_to_station !== '-')
+                                      ? `${cell.original_from_station || 'GNT'} ➔ ${cell.original_to_station || '---'}`
+                                      : (isCat4 ? 'GNT ➔ GNT' : '-')));
+                            const coachDisplay = (isCat4 && isWorkingTrain)
+                              ? workedCoaches
+                              : (schedIsRest
+                                  ? '-'
+                                  : (cell.original_coaches || '-'));
 
-                            // 2. ACTUALLY WORKED LINK & DUTY PERFORMED COLUMN + STATUS/REMARKS COLUMN
-                            const workedTrainName = workedTrainRaw || '-';
-                            const workedRoute = (cell.from_station || 'GNT') + ' ➔ ' + (cell.to_station || '---');
-                            const workedCoaches = cell.coaches || '-';
                             const workedLinkBadgeText = cell.actualLinkNumber
                               ? (isUpgradedToCor
                                   ? `⭐ COR Link #${cell.actualLinkNumber} (Upgraded)`
                                   : (isCat4
-                                      ? `🔄 ${(cell.target_category_id === 1 ? 'COR ' : 'SL ')}Link #${cell.actualLinkNumber}`
+                                      ? `🚆 Booked: ${(cell.target_category_id === 1 ? 'COR ' : 'SL ')}Link #${cell.actualLinkNumber}`
                                       : `🔄 Link #${getLinkDisplayLabel(targetCatId, cell.actualLinkNumber)}`))
-                              : (cell.set_type && cell.set_type !== 'Other / REST' ? `🚆 ${cell.set_type}` : '🚆 Extra / Non-Daily Train');
+                              : (isCat4
+                                  ? `🚆 Booked: ${cell.set_type && cell.set_type !== 'Other / REST' ? cell.set_type : 'Extra / Non-Daily Train'}`
+                                  : (cell.set_type && cell.set_type !== 'Other / REST' ? `🚆 ${cell.set_type}` : '🚆 Extra / Non-Daily Train'));
 
                             let cellBg = 'transparent';
                             let actuallyWorkedElement = null;
@@ -6147,7 +6178,9 @@ export default function App() {
                                     <span style={{ color: accentColor, fontWeight: 600, fontSize: '0.85rem' }}>
                                       {isCondition4
                                         ? `⚡ Worked Train ${workedTrainName} on Rest Day ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`
-                                        : `🔄 Daily Summary Change: Worked ${cell.actualLinkNumber ? `${isUpgradedToCor ? 'COR ' : ''}Link #${cell.actualLinkNumber} ` : ''}(Tr. ${workedTrainName}) ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`}
+                                        : (isCat4
+                                            ? `📌 LR Duty Booked in Daily Summary: Worked ${cell.actualLinkNumber ? `${cell.target_category_id === 1 ? 'COR ' : 'SL '}Link #${cell.actualLinkNumber} ` : ''}(Tr. ${workedTrainName}) ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`
+                                            : `🔄 Daily Summary Change: Worked ${cell.actualLinkNumber ? `${isUpgradedToCor ? 'COR ' : ''}Link #${cell.actualLinkNumber} ` : ''}(Tr. ${workedTrainName}) ${cell.overrideReason ? `• ${cell.overrideReason}` : ''}`)}
                                     </span>
                                   </div>
                                 );
@@ -6181,20 +6214,20 @@ export default function App() {
                                   </div>
                                 );
                               }
-                            } else if (isCat4 && lrInfo) {
+                            } else if (isCat4) {
                               actuallyWorkedElement = (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ background: 'rgba(16, 185, 129, 0.14)', color: '#10b981', borderRadius: '5px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700, width: 'fit-content' }}>
                                     ⚡ LR Standby at HQ (Not Booked)
                                   </span>
                                   <span style={{ fontSize: '0.74rem', color: 'var(--color-text-secondary)' }}>
-                                    {lrInfo.lastTrainNo ? `Last Worked: Tr. ${lrInfo.lastTrainNo} • No TA Today` : 'Available at GNT HQ • No TA Today'}
+                                    {lrInfo && lrInfo.lastTrainNo ? `Last Worked: Tr. ${lrInfo.lastTrainNo} • No TA Today` : 'Available at GNT HQ • No TA Today'}
                                   </span>
                                 </div>
                               );
                               remarksElement = (
                                 <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.85rem' }}>
-                                  ⚡ {lrInfo.remarksText || 'Available for Booking Duty at HQ (Standby)'}
+                                  ⚡ {(lrInfo && lrInfo.remarksText) || 'Available for Booking Duty at HQ (Standby)'}
                                 </span>
                               );
                             } else {
