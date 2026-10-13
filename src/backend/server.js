@@ -11424,6 +11424,9 @@ app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
     const journal = await generateStaffTaJournal({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(journal);
   } catch (err) {
+    if (err.message && err.message.includes('not found')) {
+      return res.status(200).json({ notFound: true, employee: null, rows: [] });
+    }
     console.error('Error generating TA journal:', err);
     res.status(500).json({ error: err.message });
   }
@@ -12220,6 +12223,9 @@ app.get('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
     const journal = await generateStaffNdaJournal({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(journal);
   } catch (err) {
+    if (err.message && err.message.includes('not found')) {
+      return res.status(200).json({ notFound: true, employee: null, rows: [] });
+    }
     console.error('Error generating NDA journal:', err);
     res.status(500).json({ error: err.message });
   }
@@ -12481,6 +12487,9 @@ app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => 
     const diary = await generateStaffDiary({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(diary);
   } catch (err) {
+    if (err.message && err.message.includes('not found')) {
+      return res.status(200).json({ notFound: true, employee: null, rows: [] });
+    }
     console.error('Error generating Diary:', err);
     res.status(500).json({ error: err.message });
   }
@@ -12876,6 +12885,9 @@ app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async
     const monthlyEarnings = await generateStaffMonthlyEarnings({ get, all, run }, staffId, year, month);
     res.json(monthlyEarnings);
   } catch (err) {
+    if (err.message && err.message.includes('not found')) {
+      return res.status(200).json({ notFound: true, employee: null, rows: [] });
+    }
     console.error('Error generating Staff Monthly Earnings:', err);
     res.status(500).json({ error: err.message });
   }

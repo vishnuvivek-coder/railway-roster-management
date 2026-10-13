@@ -2174,6 +2174,10 @@ export default function App() {
             const exists = data.some(s => String(s.id) === String(prev));
             return exists ? prev : String(data[0].id);
           });
+          setDocStaffId(prev => {
+            const exists = data.some(s => String(s.id) === String(prev));
+            return exists ? prev : String(data[0].id);
+          });
         }
       });
   };
@@ -4167,6 +4171,11 @@ export default function App() {
       setStaffList(prev => prev.filter(s => s.id !== id));
       setAllStaffList(prev => prev.filter(s => s.id !== id));
 
+      const remainingStaff = staffList.filter(s => s.id !== id);
+      const nextStaffId = remainingStaff.length > 0 ? String(remainingStaff[0].id) : '';
+      if (String(selectedStaffId) === String(id)) setSelectedStaffId(nextStaffId);
+      if (String(docStaffId) === String(id)) setDocStaffId(nextStaffId);
+
       await notifyAllModulesUpdated('staff_delete');
       showGlobalSaveNotice(`✓ Employee '${staffName}' permanently deleted from database.`);
     } catch (err) {
@@ -4236,6 +4245,11 @@ export default function App() {
         const removedId = parseInt(removeStaffId, 10);
         setStaffList(prev => prev.filter(s => s.id !== removedId));
         setAllStaffList(prev => prev.filter(s => s.id !== removedId));
+
+        const remainingStaff = staffList.filter(s => s.id !== removedId);
+        const nextStaffId = remainingStaff.length > 0 ? String(remainingStaff[0].id) : '';
+        if (String(selectedStaffId) === String(removedId)) setSelectedStaffId(nextStaffId);
+        if (String(docStaffId) === String(removedId)) setDocStaffId(nextStaffId);
 
         setRemoveStaffId('');
         await notifyAllModulesUpdated('staff_remove');

@@ -216,13 +216,14 @@ export default function DiaryDocument({
           if (data.summary_breakdown) {
             setSummaryMeta(data.summary_breakdown);
           }
+        } else if (data && data.notFound) {
+          setDiaryData(null);
         } else {
-          console.error('Diary error:', data?.error);
+          console.warn('Diary notice:', data?.error);
         }
         setLoading(false);
       })
       .catch(err => {
-        console.error('Error loading diary statement:', err);
         setLoading(false);
       });
   };
@@ -237,6 +238,27 @@ export default function DiaryDocument({
   useEffect(() => {
     const handleRosterUpdate = (e) => {
       if (e?.detail?.source === 'diary_doc_save') return;
+      if (e?.detail?.source === 'staff_delete' || e?.detail?.source === 'staff_remove') {
+        const catParam = (selectedCatId && selectedCatId !== 'ALL') ? `?category_id=${selectedCatId}` : '';
+        fetch(`${API_BASE}/staff${catParam}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              setStaffList(data);
+              const exists = data.some(s => s.id.toString() === selectedStaffId?.toString());
+              if (!exists) {
+                const firstValid = data.find(s => !s.name.includes('VACANT')) || data[0];
+                setSelectedStaffId(firstValid.id.toString());
+              } else {
+                fetchDiary();
+              }
+            }
+          })
+          .catch(() => {});
+        return;
+      }
       if (selectedStaffId && startDate && endDate) {
         fetchDiary();
       }

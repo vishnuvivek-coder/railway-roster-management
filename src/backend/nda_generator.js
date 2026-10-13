@@ -89,10 +89,28 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
 async function generateStaffNdaJournal(db, staffId, year, month, startDate = null, endDate = null) {
   const { get, all } = db;
   const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) throw new Error(`Staff with ID ${staffId} not found`);
+  if (!staff) {
+    return {
+      notFound: true,
+      employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
+      rows: [],
+      period_label: '',
+      year,
+      month
+    };
+  }
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-  if (!category) throw new Error(`Category for staff ID ${staffId} not found`);
+  if (!category) {
+    return {
+      notFound: true,
+      employee: staff,
+      rows: [],
+      period_label: '',
+      year,
+      month
+    };
+  }
 
   const now = new Date();
   const currentYear = now.getFullYear();

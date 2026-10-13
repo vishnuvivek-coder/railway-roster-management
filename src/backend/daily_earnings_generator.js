@@ -281,10 +281,26 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
 async function generateStaffMonthlyEarnings(db, staffId, year, month) {
   const { get, all } = db;
   const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) throw new Error(`Staff with ID ${staffId} not found`);
+  if (!staff) {
+    return {
+      notFound: true,
+      employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
+      rows: [],
+      year,
+      month
+    };
+  }
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-  if (!category) throw new Error(`Category for staff ID ${staffId} not found`);
+  if (!category) {
+    return {
+      notFound: true,
+      employee: staff,
+      rows: [],
+      year,
+      month
+    };
+  }
 
   const y = parseInt(year, 10) || new Date().getFullYear();
   const m = parseInt(month, 10) || (new Date().getMonth() + 1);

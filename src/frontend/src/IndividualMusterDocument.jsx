@@ -157,17 +157,19 @@ export default function IndividualMusterDocument({
         const taRes = await fetch(`${API_BASE}/documents/ta/${selectedStaffId}?year=${year}&month=${month}`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
         });
-        const taJson = await taRes.json();
-        if (taJson && taJson.employee) {
-          empMeta = taJson.employee;
-        }
-        if (taJson && taJson.total_days !== undefined) {
-          taPointsTotal = parseFloat(taJson.total_days) || 0;
-        } else if (taJson && taJson.rows) {
-          taPointsTotal = (taJson.rows || []).reduce((sum, d) => sum + (parseFloat(d.days_claiming_ta || d.ta_percentage || d.ta || 0) || 0), 0);
+        if (taRes.ok) {
+          const taJson = await taRes.json();
+          if (taJson && !taJson.notFound && taJson.employee) {
+            empMeta = taJson.employee;
+          }
+          if (taJson && taJson.total_days !== undefined) {
+            taPointsTotal = parseFloat(taJson.total_days) || 0;
+          } else if (taJson && taJson.rows) {
+            taPointsTotal = (taJson.rows || []).reduce((sum, d) => sum + (parseFloat(d.days_claiming_ta || d.ta_percentage || d.ta || 0) || 0), 0);
+          }
         }
       } catch (e) {
-        console.warn('Could not fetch TA document details for muster:', e);
+        // Silently skip if document not available
       }
 
       // 3. Fetch NDA Data if available
@@ -175,14 +177,16 @@ export default function IndividualMusterDocument({
         const ndaRes = await fetch(`${API_BASE}/documents/nda/${selectedStaffId}?year=${year}&month=${month}`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
         });
-        const ndaJson = await ndaRes.json();
-        if (ndaJson && ndaJson.total_night_hours !== undefined) {
-          nightHoursTotal = parseFloat(ndaJson.total_night_hours) || 0;
-        } else if (ndaJson && ndaJson.rows) {
-          nightHoursTotal = (ndaJson.rows || []).reduce((sum, d) => sum + (parseFloat(d.night_hours || 0) || 0), 0);
+        if (ndaRes.ok) {
+          const ndaJson = await ndaRes.json();
+          if (ndaJson && ndaJson.total_night_hours !== undefined) {
+            nightHoursTotal = parseFloat(ndaJson.total_night_hours) || 0;
+          } else if (ndaJson && ndaJson.rows) {
+            nightHoursTotal = (ndaJson.rows || []).reduce((sum, d) => sum + (parseFloat(d.night_hours || 0) || 0), 0);
+          }
         }
       } catch (e) {
-        console.warn('Could not fetch NDA document details:', e);
+        // Silently skip if document not available
       }
 
       if (foundRow || empMeta || staffObj) {

@@ -246,13 +246,14 @@ export default function TaDocument({
               vertical_object_text: prev.vertical_object_text || (data.employee.category_id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')
             }));
           }
+        } else if (data && data.notFound) {
+          setJournalData(null);
         } else {
-          console.error('TA Journal error:', data?.error);
+          console.warn('TA Journal notice:', data?.error);
         }
         setLoading(false);
       })
       .catch(err => {
-        console.error('Error loading TA journal:', err);
         setLoading(false);
       });
   };
@@ -267,6 +268,27 @@ export default function TaDocument({
   useEffect(() => {
     const handleRosterUpdate = (e) => {
       if (e?.detail?.source === 'ta_doc_save') return;
+      if (e?.detail?.source === 'staff_delete' || e?.detail?.source === 'staff_remove') {
+        const catParam = (selectedCatId && selectedCatId !== 'ALL') ? `?category_id=${selectedCatId}` : '';
+        fetch(`${API_BASE}/staff${catParam}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+              setStaffList(data);
+              const exists = data.some(s => s.id.toString() === selectedStaffId?.toString());
+              if (!exists) {
+                const firstValid = data.find(s => !s.name.includes('VACANT')) || data[0];
+                setSelectedStaffId(firstValid.id.toString());
+              } else {
+                fetchJournal();
+              }
+            }
+          })
+          .catch(() => {});
+        return;
+      }
       if (selectedStaffId && startDate && endDate) {
         fetchJournal();
       }
