@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { KNOWN_LINK_SETS, getLinkSetDetails } from './DutyEditModal';
 
 const QUICK_CODES = [
   { code: 'R', label: 'Weekly Rest', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.15)', border: 'rgba(156, 163, 175, 0.35)' },
@@ -222,7 +223,7 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
   }
 ];
 
-export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
+export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinksList: propLinksList, categories: propCategories }) {
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState(9);
   const [sheetData, setSheetData] = useState(null);
@@ -230,8 +231,25 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Links state: fallback fetch if not passed as prop
+  const [internalLinksList, setInternalLinksList] = useState([]);
+  const linksList = propLinksList && propLinksList.length > 0 ? propLinksList : internalLinksList;
+
+  useEffect(() => {
+    if (!propLinksList || propLinksList.length === 0) {
+      fetch(`${API_BASE}/links`)
+        .then(res => res.json())
+        .then(data => { if (Array.isArray(data)) setInternalLinksList(data); })
+        .catch(() => {});
+    }
+  }, [propLinksList, API_BASE]);
+
   // Active cell edit modal
   const [editModal, setEditModal] = useState(null);
+  const [dutyAssignTab, setDutyAssignTab] = useState('LINK'); // 'LINK' | 'NON_DAILY' | 'CUSTOM' | 'QUICK'
+  const [selectedLinkCat, setSelectedLinkCat] = useState(1); // 1 = COR, 2 = Sleeper
+  const [linkSearch, setLinkSearch] = useState('');
+  const [selectedLink, setSelectedLink] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
   const [inputCode, setInputCode] = useState('');
   const [inputRemarks, setInputRemarks] = useState('');
@@ -470,10 +488,11 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
     };
   }, [year, month]);
 
-  const handleSaveCell = async (newCode, newRemarks = '') => {
+  const handleSaveCell = async (newCode, newRemarks = '', linkNum = null, targetCatId = null) => {
     if (!editModal) return;
     const targetStaffId = editModal.staff.staffId;
     const targetDateStr = editModal.day.dateStr;
+
     try {
       setSaving(true);
       const token = authToken || localStorage.getItem('token');
@@ -486,8 +505,10 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
         body: JSON.stringify({
           staff_id: targetStaffId,
           date: targetDateStr,
-          duty_code: newCode,
-          remarks: newRemarks
+          duty_code: newCode ? newCode.trim() : '',
+          remarks: newRemarks ? newRemarks.trim() : '',
+          link_number: linkNum,
+          target_category_id: targetCatId
         })
       });
       const data = await res.json();
@@ -503,18 +524,149 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
         if (!newCode || newCode.trim() === '') {
           delete newRecords[key];
         } else {
-          newRecords[key] = { dutyCode: newCode.trim(), remarks: newRemarks };
+          newRecords[key] = {
+            dutyCode: newCode.trim(),
+            remarks: newRemarks,
+            link_number: linkNum,
+            target_category_id: targetCatId
+          };
         }
         return { ...prev, records: newRecords };
       });
 
       setEditModal(null);
       setSelectedService(null);
+      setSelectedLink(null);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: targetStaffId, date: targetDateStr, source: 'lr_sheet', timestamp: Date.now() }
       }));
     } catch (err) {
       alert('Error updating cell: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Multi-day Link Set details computation for the selected regular link
+  const linkSetInfo = useMemo(() => {
+    if (!selectedLink) return null;
+    const catId = selectedLink.category_id;
+    const linkNum = selectedLink.link_number;
+    const setDetails = getLinkSetDetails(catId, linkNum);
+    if (!setDetails || setDetails.setLinks.length <= 1) return null;
+
+    const legs = setDetails.setLinks.map((lNum, idx) => {
+      const match = (linksList || []).find(l => l.category_id === catId && l.link_number === lNum);
+      return {
+        linkNumber: lNum,
+        dayOffset: idx,
+        dayIndexInSet: idx + 1,
+        trainNumbers: match?.train_numbers || `Link #${lNum}`,
+        route: match ? `${match.from_station || 'GNT'} ➔ ${match.to_station || '---'}` : '-',
+        coaches: match?.coaches || '-',
+        dutyCode: `Link ${lNum}`,
+        remarks: `${catId === 1 ? 'COR' : 'SL'} Link #${lNum} (Day ${idx + 1} of ${setDetails.setLength}-Day Set)`
+      };
+    });
+
+    return {
+      setLength: setDetails.setLength,
+      setLinks: setDetails.setLinks,
+      legs
+    };
+  }, [selectedLink, linksList]);
+
+  // Available regular links filtered by selected category (COR or Sleeper) and search query
+  const filteredAvailableLinks = useMemo(() => {
+    if (!linksList || linksList.length === 0) return [];
+    let list = linksList.filter(l => l.category_id === selectedLinkCat && !l.is_rest);
+    if (linkSearch.trim()) {
+      const q = linkSearch.trim().toLowerCase();
+      list = list.filter(l =>
+        String(l.link_number).includes(q) ||
+        (l.train_numbers && l.train_numbers.toLowerCase().includes(q)) ||
+        (l.from_station && l.from_station.toLowerCase().includes(q)) ||
+        (l.to_station && l.to_station.toLowerCase().includes(q)) ||
+        (l.set_name && l.set_name.toLowerCase().includes(q))
+      );
+    }
+    return list.sort((a, b) => a.link_number - b.link_number);
+  }, [linksList, selectedLinkCat, linkSearch]);
+
+  // 1-Click Multi-Day Link Set Booking for LR Staff
+  const handleAssignLinkSet = async (linkSet) => {
+    if (!editModal || !linkSet || !selectedLink) return;
+    const staffId = editModal.staff.staffId;
+    const startDateObj = new Date(editModal.day.dateStr + 'T12:00:00');
+
+    const updates = [];
+    const localRecordUpdates = {};
+
+    for (let i = 0; i < linkSet.legs.length; i++) {
+      const leg = linkSet.legs[i];
+      const legDate = new Date(startDateObj);
+      legDate.setDate(legDate.getDate() + i);
+      const y = legDate.getFullYear();
+      const m = String(legDate.getMonth() + 1).padStart(2, '0');
+      const d = String(legDate.getDate()).padStart(2, '0');
+      const legDateStr = `${y}-${m}-${d}`;
+
+      updates.push({
+        staff_id: staffId,
+        date: legDateStr,
+        duty_code: leg.dutyCode,
+        remarks: leg.remarks,
+        link_number: leg.linkNumber,
+        target_category_id: selectedLink.category_id
+      });
+
+      localRecordUpdates[`${staffId}_${legDateStr}`] = {
+        dutyCode: leg.dutyCode,
+        remarks: leg.remarks,
+        link_number: leg.linkNumber,
+        target_category_id: selectedLink.category_id
+      };
+    }
+
+    try {
+      setSaving(true);
+      const token = authToken || localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/lr-sheet/batch-update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({ updates })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to assign complete link set');
+      }
+
+      setSheetData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          records: {
+            ...prev.records,
+            ...localRecordUpdates
+          }
+        };
+      });
+
+      const msg = `⚡ LR Duty Booked: Assigned Complete ${linkSet.setLength}-Day Link Set (${linkSet.legs.map(l => `Link #${l.linkNumber}`).join(' ➔ ')}) to ${editModal.staff.name}!`;
+      setSyncNotice(msg);
+      setTimeout(() => setSyncNotice(null), 6000);
+      setEditModal(null);
+      setSelectedService(null);
+      setSelectedLink(null);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { staffId, source: 'lr_sheet', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error booking link set: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -601,6 +753,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
       setTimeout(() => setSyncNotice(null), errDays > 0 ? 8000 : 6000);
       setEditModal(null);
       setSelectedService(null);
+      setSelectedLink(null);
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, source: 'lr_sheet', timestamp: Date.now() }
@@ -642,6 +795,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
     }
     if (clean === 'L' || clean === 'CAP' || clean === 'LHAP' || clean === 'SCL' || clean === 'CCL' || clean === 'OD') {
       return { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.18)', border: 'rgba(245, 158, 11, 0.45)', isLeave: true };
+    }
+
+    // Check if regular link duty (e.g. Link 19, COR Link 1, SL Link 36)
+    if (/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*\d+/i.test(code)) {
+      const isCor = /COR|CONDUCTOR/i.test(code);
+      return {
+        color: isCor ? '#facc15' : '#38bdf8',
+        bg: isCor ? 'rgba(234, 179, 8, 0.18)' : 'rgba(56, 189, 248, 0.18)',
+        border: isCor ? 'rgba(234, 179, 8, 0.5)' : 'rgba(56, 189, 248, 0.5)',
+        isTrain: true
+      };
     }
 
     // Check if non-daily train
@@ -1117,9 +1281,12 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                             onClick={() => {
                               if (isAdmin) {
                                 setEditModal({ staff, day, currentCode: displayCode, remarks: rec?.remarks || '' });
-                                setInputCode(displayCode);
+                                setInputCode(displayCode || '');
                                 setInputRemarks(rec?.remarks || '');
                                 setSelectedService(null);
+                                setSelectedLink(null);
+                                setDutyAssignTab('LINK');
+                                setLinkSearch('');
                               }
                             }}
                             style={{
@@ -1290,17 +1457,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
             background: '#1a1a1d',
             border: '1px solid var(--border-gold)',
             borderRadius: '16px',
-            maxWidth: '560px',
+            maxWidth: '680px',
             width: '100%',
             padding: '24px',
             boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
             maxHeight: '90vh',
             overflowY: 'auto'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--primary)' }}>
-                  Assign LR Duty / Attendance
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🛡️</span> Assign LR Staff Duty / Attendance
                 </h3>
                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.84rem', margin: '4px 0 0 0' }}>
                   {editModal.staff.name} ({editModal.staff.designation}) • <strong>{editModal.day.dayOfWeek} {editModal.day.dateStr}</strong>
@@ -1308,209 +1475,703 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
               </div>
               <button
                 type="button"
-                onClick={() => { setEditModal(null); setSelectedService(null); }}
+                onClick={() => { setEditModal(null); setSelectedService(null); setSelectedLink(null); }}
                 style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}
               >
                 ✕
               </button>
             </div>
 
-            {/* Dedicated 2-Day & 3-Day Non-Daily Services Booking Panel */}
+            {/* Clarification banner indicating LR can be booked to ANY duty */}
             <div style={{
-              marginBottom: '18px',
-              padding: '14px',
-              borderRadius: '10px',
+              marginBottom: '16px',
+              padding: '10px 14px',
+              borderRadius: '8px',
               background: 'rgba(56, 189, 248, 0.08)',
-              border: '1px solid rgba(56, 189, 248, 0.35)'
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              fontSize: '0.78rem',
+              color: 'var(--color-text-secondary)',
+              lineHeight: 1.45
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🚆</span> 2-Day & 3-Day Non-Daily Services (One-Click Booking)
-                </span>
-                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                  Selected: {editModal.day.dayOfWeek}
-                </span>
-              </div>
-
-              {/* Service list options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
-                {(sheetData?.nonDailyServices || NON_DAILY_MULTI_DAY_SERVICES).map(service => {
-                  const isDayMatch = service.serviceDays.includes(editModal.day.dayOfWeek);
-                  const isSelected = selectedService?.id === service.id;
-
-                  return (
-                    <div
-                      key={service.id}
-                      onClick={() => {
-                        setSelectedService(service);
-                        setInputCode(service.legs[0].dutyCode);
-                        setInputRemarks(service.legs[0].remarks);
-                      }}
-                      style={{
-                        padding: '7px 10px',
-                        borderRadius: '6px',
-                        fontSize: '0.78rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        background: isSelected ? 'rgba(56, 189, 248, 0.25)' : (isDayMatch ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255,255,255,0.03)'),
-                        border: `1px solid ${isSelected ? '#38bdf8' : (isDayMatch ? 'rgba(56, 189, 248, 0.4)' : 'rgba(255,255,255,0.08)')}`,
-                        transition: 'all 0.15s'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{
-                          fontSize: '0.66rem',
-                          fontWeight: 800,
-                          padding: '2px 5px',
-                          borderRadius: '4px',
-                          background: isDayMatch ? '#38bdf8' : 'rgba(255,255,255,0.1)',
-                          color: isDayMatch ? '#000' : 'inherit'
-                        }}>
-                          {service.serviceDays.join('/')}
-                        </span>
-                        <span style={{ fontWeight: 700, color: isSelected ? '#fff' : (isDayMatch ? '#38bdf8' : 'inherit') }}>
-                          {service.name}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.70rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                        {service.totalDays} Days ({service.legs[0].train}/{service.legs[1].train})
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Selected Service Preview & One-Click Multi-Day Assignment */}
-              {selectedService && (
-                <div style={{
-                  marginTop: '12px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid rgba(56, 189, 248, 0.4)'
-                }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', marginBottom: '6px' }}>
-                    📅 Itinerary Breakdown for {selectedService.name}:
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.74rem' }}>
-                    {selectedService.legs.map((leg, idx) => {
-                      const legDateObj = new Date(editModal.day.dateStr + 'T12:00:00');
-                      legDateObj.setDate(legDateObj.getDate() + idx);
-                      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-                      const legDow = dayNames[legDateObj.getDay()];
-                      const legDateStr = legDateObj.toISOString().split('T')[0];
-
-                      return (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary)' }}>
-                          <span>
-                            <strong>Day {leg.dayIndex} ({legDow} {legDateStr}):</strong> {leg.train !== '---' ? `Train ${leg.train} (${leg.from} ➔ ${leg.to})` : 'At Headquarters GNT'}
-                          </span>
-                          <span style={{ color: leg.dutyCode === 'AVL' ? '#34d399' : '#38bdf8', fontWeight: 700 }}>
-                            {leg.dutyCode} {leg.depTime ? `(Dep ${leg.depTime})` : (leg.arrTime ? `(Arr ${leg.arrTime})` : '')}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={saving}
-                    onClick={() => handleAssignMultiDayService(selectedService)}
-                    style={{
-                      marginTop: '10px',
-                      width: '100%',
-                      padding: '8px',
-                      fontSize: '0.84rem',
-                      fontWeight: 800,
-                      background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <span>⚡</span> Assign Complete {selectedService.totalDays}-Day Round Trip ({selectedService.legs.map(l => l.train).filter(t => t !== '---').join(' / ')})
-                  </button>
-                </div>
-              )}
+              <strong style={{ color: '#38bdf8' }}>💡 LR Allotment Rules:</strong> Leave Reserve staff can be booked to{' '}
+              <strong style={{ color: '#fff' }}>ANY Regular Link (COR / Sleeper)</strong>,{' '}
+              <strong style={{ color: '#fff' }}>ANY Non-Daily Service</strong>, or{' '}
+              <strong style={{ color: '#fff' }}>ANY Specific Train Number / Custom Duty</strong>.
             </div>
 
-            {/* Quick Attendance / Rest Codes */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 600 }}>
-                Quick Attendance / Rest Codes:
-              </label>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {QUICK_CODES.map(q => (
+            {/* 4-Tab Switcher */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '6px',
+              marginBottom: '18px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              padding: '4px',
+              borderRadius: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => { setDutyAssignTab('LINK'); setSelectedService(null); }}
+                style={{
+                  padding: '9px 4px',
+                  borderRadius: '7px',
+                  fontSize: '0.79rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dutyAssignTab === 'LINK' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+                  color: dutyAssignTab === 'LINK' ? '#fff' : 'var(--color-text-secondary)',
+                  boxShadow: dutyAssignTab === 'LINK' ? '0 2px 8px rgba(2, 132, 199, 0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                🚆 Assign Link
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDutyAssignTab('NON_DAILY'); setSelectedLink(null); }}
+                style={{
+                  padding: '9px 4px',
+                  borderRadius: '7px',
+                  fontSize: '0.79rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dutyAssignTab === 'NON_DAILY' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+                  color: dutyAssignTab === 'NON_DAILY' ? '#fff' : 'var(--color-text-secondary)',
+                  boxShadow: dutyAssignTab === 'NON_DAILY' ? '0 2px 8px rgba(2, 132, 199, 0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                🗓️ Non-Daily
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDutyAssignTab('CUSTOM'); setSelectedLink(null); setSelectedService(null); }}
+                style={{
+                  padding: '9px 4px',
+                  borderRadius: '7px',
+                  fontSize: '0.79rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dutyAssignTab === 'CUSTOM' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
+                  color: dutyAssignTab === 'CUSTOM' ? '#fff' : 'var(--color-text-secondary)',
+                  boxShadow: dutyAssignTab === 'CUSTOM' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                ✏️ Any Train
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDutyAssignTab('QUICK'); setSelectedLink(null); setSelectedService(null); }}
+                style={{
+                  padding: '9px 4px',
+                  borderRadius: '7px',
+                  fontSize: '0.79rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dutyAssignTab === 'QUICK' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+                  color: dutyAssignTab === 'QUICK' ? '#fff' : 'var(--color-text-secondary)',
+                  boxShadow: dutyAssignTab === 'QUICK' ? '0 2px 8px rgba(245, 158, 11, 0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                ⚡ Rest / Leave
+              </button>
+            </div>
+
+            {/* TAB 1: REGULAR LINK ASSIGNMENT */}
+            {dutyAssignTab === 'LINK' && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'rgba(56, 189, 248, 0.06)',
+                border: '1px solid rgba(56, 189, 248, 0.3)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedLinkCat(1); setSelectedLink(null); }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: selectedLinkCat === 1 ? '#facc15' : 'rgba(255,255,255,0.06)',
+                        color: selectedLinkCat === 1 ? '#000' : 'inherit',
+                        border: `1px solid ${selectedLinkCat === 1 ? '#facc15' : 'rgba(255,255,255,0.1)'}`
+                      }}
+                    >
+                      Conductors (COR Links 1–21)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedLinkCat(2); setSelectedLink(null); }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: selectedLinkCat === 2 ? '#38bdf8' : 'rgba(255,255,255,0.06)',
+                        color: selectedLinkCat === 2 ? '#000' : 'inherit',
+                        border: `1px solid ${selectedLinkCat === 2 ? '#38bdf8' : 'rgba(255,255,255,0.1)'}`
+                      }}
+                    >
+                      Sleeper Staff (Links 1–52)
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search link # or train..."
+                    value={linkSearch}
+                    onChange={(e) => setLinkSearch(e.target.value)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#fff',
+                      width: '160px'
+                    }}
+                  />
+                </div>
+
+                {/* Available links scrollable grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+                  gap: '6px',
+                  maxHeight: '160px',
+                  overflowY: 'auto',
+                  paddingRight: '4px'
+                }}>
+                  {filteredAvailableLinks.map(l => {
+                    const isSelected = selectedLink?.id === l.id && selectedLink?.category_id === l.category_id;
+                    const catLabel = l.category_id === 1 ? 'COR' : 'SL';
+                    return (
+                      <div
+                        key={`${l.category_id}_${l.link_number}`}
+                        onClick={() => {
+                          setSelectedLink(l);
+                          const isCor = l.category_id === 1;
+                          const code = isCor ? `COR Link ${l.link_number}` : `Link ${l.link_number}`;
+                          const rem = `${catLabel} Link #${l.link_number}${l.train_numbers ? ` (${l.train_numbers})` : ''}`;
+                          setInputCode(code);
+                          setInputRemarks(rem);
+                        }}
+                        style={{
+                          padding: '7px 9px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          background: isSelected
+                            ? 'rgba(56, 189, 248, 0.25)'
+                            : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${isSelected ? '#38bdf8' : 'rgba(255,255,255,0.08)'}`,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          transition: 'all 0.12s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{
+                            fontWeight: 800,
+                            color: l.category_id === 1 ? '#facc15' : '#38bdf8'
+                          }}>
+                            {catLabel} Link #{l.link_number}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--color-text-secondary)' }}>
+                            {l.from_station || 'GNT'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: isSelected ? '#fff' : 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {l.train_numbers || 'Regular Link'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filteredAvailableLinks.length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', padding: '12px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '0.78rem' }}>
+                      No links matching "{linkSearch}"
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected Link Preview & Multi-Day Set or Single Day Assignment */}
+                {selectedLink && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.35)',
+                    border: '1px solid rgba(56, 189, 248, 0.4)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#38bdf8' }}>
+                        Selected: {selectedLink.category_id === 1 ? 'COR' : 'SL'} Link #{selectedLink.link_number} ({selectedLink.train_numbers || 'Regular Link'})
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                        {selectedLink.from_station || 'GNT'} ➔ {selectedLink.to_station || '---'}
+                      </span>
+                    </div>
+
+                    {/* If Multi-Day Link Set, render leg itinerary breakdown */}
+                    {linkSetInfo && linkSetInfo.legs.length > 1 && (
+                      <div style={{ margin: '8px 0', padding: '8px 10px', background: 'rgba(56, 189, 248, 0.08)', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', marginBottom: '4px' }}>
+                          📅 Complete {linkSetInfo.setLength}-Day Link Set Breakdown:
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.73rem' }}>
+                          {linkSetInfo.legs.map((leg, idx) => {
+                            const legDateObj = new Date(editModal.day.dateStr + 'T12:00:00');
+                            legDateObj.setDate(legDateObj.getDate() + idx);
+                            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                            const legDow = dayNames[legDateObj.getDay()];
+                            const legDateStr = legDateObj.toISOString().split('T')[0];
+
+                            return (
+                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary)' }}>
+                                <span>
+                                  <strong>Day {leg.dayIndexInSet} ({legDow} {legDateStr}):</strong> Link #{leg.linkNumber} ({leg.trainNumbers})
+                                </span>
+                                <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+                                  {leg.route}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons for Selected Link */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      {linkSetInfo && linkSetInfo.legs.length > 1 ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={saving}
+                            onClick={() => handleAssignLinkSet(linkSetInfo)}
+                            style={{
+                              flex: 1.3,
+                              padding: '8px',
+                              fontSize: '0.82rem',
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                              border: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span>⚡</span> Assign Complete {linkSetInfo.setLength}-Day Link Set ({linkSetInfo.legs.map(l => `#${l.linkNumber}`).join(' ➔ ')})
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={saving}
+                            onClick={() => handleSaveCell(inputCode, inputRemarks, selectedLink.link_number, selectedLink.category_id)}
+                            style={{
+                              flex: 1,
+                              padding: '8px',
+                              fontSize: '0.80rem',
+                              fontWeight: 700
+                            }}
+                          >
+                            Assign Single Day Only (Link #{selectedLink.link_number})
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={saving}
+                          onClick={() => handleSaveCell(inputCode, inputRemarks, selectedLink.link_number, selectedLink.category_id)}
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            fontSize: '0.84rem',
+                            fontWeight: 800,
+                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <span>⚡</span> Assign {selectedLink.category_id === 1 ? 'COR' : 'SL'} Link #{selectedLink.link_number} ({selectedLink.train_numbers || 'Regular Link'})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: NON-DAILY SERVICES */}
+            {dutyAssignTab === 'NON_DAILY' && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.35)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🚆</span> 2-Day & 3-Day Non-Daily Services (One-Click Booking)
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                    Selected Day: {editModal.day.dayOfWeek}
+                  </span>
+                </div>
+
+                {/* Service list options */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {(sheetData?.nonDailyServices || NON_DAILY_MULTI_DAY_SERVICES).map(service => {
+                    const isDayMatch = service.serviceDays.includes(editModal.day.dayOfWeek);
+                    const isSelected = selectedService?.id === service.id;
+
+                    return (
+                      <div
+                        key={service.id}
+                        onClick={() => {
+                          setSelectedService(service);
+                          setInputCode(service.legs[0].dutyCode);
+                          setInputRemarks(service.legs[0].remarks);
+                        }}
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: isSelected ? 'rgba(56, 189, 248, 0.25)' : (isDayMatch ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255,255,255,0.03)'),
+                          border: `1px solid ${isSelected ? '#38bdf8' : (isDayMatch ? 'rgba(56, 189, 248, 0.4)' : 'rgba(255,255,255,0.08)')}`,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            fontSize: '0.66rem',
+                            fontWeight: 800,
+                            padding: '2px 5px',
+                            borderRadius: '4px',
+                            background: isDayMatch ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+                            color: isDayMatch ? '#000' : 'inherit'
+                          }}>
+                            {service.serviceDays.join('/')}
+                          </span>
+                          <span style={{ fontWeight: 700, color: isSelected ? '#fff' : (isDayMatch ? '#38bdf8' : 'inherit') }}>
+                            {service.name}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.70rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                          {service.totalDays} Days ({service.legs[0].train}/{service.legs[1].train})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Service Preview & One-Click Multi-Day Assignment */}
+                {selectedService && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(56, 189, 248, 0.4)'
+                  }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', marginBottom: '6px' }}>
+                      📅 Itinerary Breakdown for {selectedService.name}:
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.74rem' }}>
+                      {selectedService.legs.map((leg, idx) => {
+                        const legDateObj = new Date(editModal.day.dateStr + 'T12:00:00');
+                        legDateObj.setDate(legDateObj.getDate() + idx);
+                        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                        const legDow = dayNames[legDateObj.getDay()];
+                        const legDateStr = legDateObj.toISOString().split('T')[0];
+
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary)' }}>
+                            <span>
+                              <strong>Day {leg.dayIndex} ({legDow} {legDateStr}):</strong> {leg.train !== '---' ? `Train ${leg.train} (${leg.from} ➔ ${leg.to})` : 'At Headquarters GNT'}
+                            </span>
+                            <span style={{ color: leg.dutyCode === 'AVL' ? '#34d399' : '#38bdf8', fontWeight: 700 }}>
+                              {leg.dutyCode} {leg.depTime ? `(Dep ${leg.depTime})` : (leg.arrTime ? `(Arr ${leg.arrTime})` : '')}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={saving}
+                      onClick={() => handleAssignMultiDayService(selectedService)}
+                      style={{
+                        marginTop: '10px',
+                        width: '100%',
+                        padding: '8px',
+                        fontSize: '0.84rem',
+                        fontWeight: 800,
+                        background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span>⚡</span> Assign Complete {selectedService.totalDays}-Day Round Trip ({selectedService.legs.map(l => l.train).filter(t => t !== '---').join(' / ')})
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: ANY TRAIN NUMBER / CUSTOM DUTY */}
+            {dutyAssignTab === 'CUSTOM' && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.35)'
+              }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#34d399', marginBottom: '8px' }}>
+                  🚂 Direct Train Number / Movement Duty
+                </div>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.76rem', margin: '0 0 10px 0' }}>
+                  Assign LR staff to any specific train (e.g. 12805, 12795, 20629, 17240, 12603), pilot movement, or station duty.
+                </p>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+                    Train Number / Custom Duty Code:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 12603, 17221, 22882, 17254 / 12795, GTL, TPTY, STN"
+                    value={inputCode}
+                    onChange={(e) => setInputCode(e.target.value)}
+                    style={{ borderRadius: '8px', fontSize: '0.9rem', width: '100%' }}
+                    autoFocus
+                  />
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+                    Duty Remarks / Order Ref:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Relieved for extra train, Spl Order 44/2"
+                    value={inputRemarks}
+                    onChange={(e) => setInputRemarks(e.target.value)}
+                    style={{ borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={saving || !inputCode.trim()}
+                  onClick={() => handleSaveCell(inputCode, inputRemarks)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>💾</span> Save Train Duty ({inputCode || '...'})
+                </button>
+              </div>
+            )}
+
+            {/* TAB 4: QUICK REST / LEAVE CODES */}
+            {dutyAssignTab === 'QUICK' && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.35)'
+              }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#fbbf24', marginBottom: '8px', fontWeight: 700 }}>
+                  ⚡ Quick Attendance / Rest / Leave Codes:
+                </label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  {QUICK_CODES.map(q => (
+                    <button
+                      key={q.code}
+                      type="button"
+                      onClick={() => {
+                        setInputCode(q.code);
+                        setInputRemarks(q.label);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: inputCode === q.code ? q.bg : 'rgba(255,255,255,0.06)',
+                        color: inputCode === q.code ? q.color : 'inherit',
+                        border: `1px solid ${inputCode === q.code ? q.color : 'rgba(255,255,255,0.1)'}`
+                      }}
+                    >
+                      {q.code} ({q.label})
+                    </button>
+                  ))}
                   <button
-                    key={q.code}
                     type="button"
                     onClick={() => {
-                      setInputCode(q.code);
-                      setSelectedService(null);
+                      setInputCode('AVL');
+                      setInputRemarks('Available Standby at GNT');
                     }}
                     style={{
-                      padding: '5px 10px',
+                      padding: '6px 12px',
                       borderRadius: '6px',
                       fontSize: '0.78rem',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      background: inputCode === q.code ? q.bg : 'rgba(255,255,255,0.06)',
-                      color: inputCode === q.code ? q.color : 'inherit',
-                      border: `1px solid ${inputCode === q.code ? q.color : 'rgba(255,255,255,0.1)'}`
+                      background: inputCode === 'AVL' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255,255,255,0.06)',
+                      color: inputCode === 'AVL' ? '#34d399' : 'inherit',
+                      border: `1px solid ${inputCode === 'AVL' ? '#10b981' : 'rgba(255,255,255,0.1)'}`
                     }}
                   >
-                    {q.code} ({q.label})
+                    AVL (Available Standby)
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputCode('REST_HQ');
+                      setInputRemarks('HQ Rest after outstation arrival');
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: inputCode === 'REST_HQ' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.06)',
+                      color: inputCode === 'REST_HQ' ? '#fbbf24' : 'inherit',
+                      border: `1px solid ${inputCode === 'REST_HQ' ? '#f59e0b' : 'rgba(255,255,255,0.1)'}`
+                    }}
+                  >
+                    REST_HQ (HQ Rest)
+                  </button>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+                    Remarks:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Sanctioned via memo / Leave App"
+                    value={inputRemarks}
+                    onChange={(e) => setInputRemarks(e.target.value)}
+                    style={{ borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={saving || !inputCode.trim()}
+                  onClick={() => handleSaveCell(inputCode, inputRemarks)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>💾</span> Save Status ({inputCode || '...'})
+                </button>
               </div>
-            </div>
+            )}
 
-            {/* Custom Code / Train Number input */}
-            <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
-                Train Number / Movement / Custom Duty:
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. 12603, 17221, 22882, 17254 / 12795, GTL, TPTY"
-                value={inputCode}
-                onChange={(e) => setInputCode(e.target.value)}
-                style={{ borderRadius: '8px', fontSize: '0.9rem', width: '100%' }}
-                autoFocus
-              />
-            </div>
+            {/* Quick manual edit fields (visible on Link/Non-Daily tabs too for custom tweaking) */}
+            {(dutyAssignTab === 'LINK' || dutyAssignTab === 'NON_DAILY') && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+                      Duty Code to Save:
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Link 19, 12805"
+                      value={inputCode}
+                      onChange={(e) => setInputCode(e.target.value)}
+                      style={{ borderRadius: '6px', fontSize: '0.82rem', width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>
+                      Remarks:
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Remarks"
+                      value={inputRemarks}
+                      onChange={(e) => setInputRemarks(e.target.value)}
+                      style={{ borderRadius: '6px', fontSize: '0.82rem', width: '100%' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
-                Remarks (Optional):
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. Relieved for special duty, CR ref 21/8"
-                value={inputRemarks}
-                onChange={(e) => setInputRemarks(e.target.value)}
-                style={{ borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
-              />
-            </div>
-
-            {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Modal Actions Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
                 disabled={saving}
                 onClick={() => handleSaveCell('', '')}
-                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)', fontSize: '0.84rem' }}
+                style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)', fontSize: '0.82rem' }}
               >
-                🗑️ Clear Cell
+                🗑️ Clear Cell / Reset
               </button>
 
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1518,24 +2179,24 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api' }) {
                   type="button"
                   className="btn btn-secondary"
                   disabled={saving}
-                  onClick={() => { setEditModal(null); setSelectedService(null); }}
-                  style={{ fontSize: '0.84rem' }}
+                  onClick={() => { setEditModal(null); setSelectedService(null); setSelectedLink(null); }}
+                  style={{ fontSize: '0.82rem' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={saving}
-                  onClick={() => handleSaveCell(inputCode, inputRemarks)}
+                  disabled={saving || !inputCode.trim()}
+                  onClick={() => handleSaveCell(inputCode, inputRemarks, selectedLink?.link_number || null, selectedLink?.category_id || null)}
                   style={{
                     background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))',
                     border: 'none',
                     fontWeight: 700,
-                    fontSize: '0.84rem'
+                    fontSize: '0.82rem'
                   }}
                 >
-                  {saving ? 'Saving...' : '💾 Save Single Day Duty'}
+                  {saving ? 'Saving...' : '💾 Save Duty'}
                 </button>
               </div>
             </div>

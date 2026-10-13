@@ -14994,6 +14994,8 @@ export default function App() {
             isAdmin={isAdmin}
             authToken={authToken}
             API_BASE={API_BASE}
+            allLinksList={allLinksList}
+            categories={categories}
           />
         )}
 

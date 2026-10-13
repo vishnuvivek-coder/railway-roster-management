@@ -14969,7 +14969,7 @@ app.get('/api/lr-sheet/multi-day-services', (req, res) => {
 });
 
 // Centralized helper for bidirectional synchronization when an LR Sheet cell is modified or cleared
-async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
+async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', options = {}) {
   if (!staffId || !dateStr) return;
   const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   if (!staff) return;
@@ -15082,49 +15082,114 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
     await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
     await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
   } else {
-    // Train duty (e.g. 12747, 17281, 12734, GTL, etc.)
-    const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
-    await run(
-      `INSERT INTO overrides (
-        staff_id, date, overridden_link_number, status, target_category_id,
-        reason, original_link_number, extra_train_no, is_extra,
-        shifted_from_link, shifted_from_train, shifted_place,
-        advance_train_no, is_advance_duty
-      ) VALUES (?, ?, NULL, 'EXTRA_CREW', 4, ?, NULL, ?, 1, NULL, NULL, 'LR_SHEET', NULL, 0)
-      ON CONFLICT(staff_id, date) DO UPDATE SET
-        overridden_link_number = NULL,
-        status = 'EXTRA_CREW',
-        target_category_id = 4,
-        reason = excluded.reason,
-        extra_train_no = excluded.extra_train_no,
-        is_extra = 1,
-        shifted_place = 'LR_SHEET'`,
-      [staffId, dateStr, reason, clean]
-    );
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-       VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         code = 'P',
-         remarks = excluded.remarks,
-         updated_by = excluded.updated_by,
-         updated_at = CURRENT_TIMESTAMP`,
-      [staffId, dateStr, reason]
-    );
+    // Train duty or Link duty
+    const isCorExplicit = /COR|CONDUCTOR/i.test(clean) || (options.target_category_id === 1);
+    const linkMatch = clean.match(/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*(\d+)/i) || (options.link_number ? [null, String(options.link_number)] : null);
 
-    await run(
-      `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
-      [staffId, dateStr, dateStr, altDateStr]
-    );
-    const y = parseInt(dateParts[0], 10);
-    const m = parseInt(dateParts[1], 10);
-    try {
-      const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-      await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
-    } catch (err) {
-      console.warn('Error regenerating TA claims in LR sync:', err.message);
+    if (linkMatch) {
+      const linkNum = options.link_number ? parseInt(options.link_number, 10) : parseInt(linkMatch[1], 10);
+      let targetCatId = options.target_category_id ? parseInt(options.target_category_id, 10) : (isCorExplicit ? 1 : null);
+      if (!targetCatId) {
+        if (linkNum > 21) {
+          targetCatId = 2; // Category 2 Sleeper
+        } else {
+          const corCheck = await get('SELECT id FROM links WHERE category_id = 1 AND link_number = ?', [linkNum]);
+          targetCatId = corCheck ? 1 : 2;
+        }
+      }
+
+      const linkDef = await get('SELECT train_numbers, from_station, to_station, coaches, set_type FROM links WHERE category_id = ? AND link_number = ?', [targetCatId, linkNum]);
+      const catLabel = targetCatId === 1 ? 'COR' : 'SL';
+      const linkTrain = linkDef?.train_numbers ? ` (${linkDef.train_numbers})` : '';
+      const reason = remarks ? `Assigned to ${catLabel} Link #${linkNum}${linkTrain} • ${remarks}` : `Assigned to ${catLabel} Link #${linkNum}${linkTrain}`;
+
+      await run(
+        `INSERT INTO overrides (
+          staff_id, date, overridden_link_number, status, target_category_id,
+          reason, original_link_number, extra_train_no, is_extra,
+          shifted_from_link, shifted_from_train, shifted_place,
+          advance_train_no, is_advance_duty
+        ) VALUES (?, ?, ?, 'CHANGED_LINK', ?, ?, NULL, NULL, 0, NULL, NULL, 'LR_SHEET', NULL, 0)
+        ON CONFLICT(staff_id, date) DO UPDATE SET
+          overridden_link_number = excluded.overridden_link_number,
+          status = 'CHANGED_LINK',
+          target_category_id = excluded.target_category_id,
+          reason = excluded.reason,
+          extra_train_no = NULL,
+          is_extra = 0,
+          shifted_place = 'LR_SHEET'`,
+        [staffId, dateStr, linkNum, targetCatId, reason]
+      );
+
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = 'P',
+           remarks = excluded.remarks,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [staffId, dateStr, reason]
+      );
+
+      await run(
+        `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+        [staffId, dateStr, dateStr, altDateStr]
+      );
+      const y = parseInt(dateParts[0], 10);
+      const m = parseInt(dateParts[1], 10);
+      try {
+        const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+        await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+      } catch (err) {
+        console.warn('Error regenerating TA claims in LR sync:', err.message);
+      }
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason, target_category_id: targetCatId, link_number: linkNum });
+    } else {
+      // Regular train duty (e.g. 12805, 17281, 12734, GTL, etc.)
+      const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
+      await run(
+        `INSERT INTO overrides (
+          staff_id, date, overridden_link_number, status, target_category_id,
+          reason, original_link_number, extra_train_no, is_extra,
+          shifted_from_link, shifted_from_train, shifted_place,
+          advance_train_no, is_advance_duty
+        ) VALUES (?, ?, NULL, 'EXTRA_CREW', 4, ?, NULL, ?, 1, NULL, NULL, 'LR_SHEET', NULL, 0)
+        ON CONFLICT(staff_id, date) DO UPDATE SET
+          overridden_link_number = NULL,
+          status = 'EXTRA_CREW',
+          target_category_id = 4,
+          reason = excluded.reason,
+          extra_train_no = excluded.extra_train_no,
+          is_extra = 1,
+          shifted_place = 'LR_SHEET'`,
+        [staffId, dateStr, reason, clean]
+      );
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = 'P',
+           remarks = excluded.remarks,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [staffId, dateStr, reason]
+      );
+
+      await run(
+        `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+        [staffId, dateStr, dateStr, altDateStr]
+      );
+      const y = parseInt(dateParts[0], 10);
+      const m = parseInt(dateParts[1], 10);
+      try {
+        const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+        await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+      } catch (err) {
+        console.warn('Error regenerating TA claims in LR sync:', err.message);
+      }
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
     }
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
   }
 }
 
@@ -15140,7 +15205,7 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '') {
 // ============================================================================
 app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
   try {
-    const { staff_id, date, duty_code, remarks } = req.body;
+    const { staff_id, date, duty_code, remarks, link_number, target_category_id } = req.body;
     if (!staff_id || !date) {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
@@ -15148,7 +15213,7 @@ app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
     const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
     const staffName = staffRow?.name || `Staff #${staff_id}`;
 
-    await syncLRSheetCellChange(staff_id, date, duty_code, remarks);
+    await syncLRSheetCellChange(staff_id, date, duty_code, remarks, { link_number, target_category_id });
 
     await logAudit(
       'Admin',
@@ -15191,7 +15256,7 @@ app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
         if (!item.staff_id || !item.date) {
           throw new Error('Missing staff_id or date');
         }
-        await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks);
+        await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks, { link_number: item.link_number, target_category_id: item.target_category_id });
         savedCount++;
         savedEmployeesSet.add(item.staff_id);
       } catch (itemErr) {
