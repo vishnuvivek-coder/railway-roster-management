@@ -14739,9 +14739,6 @@ app.get('/api/lr-sheet', async (req, res) => {
     if (!year) year = 2026;
     if (!month || month < 1 || month > 12) month = 9;
 
-    // Automatically check and synchronize with daily duty sheet
-    await syncLRSheetFromDailyDuty(year, month);
-
     const daysInMonth = new Date(year, month, 0).getDate();
     const days = [];
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
