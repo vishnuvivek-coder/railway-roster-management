@@ -10,13 +10,16 @@
     "dev:backend": "node src/backend/server.js",
     "dev:frontend": "npm run dev --prefix src/frontend",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "migrate:mysql": "node src/backend/migrate_to_mysql.js",
     "test": "node src/backend/test_rotation.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
+    "dotenv": "^18.0.7",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.5",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {

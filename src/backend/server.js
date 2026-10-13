@@ -2625,7 +2625,7 @@ async function executeDeleteStaff(staffId, res) {
   try {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
     if (!staff) {
-      return res.status(404).json({ error: 'Staff member not found' });
+      return res.json({ success: true, message: 'Staff member already deleted or does not exist.' });
     }
 
     const staffName = staff.name;
@@ -2650,6 +2650,11 @@ async function executeDeleteStaff(staffId, res) {
     // Re-index remaining staff in category to keep contiguous positions 1, 2, 3...
     if (catId) {
       const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
+      // First pass: assign temporary negative offsets to prevent UNIQUE(category_id, row_position) conflicts
+      for (let i = 0; i < remaining.length; i++) {
+        await run('UPDATE staff SET row_position = ? WHERE id = ?', [-(i + 1000), remaining[i].id]);
+      }
+      // Second pass: assign contiguous 1-based row positions
       for (let i = 0; i < remaining.length; i++) {
         await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remaining[i].id]);
       }

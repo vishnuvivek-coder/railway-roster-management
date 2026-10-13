@@ -1,15 +1,36 @@
+require('dotenv').config();
 const sqlite3 = require('sqlite3').verbose();
+const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
 const dbPath = path.join(__dirname, 'roster.db');
-const db = new sqlite3.Database(dbPath);
+const schemaSqlPath = path.join(__dirname, 'mysql_schema.sql');
 
-// Helper to run SQL
-const run = (sql, params = []) => {
+// Always initialize SQLite database instance for zero-downtime fallback
+const sqliteDb = new sqlite3.Database(dbPath);
+let mysqlPool = null;
+let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
+
+// Helper to run SQL with automatic dialect normalization
+const run = async (sql, params = []) => {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    let cleanSql = sql.trim();
+    if (cleanSql.toUpperCase() === 'BEGIN TRANSACTION') {
+      cleanSql = 'START TRANSACTION';
+    } else if (cleanSql.toUpperCase().startsWith('INSERT OR REPLACE INTO')) {
+      cleanSql = cleanSql.replace(/^INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
+    }
+    const [result] = await mysqlPool.query(cleanSql, params);
+    return {
+      lastID: result ? result.insertId : null,
+      changes: result ? result.affectedRows : 0
+    };
+  }
+
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    sqliteDb.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve(this);
     });
@@ -17,26 +38,116 @@ const run = (sql, params = []) => {
 };
 
 // Helper to query all rows
-const all = (sql, params = []) => {
+const all = async (sql, params = []) => {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    const [rows] = await mysqlPool.query(sql, params);
+    return rows || [];
+  }
+
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    sqliteDb.all(sql, params, (err, rows) => {
       if (err) reject(err);
-      else resolve(rows);
+      else resolve(rows || []);
     });
   });
 };
 
 // Helper to query single row
-const get = (sql, params = []) => {
+const get = async (sql, params = []) => {
+  if (activeEngine === 'mysql' && mysqlPool) {
+    const [rows] = await mysqlPool.query(sql, params);
+    return rows && rows.length > 0 ? rows[0] : null;
+  }
+
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    sqliteDb.get(sql, params, (err, row) => {
       if (err) reject(err);
-      else resolve(row);
+      else resolve(row || null);
     });
   });
 };
 
 async function initDb() {
+  const dbTypePref = (process.env.DB_TYPE || 'sqlite').toLowerCase();
+  
+  if (dbTypePref === 'mysql') {
+    const host = process.env.MYSQL_HOST || 'localhost';
+    const port = parseInt(process.env.MYSQL_PORT, 10) || 3306;
+    const user = process.env.MYSQL_USER || 'root';
+    const password = process.env.MYSQL_PASSWORD || '';
+    const database = process.env.MYSQL_DATABASE || 'railway_roster';
+
+    try {
+      console.log(`[DB Engine] Attempting connection to MySQL server at ${host}:${port} as '${user}'...`);
+      // Step 1: Ensure target database exists
+      const rootConn = await mysql.createConnection({ host, port, user, password });
+      await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+      await rootConn.end();
+
+      // Step 2: Establish MySQL connection pool
+      mysqlPool = mysql.createPool({
+        host,
+        port,
+        user,
+        password,
+        database,
+        waitForConnections: true,
+        connectionLimit: 20,
+        queueLimit: 0,
+        multipleStatements: true,
+        decimalNumbers: true
+      });
+
+      // Verify connection
+      await mysqlPool.query('SELECT 1');
+      activeEngine = 'mysql';
+
+      console.log(`\n================================================================`);
+      console.log(`🐬 [DATABASE ENGINE] Dedicated MySQL Active: Database '${database}'`);
+      console.log(`   Host: ${host}:${port} | User: ${user}`);
+      console.log(`================================================================\n`);
+
+      // Step 3: Ensure MySQL tables exist
+      if (fs.existsSync(schemaSqlPath)) {
+        const schemaSql = fs.readFileSync(schemaSqlPath, 'utf8');
+        await mysqlPool.query(schemaSql);
+      }
+
+      // Step 4: Ensure Admin 12345 / CLICKME exists
+      const clickmeHash = await bcrypt.hash('CLICKME', 10);
+      const primaryAdmin = await get("SELECT * FROM users WHERE username = '12345'");
+      if (!primaryAdmin) {
+        await run(
+          `INSERT INTO users (username, name, email, password_hash, role, status, approved_at, approved_by)
+           VALUES (?, ?, ?, ?, 'Admin', 'APPROVED', CURRENT_TIMESTAMP, 'SYSTEM')`,
+          ['12345', 'Railway Officer / Administrator', 'admin12345@railway.gov.in', clickmeHash]
+        );
+        console.log('[DB Engine] Seeded Admin (ID: 12345 / Password: CLICKME) in MySQL.');
+      } else {
+        await run(
+          `UPDATE users SET password_hash = ?, role = 'Admin', status = 'APPROVED' WHERE username = '12345'`,
+          [clickmeHash]
+        );
+      }
+
+      // Step 5: Check if staff or categories are present
+      const staffCount = await get("SELECT COUNT(*) as count FROM staff");
+      if (!staffCount || staffCount.count === 0) {
+        console.log(`[DB Engine] ℹ️ MySQL database tables are ready. Existing SQLite data can be migrated anytime via: npm run migrate:mysql`);
+      }
+
+      return;
+    } catch (mysqlErr) {
+      console.warn(`\n⚠️  [DATABASE WARNING] Could not connect to MySQL (${mysqlErr.message}).`);
+      console.warn(`    Falling back to SQLite database at ${dbPath}`);
+      console.warn(`    To use MySQL: Update MYSQL_PASSWORD in .env and run 'npm run migrate:mysql'\n`);
+      activeEngine = 'sqlite';
+    }
+  }
+
+  // --- SQLite Initialization (Fallback or when DB_TYPE=sqlite) ---
+  console.log(`[DB Engine] Using SQLite database (${dbPath})`);
+
   // Create users table for authentication & admin verification
   await run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -1462,7 +1573,9 @@ async function initDb() {
 }
 
 module.exports = {
-  db,
+  db: sqliteDb,
+  getDbEngine: () => activeEngine,
+  getPool: () => mysqlPool,
   initDb,
   run,
   all,
