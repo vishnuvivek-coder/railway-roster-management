@@ -234,10 +234,10 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
 
   // Links state: fallback fetch if not passed as prop
   const [internalLinksList, setInternalLinksList] = useState([]);
-  const linksList = propLinksList && propLinksList.length > 0 ? propLinksList : internalLinksList;
+  const linksList = (Array.isArray(propLinksList) && propLinksList.length > 0) ? propLinksList : internalLinksList;
 
   useEffect(() => {
-    if (!propLinksList || propLinksList.length === 0) {
+    if (!Array.isArray(propLinksList) || propLinksList.length === 0) {
       fetch(`${API_BASE}/links`)
         .then(res => res.json())
         .then(data => { if (Array.isArray(data)) setInternalLinksList(data); })

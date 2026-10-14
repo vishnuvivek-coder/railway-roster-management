@@ -19,22 +19,34 @@ let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
 const { AsyncLocalStorage } = require('async_hooks');
 const txStorage = new AsyncLocalStorage();
 
+// Helper to normalize SQL syntax differences between SQLite and MySQL
+const normalizeSqlForMysql = (sql) => {
+  if (!sql || typeof sql !== 'string') return sql;
+  let cleanSql = sql.trim();
+  if (cleanSql.toUpperCase() === 'BEGIN TRANSACTION') {
+    return 'START TRANSACTION';
+  }
+  if (cleanSql.toUpperCase().startsWith('INSERT OR REPLACE INTO')) {
+    cleanSql = cleanSql.replace(/^INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
+  }
+  // Normalize SQLite ON CONFLICT (...) DO UPDATE SET to MySQL ON DUPLICATE KEY UPDATE
+  if (/ON\s+CONFLICT/i.test(cleanSql)) {
+    cleanSql = cleanSql
+      .replace(/ON\s+CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+SET/gi, 'ON DUPLICATE KEY UPDATE')
+      .replace(/\bexcluded\.([a-zA-Z0-9_]+)\b/gi, 'VALUES($1)');
+  }
+  // Normalize CAST(... AS INTEGER) to CAST(... AS SIGNED)
+  cleanSql = cleanSql.replace(/\bCAST\s*\(\s*(.*?)\s+AS\s+INTEGER\s*\)/gi, 'CAST($1 AS SIGNED)');
+  // Normalize CAST(... AS TEXT) to CAST(... AS CHAR)
+  cleanSql = cleanSql.replace(/\bCAST\s*\(\s*(.*?)\s+AS\s+TEXT\s*\)/gi, 'CAST($1 AS CHAR)');
+  return cleanSql;
+};
+
 // Helper to run SQL with automatic dialect normalization
 const run = async (sql, params = []) => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
-    let cleanSql = sql.trim();
-    if (cleanSql.toUpperCase() === 'BEGIN TRANSACTION') {
-      cleanSql = 'START TRANSACTION';
-    } else if (cleanSql.toUpperCase().startsWith('INSERT OR REPLACE INTO')) {
-      cleanSql = cleanSql.replace(/^INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
-    }
-    // Normalize SQLite ON CONFLICT (...) DO UPDATE SET to MySQL ON DUPLICATE KEY UPDATE
-    if (/ON\s+CONFLICT/i.test(cleanSql)) {
-      cleanSql = cleanSql
-        .replace(/ON\s+CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+SET/gi, 'ON DUPLICATE KEY UPDATE')
-        .replace(/\bexcluded\.([a-zA-Z0-9_]+)\b/gi, 'VALUES($1)');
-    }
+    const cleanSql = normalizeSqlForMysql(sql);
     const client = (txStore && txStore.mysqlConnection) ? txStore.mysqlConnection : mysqlPool;
     if (client) {
       const [result] = await client.query(cleanSql, params);
@@ -57,9 +69,10 @@ const run = async (sql, params = []) => {
 const all = async (sql, params = []) => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
+    const cleanSql = normalizeSqlForMysql(sql);
     const client = (txStore && txStore.mysqlConnection) ? txStore.mysqlConnection : mysqlPool;
     if (client) {
-      const [rows] = await client.query(sql, params);
+      const [rows] = await client.query(cleanSql, params);
       return rows || [];
     }
   }
@@ -76,9 +89,10 @@ const all = async (sql, params = []) => {
 const get = async (sql, params = []) => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
+    const cleanSql = normalizeSqlForMysql(sql);
     const client = (txStore && txStore.mysqlConnection) ? txStore.mysqlConnection : mysqlPool;
     if (client) {
-      const [rows] = await client.query(sql, params);
+      const [rows] = await client.query(cleanSql, params);
       return rows && rows.length > 0 ? rows[0] : null;
     }
   }

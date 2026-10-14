@@ -3329,7 +3329,7 @@ app.get('/api/links', async (req, res) => {
         params.push(category_id);
       }
     }
-    sql += ' ORDER BY category_id, CAST(link_number AS INTEGER) ASC, link_number ASC, date(effective_from) DESC';
+    sql += ' ORDER BY category_id, CAST(link_number AS SIGNED) ASC, link_number ASC, date(effective_from) DESC';
     let links = await all(sql, params);
     if (date) {
       links = links.map(link => {
@@ -11108,7 +11108,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           statusReason = 'Weekly rest day at Headquarters GNT; available for call-up / emergency booking (earns CR)';
           currentLocation = '🏠 GNT (Weekly Rest)';
           catBreakdown.available_weekly_rest++;
-        } else if (((!date || date >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62]).includes(activeLink) || (dutyDetails && dutyDetails.train_numbers && String(dutyDetails.train_numbers).toUpperCase().includes('NON DAILY'))) {
+        } else if (((!targetDate || targetDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62]).includes(activeLink) || (dutyDetails && dutyDetails.train_numbers && String(dutyDetails.train_numbers).toUpperCase().includes('NON DAILY'))) {
           // Category 2 Non-Daily Links (53, 54, 55 from Oct 1, 2026)
           if (override && (override.extra_train_no || override.advance_train_no)) {
             isAvailable = false;

@@ -254,6 +254,7 @@ export default function DutyEditModal({
   onSuccess
 }) {
   const [selectedDate, setSelectedDate] = useState(dutyModal.date || new Date().toISOString().split('T')[0]);
+  const safeLinksList = useMemo(() => Array.isArray(allLinksList) ? allLinksList : [], [allLinksList]);
 
   // Determine whether slot is vacant
   const isSlotVacant = Boolean(
@@ -587,18 +588,18 @@ export default function DutyEditModal({
     if (dutyModal.target_category_id) return String(dutyModal.target_category_id);
     if (dutyModal.targetCategoryId) return String(dutyModal.targetCategoryId);
     const linkNum = dutyModal.link_number ?? dutyModal.currentLink ?? dutyModal.originalLink;
-    if (linkNum !== null && linkNum !== undefined && linkNum !== '' && allLinksList) {
+    if (linkNum !== null && linkNum !== undefined && linkNum !== '' && safeLinksList.length > 0) {
       const parsedLinkNum = parseInt(linkNum, 10);
       if (dutyModal.categoryId && dutyModal.categoryId !== 4) {
-        const directMatch = allLinksList.find(l => l.link_number === parsedLinkNum && l.category_id === dutyModal.categoryId);
+        const directMatch = safeLinksList.find(l => l.link_number === parsedLinkNum && l.category_id === dutyModal.categoryId);
         if (directMatch) return String(directMatch.category_id);
       }
-      const anyMatch = allLinksList.find(l => l.link_number === parsedLinkNum);
+      const anyMatch = safeLinksList.find(l => l.link_number === parsedLinkNum);
       if (anyMatch) return String(anyMatch.category_id);
     }
     if (dutyModal.categoryId && dutyModal.categoryId !== 4) return String(dutyModal.categoryId);
     return '1';
-  }, [dutyModal, allLinksList]);
+  }, [dutyModal, safeLinksList]);
 
   const targetLink = useMemo(() => {
     if (dutyModal.currentLink !== null && dutyModal.currentLink !== undefined && dutyModal.currentLink !== '') {
@@ -621,12 +622,12 @@ export default function DutyEditModal({
 
   // Find link details if present
   const linkDetails = useMemo(() => {
-    if (!targetLink || !allLinksList) return null;
-    return allLinksList.find(l => 
+    if (!targetLink || safeLinksList.length === 0) return null;
+    return safeLinksList.find(l => 
       String(l.category_id) === String(targetCategoryId) && 
       String(l.link_number) === String(targetLink)
     ) || null;
-  }, [targetLink, targetCategoryId, allLinksList]);
+  }, [targetLink, targetCategoryId, safeLinksList]);
 
   // Day of week
   const dObj = new Date(selectedDate);
@@ -799,7 +800,7 @@ export default function DutyEditModal({
 
     const dOffset = getDayOffset(cat.anchor_date, targetDateStr);
     const linkNum = getBaseLinkNumber(staffMember.row_position, dOffset, cat.cycle_length);
-    const linkDef = (allLinksList || []).find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
+    const linkDef = safeLinksList.find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
 
     if (!linkDef || linkDef.is_rest) {
       return { label: `Link #${linkNum} (Weekly REST)`, isRest: true, isLr: false, linkNum };
@@ -820,7 +821,7 @@ export default function DutyEditModal({
       isLr: false,
       linkNum
     };
-  }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
+  }, [categories, safeLinksList, dailyDuties, allDailyStaffDuties]);
 
   // Helper to determine whether an employee is already assigned to a train or active duty on targetDateStr,
   // or is completely unavailable for booking (Weekly REST, Sick, Leave, CR, Absent)
@@ -1001,7 +1002,7 @@ export default function DutyEditModal({
 
     const dOffset = getDayOffset(cat.anchor_date, targetDateStr);
     const linkNum = getBaseLinkNumber(staffMember.row_position, dOffset, cat.cycle_length);
-    const linkDef = (allLinksList || []).find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
+    const linkDef = safeLinksList.find(l => String(l.category_id) === String(cat.id) && l.link_number === linkNum);
 
     if (!linkDef || linkDef.is_rest) {
       return {
@@ -1033,7 +1034,7 @@ export default function DutyEditModal({
       linkNum,
       trainNo: linkDef.train_numbers
     };
-  }, [categories, allLinksList, dailyDuties, allDailyStaffDuties]);
+  }, [categories, safeLinksList, dailyDuties, allDailyStaffDuties]);
 
   // Eligible replacement staff for Delete mode (Strictly in Alphabetical Order A to Z)
   // When replacementCatId === 'ENTIRE_ROSTER': ALL staff members across the entire roster are included!
@@ -3145,7 +3146,7 @@ export default function DutyEditModal({
                             style={{ fontSize: '0.84rem' }}
                           >
                             <option value="">-- Choose Link --</option>
-                            {(allLinksList || [])
+                            {safeLinksList
                               .filter(l => String(l.category_id) === String(shiftedCatId))
                               .map(l => (
                                 <option key={l.id || l.link_number} value={l.link_number}>
@@ -3424,7 +3425,7 @@ export default function DutyEditModal({
 
                     {/* Selected COR Link Train Card */}
                     {(() => {
-                      const selectedCorDef = corLinksData.find(l => l.link_number === parseInt(targetCorLink, 10)) || (allLinksList || []).find(l => l.category_id === 1 && l.link_number === parseInt(targetCorLink, 10));
+                      const selectedCorDef = corLinksData.find(l => l.link_number === parseInt(targetCorLink, 10)) || safeLinksList.find(l => l.category_id === 1 && l.link_number === parseInt(targetCorLink, 10));
                       if (!selectedCorDef) return null;
                       return (
                         <div style={{

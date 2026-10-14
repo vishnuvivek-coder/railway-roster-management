@@ -1827,8 +1827,18 @@ export default function App() {
     { staff_ids: [], train_out: '', coach_out: '', train_return: '', coach_return: '', duty_label: '', notes: '' }
   ]);
   const [allStaffList, setAllStaffList] = useState([]);
-  const [allLinksList, setAllLinksList] = useState([]);
+  const [allLinksList, setAllLinksListRaw] = useState([]);
   const [recoData, setRecoData] = useState(null);
+  const setAllLinksList = useCallback((val) => {
+    if (typeof val === 'function') {
+      setAllLinksListRaw(prev => {
+        const res = val(prev);
+        return Array.isArray(res) ? res : [];
+      });
+    } else {
+      setAllLinksListRaw(Array.isArray(val) ? val : []);
+    }
+  }, []);
   const [recoLoading, setRecoLoading] = useState(false);
   const [historySearch, setHistorySearch] = useState('');
   const [historyStartDate, setHistoryStartDate] = useState('2026-07-01');
@@ -2689,9 +2699,10 @@ export default function App() {
     }
 
     const catId = categoryIds[0];
+    const safeLinks = Array.isArray(allLinksList) ? allLinksList : [];
     if (catId) {
       if (row.train_out) {
-        const outMatch = allLinksList.some(link => 
+        const outMatch = safeLinks.some(link => 
           link.status !== 'draft' &&
           (!link.link_set_id || linkSetsList.find(s => String(s.id) === String(link.link_set_id))?.status !== 'draft') &&
           String(link.category_id) === String(catId) && 
@@ -2712,7 +2723,7 @@ export default function App() {
       }
 
       if (row.train_return) {
-        const returnMatch = allLinksList.some(link => 
+        const returnMatch = safeLinks.some(link => 
           link.status !== 'draft' &&
           (!link.link_set_id || linkSetsList.find(s => String(s.id) === String(link.link_set_id))?.status !== 'draft') &&
           String(link.category_id) === String(catId) && 
@@ -6468,6 +6479,7 @@ export default function App() {
                     return true;
                   };
 
+                  const safeLinksList = Array.isArray(allLinksList) ? allLinksList : [];
                   slotsList.forEach(slot => {
                     const customSlot = slotCustomizations[`slot_${slot.slotId}`] || {};
 
@@ -6476,7 +6488,7 @@ export default function App() {
                     let dynamicSlotLast = '';
                     if (Array.isArray(slot.links)) {
                       for (const lDef of slot.links) {
-                        const matched = allLinksList.find(al => 
+                        const matched = safeLinksList.find(al => 
                           matchesLinkSet(al) &&
                           parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                           parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
@@ -6500,7 +6512,7 @@ export default function App() {
                       const dutyKey = `slot_${slot.slotId}_link_${lDef.categoryId || 0}_${lDef.linkNum}`;
                       const customDuty = slotCustomizations[dutyKey] || {};
 
-                      const matchedLink = allLinksList.find(al => 
+                      const matchedLink = safeLinksList.find(al => 
                         matchesLinkSet(al) &&
                         parseInt(al.category_id, 10) === parseInt(lDef.categoryId, 10) && 
                         parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
