@@ -74,7 +74,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
-const { initDb, run, all, get } = require('./db');
+const { initDb, run, all, get, withTransaction } = require('./db');
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 const { findScheduledRestDate, computeRestAdjustment, getWeekday, getWeeklyRestWeekday } = require('./restAdjustment');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
@@ -2631,41 +2631,44 @@ async function executeDeleteStaff(staffId, res) {
     const staffName = staff.name;
     const catId = staff.category_id;
 
-    // Cascade delete across all linked tables to maintain absolute data integrity
-    try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staffId, staffId]); } catch (e) {}
-    try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staffId, staffId]); } catch (e) {}
-    try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staffId]); } catch (e) {}
-    try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staffId]); } catch (e) {}
+    await withTransaction(async () => {
+      // Cascade delete across all linked tables to maintain absolute data integrity
+      await run('DELETE FROM muster_records WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staffId, staffId]);
+      await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM ta_entries WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM nda_entries WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM diary_entries WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staffId, staffId]);
+      await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]);
+      await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staffId]);
+      await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staffId]);
+      await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staffId]);
 
-    await run('DELETE FROM staff WHERE id = ?', [staffId]);
-    
-    // Re-index remaining staff in category to keep contiguous positions 1, 2, 3...
-    if (catId) {
-      const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
-      // First pass: assign temporary negative offsets to prevent UNIQUE(category_id, row_position) conflicts
-      for (let i = 0; i < remaining.length; i++) {
-        await run('UPDATE staff SET row_position = ? WHERE id = ?', [-(i + 1000), remaining[i].id]);
+      await run('DELETE FROM staff WHERE id = ?', [staffId]);
+      
+      // Re-index remaining staff in category to keep contiguous positions 1, 2, 3...
+      if (catId) {
+        const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
+        // First pass: assign temporary negative offsets to prevent UNIQUE(category_id, row_position) conflicts
+        for (let i = 0; i < remaining.length; i++) {
+          await run('UPDATE staff SET row_position = ? WHERE id = ?', [-(i + 1000), remaining[i].id]);
+        }
+        // Second pass: assign contiguous 1-based row positions
+        for (let i = 0; i < remaining.length; i++) {
+          await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remaining[i].id]);
+        }
+        try {
+          await run('UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = ?) WHERE id = ?', [catId, catId]);
+        } catch (e) {}
       }
-      // Second pass: assign contiguous 1-based row positions
-      for (let i = 0; i < remaining.length; i++) {
-        await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remaining[i].id]);
-      }
-      try {
-        await run('UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = ?) WHERE id = ?', [catId, catId]);
-      } catch (e) {}
-    }
 
-    await logAudit('Admin', 'DELETE_STAFF', `Deleted staff member '${staffName}' (ID: ${staffId})`);
+      await logAudit('Admin', 'DELETE_STAFF', `Deleted staff member '${staffName}' (ID: ${staffId})`);
+    });
+
     return res.json({ success: true, message: `Staff member '${staffName}' permanently deleted from database.` });
   } catch (err) {
     console.error('Error deleting staff:', err);
@@ -4425,7 +4428,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
     
-    // Determine dates array to update (supports single date or date range)
+    return await withTransaction(async () => {
+      // Determine dates array to update (supports single date or date range)
     const datesToProcess = [];
     const startDate = new Date(date + 'T12:00:00');
     const endDate = (to_date && to_date >= date) ? new Date(to_date + 'T12:00:00') : startDate;
@@ -6674,6 +6678,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
     }
 
     return res.status(400).json({ error: 'Invalid action specified' });
+    });
   } catch (err) {
     console.error('Error changing duty status:', err);
     res.status(500).json({ error: err.message });
@@ -6706,210 +6711,215 @@ app.post('/api/duty/exchange-staff', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'One or both staff members not found' });
     }
 
-    const catA = await get('SELECT * FROM categories WHERE id = ?', [staffA.category_id]);
-    const catB = await get('SELECT * FROM categories WHERE id = ?', [staffB.category_id]);
+    let labelA = '';
+    let labelB = '';
 
-    const dayOffsetA = getDayOffset(catA.anchor_date, date);
-    const dayOffsetB = getDayOffset(catB.anchor_date, date);
+    await withTransaction(async () => {
+      const catA = await get('SELECT * FROM categories WHERE id = ?', [staffA.category_id]);
+      const catB = await get('SELECT * FROM categories WHERE id = ?', [staffB.category_id]);
 
-    const origLinkA = getBaseLinkNumber(staffA.row_position, dayOffsetA, catA.cycle_length);
-    const origLinkB = getBaseLinkNumber(staffB.row_position, dayOffsetB, catB.cycle_length);
+      const dayOffsetA = getDayOffset(catA.anchor_date, date);
+      const dayOffsetB = getDayOffset(catB.anchor_date, date);
 
-    const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, date]);
-    const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, date]);
+      const origLinkA = getBaseLinkNumber(staffA.row_position, dayOffsetA, catA.cycle_length);
+      const origLinkB = getBaseLinkNumber(staffB.row_position, dayOffsetB, catB.cycle_length);
 
-    const existingMusterA = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffA.id, date]);
-    const existingMusterB = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffB.id, date]);
+      const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, date]);
+      const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, date]);
 
-    // Determine current effective duty of Staff A
-    let currentDutyA = null;
-    let targetCatA = staffA.category_id;
-    if (duty_a_link !== undefined && duty_a_link !== null && duty_a_link !== '') {
-      currentDutyA = parseInt(duty_a_link, 10);
-      if (duty_a_category_id) targetCatA = parseInt(duty_a_category_id, 10);
-    } else if (existingOverrideA) {
-      if (existingOverrideA.overridden_link_number !== null) {
-        currentDutyA = existingOverrideA.overridden_link_number;
-        targetCatA = existingOverrideA.target_category_id || staffA.category_id;
+      const existingMusterA = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffA.id, date]);
+      const existingMusterB = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staffB.id, date]);
+
+      // Determine current effective duty of Staff A
+      let currentDutyA = null;
+      let targetCatA = staffA.category_id;
+      if (duty_a_link !== undefined && duty_a_link !== null && duty_a_link !== '') {
+        currentDutyA = parseInt(duty_a_link, 10);
+        if (duty_a_category_id) targetCatA = parseInt(duty_a_category_id, 10);
+      } else if (existingOverrideA) {
+        if (existingOverrideA.overridden_link_number !== null) {
+          currentDutyA = existingOverrideA.overridden_link_number;
+          targetCatA = existingOverrideA.target_category_id || staffA.category_id;
+        } else {
+          // Fallback: If relieved/spare, use their original duty link
+          currentDutyA = existingOverrideA.original_link_number || origLinkA;
+          targetCatA = existingOverrideA.target_category_id || staffA.category_id;
+        }
       } else {
-        // Fallback: If relieved/spare, use their original duty link
-        currentDutyA = existingOverrideA.original_link_number || origLinkA;
-        targetCatA = existingOverrideA.target_category_id || staffA.category_id;
+        currentDutyA = origLinkA;
+        const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
+        if (!linkDefA || linkDefA.is_rest) currentDutyA = null;
       }
-    } else {
-      currentDutyA = origLinkA;
-      const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
-      if (!linkDefA || linkDefA.is_rest) currentDutyA = null;
-    }
 
-    // Determine current effective duty of Staff B
-    let currentDutyB = null;
-    let targetCatB = staffB.category_id;
-    if (duty_b_link !== undefined && duty_b_link !== null && duty_b_link !== '') {
-      currentDutyB = parseInt(duty_b_link, 10);
-      if (duty_b_category_id) targetCatB = parseInt(duty_b_category_id, 10);
-    } else if (existingOverrideB) {
-      if (existingOverrideB.overridden_link_number !== null) {
-        currentDutyB = existingOverrideB.overridden_link_number;
-        targetCatB = existingOverrideB.target_category_id || staffB.category_id;
+      // Determine current effective duty of Staff B
+      let currentDutyB = null;
+      let targetCatB = staffB.category_id;
+      if (duty_b_link !== undefined && duty_b_link !== null && duty_b_link !== '') {
+        currentDutyB = parseInt(duty_b_link, 10);
+        if (duty_b_category_id) targetCatB = parseInt(duty_b_category_id, 10);
+      } else if (existingOverrideB) {
+        if (existingOverrideB.overridden_link_number !== null) {
+          currentDutyB = existingOverrideB.overridden_link_number;
+          targetCatB = existingOverrideB.target_category_id || staffB.category_id;
+        } else {
+          // Fallback: If relieved/spare, use their original duty link
+          currentDutyB = existingOverrideB.original_link_number || origLinkB;
+          targetCatB = existingOverrideB.target_category_id || staffB.category_id;
+        }
       } else {
-        // Fallback: If relieved/spare, use their original duty link
-        currentDutyB = existingOverrideB.original_link_number || origLinkB;
-        targetCatB = existingOverrideB.target_category_id || staffB.category_id;
+        currentDutyB = origLinkB;
+        const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]);
+        if (!linkDefB || linkDefB.is_rest) currentDutyB = null;
       }
-    } else {
-      currentDutyB = origLinkB;
-      const linkDefB = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]);
-      if (!linkDefB || linkDefB.is_rest) currentDutyB = null;
-    }
 
-    // Exchange: Staff A receives Staff B's duty, Staff B receives Staff A's duty
-    const newDutyA = currentDutyB;
-    let newCatA = targetCatB;
-    if (newDutyA !== null) {
-      const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
-        [newDutyA, targetCatB || staffB.category_id]
+      // Exchange: Staff A receives Staff B's duty, Staff B receives Staff A's duty
+      const newDutyA = currentDutyB;
+      let newCatA = targetCatB;
+      if (newDutyA !== null) {
+        const linkDef = await get(
+          'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
+          [newDutyA, targetCatB || staffB.category_id]
+        );
+        if (linkDef) newCatA = linkDef.category_id;
+      }
+      const newStatusA = newDutyA === null ? 'REST' : 'CHANGED_LINK';
+      const reasonA = reason ? `Exchange with ${staffB.name}: ${reason}` : `Exchanged duty with ${staffB.name}`;
+
+      const newDutyB = currentDutyA;
+      let newCatB = targetCatA;
+      if (newDutyB !== null) {
+        const linkDef = await get(
+          'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
+          [newDutyB, targetCatA || staffA.category_id]
+        );
+        if (linkDef) newCatB = linkDef.category_id;
+      }
+
+      const newStatusB = newDutyB === null ? 'REST' : 'CHANGED_LINK';
+      const reasonB = reason ? `Exchange with ${staffA.name}: ${reason}` : `Exchanged duty with ${staffA.name}`;
+
+      const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
+      const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
+
+      // Apply override for Staff A
+      await run(
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           overridden_link_number = excluded.overridden_link_number,
+           status = excluded.status,
+           substitute_staff_id = NULL,
+           substitute_name = NULL,
+           leave_type = NULL,
+           reason = excluded.reason,
+           target_category_id = excluded.target_category_id`,
+        [staffA.id, date, effectiveOrigA, newDutyA, newStatusA, reasonA, newCatA]
       );
-      if (linkDef) newCatA = linkDef.category_id;
-    }
-    const newStatusA = newDutyA === null ? 'REST' : 'CHANGED_LINK';
-    const reasonA = reason ? `Exchange with ${staffB.name}: ${reason}` : `Exchanged duty with ${staffB.name}`;
 
-    const newDutyB = currentDutyA;
-    let newCatB = targetCatA;
-    if (newDutyB !== null) {
-      const linkDef = await get(
-        'SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY (category_id = ?) DESC LIMIT 1',
-        [newDutyB, targetCatA || staffA.category_id]
+      // Apply override for Staff B
+      await run(
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           overridden_link_number = excluded.overridden_link_number,
+           status = excluded.status,
+           substitute_staff_id = NULL,
+           substitute_name = NULL,
+           leave_type = NULL,
+           reason = excluded.reason,
+           target_category_id = excluded.target_category_id`,
+        [staffB.id, date, effectiveOrigB, newDutyB, newStatusB, reasonB, newCatB]
       );
-      if (linkDef) newCatB = linkDef.category_id;
-    }
 
-    const newStatusB = newDutyB === null ? 'REST' : 'CHANGED_LINK';
-    const reasonB = reason ? `Exchange with ${staffA.name}: ${reason}` : `Exchanged duty with ${staffA.name}`;
+      // Muster updates: P for duty, R for rest
+      const musterCodeA = newDutyA === null ? 'R' : 'P';
+      const musterCodeB = newDutyB === null ? 'R' : 'P';
 
-    const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
-    const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = excluded.code,
+           remarks = excluded.remarks,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [staffA.id, date, musterCodeA, reasonA]
+      );
 
-    // Apply override for Staff A
-    await run(
-      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         overridden_link_number = excluded.overridden_link_number,
-         status = excluded.status,
-         substitute_staff_id = NULL,
-         substitute_name = NULL,
-         leave_type = NULL,
-         reason = excluded.reason,
-         target_category_id = excluded.target_category_id`,
-      [staffA.id, date, effectiveOrigA, newDutyA, newStatusA, reasonA, newCatA]
-    );
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = excluded.code,
+           remarks = excluded.remarks,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [staffB.id, date, musterCodeB, reasonB]
+      );
 
-    // Apply override for Staff B
-    await run(
-      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         overridden_link_number = excluded.overridden_link_number,
-         status = excluded.status,
-         substitute_staff_id = NULL,
-         substitute_name = NULL,
-         leave_type = NULL,
-         reason = excluded.reason,
-         target_category_id = excluded.target_category_id`,
-      [staffB.id, date, effectiveOrigB, newDutyB, newStatusB, reasonB, newCatB]
-    );
+      // Sync with Leave Reserve (LR) sheet if staffA or staffB is Category 4
+      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dObj = new Date(date + 'T12:00:00');
+      const dayOfWeek = dayNames[dObj.getDay()];
 
-    // Muster updates: P for duty, R for rest
-    const musterCodeA = newDutyA === null ? 'R' : 'P';
-    const musterCodeB = newDutyB === null ? 'R' : 'P';
-
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-       VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         code = excluded.code,
-         remarks = excluded.remarks,
-         updated_by = excluded.updated_by,
-         updated_at = CURRENT_TIMESTAMP`,
-      [staffA.id, date, musterCodeA, reasonA]
-    );
-
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-       VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         code = excluded.code,
-         remarks = excluded.remarks,
-         updated_by = excluded.updated_by,
-         updated_at = CURRENT_TIMESTAMP`,
-      [staffB.id, date, musterCodeB, reasonB]
-    );
-
-    // Sync with Leave Reserve (LR) sheet if staffA or staffB is Category 4
-    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const dObj = new Date(date + 'T12:00:00');
-    const dayOfWeek = dayNames[dObj.getDay()];
-
-    if (staffA.category_id === 4) {
-      const resA = await resolveDutyCodeForLRStaff(staffA.id, date, dayOfWeek, staffA.rest_day);
-      if (resA && resA.code) {
-        await syncLRSheetRecord(staffA.id, date, resA.code, reasonA);
-      } else if (newDutyA === null) {
-        await syncLRSheetRecord(staffA.id, date, 'R', reasonA);
+      if (staffA.category_id === 4) {
+        const resA = await resolveDutyCodeForLRStaff(staffA.id, date, dayOfWeek, staffA.rest_day);
+        if (resA && resA.code) {
+          await syncLRSheetRecord(staffA.id, date, resA.code, reasonA);
+        } else if (newDutyA === null) {
+          await syncLRSheetRecord(staffA.id, date, 'R', reasonA);
+        }
       }
-    }
 
-    if (staffB.category_id === 4) {
-      const resB = await resolveDutyCodeForLRStaff(staffB.id, date, dayOfWeek, staffB.rest_day);
-      if (resB && resB.code) {
-        await syncLRSheetRecord(staffB.id, date, resB.code, reasonB);
-      } else if (newDutyB === null) {
-        await syncLRSheetRecord(staffB.id, date, 'R', reasonB);
+      if (staffB.category_id === 4) {
+        const resB = await resolveDutyCodeForLRStaff(staffB.id, date, dayOfWeek, staffB.rest_day);
+        if (resB && resB.code) {
+          await syncLRSheetRecord(staffB.id, date, resB.code, reasonB);
+        } else if (newDutyB === null) {
+          await syncLRSheetRecord(staffB.id, date, 'R', reasonB);
+        }
       }
-    }
 
-    // Synchronize across TA approvals and documents for both staff
-    await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, date, {
-      targetLink: newDutyA,
-      isLeave: false,
-      isRest: newDutyA === null,
-      remarks: reasonA
+      // Synchronize across TA approvals and documents for both staff
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, date, {
+        targetLink: newDutyA,
+        isLeave: false,
+        isRest: newDutyA === null,
+        remarks: reasonA
+      });
+      await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, date, {
+        targetLink: newDutyB,
+        isLeave: false,
+        isRest: newDutyB === null,
+        remarks: reasonB
+      });
+
+      const undoData = {
+        action: 'EXCHANGE_STAFF',
+        date,
+        staff_a: {
+          id: staffA.id,
+          name: staffA.name,
+          previous_override: existingOverrideA || null,
+          previous_muster: existingMusterA || null
+        },
+        staff_b: {
+          id: staffB.id,
+          name: staffB.name,
+          previous_override: existingOverrideB || null,
+          previous_muster: existingMusterB || null
+        }
+      };
+
+      labelA = newDutyA === null ? 'REST' : `Link ${newDutyA}`;
+      labelB = newDutyB === null ? 'REST' : `Link ${newDutyB}`;
+      await logAudit(
+        'Admin',
+        'EXCHANGE_STAFF',
+        `Exchanged duties between ${staffA.name} (${labelA}) and ${staffB.name} (${labelB}) on ${date}`,
+        undoData
+      );
     });
-    await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, date, {
-      targetLink: newDutyB,
-      isLeave: false,
-      isRest: newDutyB === null,
-      remarks: reasonB
-    });
-
-    const undoData = {
-      action: 'EXCHANGE_STAFF',
-      date,
-      staff_a: {
-        id: staffA.id,
-        name: staffA.name,
-        previous_override: existingOverrideA || null,
-        previous_muster: existingMusterA || null
-      },
-      staff_b: {
-        id: staffB.id,
-        name: staffB.name,
-        previous_override: existingOverrideB || null,
-        previous_muster: existingMusterB || null
-      }
-    };
-
-    const labelA = newDutyA === null ? 'REST' : `Link ${newDutyA}`;
-    const labelB = newDutyB === null ? 'REST' : `Link ${newDutyB}`;
-    await logAudit(
-      'Admin',
-      'EXCHANGE_STAFF',
-      `Exchanged duties between ${staffA.name} (${labelA}) and ${staffB.name} (${labelB}) on ${date}`,
-      undoData
-    );
 
     res.json({
       success: true,
@@ -13603,7 +13613,8 @@ app.get('/api/muster', async (req, res) => {
  * Synchronize Muster Record status across Overrides, TA Approvals, LR Sheet, and TA Entries
  */
 async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, remarks = '') {
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  return await withTransaction(async () => {
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   const isLeave = ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(cleanCode);
   const isSick = cleanCode === 'SICK';
   const isCr = cleanCode === 'CR';
@@ -13731,7 +13742,8 @@ async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, re
     }
 
     await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedDutyCode, remarks: remarks || 'Muster: Present' });
-  }
+    }
+  });
 }
 
 async function restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr) {
@@ -13775,7 +13787,8 @@ async function restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr) 
 }
 
 async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  return await withTransaction(async () => {
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
   const dateParts = dateStr.split('-');
   const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
 
@@ -13802,6 +13815,7 @@ async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
   }
 
   await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedCode, remarks: '' });
+  });
 }
 
 // POST /api/muster/update-cell - Update or assign code for a single employee cell
@@ -13826,30 +13840,32 @@ app.post('/api/muster/update-cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: `Invalid code. Must be one of: ${ALLOWED_MUSTER_CODES.join(', ')} or blank` });
     }
 
-    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
-    const staffName = staffRow?.name || `Staff #${staff_id}`;
+    await withTransaction(async () => {
+      const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+      const staffName = staffRow?.name || `Staff #${staff_id}`;
 
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-       VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-       ON CONFLICT(staff_id, date) DO UPDATE SET
-         code = excluded.code,
-         remarks = excluded.remarks,
-         updated_by = excluded.updated_by,
-         updated_at = CURRENT_TIMESTAMP`,
-      [staff_id, date, cleanCode, remarks || null]
-    );
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+         VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           code = excluded.code,
+           remarks = excluded.remarks,
+           updated_by = excluded.updated_by,
+           updated_at = CURRENT_TIMESTAMP`,
+        [staff_id, date, cleanCode, remarks || null]
+      );
 
-    // Synchronize to Overrides, Daily View, TA Approvals, NDA, Diary, Daily Earnings, and LR Sheet
-    await syncMusterToSchedulesAndApprovals(staff_id, date, cleanCode, remarks);
+      // Synchronize to Overrides, Daily View, TA Approvals, NDA, Diary, Daily Earnings, and LR Sheet
+      await syncMusterToSchedulesAndApprovals(staff_id, date, cleanCode, remarks);
 
-    const auditActionDesc = cleanCode === '' ? 'Cleared muster code to blank' : `Assigned muster code '${cleanCode}'`;
-    await logAudit(
-      'Admin',
-      'MUSTER_CELL_UPDATE',
-      `${auditActionDesc} for ${staffName} (ID ${staff_id}) on ${date} — synchronized to Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
-      { staffId: staff_id, staffName, date, code: cleanCode, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
-    );
+      const auditActionDesc = cleanCode === '' ? 'Cleared muster code to blank' : `Assigned muster code '${cleanCode}'`;
+      await logAudit(
+        'Admin',
+        'MUSTER_CELL_UPDATE',
+        `${auditActionDesc} for ${staffName} (ID ${staff_id}) on ${date} — synchronized to Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
+        { staffId: staff_id, staffName, date, code: cleanCode, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+      );
+    });
     res.json({ success: true, message: cleanCode === '' ? 'Muster cell kept blank to fill later' : `Muster cell updated to ${cleanCode} and synchronized across all sheets & documents` });
   } catch (err) {
     console.error('Error updating muster cell:', err);
@@ -13874,18 +13890,20 @@ app.post('/api/muster/reset-cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
 
-    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
-    const staffName = staffRow?.name || `Staff #${staff_id}`;
+    await withTransaction(async () => {
+      const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+      const staffName = staffRow?.name || `Staff #${staff_id}`;
 
-    await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
-    await revertMusterFromSchedulesAndApprovals(staff_id, date);
+      await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+      await revertMusterFromSchedulesAndApprovals(staff_id, date);
 
-    await logAudit(
-      'Admin',
-      'MUSTER_CELL_RESET',
-      `Reset muster cell for ${staffName} (ID ${staff_id}) on ${date} to baseline — synchronized across Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
-      { staffId: staff_id, staffName, date, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
-    );
+      await logAudit(
+        'Admin',
+        'MUSTER_CELL_RESET',
+        `Reset muster cell for ${staffName} (ID ${staff_id}) on ${date} to baseline — synchronized across Daily Summary, Monthly Movement, TA, NDA, Diary, Earnings & LR Sheet`,
+        { staffId: staff_id, staffName, date, savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+      );
+    });
     res.json({ success: true, message: 'Cell reset to cyclic baseline and synchronized' });
   } catch (err) {
     console.error('Error resetting muster cell:', err);
@@ -13935,18 +13953,20 @@ app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
           throw new Error(`Invalid attendance code "${cleanCode}" on ${item.date}`);
         }
 
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             code = excluded.code,
-             remarks = excluded.remarks,
-             updated_by = excluded.updated_by,
-             updated_at = CURRENT_TIMESTAMP`,
-          [item.staff_id, item.date, cleanCode, item.remarks || null]
-        );
+        await withTransaction(async () => {
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+             VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               code = excluded.code,
+               remarks = excluded.remarks,
+               updated_by = excluded.updated_by,
+               updated_at = CURRENT_TIMESTAMP`,
+            [item.staff_id, item.date, cleanCode, item.remarks || null]
+          );
 
-        await syncMusterToSchedulesAndApprovals(item.staff_id, item.date, cleanCode, item.remarks);
+          await syncMusterToSchedulesAndApprovals(item.staff_id, item.date, cleanCode, item.remarks);
+        });
         savedCount++;
         savedEmployeesSet.add(item.staff_id);
       } catch (itemErr) {
@@ -15029,8 +15049,9 @@ app.get('/api/lr-sheet/multi-day-services', (req, res) => {
 // Centralized helper for bidirectional synchronization when an LR Sheet cell is modified or cleared
 async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', options = {}) {
   if (!staffId || !dateStr) return;
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) return;
+  return await withTransaction(async () => {
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+    if (!staff) return;
 
   const dateParts = dateStr.split('-');
   const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
@@ -15249,6 +15270,7 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
       await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
     }
   }
+  });
 }
 
 // POST /api/lr-sheet/cell - Update or clear duty cell for an LR staff (Universally synchronized)
@@ -15268,17 +15290,19 @@ app.post('/api/lr-sheet/cell', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'staff_id and date are required' });
     }
 
-    const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
-    const staffName = staffRow?.name || `Staff #${staff_id}`;
+    await withTransaction(async () => {
+      const staffRow = await get('SELECT name FROM staff WHERE id = ?', [staff_id]);
+      const staffName = staffRow?.name || `Staff #${staff_id}`;
 
-    await syncLRSheetCellChange(staff_id, date, duty_code, remarks, { link_number, target_category_id });
+      await syncLRSheetCellChange(staff_id, date, duty_code, remarks, { link_number, target_category_id });
 
-    await logAudit(
-      'Admin',
-      'LR_CELL_UPDATE',
-      `Updated LR Sheet cell for ${staffName} (ID ${staff_id}) on ${date} to '${duty_code || 'CLEARED'}' — synchronized to Daily Summary, Monthly Movement, Muster Roll, TA, NDA, Diary & Daily Earnings`,
-      { staffId: staff_id, staffName, date, duty_code: duty_code || '', savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
-    );
+      await logAudit(
+        'Admin',
+        'LR_CELL_UPDATE',
+        `Updated LR Sheet cell for ${staffName} (ID ${staff_id}) on ${date} to '${duty_code || 'CLEARED'}' — synchronized to Daily Summary, Monthly Movement, Muster Roll, TA, NDA, Diary & Daily Earnings`,
+        { staffId: staff_id, staffName, date, duty_code: duty_code || '', savedCount: 1, errorCount: 0, savedEmployeesCount: 1, errorEmployeesCount: 0 }
+      );
+    });
     res.json({ success: true, message: `Updated and synchronized LR cell for ${date}` });
   } catch (err) {
     console.error('Error updating LR cell:', err);
@@ -15314,7 +15338,9 @@ app.post('/api/lr-sheet/batch-update', requireAdmin, async (req, res) => {
         if (!item.staff_id || !item.date) {
           throw new Error('Missing staff_id or date');
         }
-        await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks, { link_number: item.link_number, target_category_id: item.target_category_id });
+        await withTransaction(async () => {
+          await syncLRSheetCellChange(item.staff_id, item.date, item.duty_code, item.remarks, { link_number: item.link_number, target_category_id: item.target_category_id });
+        });
         savedCount++;
         savedEmployeesSet.add(item.staff_id);
       } catch (itemErr) {
