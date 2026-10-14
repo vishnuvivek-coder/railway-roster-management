@@ -1887,6 +1887,8 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         let origLinkNum = null;
         let origTrain = null;
         let origIsRest = false;
+        let linkNum = null;
+        let duties = [];
 
         if (category.id === 4) {
           const lrCode = lrEntry ? lrEntry.duty_code : (directOverride ? (directOverride.extra_train_no || directOverride.reason) : (earnEntry ? earnEntry.duty : null));

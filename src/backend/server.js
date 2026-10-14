@@ -2048,10 +2048,10 @@ app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
 app.get('/api/staff', async (req, res) => {
   const { category_id } = req.query;
   try {
-    let sql = 'SELECT * FROM staff';
+    let sql = 'SELECT * FROM staff WHERE (active = 1 OR active IS NULL)';
     let params = [];
     if (category_id && category_id !== 'ALL') {
-      sql += ' WHERE category_id = ? ORDER BY row_position';
+      sql += ' AND category_id = ? ORDER BY row_position';
       params.push(category_id);
     } else {
       sql += ' ORDER BY category_id, row_position';
@@ -8743,8 +8743,8 @@ app.get('/api/roster', async (req, res) => {
     }
 
     const staffMembers = isAllCategories
-      ? await all('SELECT * FROM staff ORDER BY category_id ASC, row_position ASC')
-      : await all('SELECT * FROM staff WHERE category_id = ? ORDER BY row_position ASC', [category_id]);
+      ? await all('SELECT * FROM staff WHERE (active = 1 OR active IS NULL) AND category_id IS NOT NULL ORDER BY category_id ASC, row_position ASC')
+      : await all('SELECT * FROM staff WHERE category_id = ? AND (active = 1 OR active IS NULL) ORDER BY row_position ASC', [category_id]);
 
     const crBalances = await calculateStaffCrBalances();
 
@@ -13442,6 +13442,8 @@ app.get('/api/muster', async (req, res) => {
       FROM staff s 
       LEFT JOIN categories c ON s.category_id = c.id
       WHERE (s.name NOT LIKE '%VACANT%')
+        AND (s.active = 1 OR s.active IS NULL)
+        AND (s.category_id IS NOT NULL OR s.seniority_no IN (1, 6))
     `;
     let staffParams = [];
     if (category_id && category_id !== 'ALL') {
@@ -14267,17 +14269,23 @@ app.post('/api/muster/delete-employee', async (req, res) => {
     const oldPos = staff.row_position;
 
     if (permanent_delete) {
+      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
+      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
+      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) {}
       await run('DELETE FROM staff WHERE id = ?', [staff_id]);
-      await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]);
-      await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]);
-      await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]);
     } else {
-      await run('UPDATE staff SET category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
+      await run('UPDATE staff SET active = 0, category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
     }
 
     if (catId) {
@@ -15477,10 +15485,23 @@ app.post('/api/lr-sheet/remove-member', async (req, res) => {
     const staffName = staff.name;
 
     if (permanent_delete) {
+      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
+      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
+      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) {}
       await run('DELETE FROM staff WHERE id = ?', [staff_id]);
-      await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]);
     } else {
-      await run('UPDATE staff SET category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
+      await run('UPDATE staff SET active = 0, category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
     }
 
     // Re-index row_position for remaining Category 4 staff to keep contiguous sequence 1, 2, 3...

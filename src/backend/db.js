@@ -1206,63 +1206,63 @@ async function initDb() {
       `INSERT INTO categories (id, name, code, cycle_length, anchor_date)
        VALUES (4, 'Leave Reserve (LR) Staff', 'LR_STAFF', 22, '2026-08-01')`
     );
-  } else {
-    await run(`UPDATE categories SET cycle_length = 22 WHERE id = 4 OR code = 'LR_STAFF'`);
   }
 
-  // Purge duplicate VA CHAKRAVARTHY from Category 4 (he is in Category 2 TTI Sleeper, row 35)
-  await run("DELETE FROM staff WHERE id = 119 OR (category_id = 4 AND (name LIKE '%CHAKRAVARTHY%' OR name LIKE '%CHAKRAVARTHI%'))");
-  await run("DELETE FROM links WHERE category_id = 4 AND link_number = 23");
+  // Check if Category 4 staff is already seeded in the database
+  const cat4StaffCount = await get("SELECT COUNT(*) as count FROM staff WHERE category_id = 4");
+  if (!cat4StaffCount || cat4StaffCount.count === 0) {
+    // Purge duplicate VA CHAKRAVARTHY from Category 4 only during initial seeding
+    await run("DELETE FROM staff WHERE id = 119 OR (category_id = 4 AND (name LIKE '%CHAKRAVARTHY%' OR name LIKE '%CHAKRAVARTHI%'))");
+    await run("DELETE FROM links WHERE category_id = 4 AND link_number = 23");
 
-  // Seed / Sync LR Staff list (22 staff members with accurate Rest Days)
-  const lrStaffSeed = [
-    { pos: 1, name: 'CH SRINIVASA RAO', desg: 'CTI', rest: 'SUN' },
-    { pos: 2, name: 'AG KRISHNA', desg: 'Sr.CCTC', rest: 'TUE' },
-    { pos: 3, name: 'D RAKESH', desg: 'Sr.CCTC', rest: 'FRI' },
-    { pos: 4, name: 'G SHIVAN', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 5, name: 'MVS NAGI REDDY', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 6, name: 'B VENKAT REDDY', desg: 'Sr.CCTC', rest: 'TUE' },
-    { pos: 7, name: 'MSA RAJU', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 8, name: 'KB RAO', desg: 'Sr.CCTC', rest: 'FRI' },
-    { pos: 9, name: 'SANJAY KUMAR', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 10, name: 'NC MEENA', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 11, name: 'T KANTHA RAO', desg: 'Sr.CCTC', rest: 'TUE' },
-    { pos: 12, name: 'BR MEENA', desg: 'Sr.CCTC', rest: 'WED' },
-    { pos: 13, name: 'T ANKAMMA RAO', desg: 'Sr.CCTC', rest: 'MON' },
-    { pos: 14, name: 'MV RAMA REDDY', desg: 'Sr.CCTC', rest: 'FRI' },
-    { pos: 15, name: 'MV ANJANEYULU', desg: 'Sr.CCTC', rest: 'FRI' },
-    { pos: 16, name: 'SV SIVA KUMAR', desg: 'CCTC', rest: 'SUN' },
-    { pos: 17, name: 'ELN RAO', desg: 'CCTC', rest: 'MON' },
-    { pos: 18, name: 'V SRINIVASA RAO', desg: 'CCTC', rest: 'THU' },
-    { pos: 19, name: 'K NAGA NAIK', desg: 'CCTC', rest: 'TUE' },
-    { pos: 20, name: 'B P SINGH', desg: 'CCTC', rest: 'WED' },
-    { pos: 21, name: 'R SAIDA NAIK', desg: 'CCTC', rest: 'SAT' },
-    { pos: 22, name: 'S HYMA TULASI', desg: 'Sr.CCTC', rest: 'THU' }
-  ];
+    // Seed LR Staff list initially ONLY IF no Category 4 staff exist
+    const lrStaffSeed = [
+      { pos: 1, name: 'CH SRINIVASA RAO', desg: 'CTI', rest: 'SUN' },
+      { pos: 2, name: 'AG KRISHNA', desg: 'Sr.CCTC', rest: 'TUE' },
+      { pos: 3, name: 'D RAKESH', desg: 'Sr.CCTC', rest: 'FRI' },
+      { pos: 4, name: 'G SHIVAN', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 5, name: 'MVS NAGI REDDY', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 6, name: 'B VENKAT REDDY', desg: 'Sr.CCTC', rest: 'TUE' },
+      { pos: 7, name: 'MSA RAJU', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 8, name: 'KB RAO', desg: 'Sr.CCTC', rest: 'FRI' },
+      { pos: 9, name: 'SANJAY KUMAR', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 10, name: 'NC MEENA', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 11, name: 'T KANTHA RAO', desg: 'Sr.CCTC', rest: 'TUE' },
+      { pos: 12, name: 'BR MEENA', desg: 'Sr.CCTC', rest: 'WED' },
+      { pos: 13, name: 'T ANKAMMA RAO', desg: 'Sr.CCTC', rest: 'MON' },
+      { pos: 14, name: 'MV RAMA REDDY', desg: 'Sr.CCTC', rest: 'FRI' },
+      { pos: 15, name: 'MV ANJANEYULU', desg: 'Sr.CCTC', rest: 'FRI' },
+      { pos: 16, name: 'SV SIVA KUMAR', desg: 'CCTC', rest: 'SUN' },
+      { pos: 17, name: 'ELN RAO', desg: 'CCTC', rest: 'MON' },
+      { pos: 18, name: 'V SRINIVASA RAO', desg: 'CCTC', rest: 'THU' },
+      { pos: 19, name: 'K NAGA NAIK', desg: 'CCTC', rest: 'TUE' },
+      { pos: 20, name: 'B P SINGH', desg: 'CCTC', rest: 'WED' },
+      { pos: 21, name: 'R SAIDA NAIK', desg: 'CCTC', rest: 'SAT' },
+      { pos: 22, name: 'S HYMA TULASI', desg: 'Sr.CCTC', rest: 'THU' }
+    ];
 
-  for (const s of lrStaffSeed) {
-    const existing = await get('SELECT * FROM staff WHERE category_id = 4 AND row_position = ?', [s.pos]);
-    if (!existing) {
-      await run(
-        `INSERT INTO staff (name, designation, category_id, row_position, active, rest_day, join_date)
-         VALUES (?, ?, 4, ?, 1, ?, '2026-07-01')`,
-        [s.name, s.desg, s.pos, s.rest]
-      );
-    } else {
-      await run(
-        `UPDATE staff SET name = ?, designation = ?, rest_day = ? WHERE category_id = 4 AND row_position = ?`,
-        [s.name, s.desg, s.rest, s.pos]
-      );
+    for (const s of lrStaffSeed) {
+      const existing = await get('SELECT * FROM staff WHERE category_id = 4 AND row_position = ?', [s.pos]);
+      if (!existing) {
+        await run(
+          `INSERT INTO staff (name, designation, category_id, row_position, active, rest_day, join_date)
+           VALUES (?, ?, 4, ?, 1, ?, '2026-07-01')`,
+          [s.name, s.desg, s.pos, s.rest]
+        );
+      }
+
+      const existingLink = await get('SELECT * FROM links WHERE category_id = 4 AND link_number = ?', [s.pos]);
+      if (!existingLink) {
+        await run(
+          `INSERT INTO links (category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_name, set_type)
+           VALUES (4, ?, ?, 'GNT', 'GNT', 'Relief / LR', 0, '2026-07-01', ?, 'Relief / LR')`,
+          [s.pos, `LR-${s.pos} (${s.rest} Rest)`, `LR Link ${s.pos}`]
+        );
+      }
     }
-
-    const existingLink = await get('SELECT * FROM links WHERE category_id = 4 AND link_number = ?', [s.pos]);
-    if (!existingLink) {
-      await run(
-        `INSERT INTO links (category_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_name, set_type)
-         VALUES (4, ?, ?, 'GNT', 'GNT', 'Relief / LR', 0, '2026-07-01', ?, 'Relief / LR')`,
-        [s.pos, `LR-${s.pos} (${s.rest} Rest)`, `LR Link ${s.pos}`]
-      );
-    }
+  } else {
+    // Keep category 4 cycle_length dynamically synced to actual staff count
+    await run(`UPDATE categories SET cycle_length = ? WHERE id = 4 OR code = 'LR_STAFF'`, [cat4StaffCount.count]);
   }
 
   // Create Non-Daily Trains table
@@ -1522,19 +1522,21 @@ async function initDb() {
       }
     }
 
-    // Ensure MV PRASAD (#1) and P PRATHAP (#6) exist in staff for Muster sheet (category_id = NULL)
-    const musterExtra = [
-      { name: 'MV PRASAD', desg: 'CTI', pf: '24609272641', seniority_no: 1 },
-      { name: 'P PRATHAP', desg: 'CTI', pf: '24603967967', seniority_no: 6 }
-    ];
-    for (const m of musterExtra) {
-      const existing = await get('SELECT id FROM staff WHERE seniority_no = ? AND category_id IS NULL', [m.seniority_no]);
-      if (!existing) {
-        await run(
-          `INSERT INTO staff (name, designation, category_id, row_position, pf_no, seniority_no, active, join_date, bill_unit, pay_amount, doa, hq_station, rest_day, t_code_no, hrms_id)
-           VALUES (?, ?, NULL, 0, ?, ?, 1, '2026-07-01', '0910629', 68000, '05/08/2000', 'GNT', 'SUN', '7133', '')`,
-          [m.name, m.desg, m.pf, m.seniority_no]
-        );
+    // Ensure MV PRASAD (#1) and P PRATHAP (#6) exist in staff for Muster sheet (category_id = NULL) - only seed on initial database setup
+    if (catCount && catCount.count === 0) {
+      const musterExtra = [
+        { name: 'MV PRASAD', desg: 'CTI', pf: '24609272641', seniority_no: 1 },
+        { name: 'P PRATHAP', desg: 'CTI', pf: '24603967967', seniority_no: 6 }
+      ];
+      for (const m of musterExtra) {
+        const existing = await get('SELECT id FROM staff WHERE seniority_no = ? AND category_id IS NULL', [m.seniority_no]);
+        if (!existing) {
+          await run(
+            `INSERT INTO staff (name, designation, category_id, row_position, pf_no, seniority_no, active, join_date, bill_unit, pay_amount, doa, hq_station, rest_day, t_code_no, hrms_id)
+             VALUES (?, ?, NULL, 0, ?, ?, 1, '2026-07-01', '0910629', 68000, '05/08/2000', 'GNT', 'SUN', '7133', '')`,
+            [m.name, m.desg, m.pf, m.seniority_no]
+          );
+        }
       }
     }
 
