@@ -10,6 +10,9 @@ const schemaSqlPath = path.join(__dirname, 'mysql_schema.sql');
 
 // Always initialize SQLite database instance for zero-downtime fallback
 const sqliteDb = new sqlite3.Database(dbPath);
+sqliteDb.configure('busyTimeout', 10000);
+sqliteDb.run('PRAGMA journal_mode = WAL');
+sqliteDb.run('PRAGMA busy_timeout = 10000');
 let mysqlPool = null;
 let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
 

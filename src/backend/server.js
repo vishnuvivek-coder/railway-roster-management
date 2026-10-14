@@ -2644,6 +2644,8 @@ async function executeDeleteStaff(staffId, res) {
     try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staffId, staffId]); } catch (e) {}
     try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]); } catch (e) {}
     try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staffId]); } catch (e) {}
+    try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staffId]); } catch (e) {}
 
     await run('DELETE FROM staff WHERE id = ?', [staffId]);
     

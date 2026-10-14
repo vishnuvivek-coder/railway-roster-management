@@ -922,6 +922,11 @@ function resolveDutyCodeToRows(dutyCode) {
   if (code === 'REST' || code === 'OFF' || code === 'AVL' || code === 'SPARE (HQ)' || code === '---' || code === '-') {
     return [];
   }
+  if (code.includes('22882/22881') || code.includes('22882 / 22881')) {
+    return [
+      { train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 }
+    ];
+  }
   if (code.includes('22882') && !code.includes('22881')) {
     return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 }];
   }
@@ -931,10 +936,8 @@ function resolveDutyCodeToRows(dutyCode) {
       { train_no: '22881', from: '---', to: 'GNT', dep: '---', arr: '02:05', ta: 0.3 }
     ];
   }
-  if (code.includes('22882/22881') || code.includes('22882 / 22881')) {
-    return [
-      { train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 }
-    ];
+  if (code.includes('17221/17222') || code.includes('17221 / 17222')) {
+    return [{ train_no: '17221', from: 'GNT', to: 'WADI', dep: '13:35', arr: '00:05', ta: 0.7 }];
   }
   if (code.includes('17221') && !code.includes('17222')) {
     return [{ train_no: '17221', from: 'GNT', to: 'WADI', dep: '13:35', arr: '00:05', ta: 0.7 }];
@@ -1210,6 +1213,500 @@ function resolveDutyCodeToRows(dutyCode) {
   return [];
 }
 
+function formatNatureOfLeave(code, rawDetail) {
+  const cleanCode = (code || '').trim().toUpperCase();
+  const dict = {
+    'LAP': 'LEAVE ON AVERAGE PAY (LAP)',
+    'CL': 'CASUAL LEAVE (CL)',
+    'CCL': 'CHILD CARE LEAVE (CCL)',
+    'SCL': 'SPECIAL CASUAL LEAVE (SCL)',
+    'LHAP': 'LEAVE ON HALF AVERAGE PAY (LHAP)',
+    'SICK': 'SICK / MEDICAL LEAVE',
+    'CR': 'COMPENSATORY REST (CR)',
+    'R': 'WEEKLY REST (R)',
+    'O': 'ABSENT'
+  };
+
+  const baseName = dict[cleanCode] || (cleanCode ? `LEAVE (${cleanCode})` : 'ON LEAVE');
+  if (!rawDetail) return baseName;
+
+  let detail = rawDetail.trim();
+  detail = detail.replace(/^(Muster:\s*|Muster Chart:\s*|Approved Leave:\s*|LEAVE\s*\[.*?\]\s*\(?|\(?LAP Leave\)?|\(?CL Leave\)?)/i, '').replace(/\)$/, '').trim();
+  const simplified = detail.replace(/\s*leave/i, '').trim().toUpperCase();
+  if (detail && simplified !== cleanCode && detail.toLowerCase() !== baseName.toLowerCase()) {
+    return `${baseName} - ${detail}`;
+  }
+  return baseName;
+}
+
+function getDutyRowsForLrTrain(trainStr, dateStr, allLinks = []) {
+  if (!trainStr) return [];
+  const raw = String(trainStr).trim();
+  const c = raw.toUpperCase();
+
+  // 1. Compound Outward + Return Pairs (Day 1 shows Outward Leg)
+  if (c.includes('17221') && c.includes('17222')) {
+    return [{ train_no: '17221', from: 'GNT', to: 'WADI', dep: '13:35', arr: '00:05', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('22882') && c.includes('22881')) {
+    return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('18047') && (c.includes('17226') || c.includes('18048') || c.includes('PILOT'))) {
+    return [
+      { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' },
+      { train_no: '18047', from: 'BZA', to: 'GTL', dep: '20:45', arr: '04:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17225') && (c.includes('18048') || c.includes('17226'))) {
+    return [
+      { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' },
+      { train_no: '17225', from: 'BZA', to: 'GTL', dep: '19:45', arr: '05:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('12604') && (c.includes('12603') || c.includes('16357'))) {
+    return [{ train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:45', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('12704') && c.includes('16357')) {
+    return [{ train_no: '12704', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:45', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('16358') && c.includes('12603')) {
+    return [{ train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '23:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('16858') && c.includes('12603')) {
+    return [{ train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '23:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17261') && (c.includes('17262') || c.includes('12733'))) {
+    return [{ train_no: '17261', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '04:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12734') && (c.includes('17262') || c.includes('20630'))) {
+    return [{ train_no: '12734', from: 'GNT', to: 'TPTY', dep: '23:10', arr: '06:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('20629') && (c.includes('20630') || c.includes('12733') || c.includes('07196'))) {
+    return [{ train_no: '20629', from: 'GNT', to: 'TPTY', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('07195') && c.includes('20630')) {
+    return [{ train_no: '07195', from: 'GNT', to: 'RU', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('07193') && c.includes('07194')) {
+    return [{ train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17069') && c.includes('17262')) {
+    return [{ train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('07001') && (c.includes('07002') || c.includes('17030') || c.includes('17070'))) {
+    return [{ train_no: '07001', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '23:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17077') && c.includes('17078')) {
+    return [{ train_no: '17077', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17231') && c.includes('17232')) {
+    return [{ train_no: '17231', from: 'BZA', to: 'CHZ', dep: '13:50', arr: '22:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17032') && (c.includes('17232') || c.includes('PILOT'))) {
+    return [{ train_no: '17032', from: 'BZA', to: 'CHZ', dep: '11:05', arr: '19:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12755') && (c.includes('17625') || c.includes('PILOT'))) {
+    return [{ train_no: '12755', from: 'BZA', to: 'SC', dep: '08:40', arr: '14:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17626') && c.includes('17625')) {
+    return [{ train_no: '17626', from: 'RAL', to: 'KCG', dep: '23:30', arr: '06:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17251') && c.includes('17254')) {
+    return [{ train_no: '17251', from: 'GNT', to: 'DHNE', dep: '16:30', arr: '05:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17645') && c.includes('17626')) {
+    return [
+      { train_no: '17645', from: 'SC', to: 'GNT', dep: '16:00', arr: '23:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17626', from: 'RAL', to: 'KCG', dep: '23:30', arr: '06:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+
+  // 2. Same-Day Double Leg Duties
+  if (c.includes('17646') && c.includes('12796')) {
+    return [
+      { train_no: '17646', from: 'GNT', to: 'SC', dep: '07:15', arr: '14:30', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' },
+      { train_no: '12796', from: 'SC', to: 'BZA', dep: '17:30', arr: '23:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17646') && c.includes('17645')) {
+    return [
+      { train_no: '17646', from: 'GNT', to: 'SC', dep: '07:15', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17645', from: 'SC', to: 'GNT', dep: '16:00', arr: '23:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('12795') && c.includes('17645')) {
+    return [
+      { train_no: '12705', from: 'GNT', to: 'SC', dep: '15:30', arr: '22:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17645', from: 'SC', to: 'GNT', dep: '16:00', arr: '23:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('12805') && c.includes('12806')) {
+    return [
+      { train_no: '12805', from: 'BZA', to: 'GNT', dep: '12:00', arr: '13:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' },
+      { train_no: '12806', from: 'GNT', to: 'BZA', dep: '14:30', arr: '15:30', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }
+    ];
+  }
+  if (c.includes('17239') && c.includes('17240')) {
+    return [
+      { train_no: '17239', from: 'GNT', to: 'BZA', dep: '08:00', arr: '09:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' },
+      { train_no: '17240', from: 'BZA', to: 'GNT', dep: '17:00', arr: '18:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }
+    ];
+  }
+  if (c.includes('17243') && c.includes('17244')) {
+    return [
+      { train_no: '17243', from: 'GNT', to: 'RGDA', dep: '23:20', arr: '09:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17281') && c.includes('17282')) {
+    return [
+      { train_no: '17281', from: 'GNT', to: 'NS', dep: '17:45', arr: '22:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17282', from: 'NS', to: 'GNT', dep: '06:00', arr: '10:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17607') && c.includes('17608')) {
+    return [
+      { train_no: '17607', from: 'GNT', to: 'RU', dep: '12:20', arr: '19:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17608', from: 'RU', to: 'GNT', dep: '12:10', arr: '19:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17041') && c.includes('17042')) {
+    return [
+      { train_no: '17041', from: 'GNT', to: 'RU', dep: '12:20', arr: '19:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17042', from: 'RU', to: 'GNT', dep: '10:40', arr: '17:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('07227') && c.includes('07228')) {
+    return [
+      { train_no: '07227', from: 'GNT', to: 'CHZ', dep: '06:00', arr: '12:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '07228', from: 'CHZ', to: 'GNT', dep: '05:30', arr: '12:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17637') && (c.includes('17638') || c.includes('38'))) {
+    return [
+      { train_no: '17637', from: 'GNT', to: 'RU', dep: '07:00', arr: '14:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17638', from: 'RU', to: 'GNT', dep: '07:15', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17687') && c.includes('17688')) {
+    return [
+      { train_no: '17687', from: 'GNT', to: 'KCG', dep: '05:45', arr: '12:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17688', from: 'KCG', to: 'GNT', dep: '15:00', arr: '22:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('18063') && c.includes('18064')) {
+    return [
+      { train_no: '18063', from: 'GNT', to: 'DMM', dep: '09:45', arr: '17:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '18064', from: 'DMM', to: 'GNT', dep: '08:15', arr: '19:25', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('02811') && c.includes('02812')) {
+    return [
+      { train_no: '02811', from: 'GNT', to: 'DMM', dep: '08:30', arr: '18:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '02812', from: 'DMM', to: 'BZA', dep: '08:30', arr: '18:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('07025') && c.includes('07026')) {
+    return [
+      { train_no: '07025', from: 'GNT', to: 'SC', dep: '06:00', arr: '12:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '07026', from: 'SC', to: 'GNT', dep: '14:00', arr: '20:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('07127') && c.includes('07128')) {
+    return [
+      { train_no: '07127', from: 'GNT', to: 'RU', dep: '17:40', arr: '00:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '07128', from: 'RU', to: 'GNT', dep: '18:00', arr: '01:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17253') && c.includes('17252')) {
+    return [
+      { train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' },
+      { train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+
+  // 3. Return Leg / Single Train Matches
+  if (c.includes('17222')) {
+    return [{ train_no: '17222', from: 'WADI', to: 'GNT', dep: '23:00', arr: '08:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17221')) {
+    return [{ train_no: '17221', from: 'GNT', to: 'WADI', dep: '13:35', arr: '00:05', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('22881')) {
+    return [{ train_no: '22881', from: 'WADI', to: 'GNT', dep: '16:55', arr: '02:05', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('22882')) {
+    return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17226')) {
+    return [
+      { train_no: '17226', from: 'GTL', to: 'BZA', dep: '19:10', arr: '03:55', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' },
+      { train_no: '57201', from: 'BZA', to: 'GNT', dep: '06:20', arr: '07:35', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('18048')) {
+    return [
+      { train_no: '18048', from: 'GTL', to: 'BZA', dep: '14:30', arr: '22:45', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' },
+      { train_no: '12703', from: 'BZA', to: 'GNT', dep: '23:30', arr: '00:15', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' }
+    ];
+  }
+  if (c.includes('18047')) {
+    return [
+      { train_no: '67230', from: 'GNT', to: 'BZA', dep: '16:25', arr: '18:10', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' },
+      { train_no: '18047', from: 'BZA', to: 'GTL', dep: '20:45', arr: '04:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17625')) {
+    return [
+      { train_no: '17625', from: 'KCG', to: 'RAL', dep: '22:20', arr: '05:30', ta: null, days_claiming_ta: null, ta_percentage: null, ta_b1: '' },
+      { train_no: '17646', from: 'RAL', to: 'GNT', dep: '07:15', arr: '08:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+    ];
+  }
+  if (c.includes('17626')) {
+    return [{ train_no: '17626', from: 'RAL', to: 'KCG', dep: '23:30', arr: '06:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12603')) {
+    return [{ train_no: '12603', from: 'MAS', to: 'GNT', dep: '16:45', arr: '23:30', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('12604')) {
+    return [{ train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:45', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('16357')) {
+    return [{ train_no: '16357', from: 'MAS', to: 'GNT', dep: '13:00', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('16358') || c.includes('16858')) {
+    return [{ train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '23:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17262')) {
+    return [{ train_no: '17262', from: 'TPTY', to: 'GNT', dep: '19:30', arr: '06:55', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('17261')) {
+    return [{ train_no: '17261', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '04:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12733')) {
+    return [{ train_no: '12733', from: 'TPTY', to: 'GNT', dep: '18:20', arr: '01:30', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('12734')) {
+    return [{ train_no: '12734', from: 'GNT', to: 'TPTY', dep: '23:10', arr: '06:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('20630')) {
+    return [{ train_no: '20630', from: 'TPTY', to: 'GNT', dep: '23:15', arr: '05:30', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('20629')) {
+    return [{ train_no: '20629', from: 'GNT', to: 'TPTY', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('07002')) {
+    return [{ train_no: '07002', from: 'TPTY', to: 'GNT', dep: '20:30', arr: '03:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07001')) {
+    return [{ train_no: '07001', from: 'GNT', to: 'TPTY', dep: '16:30', arr: '23:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07194')) {
+    return [{ train_no: '07194', from: 'KPD', to: 'GNT', dep: '01:00', arr: '10:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07193')) {
+    return [{ train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07198')) {
+    return [{ train_no: '07198', from: 'RU', to: 'GNT', dep: '18:30', arr: '01:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07195')) {
+    return [{ train_no: '07195', from: 'GNT', to: 'RU', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17070')) {
+    return [{ train_no: '17070', from: 'TPTY', to: 'GNT', dep: '22:40', arr: '05:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17069')) {
+    return [{ train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17078')) {
+    return [{ train_no: '17078', from: 'TPTY', to: 'GNT', dep: '19:00', arr: '02:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17077')) {
+    return [{ train_no: '17077', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17232')) {
+    return [{ train_no: '17232', from: 'CHZ', to: 'BZA', dep: '23:40', arr: '06:25', ta: 1.0, days_claiming_ta: 1.0, ta_percentage: 1.0, ta_b1: '1' }];
+  }
+  if (c.includes('17231')) {
+    return [{ train_no: '17231', from: 'BZA', to: 'CHZ', dep: '13:50', arr: '22:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17031')) {
+    return [{ train_no: '17031', from: 'CHZ', to: 'BZA', dep: '04:30', arr: '12:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17032')) {
+    return [{ train_no: '17032', from: 'BZA', to: 'CHZ', dep: '11:05', arr: '19:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12756')) {
+    return [{ train_no: '12756', from: 'SC', to: 'BZA', dep: '06:40', arr: '12:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12755')) {
+    return [{ train_no: '12755', from: 'BZA', to: 'SC', dep: '08:40', arr: '14:50', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17254')) {
+    return [{ train_no: '17254', from: 'DHNE', to: 'GNT', dep: '16:30', arr: '23:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17251')) {
+    return [{ train_no: '17251', from: 'GNT', to: 'DHNE', dep: '16:30', arr: '05:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17252')) {
+    return [{ train_no: '17252', from: 'DHNE', to: 'GNT', dep: '15:30', arr: '23:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17253')) {
+    return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:15', arr: '14:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17646')) {
+    return [{ train_no: '17646', from: 'GNT', to: 'SC', dep: '07:15', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17645')) {
+    return [{ train_no: '17645', from: 'SC', to: 'GNT', dep: '16:00', arr: '23:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('12805')) {
+    return [{ train_no: '12805', from: 'BZA', to: 'GNT', dep: '12:00', arr: '13:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('12806')) {
+    return [{ train_no: '12806', from: 'GNT', to: 'BZA', dep: '14:30', arr: '15:30', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17239')) {
+    return [{ train_no: '17239', from: 'GNT', to: 'BZA', dep: '08:00', arr: '09:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17240')) {
+    return [{ train_no: '17240', from: 'BZA', to: 'GNT', dep: '17:00', arr: '18:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c.includes('17243')) {
+    return [{ train_no: '17243', from: 'GNT', to: 'RGDA', dep: '23:20', arr: '09:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17244')) {
+    return [{ train_no: '17244', from: 'RGDA', to: 'GNT', dep: '15:30', arr: '04:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17281')) {
+    return [{ train_no: '17281', from: 'GNT', to: 'NS', dep: '17:45', arr: '22:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17282')) {
+    return [{ train_no: '17282', from: 'NS', to: 'GNT', dep: '06:00', arr: '10:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17607')) {
+    return [{ train_no: '17607', from: 'GNT', to: 'RU', dep: '12:20', arr: '19:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17608')) {
+    return [{ train_no: '17608', from: 'RU', to: 'GNT', dep: '12:10', arr: '19:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17041')) {
+    return [{ train_no: '17041', from: 'GNT', to: 'RU', dep: '12:20', arr: '19:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17042')) {
+    return [{ train_no: '17042', from: 'RU', to: 'GNT', dep: '10:40', arr: '17:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07227')) {
+    return [{ train_no: '07227', from: 'GNT', to: 'CHZ', dep: '06:00', arr: '12:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07228')) {
+    return [{ train_no: '07228', from: 'CHZ', to: 'GNT', dep: '05:30', arr: '12:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17637')) {
+    return [{ train_no: '17637', from: 'GNT', to: 'RU', dep: '07:00', arr: '14:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17638')) {
+    return [{ train_no: '17638', from: 'RU', to: 'GNT', dep: '07:15', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('18063')) {
+    return [{ train_no: '18063', from: 'GNT', to: 'DMM', dep: '09:45', arr: '17:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('18064')) {
+    return [{ train_no: '18064', from: 'DMM', to: 'GNT', dep: '08:15', arr: '19:25', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('02811')) {
+    return [{ train_no: '02811', from: 'GNT', to: 'DMM', dep: '08:30', arr: '18:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('02812')) {
+    return [{ train_no: '02812', from: 'DMM', to: 'BZA', dep: '08:30', arr: '18:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07208')) {
+    return [{ train_no: '07208', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('17081')) {
+    return [{ train_no: '17081', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+
+  // 4. Default 4-5 digit train extraction
+  const m = c.match(/\b\d{4,5}\b/);
+  if (m) {
+    return [{ train_no: m[0], from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+
+  return [];
+}
+
+function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks = []) {
+  if (!dutyCode) return { action: 'SKIP' };
+  const raw = String(dutyCode).trim();
+  const c = raw.toUpperCase();
+
+  // 1. Rest strings
+  const { isRestString } = require('./duty_comparator');
+  if (
+    c === 'R' || c === 'REST' || c === 'OFF' || c === '-' || c === '---' ||
+    c.startsWith('CR') || isRestString(c)
+  ) {
+    const rmk = remarks || (c.startsWith('CR') ? `Compensatory Rest (${raw})` : 'Weekly Rest');
+    return { action: 'SKIP', isRest: true, remarks: rmk };
+  }
+
+  // 2. Leave / Sick
+  if (
+    ['S', 'SICK', 'CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'CAP', 'L', 'O'].includes(c) ||
+    c.includes('SICK') || c.includes('LEAVE')
+  ) {
+    const leaveCode = c.startsWith('S') ? 'SICK' : (['CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'CAP'].includes(c) ? c : 'LEAVE');
+    return {
+      action: 'LEAVE',
+      isLeave: true,
+      leaveCode,
+      remarks: remarks || `${leaveCode} Leave`
+    };
+  }
+
+  // 3. Standby / Available at HQ
+  if (['AVL', 'SPARE', 'SPARE (HQ)', 'HQ', 'STANDBY', 'GNT', 'NON DAILY LINKS'].includes(c)) {
+    return { action: 'STANDBY', remarks: remarks || 'Standby at HQ' };
+  }
+
+  // 4. Link references, e.g. "Link 3", "Link 50", "COR Link #57", "L17"
+  const linkMatch = raw.match(/Link\s*#?\s*(\d+)/i) || raw.match(/^L\s*(\d+)$/i);
+  if (linkMatch) {
+    const lNum = parseInt(linkMatch[1], 10);
+    const targetCat = (lNum > 21) ? 2 : 1;
+    const lObj = linkMap[`${targetCat}_${lNum}`] || (allLinks && allLinks.find(l => l.link_number === lNum));
+    const rows = getDutyRowsForLinkNumber(targetCat, lNum, lObj, dateStrIso);
+    if (rows && rows.length > 0) {
+      return { action: 'DISPLAY', linkNum: lNum, duties: rows, remarks: remarks || `Link #${lNum}` };
+    }
+  }
+
+  // 5. Outstation stations without trains, e.g. "GTL", "SC", "TPTY", "VSKP"
+  if (['GTL', 'SC', 'TPTY', 'VSKP'].includes(c)) {
+    return {
+      action: 'DISPLAY',
+      duties: [{ train_no: c, from: 'GNT', to: c, dep: '17:45', arr: '---', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }],
+      remarks: remarks || `Deputed to ${c}`
+    };
+  }
+
+  // 6. Train duties:
+  const duties = getDutyRowsForLrTrain(raw, dateStrIso, allLinks);
+  if (duties && duties.length > 0) {
+    return { action: 'DISPLAY', duties, remarks: remarks || raw };
+  }
+
+  // Fallback:
+  const singleMatch = raw.match(/\b\d{4,5}\b/);
+  const trainNo = singleMatch ? singleMatch[0] : raw;
+  return {
+    action: 'DISPLAY',
+    duties: [{ train_no: trainNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }],
+    remarks: remarks || raw
+  };
+}
+
 /**
  * Generate pending TA claims into ta_approvals for a given month
  */
@@ -1391,7 +1888,39 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         let origTrain = null;
         let origIsRest = false;
 
-        if (category.id !== 4) {
+        if (category.id === 4) {
+          const lrCode = lrEntry ? lrEntry.duty_code : (directOverride ? (directOverride.extra_train_no || directOverride.reason) : (earnEntry ? earnEntry.duty : null));
+          const lrRemarks = (lrEntry && lrEntry.remarks) || (directOverride && directOverride.reason) || (muster ? muster.remarks : '');
+
+          const lrRes = resolveLrDutyCode(lrCode, lrRemarks, dateStrIso, linkMap, Object.values(linkMap));
+          lastAssignedLink = null;
+          lastAssignedNonDaily = null;
+
+          if (lrRes.action === 'SKIP' || lrRes.action === 'STANDBY') {
+            continue;
+          }
+
+          if (lrRes.action === 'LEAVE') {
+            isEffectiveLeave = true;
+            const effLeaveCode = musterCode || lrRes.leaveCode || 'LEAVE';
+            duties = [{
+              train_no: '---',
+              from: '---',
+              to: '---',
+              dep: '---',
+              arr: '---',
+              remarks: lrRes.remarks || `${effLeaveCode} Leave`,
+              is_leave: true
+            }];
+          } else if (lrRes.action === 'DISPLAY') {
+            isEffectiveLeave = false;
+            linkNum = lrRes.linkNum || null;
+            duties = lrRes.duties || [];
+            duties.forEach(dRow => {
+              dRow.remarks = lrRes.remarks || dRow.remarks;
+            });
+          }
+        } else {
           const curAnchor = category.id === 2
             ? (dateStrIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
             : category.anchor_date;
@@ -1429,114 +1958,107 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           } else {
             origTrain = 'REST';
           }
-        } else {
-          const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
-          origIsRest = !dutyCode || isRestString(dutyCode);
-          origTrain = origIsRest ? 'REST' : dutyCode;
-        }
 
-        const overrideDuty = directOverride || subOverride;
-        const remarksStr = (overrideDuty && overrideDuty.reason) || (muster ? muster.remarks : '') || '';
+          const overrideDuty = directOverride || subOverride;
+          const remarksStr = (overrideDuty && overrideDuty.reason) || (muster ? muster.remarks : '') || '';
 
-        let duties = [];
-        let linkNum = null;
-
-        // First, check if this day is an active multi-day continuation (Non-Daily Return or Multi-Day Link Return)
-        // when the staff member is not on leave/standby/overridden on this day.
-        const isStandbyOverride = overrideDuty && overrideDuty.status === 'AVAILABLE_FOR_BOOKING';
-        if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedNonDaily) {
-          if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
-            const nd = lastAssignedNonDaily.service;
-            duties = resolveDutyCodeToRows(nd.returnTrain);
-            const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily ${nd.returnTrain})`;
-            duties.forEach(dRow => { dRow.remarks = derivedRemark; });
-            lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
-            lastAssignedLink = null;
-          } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
-            lastAssignedNonDaily = null;
-            lastAssignedLink = null;
-            continue;
-          } else {
-            lastAssignedNonDaily = null;
-          }
-        } else if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0) {
-          const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
-          const nextLink = setDetails.remainingLinks[0];
-          linkNum = nextLink;
-          const targetCatId = lastTargetCat || category.id;
-          duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink], dateStrIso);
-          const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
-          const isNaturalSchedule = (origLinkNum === nextLink && targetCatId === category.id);
-          const derivedRemark = isNaturalSchedule ? 'Regular Cyclic Duty' : `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
-          duties.forEach(dRow => { dRow.remarks = derivedRemark; });
-          lastAssignedLink = nextLink;
-        }
-
-        if (duties.length === 0) {
-          const cmp = compareDutyAndResolve({
-            origTrain,
-            origIsRest,
-            origLinkNum,
-            actualLinkNum: overrideDuty?.overridden_link_number !== undefined ? overrideDuty.overridden_link_number : null,
-            targetCategoryId: overrideDuty?.target_category_id || category.id,
-            remarks: remarksStr,
-            overrideDuty,
-            muster,
-            allLinks: Object.values(linkMap),
-            dateStr: dateStrIso,
-            categoryId: category.id
-          });
-
-          if (cmp.action === 'SKIP') {
-            // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
-            lastAssignedLink = null;
-            lastAssignedNonDaily = null;
-            continue;
-          }
-
-          if (cmp.action === 'STANDBY') {
-            lastAssignedLink = null;
-            lastAssignedNonDaily = null;
-            continue;
-          }
-
-          if (cmp.action === 'LEAVE') {
-            isEffectiveLeave = true;
-            const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
-            duties = [{
-              train_no: '---',
-              from: '---',
-              to: '---',
-              dep: '---',
-              arr: '---',
-              remarks: cmp.remarks || `${effLeaveCode} Leave`,
-              is_leave: true
-            }];
-            lastAssignedLink = null;
-            lastAssignedNonDaily = null;
-          } else if (cmp.action === 'DISPLAY') {
-            isEffectiveLeave = false;
-            linkNum = (overrideDuty && overrideDuty.overridden_link_number !== null && overrideDuty.overridden_link_number !== undefined)
-              ? overrideDuty.overridden_link_number
-              : ((overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) ? null : origLinkNum);
-            duties = cmp.duty_rows;
-            duties.forEach(dRow => {
-              dRow.train_no = dRow.train_no || cmp.train_no;
-              dRow.remarks = cmp.remarks || dRow.remarks;
-            });
-            if (overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) {
-              const trNo = overrideDuty.extra_train_no || overrideDuty.reason || 'EXTRA';
-              const ndMatch = getMultiDayNonDailyMatch(trNo);
-              if (ndMatch) {
-                lastAssignedNonDaily = { service: ndMatch, dayIndex: 1, totalDays: ndMatch.totalDays };
-              } else {
-                lastAssignedNonDaily = null;
-              }
+          // First, check if this day is an active multi-day continuation (Non-Daily Return or Multi-Day Link Return)
+          // when the staff member is not on leave/standby/overridden on this day.
+          const isStandbyOverride = overrideDuty && overrideDuty.status === 'AVAILABLE_FOR_BOOKING';
+          if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedNonDaily) {
+            if (lastAssignedNonDaily.dayIndex === 1 && lastAssignedNonDaily.totalDays >= 2) {
+              const nd = lastAssignedNonDaily.service;
+              duties = resolveDutyCodeToRows(nd.returnTrain);
+              const derivedRemark = `Return Leg of Multi-Day Link (Non-Daily ${nd.returnTrain})`;
+              duties.forEach(dRow => { dRow.remarks = derivedRemark; });
+              lastAssignedNonDaily = { ...lastAssignedNonDaily, dayIndex: 2 };
               lastAssignedLink = null;
+            } else if (lastAssignedNonDaily.dayIndex === 2 && lastAssignedNonDaily.totalDays === 3) {
+              lastAssignedNonDaily = null;
+              lastAssignedLink = null;
+              continue;
             } else {
               lastAssignedNonDaily = null;
-              lastAssignedLink = linkNum;
-              lastTargetCat = overrideDuty?.target_category_id || (linkNum > 21 && category.id === 4 ? 2 : (category.id === 4 ? 1 : category.id));
+            }
+          } else if (!isEffectiveLeave && !isStandbyOverride && !overrideDuty && lastAssignedLink && getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink)?.remainingLinks?.length > 0) {
+            const setDetails = getLinkSetDetails(lastTargetCat || category.id, lastAssignedLink);
+            const nextLink = setDetails.remainingLinks[0];
+            linkNum = nextLink;
+            const targetCatId = lastTargetCat || category.id;
+            duties = getDutyRowsForLinkNumber(targetCatId, nextLink, linkMap[`${targetCatId}_${nextLink}`] || linkMap[nextLink], dateStrIso);
+            const joinedSet = setDetails.setLinks ? setDetails.setLinks.join('->') : (setDetails.set ? setDetails.set.join('->') : '');
+            const isNaturalSchedule = (origLinkNum === nextLink && targetCatId === category.id);
+            const derivedRemark = isNaturalSchedule ? 'Regular Cyclic Duty' : `Return Leg of Multi-Day Link #${nextLink} (Set: ${joinedSet})`;
+            duties.forEach(dRow => { dRow.remarks = derivedRemark; });
+            lastAssignedLink = nextLink;
+          }
+
+          if (duties.length === 0) {
+            const cmp = compareDutyAndResolve({
+              origTrain,
+              origIsRest,
+              origLinkNum,
+              actualLinkNum: overrideDuty?.overridden_link_number !== undefined ? overrideDuty.overridden_link_number : null,
+              targetCategoryId: overrideDuty?.target_category_id || category.id,
+              remarks: remarksStr,
+              overrideDuty,
+              muster,
+              allLinks: Object.values(linkMap),
+              dateStr: dateStrIso,
+              categoryId: category.id
+            });
+
+            if (cmp.action === 'SKIP') {
+              // Condition 3: Employee rest day, both columns declared rest -> Skip day in TA!
+              lastAssignedLink = null;
+              lastAssignedNonDaily = null;
+              continue;
+            }
+
+            if (cmp.action === 'STANDBY') {
+              lastAssignedLink = null;
+              lastAssignedNonDaily = null;
+              continue;
+            }
+
+            if (cmp.action === 'LEAVE') {
+              isEffectiveLeave = true;
+              const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
+              duties = [{
+                train_no: '---',
+                from: '---',
+                to: '---',
+                dep: '---',
+                arr: '---',
+                remarks: cmp.remarks || `${effLeaveCode} Leave`,
+                is_leave: true
+              }];
+              lastAssignedLink = null;
+              lastAssignedNonDaily = null;
+            } else if (cmp.action === 'DISPLAY') {
+              isEffectiveLeave = false;
+              linkNum = (overrideDuty && overrideDuty.overridden_link_number !== null && overrideDuty.overridden_link_number !== undefined)
+                ? overrideDuty.overridden_link_number
+                : ((overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) ? null : origLinkNum);
+              duties = cmp.duty_rows;
+              duties.forEach(dRow => {
+                dRow.train_no = dRow.train_no || cmp.train_no;
+                dRow.remarks = cmp.remarks || dRow.remarks;
+              });
+              if (overrideDuty && (overrideDuty.status === 'EXTRA_CREW' || overrideDuty.extra_train_no)) {
+                const trNo = overrideDuty.extra_train_no || overrideDuty.reason || 'EXTRA';
+                const ndMatch = getMultiDayNonDailyMatch(trNo);
+                if (ndMatch) {
+                  lastAssignedNonDaily = { service: ndMatch, dayIndex: 1, totalDays: ndMatch.totalDays };
+                } else {
+                  lastAssignedNonDaily = null;
+                }
+                lastAssignedLink = null;
+              } else {
+                lastAssignedNonDaily = null;
+                lastAssignedLink = linkNum;
+                lastTargetCat = overrideDuty?.target_category_id || (linkNum > 21 && category.id === 4 ? 2 : (category.id === 4 ? 1 : category.id));
+              }
             }
           }
         }
@@ -1982,7 +2504,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   let cleanedRows = [];
   for (let i = 0; i < finalRows.length; i++) {
     const r = finalRows[i];
-    if (r.is_leave || r.train_no === '---') {
+    if (r.is_leave || r.train_no === '---' || category.id === 4) {
       cleanedRows.push(r);
       continue;
     }
@@ -2099,6 +2621,8 @@ module.exports = {
   generateStaffTaJournal,
   getDutyRowsForLinkNumber,
   resolveDutyCodeToRows,
-  getLinkSetDetails
+  getLinkSetDetails,
+  resolveLrDutyCode,
+  getDutyRowsForLrTrain
 };
 
