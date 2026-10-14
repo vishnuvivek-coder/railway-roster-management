@@ -119,7 +119,10 @@ async function migrate() {
 
   for (const tableName of tablesInOrder) {
     try {
-      const rows = await sqliteAll(`SELECT * FROM ${tableName}`);
+      const selectSql = tableName === 'duty_register_staff'
+        ? `SELECT * FROM ${tableName} WHERE entry_id IS NOT NULL`
+        : `SELECT * FROM ${tableName}`;
+      const rows = await sqliteAll(selectSql);
       if (!rows || rows.length === 0) {
         console.log(tableName.padEnd(30) + ' | 0 rows');
         continue;
@@ -143,8 +146,17 @@ async function migrate() {
           queryParts.push(placeholders);
           for (const col of columns) {
             let val = row[col];
-            // Format dates or booleans if necessary
-            if (val === undefined) val = null;
+            if (val === undefined || val === '') {
+              if (col === 'effective_from') {
+                val = '2026-08-01';
+              } else if (col.includes('date') || col.includes('_at') || col === 'entry_id') {
+                val = null;
+              } else {
+                val = val === '' ? '' : null;
+              }
+            } else if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+              val = val.replace('T', ' ').replace(/\.\d+Z$/, '').replace(/Z$/, '');
+            }
             values.push(val);
           }
         }

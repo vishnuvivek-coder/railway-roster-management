@@ -29,6 +29,12 @@ const run = async (sql, params = []) => {
     } else if (cleanSql.toUpperCase().startsWith('INSERT OR REPLACE INTO')) {
       cleanSql = cleanSql.replace(/^INSERT\s+OR\s+REPLACE\s+INTO/i, 'REPLACE INTO');
     }
+    // Normalize SQLite ON CONFLICT (...) DO UPDATE SET to MySQL ON DUPLICATE KEY UPDATE
+    if (/ON\s+CONFLICT/i.test(cleanSql)) {
+      cleanSql = cleanSql
+        .replace(/ON\s+CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+SET/gi, 'ON DUPLICATE KEY UPDATE')
+        .replace(/\bexcluded\.([a-zA-Z0-9_]+)\b/gi, 'VALUES($1)');
+    }
     const client = (txStore && txStore.mysqlConnection) ? txStore.mysqlConnection : mysqlPool;
     if (client) {
       const [result] = await client.query(cleanSql, params);
@@ -167,7 +173,8 @@ async function initDb() {
         connectionLimit: 20,
         queueLimit: 0,
         multipleStatements: true,
-        decimalNumbers: true
+        decimalNumbers: true,
+        dateStrings: true
       });
 
       // Verify connection

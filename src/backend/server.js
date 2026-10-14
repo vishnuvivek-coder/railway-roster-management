@@ -140,9 +140,16 @@ initDb().then(async () => {
 
 function formatDateDisplay(iso) {
   if (!iso) return '';
-  const parts = iso.split('-');
+  if (iso instanceof Date) {
+    const y = iso.getFullYear();
+    const m = String(iso.getMonth() + 1).padStart(2, '0');
+    const d = String(iso.getDate()).padStart(2, '0');
+    return `${d}/${m}/${y}`;
+  }
+  const isoStr = String(iso);
+  const parts = isoStr.split('-');
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  return iso;
+  return isoStr;
 }
 
 // Helper: Derive structured "What is saved" and "Where it is saved" metadata for any Audit Log action
