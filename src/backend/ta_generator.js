@@ -514,9 +514,9 @@ function recalculateJournalRowsTa(rows) {
     calculated.forEach(r => {
       const orig = updatedRows[r._origIdx];
       const effectiveDaRate = orig.da_rate || (orig.pay_amount ? (orig.pay_amount >= 53100 ? 800 : (orig.pay_amount >= 35400 ? 500 : 800)) : 800);
-      const hasExplicitSavedTa = orig._isSaved && orig.days_claiming_ta !== null && orig.days_claiming_ta !== undefined;
+      const hasExplicitSavedTa = Boolean(orig._isSaved);
       const daysClaim = hasExplicitSavedTa ? orig.days_claiming_ta : (r.days_claiming_ta !== undefined ? r.days_claiming_ta : null);
-      const b1Val = hasExplicitSavedTa ? (orig.ta_b1 || String(orig.days_claiming_ta)) : (r.ta_b1 !== undefined ? r.ta_b1 : (r.days_claiming_ta !== null ? String(r.days_claiming_ta) : ''));
+      const b1Val = hasExplicitSavedTa ? (orig.ta_b1 !== undefined && orig.ta_b1 !== null ? String(orig.ta_b1) : (orig.days_claiming_ta !== null && orig.days_claiming_ta !== undefined ? String(orig.days_claiming_ta) : '')) : (r.ta_b1 !== undefined ? r.ta_b1 : (r.days_claiming_ta !== null ? String(r.days_claiming_ta) : ''));
       const amt = daysClaim !== null && daysClaim !== undefined
         ? Math.round(daysClaim * effectiveDaRate)
         : (orig.claim_amount || 0);

@@ -240,7 +240,7 @@ export default function TaDocument({
               remarks: r.remarks || r.nature_of_leave || '',
               nature_of_leave: r.nature_of_leave || '',
               is_leave: !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave'))),
-              is_manual_ta: !!(r.is_manual_ta || (r._isSaved && b1Val !== ''))
+              is_manual_ta: !!(r.is_manual_ta || r._isSaved)
             };
           });
 
