@@ -11819,6 +11819,9 @@ app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
       await run('DELETE FROM ta_entries WHERE staff_id = ? AND month_year = ?', [staffId, month_year]);
     }
 
+    const staffMember = await get('SELECT id, category_id FROM staff WHERE id = ?', [staffId]);
+    const defaultObjText = (staffMember && staffMember.category_id === 1) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES';
+
     // Save all current rows & propagate timings
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i];
@@ -11851,7 +11854,7 @@ app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
           item.ta_a || '',
           item.ta_b1 || '',
           daysClaiming,
-          item.object_of_journey || 'MANNING AC COACHES',
+          item.object_of_journey || defaultObjText,
           item.remarks || '',
           i + 1
         ]

@@ -39,6 +39,22 @@ const computePresetDates = (preset, y, m) => {
   };
 };
 
+export const getVerticalChars = (text) => {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+  const words = raw.split(/\s+/);
+  const chars = [];
+  words.forEach((word, wIdx) => {
+    for (const ch of word) {
+      chars.push(ch.toUpperCase());
+    }
+    if (wIdx < words.length - 1) {
+      chars.push(''); // Gap spacer between words
+    }
+  });
+  return chars;
+};
+
 export default function TaDocument({
   authToken,
   categories,
@@ -145,8 +161,17 @@ export default function TaDocument({
     doa: '05/08/2000',
     full_name_sign: 'K V RAMANA RAO',
     designation_sign: '(CTI/SL/GNT)',
-    vertical_object_text: 'MANNING AC COACHES'
+    vertical_object_text: (String(selectedCatId) === '1' || !selectedCatId) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'
   });
+
+  const selectedStaffObj = staffList.find(s => s.id?.toString() === selectedStaffId?.toString());
+  const isCorStaff = Boolean(
+    (journalData?.employee?.category_id === 1) ||
+    (journalData?.employee?.category_code === 'COR') ||
+    (journalData?.employee?.category_name && journalData.employee.category_name.toUpperCase().includes('COR')) ||
+    (selectedStaffObj?.category_id === 1) ||
+    (String(selectedCatId) === '1')
+  );
 
   // Auto-initialize selectedCatId if categories are loaded
   useEffect(() => {
@@ -243,7 +268,9 @@ export default function TaDocument({
               doa: data.employee.doa || '05/08/2000',
               full_name_sign: empName === 'K V R RAO' ? 'K V RAMANA RAO' : empName,
               designation_sign: `(${empDesig}/SL/GNT)`,
-              vertical_object_text: prev.vertical_object_text || (data.employee.category_id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')
+              vertical_object_text: (data.employee.category_id === 1 || data.employee.category_code === 'COR' || (data.employee.category_name && data.employee.category_name.toUpperCase().includes('COR')) || String(selectedCatId) === '1')
+                ? 'MANNING AC COACHES'
+                : 'MANNING SLEEPER COACHES'
             }));
           }
         } else if (data && data.notFound) {
@@ -752,12 +779,19 @@ export default function TaDocument({
     if (!silent) setStatusMsg('Saving TA journal...');
 
     try {
+      const effectiveObjText = editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES');
       const payload = {
         month_year: journalData?.month_year || `${year}-${String(month).padStart(2, '0')}`,
         start_date: startDate,
         end_date: endDate,
-        entries: journalData.rows,
-        employee_meta: editableMeta
+        entries: (journalData.rows || []).map(r => ({
+          ...r,
+          object_of_journey: effectiveObjText
+        })),
+        employee_meta: {
+          ...editableMeta,
+          vertical_object_text: effectiveObjText
+        }
       };
 
       // 1. Instant local storage mirror
@@ -1081,7 +1115,15 @@ export default function TaDocument({
             <select
               className="form-input"
               value={selectedCatId}
-              onChange={(e) => setSelectedCatId(e.target.value)}
+              onChange={(e) => {
+                const newCat = e.target.value;
+                if (setSelectedCatId) setSelectedCatId(newCat);
+                const isCor = String(newCat) === '1';
+                setEditableMeta(prev => ({
+                  ...prev,
+                  vertical_object_text: isCor ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'
+                }));
+              }}
               style={{ padding: '7px 10px', fontSize: '0.85rem' }}
             >
               {categories.map(cat => (
@@ -1097,6 +1139,20 @@ export default function TaDocument({
               value={selectedStaffId}
               onChange={(val) => setSelectedStaffId(val)}
             />
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>Object of Journey (Vertical Column)</label>
+            <select
+              className="form-input"
+              value={editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')}
+              onChange={(e) => handleMetaChange('vertical_object_text', e.target.value)}
+              style={{ padding: '7px 10px', fontSize: '0.85rem', fontWeight: 600 }}
+              title="Official Object of Journey: 'MANNING AC COACHES' for Conductors (COR), 'MANNING SLEEPER COACHES' for Sleeper, LR, and Ladies staff"
+            >
+              <option value="MANNING AC COACHES">MANNING AC COACHES (COR)</option>
+              <option value="MANNING SLEEPER COACHES">MANNING SLEEPER COACHES (Sleeper / LR / Ladies)</option>
+            </select>
           </div>
 
           <div>
@@ -1699,7 +1755,14 @@ export default function TaDocument({
                             textAlign: 'center',
                             verticalAlign: 'middle',
                             position: 'relative',
-                            background: '#ffffff'
+                            background: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                          title="Click to toggle: MANNING AC COACHES (COR) ⇄ MANNING SLEEPER COACHES (Others)"
+                          onClick={() => {
+                            const current = editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES');
+                            const nextVal = current === 'MANNING AC COACHES' ? 'MANNING SLEEPER COACHES' : 'MANNING AC COACHES';
+                            handleMetaChange('vertical_object_text', nextVal);
                           }}
                         >
                           <div style={{
@@ -1709,13 +1772,13 @@ export default function TaDocument({
                             justifyContent: 'space-around',
                             height: '100%',
                             fontWeight: 'bold',
-                            fontSize: '12.5px',
+                            fontSize: (editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')).length > 20 ? '11px' : '12.5px',
                             textTransform: 'uppercase',
                             lineHeight: 1.25,
                             userSelect: 'none',
                             color: '#000'
                           }}>
-                            {['M','A','N','N','I','N','G','','A','C','','C','O','A','C','H','E','S'].map((char, ci) => (
+                            {getVerticalChars(editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')).map((char, ci) => (
                               <span key={ci} style={{ height: char === '' ? '12px' : 'auto' }}>{char}</span>
                             ))}
                           </div>
@@ -1888,7 +1951,14 @@ export default function TaDocument({
                         textAlign: 'center',
                         verticalAlign: 'middle',
                         position: 'relative',
-                        background: '#ffffff'
+                        background: '#ffffff',
+                        cursor: 'pointer'
+                      }}
+                      title="Click to toggle: MANNING AC COACHES (COR) ⇄ MANNING SLEEPER COACHES (Others)"
+                      onClick={() => {
+                        const current = editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES');
+                        const nextVal = current === 'MANNING AC COACHES' ? 'MANNING SLEEPER COACHES' : 'MANNING AC COACHES';
+                        handleMetaChange('vertical_object_text', nextVal);
                       }}
                     >
                       <div style={{
@@ -1898,13 +1968,13 @@ export default function TaDocument({
                         justifyContent: 'space-around',
                         height: '100%',
                         fontWeight: 'bold',
-                        fontSize: '12.5px',
+                        fontSize: (editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')).length > 20 ? '11px' : '12.5px',
                         textTransform: 'uppercase',
                         lineHeight: 1.25,
                         userSelect: 'none',
                         color: '#000'
                       }}>
-                        {['M','A','N','N','I','N','G','','A','C','','C','O','A','C','H','E','S'].map((char, ci) => (
+                        {getVerticalChars(editableMeta.vertical_object_text || (isCorStaff ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')).map((char, ci) => (
                           <span key={ci} style={{ height: char === '' ? '12px' : 'auto' }}>{char}</span>
                         ))}
                       </div>

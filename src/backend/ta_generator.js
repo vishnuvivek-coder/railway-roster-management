@@ -2424,6 +2424,12 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       continue;
     }
 
+    const resolvedObjectOfJourney = (category.id === 1 && item.object_of_journey === 'MANNING SLEEPER COACHES')
+      ? 'MANNING AC COACHES'
+      : ((category.id !== 1 && item.object_of_journey === 'MANNING AC COACHES')
+        ? 'MANNING SLEEPER COACHES'
+        : (item.object_of_journey || (category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')));
+
     if (leaveInfo && !hasWorkedTrain) {
       if (seenLeaveDates.has(dIso)) {
         continue; // Suppress duplicate rows on same leave date
@@ -2453,7 +2459,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         is_leave: true,
         leave_code: leaveInfo.code,
         nature_of_leave: leaveInfo.natureOfLeave,
-        object_of_journey: item.object_of_journey || (category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'),
+        object_of_journey: resolvedObjectOfJourney,
         remarks: leaveInfo.natureOfLeave
       });
     } else {
@@ -2491,7 +2497,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         days_claiming_ta: daysClaim,
         absence_hours: item.absence_hours || 0,
         claim_amount: item.claim_amount || 0,
-        object_of_journey: item.object_of_journey || (category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'),
+        object_of_journey: resolvedObjectOfJourney,
         remarks: rowRemarks
       });
     }
@@ -2595,6 +2601,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       pf_no: staff.pf_no || '07323475',
       bill_unit: staff.bill_unit || '0910629',
       doa: staff.doa || '05/08/2000',
+      category_id: staff.category_id,
       category_name: category.name,
       category_code: category.code
     },
