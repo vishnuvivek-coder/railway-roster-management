@@ -160,7 +160,7 @@ function deriveAuditMetadata(actionType, description, undoData = null) {
   if (undoData) {
     if (typeof undoData === 'object') parsedUndo = undoData;
     else if (typeof undoData === 'string') {
-      try { parsedUndo = JSON.parse(undoData); } catch (e) {}
+      try { parsedUndo = JSON.parse(undoData); } catch (e) { }
     }
   }
 
@@ -202,8 +202,8 @@ function deriveAuditMetadata(actionType, description, undoData = null) {
     endpoint = act.includes('BATCH') || act.includes('BULK')
       ? 'POST /api/lr-sheet/batch-update'
       : act.includes('SYNC')
-      ? 'POST /api/lr-sheet/sync-from-daily-duty'
-      : 'POST /api/lr-sheet/cell';
+        ? 'POST /api/lr-sheet/sync-from-daily-duty'
+        : 'POST /api/lr-sheet/cell';
     frontendCaller = 'App.jsx (Leave Reserve LR Sheet)';
     sourceModule = 'Leave Reserve (LR) Sheet';
     savedTables = ['lr_sheet_records'];
@@ -236,12 +236,12 @@ function deriveAuditMetadata(actionType, description, undoData = null) {
     endpoint = act.includes('ALL')
       ? 'POST /api/ta-approvals/accept-all'
       : act.includes('BATCH')
-      ? 'POST /api/ta-approvals/accept-batch'
-      : act.includes('REJECT')
-      ? 'POST /api/ta-approvals/reject'
-      : act.includes('REVERT')
-      ? 'POST /api/ta-approvals/revert'
-      : 'POST /api/ta-approvals/accept';
+        ? 'POST /api/ta-approvals/accept-batch'
+        : act.includes('REJECT')
+          ? 'POST /api/ta-approvals/reject'
+          : act.includes('REVERT')
+            ? 'POST /api/ta-approvals/revert'
+            : 'POST /api/ta-approvals/accept';
     frontendCaller = 'TaApprovals.jsx (TA Approvals Portal)';
     sourceModule = 'TA Approvals Portal';
     savedTables = ['ta_approvals', 'ta_entries'];
@@ -284,8 +284,8 @@ function deriveAuditMetadata(actionType, description, undoData = null) {
     endpoint = act.includes('RESET')
       ? 'DELETE /api/documents/daily-earnings'
       : act.includes('BULK') || act.includes('RANGE')
-      ? 'POST /api/documents/daily-earnings/range'
-      : 'POST /api/documents/daily-earnings';
+        ? 'POST /api/documents/daily-earnings/range'
+        : 'POST /api/documents/daily-earnings';
     frontendCaller = 'DailyEarningsDocument.jsx (Daily Earnings Sheet)';
     sourceModule = 'Daily Earnings Sheet';
     savedTables = ['daily_earnings_entries', 'diary_entries'];
@@ -356,8 +356,8 @@ function deriveAuditMetadata(actionType, description, undoData = null) {
     endpoint = act.includes('ADD') || act.includes('CREATE')
       ? 'POST /api/staff'
       : act.includes('DELETE')
-      ? 'DELETE /api/staff/:id'
-      : 'PUT /api/staff/:id';
+        ? 'DELETE /api/staff/:id'
+        : 'PUT /api/staff/:id';
     frontendCaller = 'App.jsx (Staff Directory)';
     sourceModule = 'Staff & Seniority Directory';
     savedTables = ['staff'];
@@ -1123,7 +1123,7 @@ async function getStaffLastDutyAndRestStatus(staffId, targetDateStr, customNow) 
       if (ov.status === 'REST' || ov.status === 'SICK' || ov.status === 'LEAVE' || ov.status === 'CR' || ov.status === 'ABSENT') {
         continue;
       }
-      
+
       // Check non-daily multi-day service
       const trainStr = ov.extra_train_no || ov.reason || (ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[ov.overridden_link_number] : '');
       const ndMatch = getMultiDayNonDailyMatch(trainStr);
@@ -1371,7 +1371,7 @@ async function calculateStaffCrBalances() {
   allLrSheet.forEach(l => {
     lrSheetMap[`${l.staff_id}_${l.date}`] = l;
   });
-  
+
   function formatDateDisplay(iso) {
     if (!iso) return '';
     const parts = iso.split('-');
@@ -1457,8 +1457,8 @@ async function calculateStaffCrBalances() {
       const isWorkingLr = lr && lr.duty_code && !['R', 'REST', 'L', 'SICK', 'CR', 'O', 'S'].includes(lr.duty_code.toUpperCase());
 
       const explicitRestWorked = (o && o.reason && /rest day worked|cr credit|cr against rest/i.test(o.reason)) ||
-                                (m && m.remarks && /rest day worked|cr credit|cr against rest/i.test(m.remarks)) ||
-                                (lr && lr.remarks && /rest day worked|cr credit|cr against rest/i.test(lr.remarks));
+        (m && m.remarks && /rest day worked|cr credit|cr against rest/i.test(m.remarks)) ||
+        (lr && lr.remarks && /rest day worked|cr credit|cr against rest/i.test(lr.remarks));
 
       if ((isOrigRest && (isWorkingOverride || isWorkingMuster || isWorkingLr)) || explicitRestWorked) {
         let dutyDesc = '';
@@ -2170,18 +2170,18 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
       ORDER BY category_id ASC, link_number ASC
     `);
-    
+
     const results = [];
     const curr = new Date(beforeDateStr + 'T12:00:00');
     const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-    
+
     // Look back up to 21 days to find up to `limit` records
     for (let i = 1; i <= 21 && results.length < limit; i++) {
       const d = new Date(curr);
       d.setDate(d.getDate() - i);
       const dStr = d.toISOString().split('T')[0];
       const dow = dayNames[d.getDay()];
-      
+
       // 1. Check override directly for this staff
       const ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dStr]);
       // 2. Check substitute override where this staff worked as substitute
@@ -2190,7 +2190,7 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
       const nd = await get('SELECT * FROM non_daily_trains WHERE assigned_staff_id = ? AND UPPER(day_of_week) = ?', [staffId, dow]);
       // 4. Check manual duty completion
       const manual = await get('SELECT * FROM lr_duty_completions WHERE staff_id = ? AND arrival_date = ?', [staffId, dStr]);
-      
+
       let dutyText = '';
       let dutyType = 'WORK'; // 'WORK', 'REST', 'LEAVE', 'SICK', 'ABSENT', 'STANDBY'
       let trainNo = '';
@@ -2198,7 +2198,7 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
       let linkNum = null;
       let coaches = '';
       let notes = '';
-      
+
       if (ov) {
         if (ov.status === 'LEAVE') {
           dutyText = `Leave (${ov.leave_type || 'CL'})`;
@@ -2227,7 +2227,7 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
         } else if (ov.overridden_link_number !== null && ov.overridden_link_number !== undefined) {
           linkNum = ov.overridden_link_number;
           const lDef = allLinks.find(l => l.link_number === linkNum && l.category_id === (ov.target_category_id || staff.category_id))
-                     || allLinks.find(l => l.link_number === linkNum);
+            || allLinks.find(l => l.link_number === linkNum);
           if (lDef && lDef.is_rest) {
             dutyText = 'Weekly Rest';
             dutyType = 'REST';
@@ -2290,7 +2290,7 @@ app.get('/api/staff/:id/recent-duties', async (req, res) => {
           dutyType = 'STANDBY';
         }
       }
-      
+
       results.push({
         date: dStr,
         day_of_week: dow,
@@ -2609,7 +2609,7 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
           [targetName, targetDesg, targetPf, currentStaff.seniority_no, currentStaff.pf_no, targetPf]
         );
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
     await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${targetName}, PF: ${targetPf}, Desg: ${targetDesg}, HRMS: ${targetHrms})`);
@@ -2650,13 +2650,11 @@ async function executeDeleteStaff(staffId, res) {
       await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staffId]);
       await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staffId]);
       await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staffId, staffId]);
-      await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]);
-      await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staffId]);
-      await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staffId]);
+      await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staffId]); await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staffId]);
       await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staffId]);
 
       await run('DELETE FROM staff WHERE id = ?', [staffId]);
-      
+
       // Re-index remaining staff in category to keep contiguous positions 1, 2, 3...
       if (catId) {
         const remaining = await all('SELECT id FROM staff WHERE category_id = ? ORDER BY row_position ASC, id ASC', [catId]);
@@ -2670,7 +2668,7 @@ async function executeDeleteStaff(staffId, res) {
         }
         try {
           await run('UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = ?) WHERE id = ?', [catId, catId]);
-        } catch (e) {}
+        } catch (e) { }
       }
 
       await logAudit('Admin', 'DELETE_STAFF', `Deleted staff member '${staffName}' (ID: ${staffId})`);
@@ -3031,8 +3029,8 @@ app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
     const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
     if (!origSet) return res.status(404).json({ error: 'Source link set not found' });
 
-    const newName = customName && customName.trim() 
-      ? customName.trim() 
+    const newName = customName && customName.trim()
+      ? customName.trim()
       : `${origSet.name} (Draft Copy)`;
 
     // Insert brand new draft link set
@@ -3075,8 +3073,8 @@ app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
     }
 
     await logAudit(
-      'Admin', 
-      'DUPLICATE_LINK_SET', 
+      'Admin',
+      'DUPLICATE_LINK_SET',
       `Duplicated Link Set "${origSet.name}" (#${origSet.id}) into Draft Set #${newSetId} with ${origLinks.length} links`,
       {
         action: 'DUPLICATE_LINK_SET',
@@ -3410,7 +3408,7 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
 // ============================================================================
 app.post('/api/links', requireAdmin, async (req, res) => {
   const { category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, set_type, set_name, status } = req.body;
-  
+
   let isDraft = status === 'draft';
   if (link_set_id) {
     const parentSet = await get('SELECT status FROM link_sets WHERE id = ?', [link_set_id]);
@@ -3445,25 +3443,25 @@ app.post('/api/links', requireAdmin, async (req, res) => {
       `INSERT INTO links (category_id, link_set_id, link_number, train_numbers, from_station, to_station, coaches, is_rest, effective_from, effective_to, set_type, set_name, status) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        category_id, 
-        link_set_id || null, 
-        link_number, 
-        train_numbers || '', 
-        from_station || '', 
-        to_station || '', 
-        coaches || '', 
-        is_rest ? 1 : 0, 
-        effective_from || '', 
-        '9999-12-31', 
-        set_type || '2-Day Set', 
-        set_name || null, 
+        category_id,
+        link_set_id || null,
+        link_number,
+        train_numbers || '',
+        from_station || '',
+        to_station || '',
+        coaches || '',
+        is_rest ? 1 : 0,
+        effective_from || '',
+        '9999-12-31',
+        set_type || '2-Day Set',
+        set_name || null,
         isDraft ? 'draft' : (status || 'published')
       ]
     );
 
     await logAudit(
-      'Admin', 
-      'CREATE_LINK', 
+      'Admin',
+      'CREATE_LINK',
       `Created Link ${link_number} for Category ${category_id}${isDraft ? ' (Draft)' : ''}`,
       {
         action: 'CREATE_LINK',
@@ -3521,14 +3519,14 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
            link_number = ?, category_id = ?, link_set_id = ?, status = ?
        WHERE id = ?`,
       [
-        train_numbers, 
-        from_station, 
-        to_station, 
-        coaches, 
-        is_rest, 
-        effective_from, 
-        effective_to, 
-        set_type, 
+        train_numbers,
+        from_station,
+        to_station,
+        coaches,
+        is_rest,
+        effective_from,
+        effective_to,
+        set_type,
         set_name,
         link_number,
         category_id,
@@ -3538,8 +3536,8 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
       ]
     );
     await logAudit(
-      'Admin', 
-      'UPDATE_LINK', 
+      'Admin',
+      'UPDATE_LINK',
       `Updated Link ID ${id}${train_numbers ? ` (Train: ${train_numbers})` : ''} (Link #${link_number})`,
       {
         action: 'UPDATE_LINK',
@@ -3793,8 +3791,8 @@ app.post('/api/slot-customizations', requireAdmin, async (req, res) => {
     }
 
     await logAudit(
-      'Admin', 
-      'UPDATE_SLOT_TRAIN_COACH', 
+      'Admin',
+      'UPDATE_SLOT_TRAIN_COACH',
       `Updated train/coaches for ${targetKey} (Train: ${cleanFirstTrain || ''} / ${cleanLastTrain || ''})`,
       {
         action: 'UPDATE_SLOT_TRAIN_COACH',
@@ -4136,8 +4134,8 @@ app.get('/api/non-daily-trains', async (req, res) => {
       params.push(day.toUpperCase());
     } else {
       sql += ' ORDER BY CASE day_of_week ' +
-             "WHEN 'SUNDAY' THEN 1 WHEN 'MONDAY' THEN 2 WHEN 'TUESDAY' THEN 3 " +
-             "WHEN 'WEDNESDAY' THEN 4 WHEN 'THURSDAY' THEN 5 WHEN 'FRIDAY' THEN 6 WHEN 'SATURDAY' THEN 7 ELSE 8 END, id";
+        "WHEN 'SUNDAY' THEN 1 WHEN 'MONDAY' THEN 2 WHEN 'TUESDAY' THEN 3 " +
+        "WHEN 'WEDNESDAY' THEN 4 WHEN 'THURSDAY' THEN 5 WHEN 'FRIDAY' THEN 6 WHEN 'SATURDAY' THEN 7 ELSE 8 END, id";
     }
 
     const trains = await all(sql, params);
@@ -4167,17 +4165,17 @@ app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
        (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        day_of_week.toUpperCase(), 
-        train_number, 
-        last_day_train_number || null, 
-        departure_station || '', 
-        departure_time || '', 
-        arrival_station || '', 
-        arrival_time || '', 
-        coaches || 'SL / AC', 
-        last_day_coaches || coaches || 'SL / AC', 
-        remarks || null, 
-        assigned_staff_id || null, 
+        day_of_week.toUpperCase(),
+        train_number,
+        last_day_train_number || null,
+        departure_station || '',
+        departure_time || '',
+        arrival_station || '',
+        arrival_time || '',
+        coaches || 'SL / AC',
+        last_day_coaches || coaches || 'SL / AC',
+        remarks || null,
+        assigned_staff_id || null,
         assigned_staff_name || null
       ]
     );
@@ -4346,7 +4344,7 @@ app.post('/api/overrides', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Staff member not found' });
     }
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    
+
     // Compute original link number using rotation formula
     const dayOffset = getDayOffset(category.anchor_date, date);
     const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
@@ -4434,313 +4432,313 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
     }
 
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
-    
+
     return await withTransaction(async () => {
       // Determine dates array to update (supports single date or date range)
-    const datesToProcess = [];
-    const startDate = new Date(date + 'T12:00:00');
-    const endDate = (to_date && to_date >= date) ? new Date(to_date + 'T12:00:00') : startDate;
-    const curDate = new Date(startDate);
-    while (curDate <= endDate) {
-      const y = curDate.getFullYear();
-      const m = String(curDate.getMonth() + 1).padStart(2, '0');
-      const d = String(curDate.getDate()).padStart(2, '0');
-      datesToProcess.push(`${y}-${m}-${d}`);
-      curDate.setDate(curDate.getDate() + 1);
-    }
-    if (datesToProcess.length === 0) datesToProcess.push(date);
+      const datesToProcess = [];
+      const startDate = new Date(date + 'T12:00:00');
+      const endDate = (to_date && to_date >= date) ? new Date(to_date + 'T12:00:00') : startDate;
+      const curDate = new Date(startDate);
+      while (curDate <= endDate) {
+        const y = curDate.getFullYear();
+        const m = String(curDate.getMonth() + 1).padStart(2, '0');
+        const d = String(curDate.getDate()).padStart(2, '0');
+        datesToProcess.push(`${y}-${m}-${d}`);
+        curDate.setDate(curDate.getDate() + 1);
+      }
+      if (datesToProcess.length === 0) datesToProcess.push(date);
 
-    if (action === 'RESET' || action === 'CANCEL_LEAVE') {
-      const undoSnapshots = [];
-      for (const dStr of datesToProcess) {
-        const existing = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let subOverride = null;
-        let subMuster = null;
-        if (existing && existing.substitute_staff_id) {
-          subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
-          subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
-        }
-        undoSnapshots.push({
-          date: dStr,
-          override: existing || null,
-          muster: existingMuster || null,
-          subOverride,
-          subMuster
-        });
-
-        if (existing && existing.substitute_staff_id) {
-          if (existing.status === 'SUBSTITUTE') {
-            // If this staff was a substitute, clear substitute reference on original staff's override
-            await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
-          } else {
-            // If this staff was sick/leave, remove the substitute's override & reset their muster record
-            await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [existing.substitute_staff_id, dStr]);
-            await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
-            // If substitute was an LR employee, clear their LR sheet record
-            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
+      if (action === 'RESET' || action === 'CANCEL_LEAVE') {
+        const undoSnapshots = [];
+        for (const dStr of datesToProcess) {
+          const existing = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let subOverride = null;
+          let subMuster = null;
+          if (existing && existing.substitute_staff_id) {
+            subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
+            subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
           }
-        }
-        await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        // Also delete from muster_records so attendance reverts to cyclic baseline
-        await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          undoSnapshots.push({
+            date: dStr,
+            override: existing || null,
+            muster: existingMuster || null,
+            subOverride,
+            subMuster
+          });
 
-        // If staff is an LR employee, clear their LR sheet record
-        if (staff.category_id === 4) {
-          await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        }
+          if (existing && existing.substitute_staff_id) {
+            if (existing.status === 'SUBSTITUTE') {
+              // If this staff was a substitute, clear substitute reference on original staff's override
+              await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
+            } else {
+              // If this staff was sick/leave, remove the substitute's override & reset their muster record
+              await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [existing.substitute_staff_id, dStr]);
+              await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
+              // If substitute was an LR employee, clear their LR sheet record
+              await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
+            }
+          }
+          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          // Also delete from muster_records so attendance reverts to cyclic baseline
+          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
 
-        // Restore TA approvals and entries for both main staff and substitute
-        const dateParts = dStr.split('-');
-        const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
-        await restoreMusterTaApprovalsAndEntries(staff_id, dStr, altDateStr);
-        await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
-        if (existing && existing.substitute_staff_id) {
-          await restoreMusterTaApprovalsAndEntries(existing.substitute_staff_id, dStr, altDateStr);
-          await syncDocumentsAndEarningsForStaffDate(existing.substitute_staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
-        }
-        try {
-          const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-          await generatePendingTaClaimsForMonth({ run, get, all }, parseInt(dateParts[0], 10), parseInt(dateParts[1], 10), staff_id);
-        } catch (err) {}
+          // If staff is an LR employee, clear their LR sheet record
+          if (staff.category_id === 4) {
+            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          }
 
-        // Automatically cancel any approved leave_requests for this staff on this date
-        await run(
-          `UPDATE leave_requests SET status = 'CANCELLED' 
+          // Restore TA approvals and entries for both main staff and substitute
+          const dateParts = dStr.split('-');
+          const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
+          await restoreMusterTaApprovalsAndEntries(staff_id, dStr, altDateStr);
+          await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
+          if (existing && existing.substitute_staff_id) {
+            await restoreMusterTaApprovalsAndEntries(existing.substitute_staff_id, dStr, altDateStr);
+            await syncDocumentsAndEarningsForStaffDate(existing.substitute_staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
+          }
+          try {
+            const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+            await generatePendingTaClaimsForMonth({ run, get, all }, parseInt(dateParts[0], 10), parseInt(dateParts[1], 10), staff_id);
+          } catch (err) { }
+
+          // Automatically cancel any approved leave_requests for this staff on this date
+          await run(
+            `UPDATE leave_requests SET status = 'CANCELLED' 
            WHERE staff_id = ? AND ((from_date <= ? AND to_date >= ?) OR date = ?) AND status = 'APPROVED'`,
-          [staff_id, dStr, dStr, dStr]
-        );
+            [staff_id, dStr, dStr, dStr]
+          );
 
-        // Also check if this staff was on 1-day leave on Day 1 of a multi-day link set on dStr,
-        // which generated AVAILABLE_FOR_BOOKING overrides on subsequent days:
-        const resetDayOffset = getDayOffset(category.anchor_date, dStr);
-        const resetOrigLink = getBaseLinkNumber(staff.row_position, resetDayOffset, category.cycle_length);
-        const resetLinkSet = getLinkSetDetails(staff.category_id, resetOrigLink);
-        if (resetLinkSet && resetLinkSet.isFirstDayOfSet && resetLinkSet.remainingLinks.length > 0) {
-          for (let k = 0; k < resetLinkSet.remainingLinks.length; k++) {
-            const nextDate = new Date(dStr + 'T12:00:00');
-            nextDate.setDate(nextDate.getDate() + k + 1);
-            const y = nextDate.getFullYear();
-            const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-            const d = String(nextDate.getDate()).padStart(2, '0');
-            const nextDateStr = `${y}-${m}-${d}`;
+          // Also check if this staff was on 1-day leave on Day 1 of a multi-day link set on dStr,
+          // which generated AVAILABLE_FOR_BOOKING overrides on subsequent days:
+          const resetDayOffset = getDayOffset(category.anchor_date, dStr);
+          const resetOrigLink = getBaseLinkNumber(staff.row_position, resetDayOffset, category.cycle_length);
+          const resetLinkSet = getLinkSetDetails(staff.category_id, resetOrigLink);
+          if (resetLinkSet && resetLinkSet.isFirstDayOfSet && resetLinkSet.remainingLinks.length > 0) {
+            for (let k = 0; k < resetLinkSet.remainingLinks.length; k++) {
+              const nextDate = new Date(dStr + 'T12:00:00');
+              nextDate.setDate(nextDate.getDate() + k + 1);
+              const y = nextDate.getFullYear();
+              const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+              const d = String(nextDate.getDate()).padStart(2, '0');
+              const nextDateStr = `${y}-${m}-${d}`;
 
-            const subOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
-            if (subOv && subOv.status === 'AVAILABLE_FOR_BOOKING') {
-              if (subOv.substitute_staff_id) {
-                await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [subOv.substitute_staff_id, nextDateStr]);
-                await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [subOv.substitute_staff_id, nextDateStr]);
-                await syncDocumentsAndEarningsForStaffDate(subOv.substitute_staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
+              const subOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
+              if (subOv && subOv.status === 'AVAILABLE_FOR_BOOKING') {
+                if (subOv.substitute_staff_id) {
+                  await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [subOv.substitute_staff_id, nextDateStr]);
+                  await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [subOv.substitute_staff_id, nextDateStr]);
+                  await syncDocumentsAndEarningsForStaffDate(subOv.substitute_staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
+                }
+                await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
+                await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
+                await syncDocumentsAndEarningsForStaffDate(staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
               }
-              await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
-              await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
-              await syncDocumentsAndEarningsForStaffDate(staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
             }
           }
         }
+
+        const logMsg = action === 'CANCEL_LEAVE'
+          ? `Cancelled leave for ${staff.name} between ${datesToProcess[0]} and ${datesToProcess[datesToProcess.length - 1]} and restored cyclic duty`
+          : `Reset duty status and muster records for ${staff.name} between ${datesToProcess[0]} and ${datesToProcess[datesToProcess.length - 1]} to cyclic roster`;
+
+        const undoData = {
+          action,
+          staff_id,
+          staff_name: staff.name,
+          dates: datesToProcess,
+          snapshots: undoSnapshots
+        };
+        await logAudit('Admin', action === 'CANCEL_LEAVE' ? 'CANCEL_LEAVE' : 'RESET_DUTY', logMsg, undoData);
+
+        const userMsg = action === 'CANCEL_LEAVE'
+          ? `Leave cancelled successfully. ${staff.name} returned to original cyclic link duty!`
+          : `Duty and muster records reset to cyclic roster for ${staff.name}`;
+        return res.json({ success: true, message: userMsg });
       }
 
-      const logMsg = action === 'CANCEL_LEAVE'
-        ? `Cancelled leave for ${staff.name} between ${datesToProcess[0]} and ${datesToProcess[datesToProcess.length - 1]} and restored cyclic duty`
-        : `Reset duty status and muster records for ${staff.name} between ${datesToProcess[0]} and ${datesToProcess[datesToProcess.length - 1]} to cyclic roster`;
-      
-      const undoData = {
-        action,
-        staff_id,
-        staff_name: staff.name,
-        dates: datesToProcess,
-        snapshots: undoSnapshots
-      };
-      await logAudit('Admin', action === 'CANCEL_LEAVE' ? 'CANCEL_LEAVE' : 'RESET_DUTY', logMsg, undoData);
+      if (action === 'WRONG_ALLOTMENT') {
+        const undoSnapshots = [];
+        const linkNum = req.body.link_number || req.body.new_link_number;
+        const targetCatId = target_category_id || staff.category_id;
+        const subAction = req.body.wrong_allotment_action || (replacement_staff_id ? 'REPLACE' : (replacement_type === 'RESET' ? 'RESET' : 'VACANT'));
 
-      const userMsg = action === 'CANCEL_LEAVE'
-        ? `Leave cancelled successfully. ${staff.name} returned to original cyclic link duty!`
-        : `Duty and muster records reset to cyclic roster for ${staff.name}`;
-      return res.json({ success: true, message: userMsg });
-    }
-
-    if (action === 'WRONG_ALLOTMENT') {
-      const undoSnapshots = [];
-      const linkNum = req.body.link_number || req.body.new_link_number;
-      const targetCatId = target_category_id || staff.category_id;
-      const subAction = req.body.wrong_allotment_action || (replacement_staff_id ? 'REPLACE' : (replacement_type === 'RESET' ? 'RESET' : 'VACANT'));
-
-      for (const dStr of datesToProcess) {
-        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let existingSubOverride = null;
-        let existingSubMuster = null;
-        if (replacement_staff_id) {
-          existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-        }
-        undoSnapshots.push({
-          date: dStr,
-          override: existingOverride || null,
-          muster: existingMuster || null,
-          subOverride: existingSubOverride || null,
-          subMuster: existingSubMuster || null
-        });
-
-        // 1. Relieve the wrongly allotted employee (staff_id)
-        if (existingOverride && (existingOverride.status === 'CHANGED_LINK' || existingOverride.status === 'SUBSTITUTE')) {
-          // If staff_id was a substitute or placed on this link via override, clear that assignment
-          if (existingOverride.substitute_staff_id) {
-            await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existingOverride.substitute_staff_id, dStr]);
+        for (const dStr of datesToProcess) {
+          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let existingSubOverride = null;
+          let existingSubMuster = null;
+          if (replacement_staff_id) {
+            existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+            existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
           }
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          if (staff.category_id === 4) {
-            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          }
-        } else if (subAction === 'RESET') {
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          if (staff.category_id === 4) {
-            await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          }
-        } else {
-          // staff_id was cyclic occupant of this link, relieve them as AVAILABLE_FOR_BOOKING at HQ
-          const dayOffset = getDayOffset(category.anchor_date, dStr);
-          const origLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+          undoSnapshots.push({
+            date: dStr,
+            override: existingOverride || null,
+            muster: existingMuster || null,
+            subOverride: existingSubOverride || null,
+            subMuster: existingSubMuster || null
+          });
+
+          // 1. Relieve the wrongly allotted employee (staff_id)
+          if (existingOverride && (existingOverride.status === 'CHANGED_LINK' || existingOverride.status === 'SUBSTITUTE')) {
+            // If staff_id was a substitute or placed on this link via override, clear that assignment
+            if (existingOverride.substitute_staff_id) {
+              await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existingOverride.substitute_staff_id, dStr]);
+            }
+            await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            if (staff.category_id === 4) {
+              await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            }
+          } else if (subAction === 'RESET') {
+            await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            if (staff.category_id === 4) {
+              await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+            }
+          } else {
+            // staff_id was cyclic occupant of this link, relieve them as AVAILABLE_FOR_BOOKING at HQ
+            const dayOffset = getDayOffset(category.anchor_date, dStr);
+            const origLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
              VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = NULL,
                status = 'AVAILABLE_FOR_BOOKING',
                reason = excluded.reason`,
-            [
-              staff_id,
-              dStr,
-              origLink,
-              reason || 'Wrong allotment removed (Available at HQ)',
-              staff.category_id
-            ]
-          );
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              [
+                staff_id,
+                dStr,
+                origLink,
+                reason || 'Wrong allotment removed (Available at HQ)',
+                staff.category_id
+              ]
+            );
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = 'P',
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [staff_id, dStr, 'Available at HQ (Wrong allotment removed)']
-          );
-        }
-        await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: 'AVL', isLeaveOrRest: false, remarks: 'Wrong allotment removed' });
+              [staff_id, dStr, 'Available at HQ (Wrong allotment removed)']
+            );
+          }
+          await syncDocumentsAndEarningsForStaffDate(staff_id, dStr, { dutyText: 'AVL', isLeaveOrRest: false, remarks: 'Wrong allotment removed' });
 
-        // 2. If replacement employee is selected, assign them to this link
-        if (replacement_staff_id) {
-          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-          if (subStaff) {
-            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const targetLinkVal = linkNum ? parseInt(linkNum, 10) : (existingOverride?.overridden_link_number || existingOverride?.original_link_number || null);
+          // 2. If replacement employee is selected, assign them to this link
+          if (replacement_staff_id) {
+            const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+            if (subStaff) {
+              const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+              const targetLinkVal = linkNum ? parseInt(linkNum, 10) : (existingOverride?.overridden_link_number || existingOverride?.original_link_number || null);
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
                VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = 'CHANGED_LINK',
                  reason = excluded.reason,
                  target_category_id = excluded.target_category_id`,
-              [
-                subStaff.id,
-                dStr,
-                subOrigLink,
-                targetLinkVal,
-                reason || `Assigned to Link #${targetLinkVal} (Replaced wrong allotment of ${staff.name})`,
-                targetCatId
-              ]
-            );
+                [
+                  subStaff.id,
+                  dStr,
+                  subOrigLink,
+                  targetLinkVal,
+                  reason || `Assigned to Link #${targetLinkVal} (Replaced wrong allotment of ${staff.name})`,
+                  targetCatId
+                ]
+              );
 
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, `Working Link #${targetLinkVal}`]
-            );
+                [subStaff.id, dStr, `Working Link #${targetLinkVal}`]
+              );
 
-            if (subStaff.category_id === 4) {
-              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-              const dObj = new Date(dStr + 'T12:00:00');
-              const dayOfWeek = dayNames[dObj.getDay()];
-              const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
-              if (resolvedSubDuty && resolvedSubDuty.code) {
-                await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLinkVal}`);
+              if (subStaff.category_id === 4) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const dObj = new Date(dStr + 'T12:00:00');
+                const dayOfWeek = dayNames[dObj.getDay()];
+                const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+                if (resolvedSubDuty && resolvedSubDuty.code) {
+                  await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLinkVal}`);
+                }
               }
+              await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+                targetLink: targetLinkVal,
+                isLeave: false,
+                remarks: `Working Link #${targetLinkVal}`
+              });
             }
-            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
-              targetLink: targetLinkVal,
-              isLeave: false,
-              remarks: `Working Link #${targetLinkVal}`
-            });
           }
         }
-      }
 
-      const auditMsg = replacement_staff_id
-        ? `Removed wrong allotment for ${staff.name} on ${date} and replaced with ${replacement_name || 'selected employee'}`
-        : `Removed wrong allotment for ${staff.name} on ${date}`;
+        const auditMsg = replacement_staff_id
+          ? `Removed wrong allotment for ${staff.name} on ${date} and replaced with ${replacement_name || 'selected employee'}`
+          : `Removed wrong allotment for ${staff.name} on ${date}`;
 
-      await logAudit('Admin', 'WRONG_ALLOTMENT', auditMsg, {
-        staff_id,
-        staff_name: staff.name,
-        action: 'WRONG_ALLOTMENT',
-        subAction,
-        replacement_staff_id,
-        snapshots: undoSnapshots
-      });
-
-      const returnMsg = replacement_staff_id
-        ? `Wrong allotment removed! ${staff.name} relieved and replaced by ${replacement_name || 'selected employee'}.`
-        : (subAction === 'RESET'
-          ? `Wrong allotment removed! Restored to regular cyclic roster.`
-          : `Wrong allotment removed! ${staff.name} relieved from this duty.`);
-
-      return res.json({ success: true, message: returnMsg });
-    }
-
-    if (action === 'MARK_LATER' || action === 'REASON_LATER') {
-      let finalSubstituteName = replacement_name;
-      if (!finalSubstituteName && replacement_staff_id) {
-        const subStaffObj = await get('SELECT name FROM staff WHERE id = ?', [replacement_staff_id]);
-        finalSubstituteName = subStaffObj ? subStaffObj.name : null;
-      }
-
-      const undoSnapshots = [];
-      const effectiveReason = reason || 'Mark Reason Later (Muster Blank)';
-
-      for (const dStr of datesToProcess) {
-        const dayOffset = getDayOffset(category.anchor_date, dStr);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-
-        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let existingSubOverride = null;
-        let existingSubMuster = null;
-        if (replacement_staff_id) {
-          existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-        }
-        undoSnapshots.push({
-          date: dStr,
-          override: existingOverride || null,
-          muster: existingMuster || null,
-          subOverride: existingSubOverride || null,
-          subMuster: existingSubMuster || null
+        await logAudit('Admin', 'WRONG_ALLOTMENT', auditMsg, {
+          staff_id,
+          staff_name: staff.name,
+          action: 'WRONG_ALLOTMENT',
+          subAction,
+          replacement_staff_id,
+          snapshots: undoSnapshots
         });
 
-        // 1. Mark main staff member with status = 'MARK_LATER' and leave_type = NULL
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+        const returnMsg = replacement_staff_id
+          ? `Wrong allotment removed! ${staff.name} relieved and replaced by ${replacement_name || 'selected employee'}.`
+          : (subAction === 'RESET'
+            ? `Wrong allotment removed! Restored to regular cyclic roster.`
+            : `Wrong allotment removed! ${staff.name} relieved from this duty.`);
+
+        return res.json({ success: true, message: returnMsg });
+      }
+
+      if (action === 'MARK_LATER' || action === 'REASON_LATER') {
+        let finalSubstituteName = replacement_name;
+        if (!finalSubstituteName && replacement_staff_id) {
+          const subStaffObj = await get('SELECT name FROM staff WHERE id = ?', [replacement_staff_id]);
+          finalSubstituteName = subStaffObj ? subStaffObj.name : null;
+        }
+
+        const undoSnapshots = [];
+        const effectiveReason = reason || 'Mark Reason Later (Muster Blank)';
+
+        for (const dStr of datesToProcess) {
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+
+          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let existingSubOverride = null;
+          let existingSubMuster = null;
+          if (replacement_staff_id) {
+            existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+            existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          }
+          undoSnapshots.push({
+            date: dStr,
+            override: existingOverride || null,
+            muster: existingMuster || null,
+            subOverride: existingSubOverride || null,
+            subMuster: existingSubMuster || null
+          });
+
+          // 1. Mark main staff member with status = 'MARK_LATER' and leave_type = NULL
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
            VALUES (?, ?, ?, NULL, 'MARK_LATER', ?, ?, ?, ?, NULL)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = NULL,
@@ -4750,80 +4748,80 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              reason = excluded.reason,
              target_category_id = excluded.target_category_id,
              leave_type = NULL`,
-          [
-            staff_id,
-            dStr,
-            originalLink,
-            replacement_staff_id || null,
-            finalSubstituteName || null,
-            effectiveReason,
-            staff.category_id
-          ]
-        );
+            [
+              staff_id,
+              dStr,
+              originalLink,
+              replacement_staff_id || null,
+              finalSubstituteName || null,
+              effectiveReason,
+              staff.category_id
+            ]
+          );
 
-        // 2. Insert into muster_records with BLANK code: ''
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          // 2. Insert into muster_records with BLANK code: ''
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, '', ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = '',
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, dStr, effectiveReason]
-        );
+            [staff_id, dStr, effectiveReason]
+          );
 
-        // Sync main staff with LR sheet if staff is in Category 4
-        if (staff.category_id === 4) {
-          await syncLRSheetRecord(staff.id, dStr, '', effectiveReason);
-        }
+          // Sync main staff with LR sheet if staff is in Category 4
+          if (staff.category_id === 4) {
+            await syncLRSheetRecord(staff.id, dStr, '', effectiveReason);
+          }
 
-        // Disallow TA claims since employee was deleted from slot and did not work
-        const dateParts = dStr.split('-');
-        const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
-        const disallowRemark = `Disallowed: Deleted from duty slot (Reason to be marked later)`;
-        await run(
-          `UPDATE ta_approvals 
+          // Disallow TA claims since employee was deleted from slot and did not work
+          const dateParts = dStr.split('-');
+          const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
+          const disallowRemark = `Disallowed: Deleted from duty slot (Reason to be marked later)`;
+          await run(
+            `UPDATE ta_approvals 
            SET status = 'REJECTED', 
                claim_amount = 0, 
                ta_percentage = NULL, 
                remarks = ?
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-          [disallowRemark, staff.id, dStr, dStr, altDateStr]
-        );
-        await run(
-          `UPDATE ta_entries 
+            [disallowRemark, staff.id, dStr, dStr, altDateStr]
+          );
+          await run(
+            `UPDATE ta_entries 
            SET ta_b1 = '', 
                days_claiming_ta = NULL, 
                remarks = ?
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-          [disallowRemark, staff.id, dStr, dStr, altDateStr]
-        );
-        await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: '', isLeaveOrRest: true, remarks: effectiveReason });
+            [disallowRemark, staff.id, dStr, dStr, altDateStr]
+          );
+          await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: '', isLeaveOrRest: true, remarks: effectiveReason });
 
-        // 3. If replacement staff selected, assign them to originalLink
-        if (replacement_staff_id) {
-          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-          if (subStaff) {
-            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
-                                      (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
-                                      (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
-                                      originalLink;
-            const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || (effectiveSlotLink && effectiveSlotLink <= 21 && subStaff.category_id !== 1);
-            const subReason = isUpgrade
-              ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name}`
-              : `Substitute for ${staff.name} on Link ${effectiveSlotLink}`;
+          // 3. If replacement staff selected, assign them to originalLink
+          if (replacement_staff_id) {
+            const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+            if (subStaff) {
+              const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+              const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
+                (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
+                (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
+                originalLink;
+              const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || target_category_id === 1;
+              const subReason = isUpgrade
+                ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name}`
+                : `Substitute for ${staff.name} on Link ${effectiveSlotLink}`;
 
-            // Clear any previous substitute assignment for this staff on another slot on the same date
-            await run(
-              `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
-              [subStaff.id, staff.id, dStr]
-            );
+              // Clear any previous substitute assignment for this staff on another slot on the same date
+              await run(
+                `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
+                [subStaff.id, staff.id, dStr]
+              );
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
                VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?, NULL, 0, NULL, 0, NULL)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
@@ -4837,174 +4835,174 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  extra_train_no = NULL,
                  is_advance_duty = 0,
                  advance_train_no = NULL`,
-              [
-                subStaff.id,
-                dStr,
-                subOrigLink,
-                effectiveSlotLink,
-                staff.id,
-                staff.name,
-                subReason,
-                isUpgrade ? 1 : (target_category_id || staff.category_id)
-              ]
-            );
+                [
+                  subStaff.id,
+                  dStr,
+                  subOrigLink,
+                  effectiveSlotLink,
+                  staff.id,
+                  staff.name,
+                  subReason,
+                  isUpgrade ? 1 : (target_category_id || staff.category_id)
+                ]
+              );
 
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
-            );
+                [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
+              );
 
-            // Regenerate TA claims for substitute
-            await run(
-              `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
-              [subStaff.id, dStr, dStr, altDateStr]
-            );
-            const subY = parseInt(dateParts[0], 10);
-            const subM = parseInt(dateParts[1], 10);
-            try {
-              const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-              await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
-            } catch (err) {}
+              // Regenerate TA claims for substitute
+              await run(
+                `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+                [subStaff.id, dStr, dStr, altDateStr]
+              );
+              const subY = parseInt(dateParts[0], 10);
+              const subM = parseInt(dateParts[1], 10);
+              try {
+                const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+                await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
+              } catch (err) { }
 
-            if (subStaff.category_id === 4) {
-              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-              const dObj = new Date(dStr + 'T12:00:00');
-              const dayOfWeek = dayNames[dObj.getDay()];
-              const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
-              if (resolvedSubDuty && resolvedSubDuty.code) {
-                await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
+              if (subStaff.category_id === 4) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const dObj = new Date(dStr + 'T12:00:00');
+                const dayOfWeek = dayNames[dObj.getDay()];
+                const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+                if (resolvedSubDuty && resolvedSubDuty.code) {
+                  await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
+                }
+              }
+              await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
+            }
+          }
+        }
+
+        const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
+        const undoData = {
+          action: 'MARK_LATER',
+          staff_id,
+          staff_name: staff.name,
+          dates: datesToProcess,
+          replacement_staff_id: replacement_staff_id || null,
+          snapshots: undoSnapshots
+        };
+        await logAudit(
+          'Admin',
+          'STAFF_MARK_LATER',
+          `Deleted ${staff.name} from duty slot on ${dateRangeStr}. Reason marked later and muster kept blank. Replacement: ${finalSubstituteName || 'None'}.`,
+          undoData
+        );
+
+        return res.json({
+          success: true,
+          message: `Deleted ${staff.name} from duty slot on ${dateRangeStr}! Muster record kept blank to fill later.${finalSubstituteName ? ` Replaced by ${finalSubstituteName}.` : ' Slot left vacant.'}`
+        });
+      }
+
+      if (action === 'SICK' || action === 'LEAVE' || action === 'CR' || action === 'ABSENT' || action === 'REST') {
+        let finalSubstituteName = replacement_name;
+        if (!finalSubstituteName && replacement_staff_id) {
+          const subStaffObj = await get('SELECT name FROM staff WHERE id = ?', [replacement_staff_id]);
+          finalSubstituteName = subStaffObj ? subStaffObj.name : null;
+        }
+
+        // Determine leave type and muster code
+        let effectiveLeaveType = leave_type;
+        if (action === 'LEAVE') {
+          effectiveLeaveType = leave_type || 'CL';
+        } else if (action === 'SICK') {
+          effectiveLeaveType = leave_type || 'LHAP';
+        } else if (action === 'CR') {
+          effectiveLeaveType = 'CR';
+        } else if (action === 'ABSENT') {
+          effectiveLeaveType = 'ABSENT';
+        } else if (action === 'REST') {
+          effectiveLeaveType = leave_type || 'REST';
+        }
+
+        let musterCode = effectiveLeaveType.toUpperCase();
+        if (action === 'ABSENT') {
+          musterCode = 'O';
+        } else if (action === 'REST' || effectiveLeaveType === 'REST' || effectiveLeaveType === 'R') {
+          musterCode = 'R';
+        } else if (!ALLOWED_MUSTER_CODES.includes(musterCode)) {
+          musterCode = action === 'LEAVE' ? 'CL' : (action === 'SICK' ? 'LHAP' : 'CR');
+        }
+
+        const undoSnapshots = [];
+
+        for (const dStr of datesToProcess) {
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+
+          // Determine day-specific leave type and reason
+          let dayLeaveType = effectiveLeaveType;
+          let dayReason = reason;
+          let dayAction = action;
+
+          if (day_wise_leaves) {
+            let dayConfig = null;
+            if (Array.isArray(day_wise_leaves)) {
+              dayConfig = day_wise_leaves.find(item => item && item.date === dStr);
+            } else if (typeof day_wise_leaves === 'object') {
+              dayConfig = day_wise_leaves[dStr];
+            }
+
+            if (dayConfig) {
+              if (typeof dayConfig === 'string') {
+                dayLeaveType = dayConfig.toUpperCase();
+              } else if (typeof dayConfig === 'object') {
+                if (dayConfig.leave_type) dayLeaveType = dayConfig.leave_type.toUpperCase();
+                if (dayConfig.reason) dayReason = dayConfig.reason;
               }
             }
-            await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
-          }
-        }
-      }
-
-      const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
-      const undoData = {
-        action: 'MARK_LATER',
-        staff_id,
-        staff_name: staff.name,
-        dates: datesToProcess,
-        replacement_staff_id: replacement_staff_id || null,
-        snapshots: undoSnapshots
-      };
-      await logAudit(
-        'Admin',
-        'STAFF_MARK_LATER',
-        `Deleted ${staff.name} from duty slot on ${dateRangeStr}. Reason marked later and muster kept blank. Replacement: ${finalSubstituteName || 'None'}.`,
-        undoData
-      );
-
-      return res.json({
-        success: true,
-        message: `Deleted ${staff.name} from duty slot on ${dateRangeStr}! Muster record kept blank to fill later.${finalSubstituteName ? ` Replaced by ${finalSubstituteName}.` : ' Slot left vacant.'}`
-      });
-    }
-
-    if (action === 'SICK' || action === 'LEAVE' || action === 'CR' || action === 'ABSENT' || action === 'REST') {
-      let finalSubstituteName = replacement_name;
-      if (!finalSubstituteName && replacement_staff_id) {
-        const subStaffObj = await get('SELECT name FROM staff WHERE id = ?', [replacement_staff_id]);
-        finalSubstituteName = subStaffObj ? subStaffObj.name : null;
-      }
-
-      // Determine leave type and muster code
-      let effectiveLeaveType = leave_type;
-      if (action === 'LEAVE') {
-        effectiveLeaveType = leave_type || 'CL';
-      } else if (action === 'SICK') {
-        effectiveLeaveType = leave_type || 'LHAP';
-      } else if (action === 'CR') {
-        effectiveLeaveType = 'CR';
-      } else if (action === 'ABSENT') {
-        effectiveLeaveType = 'ABSENT';
-      } else if (action === 'REST') {
-        effectiveLeaveType = leave_type || 'REST';
-      }
-
-      let musterCode = effectiveLeaveType.toUpperCase();
-      if (action === 'ABSENT') {
-        musterCode = 'O';
-      } else if (action === 'REST' || effectiveLeaveType === 'REST' || effectiveLeaveType === 'R') {
-        musterCode = 'R';
-      } else if (!ALLOWED_MUSTER_CODES.includes(musterCode)) {
-        musterCode = action === 'LEAVE' ? 'CL' : (action === 'SICK' ? 'LHAP' : 'CR');
-      }
-
-      const undoSnapshots = [];
-
-      for (const dStr of datesToProcess) {
-        const dayOffset = getDayOffset(category.anchor_date, dStr);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-
-        // Determine day-specific leave type and reason
-        let dayLeaveType = effectiveLeaveType;
-        let dayReason = reason;
-        let dayAction = action;
-
-        if (day_wise_leaves) {
-          let dayConfig = null;
-          if (Array.isArray(day_wise_leaves)) {
-            dayConfig = day_wise_leaves.find(item => item && item.date === dStr);
-          } else if (typeof day_wise_leaves === 'object') {
-            dayConfig = day_wise_leaves[dStr];
           }
 
-          if (dayConfig) {
-            if (typeof dayConfig === 'string') {
-              dayLeaveType = dayConfig.toUpperCase();
-            } else if (typeof dayConfig === 'object') {
-              if (dayConfig.leave_type) dayLeaveType = dayConfig.leave_type.toUpperCase();
-              if (dayConfig.reason) dayReason = dayConfig.reason;
-            }
+          if (action === 'LEAVE' && dayLeaveType === 'CR') {
+            dayAction = 'CR';
+          } else if (action === 'LEAVE' && (dayLeaveType === 'REST' || dayLeaveType === 'R')) {
+            dayAction = 'REST';
+          } else if (action === 'CR' && dayLeaveType !== 'CR') {
+            dayAction = (dayLeaveType === 'REST' || dayLeaveType === 'R') ? 'REST' : 'LEAVE';
+          } else if (action === 'REST' && (dayLeaveType !== 'REST' && dayLeaveType !== 'R')) {
+            dayAction = dayLeaveType === 'CR' ? 'CR' : 'LEAVE';
           }
-        }
 
-        if (action === 'LEAVE' && dayLeaveType === 'CR') {
-          dayAction = 'CR';
-        } else if (action === 'LEAVE' && (dayLeaveType === 'REST' || dayLeaveType === 'R')) {
-          dayAction = 'REST';
-        } else if (action === 'CR' && dayLeaveType !== 'CR') {
-          dayAction = (dayLeaveType === 'REST' || dayLeaveType === 'R') ? 'REST' : 'LEAVE';
-        } else if (action === 'REST' && (dayLeaveType !== 'REST' && dayLeaveType !== 'R')) {
-          dayAction = dayLeaveType === 'CR' ? 'CR' : 'LEAVE';
-        }
+          let dayMusterCode = dayLeaveType.toUpperCase();
+          if (dayAction === 'ABSENT') {
+            dayMusterCode = 'O';
+          } else if (dayAction === 'REST' || dayLeaveType === 'REST' || dayLeaveType === 'R') {
+            dayMusterCode = 'R';
+          } else if (!ALLOWED_MUSTER_CODES.includes(dayMusterCode)) {
+            dayMusterCode = dayAction === 'LEAVE' ? 'CL' : (dayAction === 'SICK' ? 'LHAP' : 'CR');
+          }
 
-        let dayMusterCode = dayLeaveType.toUpperCase();
-        if (dayAction === 'ABSENT') {
-          dayMusterCode = 'O';
-        } else if (dayAction === 'REST' || dayLeaveType === 'REST' || dayLeaveType === 'R') {
-          dayMusterCode = 'R';
-        } else if (!ALLOWED_MUSTER_CODES.includes(dayMusterCode)) {
-          dayMusterCode = dayAction === 'LEAVE' ? 'CL' : (dayAction === 'SICK' ? 'LHAP' : 'CR');
-        }
+          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let existingSubOverride = null;
+          let existingSubMuster = null;
+          if (replacement_staff_id) {
+            existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+            existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          }
+          undoSnapshots.push({
+            date: dStr,
+            override: existingOverride || null,
+            muster: existingMuster || null,
+            subOverride: existingSubOverride || null,
+            subMuster: existingSubMuster || null
+          });
 
-        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let existingSubOverride = null;
-        let existingSubMuster = null;
-        if (replacement_staff_id) {
-          existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-        }
-        undoSnapshots.push({
-          date: dStr,
-          override: existingOverride || null,
-          muster: existingMuster || null,
-          subOverride: existingSubOverride || null,
-          subMuster: existingSubMuster || null
-        });
-
-        // 1. Mark main staff member
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+          // 1. Mark main staff member
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
            VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = NULL,
@@ -5014,84 +5012,84 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              reason = excluded.reason,
              target_category_id = excluded.target_category_id,
              leave_type = excluded.leave_type`,
-          [
-            staff_id,
-            dStr,
-            originalLink,
-            dayAction,
-            replacement_staff_id || null,
-            finalSubstituteName || null,
-            dayReason || `${dayAction} - ${dayLeaveType}`,
-            staff.category_id,
-            dayLeaveType
-          ]
-        );
+            [
+              staff_id,
+              dStr,
+              originalLink,
+              dayAction,
+              replacement_staff_id || null,
+              finalSubstituteName || null,
+              dayReason || `${dayAction} - ${dayLeaveType}`,
+              staff.category_id,
+              dayLeaveType
+            ]
+          );
 
-        // 2. Automatically sync with muster_records table
-        const musterRemarks = `${dayAction} [${dayLeaveType}]${finalSubstituteName ? ` - Sub: ${finalSubstituteName}` : ''}${dayReason ? ` (${dayReason})` : ''}`;
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          // 2. Automatically sync with muster_records table
+          const musterRemarks = `${dayAction} [${dayLeaveType}]${finalSubstituteName ? ` - Sub: ${finalSubstituteName}` : ''}${dayReason ? ` (${dayReason})` : ''}`;
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = excluded.code,
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, dStr, dayMusterCode, musterRemarks]
-        );
+            [staff_id, dStr, dayMusterCode, musterRemarks]
+          );
 
-        // Sync main staff with LR sheet if staff is in Category 4
-        if (staff.category_id === 4) {
-          const lrMusterCode = dayMusterCode === 'SICK' ? 'S' : dayMusterCode;
-          await syncLRSheetRecord(staff.id, dStr, lrMusterCode, dayReason || `${dayAction} - ${dayLeaveType}`);
-        }
+          // Sync main staff with LR sheet if staff is in Category 4
+          if (staff.category_id === 4) {
+            const lrMusterCode = dayMusterCode === 'SICK' ? 'S' : dayMusterCode;
+            await syncLRSheetRecord(staff.id, dStr, lrMusterCode, dayReason || `${dayAction} - ${dayLeaveType}`);
+          }
 
-        // Synchronize TA approvals for main staff on leave/sick/rest
-        const dateParts = dStr.split('-');
-        const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
-        const disallowRemark = `Disallowed: On Leave/Absent as per Daily Duty (${dayMusterCode})`;
-        await run(
-          `UPDATE ta_approvals 
+          // Synchronize TA approvals for main staff on leave/sick/rest
+          const dateParts = dStr.split('-');
+          const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
+          const disallowRemark = `Disallowed: On Leave/Absent as per Daily Duty (${dayMusterCode})`;
+          await run(
+            `UPDATE ta_approvals 
            SET status = 'REJECTED', 
                claim_amount = 0, 
                ta_percentage = NULL, 
                remarks = ?
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-          [disallowRemark, staff.id, dStr, dStr, altDateStr]
-        );
-        await run(
-          `UPDATE ta_entries 
+            [disallowRemark, staff.id, dStr, dStr, altDateStr]
+          );
+          await run(
+            `UPDATE ta_entries 
            SET ta_b1 = '', 
                days_claiming_ta = NULL, 
                remarks = ?
            WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-          [disallowRemark, staff.id, dStr, dStr, altDateStr]
-        );
-        await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: dayMusterCode, isLeaveOrRest: true, remarks: musterRemarks });
+            [disallowRemark, staff.id, dStr, dStr, altDateStr]
+          );
+          await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: dayMusterCode, isLeaveOrRest: true, remarks: musterRemarks });
 
-        // If replacement is an existing staff member in another column or LR pool
-        if (replacement_staff_id) {
-          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-          if (subStaff) {
-            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
-                                      (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
-                                      (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
-                                      originalLink;
-            const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || (effectiveSlotLink && effectiveSlotLink <= 21 && subStaff.category_id !== 1);
-            const subReason = isUpgrade
-              ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name} (${dayLeaveType})`
-              : `Substitute for ${staff.name} (${dayLeaveType}) on Link ${effectiveSlotLink}`;
+          // If replacement is an existing staff member in another column or LR pool
+          if (replacement_staff_id) {
+            const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+            if (subStaff) {
+              const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+              const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
+                (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
+                (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
+                originalLink;
+              const isUpgrade = replacement_type === 'UPGRADE_SLEEPER' || staff.category_id === 1 || target_category_id === 1;
+              const subReason = isUpgrade
+                ? `Upgraded to COR Link ${effectiveSlotLink} in place of ${staff.name} (${dayLeaveType})`
+                : `Substitute for ${staff.name} (${dayLeaveType}) on Link ${effectiveSlotLink}`;
 
-            // Clear any previous substitute assignment for this staff on another slot on the same date
-            await run(
-              `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
-              [subStaff.id, staff.id, dStr]
-            );
+              // Clear any previous substitute assignment for this staff on another slot on the same date
+              await run(
+                `UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND staff_id != ? AND date = ?`,
+                [subStaff.id, staff.id, dStr]
+              );
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type, is_extra, extra_train_no, is_advance_duty, advance_train_no)
                VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?, NULL, 0, NULL, 0, NULL)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
@@ -5105,70 +5103,70 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  extra_train_no = NULL,
                  is_advance_duty = 0,
                  advance_train_no = NULL`,
-              [
-                subStaff.id,
-                dStr,
-                subOrigLink,
-                effectiveSlotLink,
-                staff.id,
-                staff.name,
-                subReason,
-                isUpgrade ? 1 : (target_category_id || staff.category_id)
-              ]
-            );
+                [
+                  subStaff.id,
+                  dStr,
+                  subOrigLink,
+                  effectiveSlotLink,
+                  staff.id,
+                  staff.name,
+                  subReason,
+                  isUpgrade ? 1 : (target_category_id || staff.category_id)
+                ]
+              );
 
-            // Substitute is working duty on this date: record 'P' in muster roll
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              // Substitute is working duty on this date: record 'P' in muster roll
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
-            );
+                [subStaff.id, dStr, isUpgrade ? `Upgraded to COR Link #${effectiveSlotLink} (Sub for ${staff.name})` : `Working as substitute for ${staff.name}`]
+              );
 
-            // Regenerate TA claims for substitute
-            await run(
-              `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
-              [subStaff.id, dStr, dStr, altDateStr]
-            );
-            const subY = parseInt(dateParts[0], 10);
-            const subM = parseInt(dateParts[1], 10);
-            try {
-              const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-              await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
-            } catch (err) {}
-            await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
+              // Regenerate TA claims for substitute
+              await run(
+                `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+                [subStaff.id, dStr, dStr, altDateStr]
+              );
+              const subY = parseInt(dateParts[0], 10);
+              const subM = parseInt(dateParts[1], 10);
+              try {
+                const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+                await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
+              } catch (err) { }
+              await syncDocumentsAndEarningsForStaffDate(subStaff.id, dStr, { dutyText: `L-${effectiveSlotLink}`, isLeaveOrRest: false, remarks: subReason });
 
-            // Sync substitute with LR sheet if substitute is in Category 4
-            if (subStaff.category_id === 4) {
-              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-              const dObj = new Date(dStr + 'T12:00:00');
-              const dayOfWeek = dayNames[dObj.getDay()];
-              const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
-              if (resolvedSubDuty && resolvedSubDuty.code) {
-                await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
-              }
+              // Sync substitute with LR sheet if substitute is in Category 4
+              if (subStaff.category_id === 4) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const dObj = new Date(dStr + 'T12:00:00');
+                const dayOfWeek = dayNames[dObj.getDay()];
+                const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+                if (resolvedSubDuty && resolvedSubDuty.code) {
+                  await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
+                }
 
-              // If original link is part of a multi-day link set, automatically book LR substitute for the entire link!
-              if (datesToProcess.length === 1) {
-                const subLinkSet = getLinkSetDetails(staff.category_id, originalLink);
-                if (subLinkSet && subLinkSet.remainingLinks && subLinkSet.remainingLinks.length > 0) {
-                  for (let k = 0; k < subLinkSet.remainingLinks.length; k++) {
-                    const remLinkNum = subLinkSet.remainingLinks[k];
-                    const nextDate = new Date(dStr + 'T12:00:00');
-                    nextDate.setDate(nextDate.getDate() + k + 1);
-                    const y = nextDate.getFullYear();
-                    const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-                    const d = String(nextDate.getDate()).padStart(2, '0');
-                    const nextDateStr = `${y}-${m}-${d}`;
+                // If original link is part of a multi-day link set, automatically book LR substitute for the entire link!
+                if (datesToProcess.length === 1) {
+                  const subLinkSet = getLinkSetDetails(staff.category_id, originalLink);
+                  if (subLinkSet && subLinkSet.remainingLinks && subLinkSet.remainingLinks.length > 0) {
+                    for (let k = 0; k < subLinkSet.remainingLinks.length; k++) {
+                      const remLinkNum = subLinkSet.remainingLinks[k];
+                      const nextDate = new Date(dStr + 'T12:00:00');
+                      nextDate.setDate(nextDate.getDate() + k + 1);
+                      const y = nextDate.getFullYear();
+                      const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+                      const d = String(nextDate.getDate()).padStart(2, '0');
+                      const nextDateStr = `${y}-${m}-${d}`;
 
-                    const subLegReason = `Substitute for ${staff.name} on Link #${remLinkNum} (Day ${subLinkSet.dayIndexInSet + k + 1} of ${subLinkSet.setLength}-day link set)`;
+                      const subLegReason = `Substitute for ${staff.name} on Link #${remLinkNum} (Day ${subLinkSet.dayIndexInSet + k + 1} of ${subLinkSet.setLength}-day link set)`;
 
-                    await run(
-                      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+                      await run(
+                        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                        VALUES (?, ?, NULL, ?, 'SUBSTITUTE', ?, ?, ?, ?)
                        ON CONFLICT(staff_id, date) DO UPDATE SET
                          overridden_link_number = excluded.overridden_link_number,
@@ -5177,87 +5175,87 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                          substitute_name = excluded.substitute_name,
                          reason = excluded.reason,
                          target_category_id = excluded.target_category_id`,
-                      [subStaff.id, nextDateStr, remLinkNum, staff.id, staff.name, subLegReason, target_category_id || staff.category_id]
-                    );
+                        [subStaff.id, nextDateStr, remLinkNum, staff.id, staff.name, subLegReason, target_category_id || staff.category_id]
+                      );
 
-                    await run(
-                      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                      await run(
+                        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                        VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                        ON CONFLICT(staff_id, date) DO UPDATE SET
                          code = 'P',
                          remarks = excluded.remarks,
                          updated_by = excluded.updated_by,
                          updated_at = CURRENT_TIMESTAMP`,
-                      [subStaff.id, nextDateStr, `Working as substitute for ${staff.name} on Link #${remLinkNum}`]
-                    );
+                        [subStaff.id, nextDateStr, `Working as substitute for ${staff.name} on Link #${remLinkNum}`]
+                      );
 
-                    const nextDObj = new Date(nextDateStr + 'T12:00:00');
-                    const nextDayOfWeek = dayNames[nextDObj.getDay()];
-                    const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, nextDateStr, nextDayOfWeek, subStaff.rest_day);
-                    if (resolvedNextDuty && resolvedNextDuty.code) {
-                      await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, subLegReason);
+                      const nextDObj = new Date(nextDateStr + 'T12:00:00');
+                      const nextDayOfWeek = dayNames[nextDObj.getDay()];
+                      const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, nextDateStr, nextDayOfWeek, subStaff.rest_day);
+                      if (resolvedNextDuty && resolvedNextDuty.code) {
+                        await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, subLegReason);
+                      }
+                      await syncDocumentsAndEarningsForStaffDate(subStaff.id, nextDateStr, { dutyText: `L-${remLinkNum}`, isLeaveOrRest: false, remarks: subLegReason });
                     }
-                    await syncDocumentsAndEarningsForStaffDate(subStaff.id, nextDateStr, { dutyText: `L-${remLinkNum}`, isLeaveOrRest: false, remarks: subLegReason });
                   }
                 }
               }
             }
           }
         }
-      }
 
-      // Multi-Day Link Leave/Sick Automation:
-      // If employee takes leave or sick on Day 1 (or Days 1..M) of an N-day link set (where M < N),
-      // they did not travel outstation on Day 1, so they remain physically present at HQ (GNT).
-      // For any remaining days of the link set:
-      // - Main staff is automatically marked AVAILABLE_FOR_BOOKING at HQ (Muster: 'P').
-      // - The scheduled link slot on that day is vacated for relief allotment ([UNMANNED / VACANT] with Assign Staff button).
-      // - If a substitute was assigned, the substitute works the train for the return legs as well.
-      let multiDaySetNotice = '';
-      if (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST') {
-        const firstDate = datesToProcess[0];
-        const lastDate = datesToProcess[datesToProcess.length - 1];
-        const firstDayOffset = getDayOffset(category.anchor_date, firstDate);
-        const firstOriginalLink = getBaseLinkNumber(staff.row_position, firstDayOffset, category.cycle_length);
-        const linkSet = getLinkSetDetails(staff.category_id, firstOriginalLink);
+        // Multi-Day Link Leave/Sick Automation:
+        // If employee takes leave or sick on Day 1 (or Days 1..M) of an N-day link set (where M < N),
+        // they did not travel outstation on Day 1, so they remain physically present at HQ (GNT).
+        // For any remaining days of the link set:
+        // - Main staff is automatically marked AVAILABLE_FOR_BOOKING at HQ (Muster: 'P').
+        // - The scheduled link slot on that day is vacated for relief allotment ([UNMANNED / VACANT] with Assign Staff button).
+        // - If a substitute was assigned, the substitute works the train for the return legs as well.
+        let multiDaySetNotice = '';
+        if (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST') {
+          const firstDate = datesToProcess[0];
+          const lastDate = datesToProcess[datesToProcess.length - 1];
+          const firstDayOffset = getDayOffset(category.anchor_date, firstDate);
+          const firstOriginalLink = getBaseLinkNumber(staff.row_position, firstDayOffset, category.cycle_length);
+          const linkSet = getLinkSetDetails(staff.category_id, firstOriginalLink);
 
-        if (linkSet && linkSet.setLinks) {
-          const startIndex = linkSet.setLinks.indexOf(firstOriginalLink);
-          const daysCovered = datesToProcess.length;
-          const remainingSetLinks = linkSet.setLinks.slice(startIndex + daysCovered);
+          if (linkSet && linkSet.setLinks) {
+            const startIndex = linkSet.setLinks.indexOf(firstOriginalLink);
+            const daysCovered = datesToProcess.length;
+            const remainingSetLinks = linkSet.setLinks.slice(startIndex + daysCovered);
 
-          if (remainingSetLinks.length > 0) {
-            multiDaySetNotice = ` Multi-Day Link detected (${linkSet.setLength}-day link #${firstOriginalLink}): On the remaining ${remainingSetLinks.length} day(s), staff is marked Available for Booking at HQ [Muster: P], and Link #${remainingSetLinks.join(', #')} vacated for relief allotment.`;
+            if (remainingSetLinks.length > 0) {
+              multiDaySetNotice = ` Multi-Day Link detected (${linkSet.setLength}-day link #${firstOriginalLink}): On the remaining ${remainingSetLinks.length} day(s), staff is marked Available for Booking at HQ [Muster: P], and Link #${remainingSetLinks.join(', #')} vacated for relief allotment.`;
 
-            for (let k = 0; k < remainingSetLinks.length; k++) {
-              const remLink = remainingSetLinks[k];
-              const nextDate = new Date(lastDate + 'T12:00:00');
-              nextDate.setDate(nextDate.getDate() + k + 1);
-              const y = nextDate.getFullYear();
-              const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-              const d = String(nextDate.getDate()).padStart(2, '0');
-              const remDateStr = `${y}-${m}-${d}`;
+              for (let k = 0; k < remainingSetLinks.length; k++) {
+                const remLink = remainingSetLinks[k];
+                const nextDate = new Date(lastDate + 'T12:00:00');
+                nextDate.setDate(nextDate.getDate() + k + 1);
+                const y = nextDate.getFullYear();
+                const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+                const d = String(nextDate.getDate()).padStart(2, '0');
+                const remDateStr = `${y}-${m}-${d}`;
 
-              // Record snapshot for undo
-              const existingSubDayOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-              const existingSubDayMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-              let existingSubDaySubOv = null;
-              let existingSubDaySubMuster = null;
-              if (replacement_staff_id) {
-                existingSubDaySubOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-                existingSubDaySubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-              }
-              undoSnapshots.push({
-                date: remDateStr,
-                override: existingSubDayOv || null,
-                muster: existingSubDayMuster || null,
-                subOverride: existingSubDaySubOv || null,
-                subMuster: existingSubDaySubMuster || null
-              });
+                // Record snapshot for undo
+                const existingSubDayOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
+                const existingSubDayMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
+                let existingSubDaySubOv = null;
+                let existingSubDaySubMuster = null;
+                if (replacement_staff_id) {
+                  existingSubDaySubOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
+                  existingSubDaySubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
+                }
+                undoSnapshots.push({
+                  date: remDateStr,
+                  override: existingSubDayOv || null,
+                  muster: existingSubDayMuster || null,
+                  subOverride: existingSubDaySubOv || null,
+                  subMuster: existingSubDaySubMuster || null
+                });
 
-              // 1. Mark main staff as AVAILABLE_FOR_BOOKING at HQ
-              await run(
-                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+                // 1. Mark main staff as AVAILABLE_FOR_BOOKING at HQ
+                await run(
+                  `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                  VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?, ?, ?)
                  ON CONFLICT(staff_id, date) DO UPDATE SET
                    overridden_link_number = NULL,
@@ -5266,44 +5264,44 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                    substitute_name = excluded.substitute_name,
                    reason = excluded.reason,
                    target_category_id = excluded.target_category_id`,
-                [
-                  staff_id,
-                  remDateStr,
-                  remLink,
-                  replacement_staff_id || null,
-                  finalSubstituteName || null,
-                  `Available for Booking Duty at HQ (Came out of ${action} on Link #${firstOriginalLink})`,
-                  staff.category_id
-                ]
-              );
+                  [
+                    staff_id,
+                    remDateStr,
+                    remLink,
+                    replacement_staff_id || null,
+                    finalSubstituteName || null,
+                    `Available for Booking Duty at HQ (Came out of ${action} on Link #${firstOriginalLink})`,
+                    staff.category_id
+                  ]
+                );
 
-              // 2. Mark main staff muster as 'P' (Present at HQ)
-              await run(
-                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                // 2. Mark main staff muster as 'P' (Present at HQ)
+                await run(
+                  `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                  VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                  ON CONFLICT(staff_id, date) DO UPDATE SET
                    code = 'P',
                    remarks = excluded.remarks,
                    updated_by = excluded.updated_by,
                    updated_at = CURRENT_TIMESTAMP`,
-                [
-                  staff_id,
-                  remDateStr,
-                  `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
-                ]
-              );
-              await syncDocumentsAndEarningsForStaffDate(staff_id, remDateStr, { dutyText: 'AVL', isLeaveOrRest: false });
+                  [
+                    staff_id,
+                    remDateStr,
+                    `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
+                  ]
+                );
+                await syncDocumentsAndEarningsForStaffDate(staff_id, remDateStr, { dutyText: 'AVL', isLeaveOrRest: false });
 
-              // 3. If substitute assigned on Day 1, they work return leg as well
-              if (replacement_staff_id) {
-                const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-                if (subStaff) {
-                  const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-                  const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, remDateStr), subCat.cycle_length);
-                  const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
+                // 3. If substitute assigned on Day 1, they work return leg as well
+                if (replacement_staff_id) {
+                  const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+                  if (subStaff) {
+                    const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+                    const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, remDateStr), subCat.cycle_length);
+                    const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
 
-                  await run(
-                    `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+                    await run(
+                      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                      VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
                      ON CONFLICT(staff_id, date) DO UPDATE SET
                        overridden_link_number = excluded.overridden_link_number,
@@ -5312,99 +5310,100 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                        substitute_name = excluded.substitute_name,
                        reason = excluded.reason,
                        target_category_id = excluded.target_category_id`,
-                    [
-                      subStaff.id,
-                      remDateStr,
-                      subOrigLink,
-                      remLink,
-                      staff.id,
-                      staff.name,
-                      subReason,
-                      staff.category_id
-                    ]
-                  );
+                      [
+                        subStaff.id,
+                        remDateStr,
+                        subOrigLink,
+                        remLink,
+                        staff.id,
+                        staff.name,
+                        subReason,
+                        staff.category_id
+                      ]
+                    );
 
-                  await run(
-                    `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                    await run(
+                      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                      VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                      ON CONFLICT(staff_id, date) DO UPDATE SET
                        code = 'P',
                        remarks = excluded.remarks,
                        updated_by = excluded.updated_by,
                        updated_at = CURRENT_TIMESTAMP`,
-                    [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
-                  );
-                  await syncDocumentsAndEarningsForStaffDate(subStaff.id, remDateStr, { dutyText: `L-${remLink}`, isLeaveOrRest: false, remarks: subReason });
+                      [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
+                    );
+                    await syncDocumentsAndEarningsForStaffDate(subStaff.id, remDateStr, { dutyText: `L-${remLink}`, isLeaveOrRest: false, remarks: subReason });
+                  }
                 }
               }
             }
           }
         }
-      }
 
-      let dayWiseSummary = '';
-      if (day_wise_leaves && datesToProcess.length > 1) {
-        const parts = datesToProcess.map(dStr => {
-          let t = effectiveLeaveType;
-          if (Array.isArray(day_wise_leaves)) {
-            const f = day_wise_leaves.find(x => x && x.date === dStr);
-            if (f && f.leave_type) t = f.leave_type;
-          } else if (typeof day_wise_leaves === 'object' && day_wise_leaves[dStr]) {
-            t = typeof day_wise_leaves[dStr] === 'string' ? day_wise_leaves[dStr] : (day_wise_leaves[dStr].leave_type || t);
-          }
-          const dParts = dStr.split('-');
-          return `${dParts[2]}/${dParts[1]}: ${t}`;
-        });
-        dayWiseSummary = ` (${parts.join(', ')})`;
-      }
-
-      const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
-      const undoData = {
-        action,
-        staff_id,
-        staff_name: staff.name,
-        dates: datesToProcess,
-        replacement_staff_id: replacement_staff_id || null,
-        snapshots: undoSnapshots
-      };
-      await logAudit(
-        'Admin',
-        `STAFF_${action}`,
-        `Marked ${staff.name} as ${action}${dayWiseSummary || ` (${effectiveLeaveType})`} on ${dateRangeStr}. Replacement: ${finalSubstituteName || 'None'}. Reason: ${reason || action}.${multiDaySetNotice ? ' ' + multiDaySetNotice : ''} Updated Muster Sheet.`,
-        undoData
-      );
-
-      return res.json({
-        success: true,
-        message: `Updated ${staff.name} to ${action}${dayWiseSummary || ` [${effectiveLeaveType}]`} with replacement ${finalSubstituteName || 'None'}${multiDaySetNotice ? ' - ' + multiDaySetNotice : ''} and updated Muster Sheet!`
-      });
-    }
-
-    if (action === 'CHANGED_LINK') {
-      const targetLink = (new_link_number === '' || new_link_number === null || new_link_number === undefined) ? null : parseInt(new_link_number, 10);
-      const linkStatus = targetLink === null ? 'REST' : 'CHANGED_LINK';
-      const dayOffset = getDayOffset(category.anchor_date, date);
-      const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-      
-      // Resolve target_category_id (never leave as 4 for LR staff when a link is assigned)
-      let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
-      if ((!resolvedTargetCat || resolvedTargetCat === 4) && targetLink !== null) {
-        const ownLink = staff.category_id !== 4 ? await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staff.category_id, targetLink]) : null;
-        if (ownLink) {
-          resolvedTargetCat = staff.category_id;
-        } else {
-          const anyLink = await get('SELECT category_id FROM links WHERE category_id != 4 AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [targetLink]);
-          if (anyLink) resolvedTargetCat = anyLink.category_id;
-          else resolvedTargetCat = targetLink > 21 ? 2 : 1;
+        let dayWiseSummary = '';
+        if (day_wise_leaves && datesToProcess.length > 1) {
+          const parts = datesToProcess.map(dStr => {
+            let t = effectiveLeaveType;
+            if (Array.isArray(day_wise_leaves)) {
+              const f = day_wise_leaves.find(x => x && x.date === dStr);
+              if (f && f.leave_type) t = f.leave_type;
+            } else if (typeof day_wise_leaves === 'object' && day_wise_leaves[dStr]) {
+              t = typeof day_wise_leaves[dStr] === 'string' ? day_wise_leaves[dStr] : (day_wise_leaves[dStr].leave_type || t);
+            }
+            const dParts = dStr.split('-');
+            return `${dParts[2]}/${dParts[1]}: ${t}`;
+          });
+          dayWiseSummary = ` (${parts.join(', ')})`;
         }
+
+        const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
+        const undoData = {
+          action,
+          staff_id,
+          staff_name: staff.name,
+          dates: datesToProcess,
+          replacement_staff_id: replacement_staff_id || null,
+          snapshots: undoSnapshots
+        };
+        await logAudit(
+          'Admin',
+          `STAFF_${action}`,
+          `Marked ${staff.name} as ${action}${dayWiseSummary || ` (${effectiveLeaveType})`} on ${dateRangeStr}. Replacement: ${finalSubstituteName || 'None'}. Reason: ${reason || action}.${multiDaySetNotice ? ' ' + multiDaySetNotice : ''} Updated Muster Sheet.`,
+          undoData
+        );
+
+        return res.json({
+          success: true,
+          message: `Updated ${staff.name} to ${action}${dayWiseSummary || ` [${effectiveLeaveType}]`} with replacement ${finalSubstituteName || 'None'}${multiDaySetNotice ? ' - ' + multiDaySetNotice : ''} and updated Muster Sheet!`
+        });
       }
-      if (!resolvedTargetCat) resolvedTargetCat = staff.category_id;
 
-      const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
-      const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+      if (action === 'CHANGED_LINK') {
+        const targetLink = (new_link_number === '' || new_link_number === null || new_link_number === undefined) ? null : parseInt(new_link_number, 10);
+        const linkStatus = targetLink === null ? 'REST' : 'CHANGED_LINK';
+        const dayOffset = getDayOffset(category.anchor_date, date);
+        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
-      await run(
-        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+        // Resolve target_category_id (never leave as 4 for LR staff when a link is assigned)
+        let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
+        if ((!resolvedTargetCat || resolvedTargetCat === 4) && targetLink !== null) {
+          const preferredCat = (staff.category_id === 1) ? 1 : 2;
+          const ownLink = await get('SELECT category_id FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [preferredCat, targetLink]);
+          if (ownLink) {
+            resolvedTargetCat = preferredCat;
+          } else {
+            const anyLink = await get('SELECT category_id FROM links WHERE category_id != 4 AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id DESC LIMIT 1', [targetLink]);
+            if (anyLink) resolvedTargetCat = anyLink.category_id;
+            else resolvedTargetCat = preferredCat;
+          }
+        }
+        if (!resolvedTargetCat) resolvedTargetCat = (staff.category_id === 1 ? 1 : 2);
+
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+
+        await run(
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
          VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            overridden_link_number = excluded.overridden_link_number,
@@ -5418,176 +5417,176 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            advance_train_no = NULL,
            reason = excluded.reason,
            target_category_id = excluded.target_category_id`,
-        [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
-      );
-
-      // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
-      await run(
-        'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
-        [staff_id, date]
-      );
-
-      // If this staff is replacing an original occupant on this date, link substitute_staff_id on the original occupant's override row
-      if (req.body.replaced_staff_id && parseInt(req.body.replaced_staff_id, 10) !== parseInt(staff_id, 10) && targetLink !== null) {
-        await run(
-          'UPDATE overrides SET substitute_staff_id = ?, substitute_name = ? WHERE staff_id = ? AND date = ?',
-          [staff.id, staff.name, parseInt(req.body.replaced_staff_id, 10), date]
+          [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
         );
-      }
 
-      // Keep non_daily_trains template table clean
-      await run(
-        'UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?',
-        [staff_id]
-      );
+        // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
+        await run(
+          'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+          [staff_id, date]
+        );
 
-      // Check if Day 1 was a scheduled REST day
-      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-      const dObj = new Date(date + 'T12:00:00');
-      const dayOfWeek = dayNames[dObj.getDay()];
-      let isDay1Rest = false;
-      if (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) isDay1Rest = true;
-      if (staff.category_id !== 4) {
-        const origLinkDef = await getActiveLinkDef(staff.category_id, originalLink, date);
-        if (originalLink === null || (origLinkDef && origLinkDef.is_rest === 1)) isDay1Rest = true;
-      }
-      const day1RestRemark = (isDay1Rest && targetLink !== null) ? ` - Rest day worked (CR credited for ${formatDateDisplay(date)})` : '';
-      const baseRemark = reason || (targetLink === null ? 'Assigned Rest Day' : `Assigned Link #${targetLink}`);
-      const musterRemark = baseRemark + day1RestRemark;
+        // If this staff is replacing an original occupant on this date, link substitute_staff_id on the original occupant's override row
+        if (req.body.replaced_staff_id && parseInt(req.body.replaced_staff_id, 10) !== parseInt(staff_id, 10) && targetLink !== null) {
+          await run(
+            'UPDATE overrides SET substitute_staff_id = ?, substitute_name = ? WHERE staff_id = ? AND date = ?',
+            [staff.id, staff.name, parseInt(req.body.replaced_staff_id, 10), date]
+          );
+        }
 
-      // Sync with muster records: P for duty, R for rest
-      const musterCode = targetLink === null ? 'R' : 'P';
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+        // Keep non_daily_trains template table clean
+        await run(
+          'UPDATE non_daily_trains SET assigned_staff_id = NULL, assigned_staff_name = NULL WHERE assigned_staff_id = ?',
+          [staff_id]
+        );
+
+        // Check if Day 1 was a scheduled REST day
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const dObj = new Date(date + 'T12:00:00');
+        const dayOfWeek = dayNames[dObj.getDay()];
+        let isDay1Rest = false;
+        if (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) isDay1Rest = true;
+        if (staff.category_id !== 4) {
+          const origLinkDef = await getActiveLinkDef(staff.category_id, originalLink, date);
+          if (originalLink === null || (origLinkDef && origLinkDef.is_rest === 1)) isDay1Rest = true;
+        }
+        const day1RestRemark = (isDay1Rest && targetLink !== null) ? ` - Rest day worked (CR credited for ${formatDateDisplay(date)})` : '';
+        const baseRemark = reason || (targetLink === null ? 'Assigned Rest Day' : `Assigned Link #${targetLink}`);
+        const musterRemark = baseRemark + day1RestRemark;
+
+        // Sync with muster records: P for duty, R for rest
+        const musterCode = targetLink === null ? 'R' : 'P';
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
          VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            code = excluded.code,
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staff_id, date, musterCode, musterRemark]
-      );
+          [staff_id, date, musterCode, musterRemark]
+        );
 
-      // Sync with Leave Reserve (LR) sheet if staff is Category 4
-      if (staff.category_id === 4) {
-        const resolvedDuty = await resolveDutyCodeForLRStaff(staff.id, date, dayOfWeek, staff.rest_day);
-        if (resolvedDuty && resolvedDuty.code) {
-          await syncLRSheetRecord(staff.id, date, resolvedDuty.code, musterRemark);
-        } else if (targetLink === null) {
-          await syncLRSheetRecord(staff.id, date, 'R', reason || 'Assigned Rest Day');
+        // Sync with Leave Reserve (LR) sheet if staff is Category 4
+        if (staff.category_id === 4) {
+          const resolvedDuty = await resolveDutyCodeForLRStaff(staff.id, date, dayOfWeek, staff.rest_day);
+          if (resolvedDuty && resolvedDuty.code) {
+            await syncLRSheetRecord(staff.id, date, resolvedDuty.code, musterRemark);
+          } else if (targetLink === null) {
+            await syncLRSheetRecord(staff.id, date, 'R', reason || 'Assigned Rest Day');
+          }
         }
-      }
 
-      // Sync Day 1 across TA, NDA, Diary, and Daily Earnings
-      await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, date, {
-        targetLink,
-        targetCat: resolvedTargetCat,
-        isLeave: false,
-        isRest: targetLink === null,
-        remarks: musterRemark
-      });
+        // Sync Day 1 across TA, NDA, Diary, and Daily Earnings
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, date, {
+          targetLink,
+          targetCat: resolvedTargetCat,
+          isLeave: false,
+          isRest: targetLink === null,
+          remarks: musterRemark
+        });
 
-      // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
-      // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
-      if (targetLink !== null) {
-        const linkSet = getLinkSetDetails(resolvedTargetCat, targetLink);
-        if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
-          for (let k = 0; k < linkSet.remainingLinks.length; k++) {
-            const remLinkNum = linkSet.remainingLinks[k];
-            const nextDate = new Date(date + 'T12:00:00');
-            nextDate.setDate(nextDate.getDate() + k + 1);
-            const y = nextDate.getFullYear();
-            const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-            const d = String(nextDate.getDate()).padStart(2, '0');
-            const nextDateStr = `${y}-${m}-${d}`;
+        // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
+        // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
+        if (targetLink !== null) {
+          const linkSet = getLinkSetDetails(resolvedTargetCat, targetLink);
+          if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
+            for (let k = 0; k < linkSet.remainingLinks.length; k++) {
+              const remLinkNum = linkSet.remainingLinks[k];
+              const nextDate = new Date(date + 'T12:00:00');
+              nextDate.setDate(nextDate.getDate() + k + 1);
+              const y = nextDate.getFullYear();
+              const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+              const d = String(nextDate.getDate()).padStart(2, '0');
+              const nextDateStr = `${y}-${m}-${d}`;
 
-            // Check if this date was a scheduled REST day for this staff member
-            let isNextDayRest = false;
-            const nextDObj = new Date(nextDateStr + 'T12:00:00');
-            const nextDayOfWeek = dayNames[nextDObj.getDay()];
-            if (staff.rest_day && staff.rest_day.toUpperCase() === nextDayOfWeek) isNextDayRest = true;
-            if (staff.category_id !== 4) {
-              const nextDayOffset = getDayOffset(category.anchor_date, nextDateStr);
-              const nextOrigLink = getBaseLinkNumber(staff.row_position, nextDayOffset, category.cycle_length);
-              const nextLinkDef = await getActiveLinkDef(staff.category_id, nextOrigLink, nextDateStr);
-              if (nextOrigLink === null || (nextLinkDef && nextLinkDef.is_rest === 1)) isNextDayRest = true;
-            }
+              // Check if this date was a scheduled REST day for this staff member
+              let isNextDayRest = false;
+              const nextDObj = new Date(nextDateStr + 'T12:00:00');
+              const nextDayOfWeek = dayNames[nextDObj.getDay()];
+              if (staff.rest_day && staff.rest_day.toUpperCase() === nextDayOfWeek) isNextDayRest = true;
+              if (staff.category_id !== 4) {
+                const nextDayOffset = getDayOffset(category.anchor_date, nextDateStr);
+                const nextOrigLink = getBaseLinkNumber(staff.row_position, nextDayOffset, category.cycle_length);
+                const nextLinkDef = await getActiveLinkDef(staff.category_id, nextOrigLink, nextDateStr);
+                if (nextOrigLink === null || (nextLinkDef && nextLinkDef.is_rest === 1)) isNextDayRest = true;
+              }
 
-            const restRemark = isNextDayRest ? ` - Rest day worked (CR credited for ${formatDateDisplay(nextDateStr)})` : '';
-            const nextReason = `Assigned Link #${remLinkNum} (Day ${k + 2} of Link #${targetLink})${restRemark}`;
+              const restRemark = isNextDayRest ? ` - Rest day worked (CR credited for ${formatDateDisplay(nextDateStr)})` : '';
+              const nextReason = `Assigned Link #${remLinkNum} (Day ${k + 2} of Link #${targetLink})${restRemark}`;
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                VALUES (?, ?, NULL, ?, 'CHANGED_LINK', NULL, NULL, ?, ?)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = 'CHANGED_LINK',
                  reason = excluded.reason,
                  target_category_id = excluded.target_category_id`,
-              [staff.id, nextDateStr, remLinkNum, nextReason, resolvedTargetCat]
-            );
+                [staff.id, nextDateStr, remLinkNum, nextReason, resolvedTargetCat]
+              );
 
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [staff.id, nextDateStr, nextReason]
-            );
+                [staff.id, nextDateStr, nextReason]
+              );
 
-            // If staff is LR, sync with LR sheet
-            if (staff.category_id === 4) {
-              const resolvedNextDuty = await resolveDutyCodeForLRStaff(staff.id, nextDateStr, nextDayOfWeek, staff.rest_day);
-              if (resolvedNextDuty && resolvedNextDuty.code) {
-                await syncLRSheetRecord(staff.id, nextDateStr, resolvedNextDuty.code, nextReason);
+              // If staff is LR, sync with LR sheet
+              if (staff.category_id === 4) {
+                const resolvedNextDuty = await resolveDutyCodeForLRStaff(staff.id, nextDateStr, nextDayOfWeek, staff.rest_day);
+                if (resolvedNextDuty && resolvedNextDuty.code) {
+                  await syncLRSheetRecord(staff.id, nextDateStr, resolvedNextDuty.code, nextReason);
+                }
               }
-            }
 
-            // Sync across all modules (TA, NDA, Diary)
-            await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, nextDateStr, {
-              targetLink: remLinkNum,
-              targetCat: resolvedTargetCat,
-              isLeave: false
-            });
+              // Sync across all modules (TA, NDA, Diary)
+              await syncDutyChangeAcrossAllModules({ get, all, run }, staff.id, nextDateStr, {
+                targetLink: remLinkNum,
+                targetCat: resolvedTargetCat,
+                isLeave: false
+              });
+            }
           }
         }
+
+        const undoData = {
+          action: 'CHANGED_LINK',
+          staff_id,
+          staff_name: staff.name,
+          date,
+          previous_override: existingOverride || null,
+          previous_muster: existingMuster || null
+        };
+
+        await logAudit(
+          'Admin',
+          'CHANGED_LINK',
+          `Changed link for ${staff.name} on ${date} from Link ${originalLink} to ${targetLink === null ? 'REST' : `Link ${targetLink}`} (Category ${resolvedTargetCat}). Reason: ${reason}`,
+          undoData
+        );
+
+        return res.json({ success: true, message: `Changed link for ${staff.name} to ${targetLink === null ? 'REST' : `Link ${targetLink}`} and updated Muster Sheet` });
       }
 
-      const undoData = {
-        action: 'CHANGED_LINK',
-        staff_id,
-        staff_name: staff.name,
-        date,
-        previous_override: existingOverride || null,
-        previous_muster: existingMuster || null
-      };
+      if (action === 'AVAILABLE_FOR_BOOKING' || action === 'REPORTED_FIT' || action === 'MARK_AVAILABLE' || action === 'REMOVE_FROM_LINK' || action === 'REMOVE') {
+        const dayOffset = getDayOffset(category.anchor_date, date);
+        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const isReportedFit = action === 'REPORTED_FIT' || (reason && /sick|fit/i.test(reason));
+        const finalReason = reason || (isReportedFit
+          ? 'Reported fit / came out of sick leave; spare at HQ GNT available for duty booking'
+          : (action === 'AVAILABLE_FOR_BOOKING' ? 'Available for Booking Duty at HQ GNT' : `Removed from Link #${originalLink} - Available for other duty / booking`));
 
-      await logAudit(
-        'Admin',
-        'CHANGED_LINK',
-        `Changed link for ${staff.name} on ${date} from Link ${originalLink} to ${targetLink === null ? 'REST' : `Link ${targetLink}`} (Category ${resolvedTargetCat}). Reason: ${reason}`,
-        undoData
-      );
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
 
-      return res.json({ success: true, message: `Changed link for ${staff.name} to ${targetLink === null ? 'REST' : `Link ${targetLink}`} and updated Muster Sheet` });
-    }
-
-    if (action === 'AVAILABLE_FOR_BOOKING' || action === 'REPORTED_FIT' || action === 'MARK_AVAILABLE' || action === 'REMOVE_FROM_LINK' || action === 'REMOVE') {
-      const dayOffset = getDayOffset(category.anchor_date, date);
-      const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-      const isReportedFit = action === 'REPORTED_FIT' || (reason && /sick|fit/i.test(reason));
-      const finalReason = reason || (isReportedFit
-        ? 'Reported fit / came out of sick leave; spare at HQ GNT available for duty booking'
-        : (action === 'AVAILABLE_FOR_BOOKING' ? 'Available for Booking Duty at HQ GNT' : `Removed from Link #${originalLink} - Available for other duty / booking`));
-
-      const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
-      const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
-
-      await run(
-        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+        await run(
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
          VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', NULL, NULL, ?, ?)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            overridden_link_number = NULL,
@@ -5596,86 +5595,86 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            substitute_name = NULL,
            reason = excluded.reason,
            target_category_id = excluded.target_category_id`,
-        [staff_id, date, originalLink, finalReason, staff.category_id]
-      );
+          [staff_id, date, originalLink, finalReason, staff.category_id]
+        );
 
-      // In muster records, they are on duty at HQ available for booking
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+        // In muster records, they are on duty at HQ available for booking
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
          VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            code = 'P',
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staff_id, date, finalReason]
-      );
+          [staff_id, date, finalReason]
+        );
 
-      // If Category 4 (LR), update LR sheet
-      if (staff.category_id === 4) {
-        await syncLRSheetRecord(staff.id, date, 'SPARE', reason || 'Available for other duty');
-      }
-
-      await syncDocumentsAndEarningsForStaffDate(staff.id, date, { dutyText: 'AVL', isLeaveOrRest: false, remarks: finalReason });
-
-      const undoData = {
-        action,
-        staff_id,
-        staff_name: staff.name,
-        date,
-        original_link: originalLink,
-        previous_override: existingOverride || null,
-        previous_muster: existingMuster || null
-      };
-
-      await logAudit(
-        'Admin',
-        'REMOVE_FROM_LINK',
-        `Removed ${staff.name} from Link #${originalLink} on ${date}. Marked Available for Booking at HQ. Reason: ${reason || 'Available for other duty'}`,
-        undoData
-      );
-
-      return res.json({
-        success: true,
-        message: `${staff.name} has been removed from Link #${originalLink} on ${date} and is now Available for Booking at HQ!`
-      });
-    }
-
-    // UPGRADE_TO_COR: Upgrade Staff to Conductor (COR / Category 1)
-    if (action === 'UPGRADE_TO_COR' || action === 'UPGRADE_COR') {
-      const targetCorLink = req.body.target_cor_link !== undefined && req.body.target_cor_link !== null && req.body.target_cor_link !== ''
-        ? parseInt(req.body.target_cor_link, 10)
-        : (new_link_number ? parseInt(new_link_number, 10) : 1);
-      const trainInfo = req.body.cor_train_info || '';
-      const undoSnapshots = [];
-
-      for (const dStr of datesToProcess) {
-        const dayOffset = getDayOffset(category.anchor_date, dStr);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-
-        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let subOverride = null;
-        let subMuster = null;
-
-        if (replacement_staff_id) {
-          subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+        // If Category 4 (LR), update LR sheet
+        if (staff.category_id === 4) {
+          await syncLRSheetRecord(staff.id, date, 'SPARE', reason || 'Available for other duty');
         }
 
-        undoSnapshots.push({
-          date: dStr,
-          original_link: originalLink,
-          target_cor_link: targetCorLink,
-          override: existingOverride || null,
-          muster: existingMuster || null,
-          subOverride,
-          subMuster
-        });
+        await syncDocumentsAndEarningsForStaffDate(staff.id, date, { dutyText: 'AVL', isLeaveOrRest: false, remarks: finalReason });
 
-        // 1. Assign upgraded staff to COR link with status 'SUBSTITUTE' and target_category_id = 1
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+        const undoData = {
+          action,
+          staff_id,
+          staff_name: staff.name,
+          date,
+          original_link: originalLink,
+          previous_override: existingOverride || null,
+          previous_muster: existingMuster || null
+        };
+
+        await logAudit(
+          'Admin',
+          'REMOVE_FROM_LINK',
+          `Removed ${staff.name} from Link #${originalLink} on ${date}. Marked Available for Booking at HQ. Reason: ${reason || 'Available for other duty'}`,
+          undoData
+        );
+
+        return res.json({
+          success: true,
+          message: `${staff.name} has been removed from Link #${originalLink} on ${date} and is now Available for Booking at HQ!`
+        });
+      }
+
+      // UPGRADE_TO_COR: Upgrade Staff to Conductor (COR / Category 1)
+      if (action === 'UPGRADE_TO_COR' || action === 'UPGRADE_COR') {
+        const targetCorLink = req.body.target_cor_link !== undefined && req.body.target_cor_link !== null && req.body.target_cor_link !== ''
+          ? parseInt(req.body.target_cor_link, 10)
+          : (new_link_number ? parseInt(new_link_number, 10) : 1);
+        const trainInfo = req.body.cor_train_info || '';
+        const undoSnapshots = [];
+
+        for (const dStr of datesToProcess) {
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+
+          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let subOverride = null;
+          let subMuster = null;
+
+          if (replacement_staff_id) {
+            subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+            subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          }
+
+          undoSnapshots.push({
+            date: dStr,
+            original_link: originalLink,
+            target_cor_link: targetCorLink,
+            override: existingOverride || null,
+            muster: existingMuster || null,
+            subOverride,
+            subMuster
+          });
+
+          // 1. Assign upgraded staff to COR link with status 'SUBSTITUTE' and target_category_id = 1
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
            VALUES (?, ?, ?, ?, 'SUBSTITUTE', NULL, NULL, ?, 1)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = excluded.overridden_link_number,
@@ -5684,166 +5683,166 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              substitute_name = NULL,
              reason = excluded.reason,
              target_category_id = 1`,
-          [staff_id, dStr, originalLink, targetCorLink, reason || `Upgraded to COR on Link #${targetCorLink}${trainInfo ? ` (${trainInfo})` : ''}`]
-        );
+            [staff_id, dStr, originalLink, targetCorLink, reason || `Upgraded to COR on Link #${targetCorLink}${trainInfo ? ` (${trainInfo})` : ''}`]
+          );
 
-        // Muster record: P for working duty
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          // Muster record: P for working duty
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = 'P',
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, dStr, `Upgraded to COR Link #${targetCorLink}`]
-        );
+            [staff_id, dStr, `Upgraded to COR Link #${targetCorLink}`]
+          );
 
-        // 2. If replacement employee selected to take their original slot, assign them
-        if (replacement_staff_id) {
-          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-          if (subStaff) {
-            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const slotReason = `Assigned to Link #${originalLink} (Substitute for upgraded staff ${staff.name})`;
+          // 2. If replacement employee selected to take their original slot, assign them
+          if (replacement_staff_id) {
+            const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+            if (subStaff) {
+              const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+              const slotReason = `Assigned to Link #${originalLink} (Substitute for upgraded staff ${staff.name})`;
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
                VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = 'CHANGED_LINK',
                  reason = excluded.reason,
                  target_category_id = excluded.target_category_id`,
-              [subStaff.id, dStr, subOrigLink, originalLink, slotReason, staff.category_id]
-            );
+                [subStaff.id, dStr, subOrigLink, originalLink, slotReason, staff.category_id]
+              );
 
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, `Working Link #${originalLink} (Sub for ${staff.name})`]
-            );
+                [subStaff.id, dStr, `Working Link #${originalLink} (Sub for ${staff.name})`]
+              );
 
-            if (subStaff.category_id === 4) {
-              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-              const dObj = new Date(dStr + 'T12:00:00');
-              const dayOfWeek = dayNames[dObj.getDay()];
-              const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
-              if (resolvedSubDuty && resolvedSubDuty.code) {
-                await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${originalLink}`);
+              if (subStaff.category_id === 4) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const dObj = new Date(dStr + 'T12:00:00');
+                const dayOfWeek = dayNames[dObj.getDay()];
+                const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+                if (resolvedSubDuty && resolvedSubDuty.code) {
+                  await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${originalLink}`);
+                }
               }
+
+              await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+                targetLink: originalLink,
+                targetCat: staff.category_id,
+                isLeave: false
+              });
             }
-
-            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
-              targetLink: originalLink,
-              targetCat: staff.category_id,
-              isLeave: false
-            });
           }
+
+          // Sync upgraded staff across modules
+          await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
+            targetLink: targetCorLink,
+            targetCat: 1,
+            isLeave: false
+          });
         }
 
-        // Sync upgraded staff across modules
-        await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
-          targetLink: targetCorLink,
-          targetCat: 1,
-          isLeave: false
+        const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
+        await logAudit(
+          'Admin',
+          'UPGRADE_TO_COR',
+          `Upgraded ${staff.name} to Conductor (COR) Link #${targetCorLink} on ${dateRangeStr}. Original slot ${replacement_name ? `replaced by ${replacement_name}` : 'vacated'}.`,
+          {
+            action: 'UPGRADE_TO_COR',
+            staff_id,
+            staff_name: staff.name,
+            dates: datesToProcess,
+            target_cor_link: targetCorLink,
+            replacement_staff_id: replacement_staff_id || null,
+            snapshots: undoSnapshots
+          }
+        );
+
+        return res.json({
+          success: true,
+          message: `${staff.name} successfully upgraded to Conductor (COR) on Link #${targetCorLink} for ${dateRangeStr}! ${replacement_name ? `Original slot assigned to ${replacement_name}.` : 'Original slot vacated.'}`
         });
       }
 
-      const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
-      await logAudit(
-        'Admin',
-        'UPGRADE_TO_COR',
-        `Upgraded ${staff.name} to Conductor (COR) Link #${targetCorLink} on ${dateRangeStr}. Original slot ${replacement_name ? `replaced by ${replacement_name}` : 'vacated'}.`,
-        {
-          action: 'UPGRADE_TO_COR',
-          staff_id,
-          staff_name: staff.name,
-          dates: datesToProcess,
-          target_cor_link: targetCorLink,
-          replacement_staff_id: replacement_staff_id || null,
-          snapshots: undoSnapshots
+      // REASSIGN_STAFF: Reassign train link to another employee and set original staff status
+      if (action === 'REASSIGN_STAFF' || action === 'REASSIGN') {
+        const targetLink = req.body.target_link !== undefined && req.body.target_link !== null && req.body.target_link !== ''
+          ? parseInt(req.body.target_link, 10)
+          : (req.body.link_number ? parseInt(req.body.link_number, 10) : (new_link_number ? parseInt(new_link_number, 10) : null));
+        const targetCatId = target_category_id ? parseInt(target_category_id, 10) : staff.category_id;
+        const originalStaffAction = req.body.original_staff_action || 'SPARE_HQ'; // 'SPARE_HQ' | 'LEAVE' | 'REST' | 'SHIFTED'
+        const repStaffId = replacement_staff_id ? parseInt(replacement_staff_id, 10) : null;
+        let repStaffName = replacement_name;
+
+        if (!repStaffId) {
+          return res.status(400).json({ error: 'Replacement employee must be selected for link reassignment.' });
         }
-      );
 
-      return res.json({
-        success: true,
-        message: `${staff.name} successfully upgraded to Conductor (COR) on Link #${targetCorLink} for ${dateRangeStr}! ${replacement_name ? `Original slot assigned to ${replacement_name}.` : 'Original slot vacated.'}`
-      });
-    }
+        const subStaff = await get('SELECT * FROM staff WHERE id = ?', [repStaffId]);
+        if (!subStaff) {
+          return res.status(404).json({ error: 'Replacement employee not found in database.' });
+        }
+        if (!repStaffName) repStaffName = subStaff.name;
 
-    // REASSIGN_STAFF: Reassign train link to another employee and set original staff status
-    if (action === 'REASSIGN_STAFF' || action === 'REASSIGN') {
-      const targetLink = req.body.target_link !== undefined && req.body.target_link !== null && req.body.target_link !== ''
-        ? parseInt(req.body.target_link, 10)
-        : (req.body.link_number ? parseInt(req.body.link_number, 10) : (new_link_number ? parseInt(new_link_number, 10) : null));
-      const targetCatId = target_category_id ? parseInt(target_category_id, 10) : staff.category_id;
-      const originalStaffAction = req.body.original_staff_action || 'SPARE_HQ'; // 'SPARE_HQ' | 'LEAVE' | 'REST' | 'SHIFTED'
-      const repStaffId = replacement_staff_id ? parseInt(replacement_staff_id, 10) : null;
-      let repStaffName = replacement_name;
+        const undoSnapshots = [];
 
-      if (!repStaffId) {
-        return res.status(400).json({ error: 'Replacement employee must be selected for link reassignment.' });
-      }
+        for (const dStr of datesToProcess) {
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
 
-      const subStaff = await get('SELECT * FROM staff WHERE id = ?', [repStaffId]);
-      if (!subStaff) {
-        return res.status(404).json({ error: 'Replacement employee not found in database.' });
-      }
-      if (!repStaffName) repStaffName = subStaff.name;
+          const existingMainOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMainMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [repStaffId, dStr]);
+          const existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [repStaffId, dStr]);
 
-      const undoSnapshots = [];
+          undoSnapshots.push({
+            date: dStr,
+            mainOverride: existingMainOverride || null,
+            mainMuster: existingMainMuster || null,
+            subOverride: existingSubOverride || null,
+            subMuster: existingSubMuster || null
+          });
 
-      for (const dStr of datesToProcess) {
-        const dayOffset = getDayOffset(category.anchor_date, dStr);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-
-        const existingMainOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMainMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [repStaffId, dStr]);
-        const existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [repStaffId, dStr]);
-
-        undoSnapshots.push({
-          date: dStr,
-          mainOverride: existingMainOverride || null,
-          mainMuster: existingMainMuster || null,
-          subOverride: existingSubOverride || null,
-          subMuster: existingSubMuster || null
-        });
-
-        // 1. Update original employee (staff_id)
-        if (originalStaffAction === 'SPARE_HQ') {
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+          // 1. Update original employee (staff_id)
+          if (originalStaffAction === 'SPARE_HQ') {
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
              VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = NULL,
                status = 'AVAILABLE_FOR_BOOKING',
                reason = excluded.reason`,
-            [staff_id, dStr, originalLink, reason || `Available at HQ / Spare (Link #${targetLink} reassigned to ${repStaffName})`, staff.category_id]
-          );
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              [staff_id, dStr, originalLink, reason || `Available at HQ / Spare (Link #${targetLink} reassigned to ${repStaffName})`, staff.category_id]
+            );
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = 'P',
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [staff_id, dStr, `Available at HQ / Spare (Link #${targetLink} reassigned to ${repStaffName})`]
-          );
-          if (staff.category_id === 4) {
-            await syncLRSheetRecord(staff.id, dStr, 'P', `Available at HQ / Spare (Reassigned to ${repStaffName})`);
-          }
-        } else if (originalStaffAction === 'LEAVE') {
-          const effectiveLeave = leave_type || 'CL';
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+              [staff_id, dStr, `Available at HQ / Spare (Link #${targetLink} reassigned to ${repStaffName})`]
+            );
+            if (staff.category_id === 4) {
+              await syncLRSheetRecord(staff.id, dStr, 'P', `Available at HQ / Spare (Reassigned to ${repStaffName})`);
+            }
+          } else if (originalStaffAction === 'LEAVE') {
+            const effectiveLeave = leave_type || 'CL';
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
              VALUES (?, ?, ?, NULL, 'LEAVE', ?, ?, ?, ?, ?)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = NULL,
@@ -5853,24 +5852,24 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                reason = excluded.reason,
                target_category_id = excluded.target_category_id,
                leave_type = excluded.leave_type`,
-            [staff_id, dStr, originalLink, repStaffId, repStaffName, reason || `Leave [${effectiveLeave}] (Reassigned to ${repStaffName})`, staff.category_id, effectiveLeave]
-          );
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              [staff_id, dStr, originalLink, repStaffId, repStaffName, reason || `Leave [${effectiveLeave}] (Reassigned to ${repStaffName})`, staff.category_id, effectiveLeave]
+            );
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = excluded.code,
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [staff_id, dStr, effectiveLeave.toUpperCase(), `Leave [${effectiveLeave}] - Sub: ${repStaffName}`]
-          );
-          if (staff.category_id === 4) {
-            await syncLRSheetRecord(staff.id, dStr, effectiveLeave.toUpperCase(), `Leave [${effectiveLeave}] - Reassigned`);
-          }
-        } else if (originalStaffAction === 'REST') {
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
+              [staff_id, dStr, effectiveLeave.toUpperCase(), `Leave [${effectiveLeave}] - Sub: ${repStaffName}`]
+            );
+            if (staff.category_id === 4) {
+              await syncLRSheetRecord(staff.id, dStr, effectiveLeave.toUpperCase(), `Leave [${effectiveLeave}] - Reassigned`);
+            }
+          } else if (originalStaffAction === 'REST') {
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, leave_type)
              VALUES (?, ?, ?, NULL, 'REST', ?, ?, ?, ?, 'REST')
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = NULL,
@@ -5880,50 +5879,50 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                reason = excluded.reason,
                target_category_id = excluded.target_category_id,
                leave_type = 'REST'`,
-            [staff_id, dStr, originalLink, repStaffId, repStaffName, reason || `Weekly Rest (Reassigned to ${repStaffName})`, staff.category_id]
-          );
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              [staff_id, dStr, originalLink, repStaffId, repStaffName, reason || `Weekly Rest (Reassigned to ${repStaffName})`, staff.category_id]
+            );
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, 'R', ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = 'R',
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [staff_id, dStr, `Weekly Rest - Reassigned to ${repStaffName}`]
-          );
-          if (staff.category_id === 4) {
-            await syncLRSheetRecord(staff.id, dStr, 'R', `Weekly Rest - Reassigned to ${repStaffName}`);
-          }
-        } else if (originalStaffAction === 'SHIFTED') {
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+              [staff_id, dStr, `Weekly Rest - Reassigned to ${repStaffName}`]
+            );
+            if (staff.category_id === 4) {
+              await syncLRSheetRecord(staff.id, dStr, 'R', `Weekly Rest - Reassigned to ${repStaffName}`);
+            }
+          } else if (originalStaffAction === 'SHIFTED') {
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
              VALUES (?, ?, ?, NULL, 'SHIFTED', ?, ?)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = NULL,
                status = 'SHIFTED',
                reason = excluded.reason`,
-            [staff_id, dStr, originalLink, reason || `Shifted Place (Reassigned Link #${targetLink} to ${repStaffName})`, staff.category_id]
-          );
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              [staff_id, dStr, originalLink, reason || `Shifted Place (Reassigned Link #${targetLink} to ${repStaffName})`, staff.category_id]
+            );
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = 'P',
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [staff_id, dStr, `Shifted Place (Reassigned to ${repStaffName})`]
-          );
-        }
+              [staff_id, dStr, `Shifted Place (Reassigned to ${repStaffName})`]
+            );
+          }
 
-        // 2. Assign replacement employee (subStaff) to targetLink
-        const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-        const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-        const subReason = reason || `Reassigned to Link #${targetLink} (Relieved ${staff.name})`;
+          // 2. Assign replacement employee (subStaff) to targetLink
+          const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+          const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+          const subReason = reason || `Reassigned to Link #${targetLink} (Relieved ${staff.name})`;
 
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
            VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?, ?, ?)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = excluded.overridden_link_number,
@@ -5932,176 +5931,176 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              substitute_name = excluded.substitute_name,
              reason = excluded.reason,
              target_category_id = excluded.target_category_id`,
-          [subStaff.id, dStr, subOrigLink, targetLink, staff_id, staff.name, subReason, targetCatId]
-        );
+            [subStaff.id, dStr, subOrigLink, targetLink, staff_id, staff.name, subReason, targetCatId]
+          );
 
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = 'P',
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [subStaff.id, dStr, `Working Link #${targetLink} (Reassigned from ${staff.name})`]
-        );
+            [subStaff.id, dStr, `Working Link #${targetLink} (Reassigned from ${staff.name})`]
+          );
 
-        if (subStaff.category_id === 4) {
-          const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-          const dObj = new Date(dStr + 'T12:00:00');
-          const dayOfWeek = dayNames[dObj.getDay()];
-          const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
-          if (resolvedSubDuty && resolvedSubDuty.code) {
-            await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLink}`);
+          if (subStaff.category_id === 4) {
+            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+            const dObj = new Date(dStr + 'T12:00:00');
+            const dayOfWeek = dayNames[dObj.getDay()];
+            const resolvedSubDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, dayOfWeek, subStaff.rest_day);
+            if (resolvedSubDuty && resolvedSubDuty.code) {
+              await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, `Link #${targetLink}`);
+            }
           }
-        }
 
-        // Multi-Day Link Set check for targetLink:
-        if (targetLink !== null) {
-          const linkSet = getLinkSetDetails(targetCatId, targetLink);
-          if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
-            for (let k = 0; k < linkSet.remainingLinks.length; k++) {
-              const remLinkNum = linkSet.remainingLinks[k];
-              const nextDate = new Date(dStr + 'T12:00:00');
-              nextDate.setDate(nextDate.getDate() + k + 1);
-              const y = nextDate.getFullYear();
-              const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-              const d = String(nextDate.getDate()).padStart(2, '0');
-              const nextDateStr = `${y}-${m}-${d}`;
-              const nextReason = `Assigned Link #${remLinkNum} (Day ${k + 2} of Link #${targetLink})`;
+          // Multi-Day Link Set check for targetLink:
+          if (targetLink !== null) {
+            const linkSet = getLinkSetDetails(targetCatId, targetLink);
+            if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
+              for (let k = 0; k < linkSet.remainingLinks.length; k++) {
+                const remLinkNum = linkSet.remainingLinks[k];
+                const nextDate = new Date(dStr + 'T12:00:00');
+                nextDate.setDate(nextDate.getDate() + k + 1);
+                const y = nextDate.getFullYear();
+                const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+                const d = String(nextDate.getDate()).padStart(2, '0');
+                const nextDateStr = `${y}-${m}-${d}`;
+                const nextReason = `Assigned Link #${remLinkNum} (Day ${k + 2} of Link #${targetLink})`;
 
-              await run(
-                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+                await run(
+                  `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
                  VALUES (?, ?, NULL, ?, 'CHANGED_LINK', ?, ?)
                  ON CONFLICT(staff_id, date) DO UPDATE SET
                    overridden_link_number = excluded.overridden_link_number,
                    status = 'CHANGED_LINK',
                    reason = excluded.reason,
                    target_category_id = excluded.target_category_id`,
-                [subStaff.id, nextDateStr, remLinkNum, nextReason, targetCatId]
-              );
+                  [subStaff.id, nextDateStr, remLinkNum, nextReason, targetCatId]
+                );
 
-              await run(
-                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+                await run(
+                  `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                  VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                  ON CONFLICT(staff_id, date) DO UPDATE SET
                    code = 'P',
                    remarks = excluded.remarks,
                    updated_by = excluded.updated_by,
                    updated_at = CURRENT_TIMESTAMP`,
-                [subStaff.id, nextDateStr, nextReason]
-              );
+                  [subStaff.id, nextDateStr, nextReason]
+                );
 
-              if (subStaff.category_id === 4) {
-                const nextDObj = new Date(nextDateStr + 'T12:00:00');
-                const nextDayOfWeek = dayNames[nextDObj.getDay()];
-                const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, nextDateStr, nextDayOfWeek, subStaff.rest_day);
-                if (resolvedNextDuty && resolvedNextDuty.code) {
-                  await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, nextReason);
+                if (subStaff.category_id === 4) {
+                  const nextDObj = new Date(nextDateStr + 'T12:00:00');
+                  const nextDayOfWeek = dayNames[nextDObj.getDay()];
+                  const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, nextDateStr, nextDayOfWeek, subStaff.rest_day);
+                  if (resolvedNextDuty && resolvedNextDuty.code) {
+                    await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, nextReason);
+                  }
                 }
-              }
 
-              await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, nextDateStr, {
-                targetLink: remLinkNum,
-                targetCat: targetCatId,
-                isLeave: false
-              });
+                await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, nextDateStr, {
+                  targetLink: remLinkNum,
+                  targetCat: targetCatId,
+                  isLeave: false
+                });
+              }
             }
           }
+
+          // Sync both employees across all modules
+          await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
+            targetLink: null,
+            targetCat: staff.category_id,
+            isLeave: originalStaffAction === 'LEAVE'
+          });
+          await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+            targetLink,
+            targetCat: targetCatId,
+            isLeave: false
+          });
         }
 
-        // Sync both employees across all modules
-        await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
-          targetLink: null,
-          targetCat: staff.category_id,
-          isLeave: originalStaffAction === 'LEAVE'
-        });
-        await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
-          targetLink,
-          targetCat: targetCatId,
-          isLeave: false
+        const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
+        await logAudit(
+          'Admin',
+          'REASSIGN_STAFF',
+          `Reassigned Link #${targetLink} from ${staff.name} to ${repStaffName} on ${dateRangeStr}. Original staff status: ${originalStaffAction}.`,
+          {
+            action: 'REASSIGN_STAFF',
+            staff_id,
+            staff_name: staff.name,
+            target_link: targetLink,
+            replacement_staff_id: repStaffId,
+            replacement_name: repStaffName,
+            original_staff_action: originalStaffAction,
+            dates: datesToProcess,
+            snapshots: undoSnapshots
+          }
+        );
+
+        return res.json({
+          success: true,
+          message: `Successfully reassigned Link #${targetLink} to ${repStaffName} on ${dateRangeStr}! ${staff.name} placed on ${originalStaffAction === 'SPARE_HQ' ? 'Available at HQ / Spare' : originalStaffAction}.`
         });
       }
 
-      const dateRangeStr = datesToProcess.length > 1 ? `${datesToProcess[0]} to ${datesToProcess[datesToProcess.length - 1]}` : date;
-      await logAudit(
-        'Admin',
-        'REASSIGN_STAFF',
-        `Reassigned Link #${targetLink} from ${staff.name} to ${repStaffName} on ${dateRangeStr}. Original staff status: ${originalStaffAction}.`,
-        {
-          action: 'REASSIGN_STAFF',
-          staff_id,
-          staff_name: staff.name,
-          target_link: targetLink,
-          replacement_staff_id: repStaffId,
-          replacement_name: repStaffName,
-          original_staff_action: originalStaffAction,
-          dates: datesToProcess,
-          snapshots: undoSnapshots
-        }
-      );
+      // UTILISED_ADVANCE: Employee utilised for advance duty out-of-turn for emergency utilisation
+      if (action === 'UTILISED_ADVANCE' || action === 'ADVANCE_DUTY' || action === 'ADVANCE_BOOKED') {
+        const advanceTrainNo = req.body.advance_train_no ? String(req.body.advance_train_no).trim() : '';
+        const vacateNextLink = Boolean(req.body.vacate_next_link);
+        const advanceLinkNumber = req.body.advance_link_number !== undefined && req.body.advance_link_number !== null && req.body.advance_link_number !== ''
+          ? parseInt(req.body.advance_link_number, 10)
+          : null;
 
-      return res.json({
-        success: true,
-        message: `Successfully reassigned Link #${targetLink} to ${repStaffName} on ${dateRangeStr}! ${staff.name} placed on ${originalStaffAction === 'SPARE_HQ' ? 'Available at HQ / Spare' : originalStaffAction}.`
-      });
-    }
-
-    // UTILISED_ADVANCE: Employee utilised for advance duty out-of-turn for emergency utilisation
-    if (action === 'UTILISED_ADVANCE' || action === 'ADVANCE_DUTY' || action === 'ADVANCE_BOOKED') {
-      const advanceTrainNo = req.body.advance_train_no ? String(req.body.advance_train_no).trim() : '';
-      const vacateNextLink = Boolean(req.body.vacate_next_link);
-      const advanceLinkNumber = req.body.advance_link_number !== undefined && req.body.advance_link_number !== null && req.body.advance_link_number !== ''
-        ? parseInt(req.body.advance_link_number, 10)
-        : null;
-
-      // 1. If assigned to an advance link today, record that assignment
-      if (advanceLinkNumber !== null) {
-        const dayOffset = getDayOffset(category.anchor_date, date);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+        // 1. If assigned to an advance link today, record that assignment
+        if (advanceLinkNumber !== null) {
+          const dayOffset = getDayOffset(category.anchor_date, date);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
            VALUES (?, ?, ?, ?, 'CHANGED_LINK', NULL, NULL, ?, ?)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = excluded.overridden_link_number,
              status = 'CHANGED_LINK',
              reason = excluded.reason,
              target_category_id = excluded.target_category_id`,
-          [staff_id, date, originalLink, advanceLinkNumber, `Assigned Advance Duty (Train ${advanceTrainNo || 'Emergency'})`, staff.category_id]
-        );
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+            [staff_id, date, originalLink, advanceLinkNumber, `Assigned Advance Duty (Train ${advanceTrainNo || 'Emergency'})`, staff.category_id]
+          );
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = 'P',
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, date, `Advance Duty on Link #${advanceLinkNumber} (Tr. ${advanceTrainNo})`]
-        );
-      }
+            [staff_id, date, `Advance Duty on Link #${advanceLinkNumber} (Tr. ${advanceTrainNo})`]
+          );
+        }
 
-      // 2. Determine target date to vacate with UTILISED_ADVANCE (next cyclic link date or specified date)
-      let targetVacateDate = date;
-      if (vacateNextLink) {
-        const curD = new Date(date + 'T12:00:00');
-        curD.setDate(curD.getDate() + 1);
-        const y = curD.getFullYear();
-        const m = String(curD.getMonth() + 1).padStart(2, '0');
-        const d = String(curD.getDate()).padStart(2, '0');
-        targetVacateDate = `${y}-${m}-${d}`;
-      }
+        // 2. Determine target date to vacate with UTILISED_ADVANCE (next cyclic link date or specified date)
+        let targetVacateDate = date;
+        if (vacateNextLink) {
+          const curD = new Date(date + 'T12:00:00');
+          curD.setDate(curD.getDate() + 1);
+          const y = curD.getFullYear();
+          const m = String(curD.getMonth() + 1).padStart(2, '0');
+          const d = String(curD.getDate()).padStart(2, '0');
+          targetVacateDate = `${y}-${m}-${d}`;
+        }
 
-      const vacateDayOffset = getDayOffset(category.anchor_date, targetVacateDate);
-      const vacateOrigLink = getBaseLinkNumber(staff.row_position, vacateDayOffset, category.cycle_length);
+        const vacateDayOffset = getDayOffset(category.anchor_date, targetVacateDate);
+        const vacateOrigLink = getBaseLinkNumber(staff.row_position, vacateDayOffset, category.cycle_length);
 
-      const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
-      const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
+        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
+        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
 
-      const advanceReason = reason || (advanceTrainNo ? `UTILISED ADVANCE BY TRAIN NO ${advanceTrainNo}` : 'UTILISED ADVANCE');
+        const advanceReason = reason || (advanceTrainNo ? `UTILISED ADVANCE BY TRAIN NO ${advanceTrainNo}` : 'UTILISED ADVANCE');
 
-      await run(
-        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, advance_train_no, is_advance_duty, reason, target_category_id)
+        await run(
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, advance_train_no, is_advance_duty, reason, target_category_id)
          VALUES (?, ?, ?, NULL, 'UTILISED_ADVANCE', ?, 1, ?, ?)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            overridden_link_number = NULL,
@@ -6112,31 +6111,31 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            substitute_name = NULL,
            reason = excluded.reason,
            target_category_id = excluded.target_category_id`,
-        [staff_id, targetVacateDate, vacateOrigLink, advanceTrainNo || null, advanceReason, staff.category_id]
-      );
+          [staff_id, targetVacateDate, vacateOrigLink, advanceTrainNo || null, advanceReason, staff.category_id]
+        );
 
-      // On the vacated date, muster is P (Present/On duty)
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+        // On the vacated date, muster is P (Present/On duty)
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
          VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            code = 'P',
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staff_id, targetVacateDate, `Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'})`]
-      );
+          [staff_id, targetVacateDate, `Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'})`]
+        );
 
-      // If replacement staff is provided to cover this vacated link:
-      if (replacement_staff_id) {
-        const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-        if (subStaff) {
-          const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-          const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, targetVacateDate), subCat.cycle_length);
-          const subReason = `Substitute for ${staff.name} (Advance Booked Tr. ${advanceTrainNo || ''}) on Link #${vacateOrigLink}`;
+        // If replacement staff is provided to cover this vacated link:
+        if (replacement_staff_id) {
+          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+          if (subStaff) {
+            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, targetVacateDate), subCat.cycle_length);
+            const subReason = `Substitute for ${staff.name} (Advance Booked Tr. ${advanceTrainNo || ''}) on Link #${vacateOrigLink}`;
 
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+            await run(
+              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
              VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                overridden_link_number = excluded.overridden_link_number,
@@ -6145,408 +6144,408 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                substitute_name = excluded.substitute_name,
                reason = excluded.reason,
                target_category_id = excluded.target_category_id`,
-            [subStaff.id, targetVacateDate, subOrigLink, vacateOrigLink, staff.id, staff.name, subReason, staff.category_id]
-          );
+              [subStaff.id, targetVacateDate, subOrigLink, vacateOrigLink, staff.id, staff.name, subReason, staff.category_id]
+            );
 
-          await run(
-            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+            await run(
+              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
              VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
              ON CONFLICT(staff_id, date) DO UPDATE SET
                code = 'P',
                remarks = excluded.remarks,
                updated_by = excluded.updated_by,
                updated_at = CURRENT_TIMESTAMP`,
-            [subStaff.id, targetVacateDate, `Working as substitute for ${staff.name} on Link #${vacateOrigLink}`]
-          );
+              [subStaff.id, targetVacateDate, `Working as substitute for ${staff.name} on Link #${vacateOrigLink}`]
+            );
 
-          if (subStaff.category_id === 4) {
-            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-            const targetDObj = new Date(targetVacateDate + 'T12:00:00');
-            const targetDayOfWeek = dayNames[targetDObj.getDay()];
-            const resolvedDuty = await resolveDutyCodeForLRStaff(subStaff.id, targetVacateDate, targetDayOfWeek, subStaff.rest_day);
-            if (resolvedDuty && resolvedDuty.code) {
-              await syncLRSheetRecord(subStaff.id, targetVacateDate, resolvedDuty.code, subReason);
+            if (subStaff.category_id === 4) {
+              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+              const targetDObj = new Date(targetVacateDate + 'T12:00:00');
+              const targetDayOfWeek = dayNames[targetDObj.getDay()];
+              const resolvedDuty = await resolveDutyCodeForLRStaff(subStaff.id, targetVacateDate, targetDayOfWeek, subStaff.rest_day);
+              if (resolvedDuty && resolvedDuty.code) {
+                await syncLRSheetRecord(subStaff.id, targetVacateDate, resolvedDuty.code, subReason);
+              }
+            }
+            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, targetVacateDate, {
+              targetLink: vacateOrigLink,
+              isLeave: false,
+              remarks: subReason
+            });
+          }
+        }
+
+        await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, targetVacateDate, {
+          targetTrain: advanceTrainNo || null,
+          targetLink: advanceLinkNumber,
+          isLeave: false,
+          remarks: advanceReason
+        });
+
+        const undoData = {
+          action: 'UTILISED_ADVANCE',
+          staff_id,
+          staff_name: staff.name,
+          date: targetVacateDate,
+          original_link: vacateOrigLink,
+          advance_train_no: advanceTrainNo,
+          replacement_staff_id: replacement_staff_id || null,
+          previous_override: existingOverride || null,
+          previous_muster: existingMuster || null
+        };
+
+        await logAudit(
+          'Admin',
+          'UTILISED_ADVANCE',
+          `Marked ${staff.name} as Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'}). Vacated Link #${vacateOrigLink} on ${targetVacateDate} with blinking notice.`,
+          undoData
+        );
+
+        return res.json({
+          success: true,
+          message: `Marked ${staff.name} as Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'}). Link #${vacateOrigLink} on ${targetVacateDate} is now Vacant with blinking notice.`
+        });
+      }
+
+      // MUTUAL_SHIFT: Mutual exchange/shift of duties/places between Staff A and Staff B across date range
+      if (action === 'MUTUAL_SHIFT' || (action === 'SHIFTED' && req.body.shifted_mode === 'MUTUAL')) {
+        const staffBId = req.body.staff_b_id || req.body.replacement_staff_id;
+        if (!staffBId) {
+          return res.status(400).json({ error: 'staff_b_id is required for mutual shift' });
+        }
+        if (parseInt(staff_id, 10) === parseInt(staffBId, 10)) {
+          return res.status(400).json({ error: 'Cannot mutually shift duties with the same employee' });
+        }
+
+        const staffA = staff;
+        const staffB = await get('SELECT * FROM staff WHERE id = ?', [staffBId]);
+        if (!staffB) {
+          return res.status(404).json({ error: 'Staff B not found' });
+        }
+
+        const catA = category;
+        const catB = await get('SELECT * FROM categories WHERE id = ?', [staffB.category_id]);
+
+        const datesToProcess = [];
+        const fromD = new Date(date + 'T12:00:00');
+        const toD = to_date ? new Date(to_date + 'T12:00:00') : new Date(date + 'T12:00:00');
+        if (toD < fromD) toD.setTime(fromD.getTime());
+        for (let cur = new Date(fromD); cur <= toD; cur.setDate(cur.getDate() + 1)) {
+          const y = cur.getFullYear();
+          const m = String(cur.getMonth() + 1).padStart(2, '0');
+          const d = String(cur.getDate()).padStart(2, '0');
+          datesToProcess.push(`${y}-${m}-${d}`);
+        }
+
+        for (const dStr of datesToProcess) {
+          const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, dStr]);
+          const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, dStr]);
+
+          // Determine baseline cyclic links
+          const dayOffsetA = getDayOffset(catA.anchor_date, dStr);
+          const dayOffsetB = catB ? getDayOffset(catB.anchor_date, dStr) : 1;
+          const origLinkA = getBaseLinkNumber(staffA.row_position, dayOffsetA, catA.cycle_length);
+          const origLinkB = catB ? getBaseLinkNumber(staffB.row_position, dayOffsetB, catB.cycle_length) : 1;
+
+          // Extract Staff A's current duty profile on dStr
+          let dutyProfileA = {
+            linkNum: null,
+            catId: staffA.category_id,
+            shiftedPlace: null,
+            extraTrainNo: null,
+            isExtra: 0,
+            status: 'CHANGED_LINK',
+            isRest: false,
+            desc: ''
+          };
+
+          if (existingOverrideA) {
+            dutyProfileA.linkNum = existingOverrideA.overridden_link_number;
+            dutyProfileA.catId = existingOverrideA.target_category_id || staffA.category_id;
+            dutyProfileA.shiftedPlace = existingOverrideA.shifted_place;
+            dutyProfileA.extraTrainNo = existingOverrideA.extra_train_no;
+            dutyProfileA.isExtra = existingOverrideA.is_extra || 0;
+            dutyProfileA.status = existingOverrideA.status;
+            if (existingOverrideA.status === 'REST' || existingOverrideA.leave_type === 'REST') {
+              dutyProfileA.isRest = true;
+            }
+            dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : 'Duty')));
+          } else {
+            const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
+            if (staffA.category_id === 4) {
+              dutyProfileA.desc = 'LR Standby Pool';
+              dutyProfileA.status = 'AVAILABLE_FOR_BOOKING';
+            } else if (!linkDefA || linkDefA.is_rest) {
+              dutyProfileA.isRest = true;
+              dutyProfileA.status = 'REST';
+              dutyProfileA.desc = 'Weekly REST';
+            } else {
+              dutyProfileA.linkNum = origLinkA;
+              dutyProfileA.catId = staffA.category_id;
+              dutyProfileA.status = 'CHANGED_LINK';
+              dutyProfileA.desc = `Link #${origLinkA}${linkDefA.train_numbers ? ` (Tr ${linkDefA.train_numbers})` : ''}`;
             }
           }
-          await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, targetVacateDate, {
-            targetLink: vacateOrigLink,
-            isLeave: false,
-            remarks: subReason
-          });
-        }
-      }
 
-      await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, targetVacateDate, {
-        targetTrain: advanceTrainNo || null,
-        targetLink: advanceLinkNumber,
-        isLeave: false,
-        remarks: advanceReason
-      });
+          // Extract Staff B's current duty profile on dStr
+          let dutyProfileB = {
+            linkNum: null,
+            catId: staffB.category_id,
+            shiftedPlace: null,
+            extraTrainNo: null,
+            isExtra: 0,
+            status: 'CHANGED_LINK',
+            isRest: false,
+            desc: ''
+          };
 
-      const undoData = {
-        action: 'UTILISED_ADVANCE',
-        staff_id,
-        staff_name: staff.name,
-        date: targetVacateDate,
-        original_link: vacateOrigLink,
-        advance_train_no: advanceTrainNo,
-        replacement_staff_id: replacement_staff_id || null,
-        previous_override: existingOverride || null,
-        previous_muster: existingMuster || null
-      };
-
-      await logAudit(
-        'Admin',
-        'UTILISED_ADVANCE',
-        `Marked ${staff.name} as Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'}). Vacated Link #${vacateOrigLink} on ${targetVacateDate} with blinking notice.`,
-        undoData
-      );
-
-      return res.json({
-        success: true,
-        message: `Marked ${staff.name} as Utilised in Advance (Tr. ${advanceTrainNo || 'Emergency'}). Link #${vacateOrigLink} on ${targetVacateDate} is now Vacant with blinking notice.`
-      });
-    }
-
-    // MUTUAL_SHIFT: Mutual exchange/shift of duties/places between Staff A and Staff B across date range
-    if (action === 'MUTUAL_SHIFT' || (action === 'SHIFTED' && req.body.shifted_mode === 'MUTUAL')) {
-      const staffBId = req.body.staff_b_id || req.body.replacement_staff_id;
-      if (!staffBId) {
-        return res.status(400).json({ error: 'staff_b_id is required for mutual shift' });
-      }
-      if (parseInt(staff_id, 10) === parseInt(staffBId, 10)) {
-        return res.status(400).json({ error: 'Cannot mutually shift duties with the same employee' });
-      }
-
-      const staffA = staff;
-      const staffB = await get('SELECT * FROM staff WHERE id = ?', [staffBId]);
-      if (!staffB) {
-        return res.status(404).json({ error: 'Staff B not found' });
-      }
-
-      const catA = category;
-      const catB = await get('SELECT * FROM categories WHERE id = ?', [staffB.category_id]);
-
-      const datesToProcess = [];
-      const fromD = new Date(date + 'T12:00:00');
-      const toD = to_date ? new Date(to_date + 'T12:00:00') : new Date(date + 'T12:00:00');
-      if (toD < fromD) toD.setTime(fromD.getTime());
-      for (let cur = new Date(fromD); cur <= toD; cur.setDate(cur.getDate() + 1)) {
-        const y = cur.getFullYear();
-        const m = String(cur.getMonth() + 1).padStart(2, '0');
-        const d = String(cur.getDate()).padStart(2, '0');
-        datesToProcess.push(`${y}-${m}-${d}`);
-      }
-
-      for (const dStr of datesToProcess) {
-        const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, dStr]);
-        const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, dStr]);
-
-        // Determine baseline cyclic links
-        const dayOffsetA = getDayOffset(catA.anchor_date, dStr);
-        const dayOffsetB = catB ? getDayOffset(catB.anchor_date, dStr) : 1;
-        const origLinkA = getBaseLinkNumber(staffA.row_position, dayOffsetA, catA.cycle_length);
-        const origLinkB = catB ? getBaseLinkNumber(staffB.row_position, dayOffsetB, catB.cycle_length) : 1;
-
-        // Extract Staff A's current duty profile on dStr
-        let dutyProfileA = {
-          linkNum: null,
-          catId: staffA.category_id,
-          shiftedPlace: null,
-          extraTrainNo: null,
-          isExtra: 0,
-          status: 'CHANGED_LINK',
-          isRest: false,
-          desc: ''
-        };
-
-        if (existingOverrideA) {
-          dutyProfileA.linkNum = existingOverrideA.overridden_link_number;
-          dutyProfileA.catId = existingOverrideA.target_category_id || staffA.category_id;
-          dutyProfileA.shiftedPlace = existingOverrideA.shifted_place;
-          dutyProfileA.extraTrainNo = existingOverrideA.extra_train_no;
-          dutyProfileA.isExtra = existingOverrideA.is_extra || 0;
-          dutyProfileA.status = existingOverrideA.status;
-          if (existingOverrideA.status === 'REST' || existingOverrideA.leave_type === 'REST') {
-            dutyProfileA.isRest = true;
-          }
-          dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : 'Duty')));
-        } else {
-          const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
-          if (staffA.category_id === 4) {
-            dutyProfileA.desc = 'LR Standby Pool';
-            dutyProfileA.status = 'AVAILABLE_FOR_BOOKING';
-          } else if (!linkDefA || linkDefA.is_rest) {
-            dutyProfileA.isRest = true;
-            dutyProfileA.status = 'REST';
-            dutyProfileA.desc = 'Weekly REST';
+          if (existingOverrideB) {
+            dutyProfileB.linkNum = existingOverrideB.overridden_link_number;
+            dutyProfileB.catId = existingOverrideB.target_category_id || staffB.category_id;
+            dutyProfileB.shiftedPlace = existingOverrideB.shifted_place;
+            dutyProfileB.extraTrainNo = existingOverrideB.extra_train_no;
+            dutyProfileB.isExtra = existingOverrideB.is_extra || 0;
+            dutyProfileB.status = existingOverrideB.status;
+            if (existingOverrideB.status === 'REST' || existingOverrideB.leave_type === 'REST') {
+              dutyProfileB.isRest = true;
+            }
+            dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : 'Duty')));
           } else {
-            dutyProfileA.linkNum = origLinkA;
-            dutyProfileA.catId = staffA.category_id;
-            dutyProfileA.status = 'CHANGED_LINK';
-            dutyProfileA.desc = `Link #${origLinkA}${linkDefA.train_numbers ? ` (Tr ${linkDefA.train_numbers})` : ''}`;
-          }
-        }
+            const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]) : null;
 
-        // Extract Staff B's current duty profile on dStr
-        let dutyProfileB = {
-          linkNum: null,
-          catId: staffB.category_id,
-          shiftedPlace: null,
-          extraTrainNo: null,
-          isExtra: 0,
-          status: 'CHANGED_LINK',
-          isRest: false,
-          desc: ''
-        };
-
-        if (existingOverrideB) {
-          dutyProfileB.linkNum = existingOverrideB.overridden_link_number;
-          dutyProfileB.catId = existingOverrideB.target_category_id || staffB.category_id;
-          dutyProfileB.shiftedPlace = existingOverrideB.shifted_place;
-          dutyProfileB.extraTrainNo = existingOverrideB.extra_train_no;
-          dutyProfileB.isExtra = existingOverrideB.is_extra || 0;
-          dutyProfileB.status = existingOverrideB.status;
-          if (existingOverrideB.status === 'REST' || existingOverrideB.leave_type === 'REST') {
-            dutyProfileB.isRest = true;
+            if (staffB.category_id === 4) {
+              dutyProfileB.desc = 'LR Standby Pool';
+              dutyProfileB.status = 'AVAILABLE_FOR_BOOKING';
+            } else if (!linkDefB || linkDefB.is_rest) {
+              dutyProfileB.isRest = true;
+              dutyProfileB.status = 'REST';
+              dutyProfileB.desc = 'Weekly REST';
+            } else {
+              dutyProfileB.linkNum = origLinkB;
+              dutyProfileB.catId = staffB.category_id;
+              dutyProfileB.status = 'CHANGED_LINK';
+              dutyProfileB.desc = `Link #${origLinkB}${linkDefB.train_numbers ? ` (Tr ${linkDefB.train_numbers})` : ''}`;
+            }
           }
-          dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : 'Duty')));
-        } else {
-          const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]) : null;
+
+          // SWAP:
+          // Staff A gets Duty Profile B
+          const statusForA = dutyProfileB.isRest ? 'REST' : (dutyProfileB.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileB.shiftedPlace ? 'SHIFTED' : (dutyProfileB.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
+          const reasonForA = reason ? `Mutual shift with ${staffB.name}: ${reason}` : `Mutual shift with ${staffB.name} (${dutyProfileB.desc})`;
+          const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
+
+          await run(
+            `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = excluded.overridden_link_number,
+             status = excluded.status,
+             substitute_staff_id = NULL,
+             substitute_name = NULL,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place,
+             extra_train_no = excluded.extra_train_no,
+             is_extra = excluded.is_extra,
+             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
+             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
+            [
+              staffA.id,
+              dStr,
+              effectiveOrigA,
+              dutyProfileB.linkNum,
+              statusForA,
+              reasonForA,
+              dutyProfileB.catId,
+              dutyProfileB.shiftedPlace,
+              dutyProfileB.extraTrainNo,
+              dutyProfileB.isExtra,
+              origLinkA || null,
+              null
+            ]
+          );
+
+          // Staff B gets Duty Profile A
+          const statusForB = dutyProfileA.isRest ? 'REST' : (dutyProfileA.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileA.shiftedPlace ? 'SHIFTED' : (dutyProfileA.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
+          const reasonForB = reason ? `Mutual shift with ${staffA.name}: ${reason}` : `Mutual shift with ${staffA.name} (${dutyProfileA.desc})`;
+          const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
+
+          await run(
+            `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = excluded.overridden_link_number,
+             status = excluded.status,
+             substitute_staff_id = NULL,
+             substitute_name = NULL,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place,
+             extra_train_no = excluded.extra_train_no,
+             is_extra = excluded.is_extra,
+             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
+             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
+            [
+              staffB.id,
+              dStr,
+              effectiveOrigB,
+              dutyProfileA.linkNum,
+              statusForB,
+              reasonForB,
+              dutyProfileA.catId,
+              dutyProfileA.shiftedPlace,
+              dutyProfileA.extraTrainNo,
+              dutyProfileA.isExtra,
+              origLinkB || null,
+              null
+            ]
+          );
+
+          // Muster updates: 'R' if REST, otherwise 'P'
+          const musterCodeA = dutyProfileB.isRest ? 'R' : 'P';
+          const musterCodeB = dutyProfileA.isRest ? 'R' : 'P';
+
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+            [staffA.id, dStr, musterCodeA, reasonForA]
+          );
+
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+            [staffB.id, dStr, musterCodeB, reasonForB]
+          );
+
+          // Sync LR sheet if staffA or staffB is in Category 4
+          const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+          const dObj = new Date(dStr + 'T12:00:00');
+          const dayOfWeek = dayNames[dObj.getDay()];
+
+          if (staffA.category_id === 4) {
+            const resA = await resolveDutyCodeForLRStaff(staffA.id, dStr, dayOfWeek, staffA.rest_day);
+            if (resA && resA.code) {
+              await syncLRSheetRecord(staffA.id, dStr, resA.code, reasonForA);
+            } else if (dutyProfileB.isRest) {
+              await syncLRSheetRecord(staffA.id, dStr, 'R', reasonForA);
+            }
+          }
 
           if (staffB.category_id === 4) {
-            dutyProfileB.desc = 'LR Standby Pool';
-            dutyProfileB.status = 'AVAILABLE_FOR_BOOKING';
-          } else if (!linkDefB || linkDefB.is_rest) {
-            dutyProfileB.isRest = true;
-            dutyProfileB.status = 'REST';
-            dutyProfileB.desc = 'Weekly REST';
-          } else {
-            dutyProfileB.linkNum = origLinkB;
-            dutyProfileB.catId = staffB.category_id;
-            dutyProfileB.status = 'CHANGED_LINK';
-            dutyProfileB.desc = `Link #${origLinkB}${linkDefB.train_numbers ? ` (Tr ${linkDefB.train_numbers})` : ''}`;
+            const resB = await resolveDutyCodeForLRStaff(staffB.id, dStr, dayOfWeek, staffB.rest_day);
+            if (resB && resB.code) {
+              await syncLRSheetRecord(staffB.id, dStr, resB.code, reasonForB);
+            } else if (dutyProfileA.isRest) {
+              await syncLRSheetRecord(staffB.id, dStr, 'R', reasonForB);
+            }
           }
+
+          // Synchronize across TA approvals and documents for both staff
+          await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, dStr, {
+            targetLink: dutyProfileB.linkNum,
+            targetTrain: dutyProfileB.extraTrainNo,
+            isLeave: false,
+            isRest: dutyProfileB.isRest,
+            remarks: reasonForA
+          });
+          await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, dStr, {
+            targetLink: dutyProfileA.linkNum,
+            targetTrain: dutyProfileA.extraTrainNo,
+            isLeave: false,
+            isRest: dutyProfileA.isRest,
+            remarks: reasonForB
+          });
         }
 
-        // SWAP:
-        // Staff A gets Duty Profile B
-        const statusForA = dutyProfileB.isRest ? 'REST' : (dutyProfileB.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileB.shiftedPlace ? 'SHIFTED' : (dutyProfileB.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
-        const reasonForA = reason ? `Mutual shift with ${staffB.name}: ${reason}` : `Mutual shift with ${staffB.name} (${dutyProfileB.desc})`;
-        const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
-
-        await run(
-          `INSERT INTO overrides (
-            staff_id, date, original_link_number, overridden_link_number, status,
-            substitute_staff_id, substitute_name, reason, target_category_id,
-            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
-          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             overridden_link_number = excluded.overridden_link_number,
-             status = excluded.status,
-             substitute_staff_id = NULL,
-             substitute_name = NULL,
-             reason = excluded.reason,
-             target_category_id = excluded.target_category_id,
-             shifted_place = excluded.shifted_place,
-             extra_train_no = excluded.extra_train_no,
-             is_extra = excluded.is_extra,
-             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
-             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
-          [
-            staffA.id,
-            dStr,
-            effectiveOrigA,
-            dutyProfileB.linkNum,
-            statusForA,
-            reasonForA,
-            dutyProfileB.catId,
-            dutyProfileB.shiftedPlace,
-            dutyProfileB.extraTrainNo,
-            dutyProfileB.isExtra,
-            origLinkA || null,
-            null
-          ]
-        );
-
-        // Staff B gets Duty Profile A
-        const statusForB = dutyProfileA.isRest ? 'REST' : (dutyProfileA.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileA.shiftedPlace ? 'SHIFTED' : (dutyProfileA.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING')));
-        const reasonForB = reason ? `Mutual shift with ${staffA.name}: ${reason}` : `Mutual shift with ${staffA.name} (${dutyProfileA.desc})`;
-        const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
-
-        await run(
-          `INSERT INTO overrides (
-            staff_id, date, original_link_number, overridden_link_number, status,
-            substitute_staff_id, substitute_name, reason, target_category_id,
-            shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
-          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             overridden_link_number = excluded.overridden_link_number,
-             status = excluded.status,
-             substitute_staff_id = NULL,
-             substitute_name = NULL,
-             reason = excluded.reason,
-             target_category_id = excluded.target_category_id,
-             shifted_place = excluded.shifted_place,
-             extra_train_no = excluded.extra_train_no,
-             is_extra = excluded.is_extra,
-             shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
-             shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
-          [
-            staffB.id,
-            dStr,
-            effectiveOrigB,
-            dutyProfileA.linkNum,
-            statusForB,
-            reasonForB,
-            dutyProfileA.catId,
-            dutyProfileA.shiftedPlace,
-            dutyProfileA.extraTrainNo,
-            dutyProfileA.isExtra,
-            origLinkB || null,
-            null
-          ]
-        );
-
-        // Muster updates: 'R' if REST, otherwise 'P'
-        const musterCodeA = dutyProfileB.isRest ? 'R' : 'P';
-        const musterCodeB = dutyProfileA.isRest ? 'R' : 'P';
-
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             code = excluded.code,
-             remarks = excluded.remarks,
-             updated_by = excluded.updated_by,
-             updated_at = CURRENT_TIMESTAMP`,
-          [staffA.id, dStr, musterCodeA, reasonForA]
-        );
-
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             code = excluded.code,
-             remarks = excluded.remarks,
-             updated_by = excluded.updated_by,
-             updated_at = CURRENT_TIMESTAMP`,
-          [staffB.id, dStr, musterCodeB, reasonForB]
-        );
-
-        // Sync LR sheet if staffA or staffB is in Category 4
-        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-        const dObj = new Date(dStr + 'T12:00:00');
-        const dayOfWeek = dayNames[dObj.getDay()];
-
-        if (staffA.category_id === 4) {
-          const resA = await resolveDutyCodeForLRStaff(staffA.id, dStr, dayOfWeek, staffA.rest_day);
-          if (resA && resA.code) {
-            await syncLRSheetRecord(staffA.id, dStr, resA.code, reasonForA);
-          } else if (dutyProfileB.isRest) {
-            await syncLRSheetRecord(staffA.id, dStr, 'R', reasonForA);
+        await logAudit(
+          'Admin',
+          'MUTUAL_SHIFT',
+          `Mutual shift between ${staffA.name} and ${staffB.name} from ${date} to ${to_date || date}`,
+          {
+            action: 'MUTUAL_SHIFT',
+            staff_id: staffA.id,
+            staff_name: `${staffA.name} ↔ ${staffB.name}`,
+            staff_b_id: staffB.id,
+            dates: datesToProcess
           }
-        }
+        );
 
-        if (staffB.category_id === 4) {
-          const resB = await resolveDutyCodeForLRStaff(staffB.id, dStr, dayOfWeek, staffB.rest_day);
-          if (resB && resB.code) {
-            await syncLRSheetRecord(staffB.id, dStr, resB.code, reasonForB);
-          } else if (dutyProfileA.isRest) {
-            await syncLRSheetRecord(staffB.id, dStr, 'R', reasonForB);
-          }
-        }
-
-        // Synchronize across TA approvals and documents for both staff
-        await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, dStr, {
-          targetLink: dutyProfileB.linkNum,
-          targetTrain: dutyProfileB.extraTrainNo,
-          isLeave: false,
-          isRest: dutyProfileB.isRest,
-          remarks: reasonForA
-        });
-        await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, dStr, {
-          targetLink: dutyProfileA.linkNum,
-          targetTrain: dutyProfileA.extraTrainNo,
-          isLeave: false,
-          isRest: dutyProfileA.isRest,
-          remarks: reasonForB
-        });
-      }
-
-      await logAudit(
-        'Admin',
-        'MUTUAL_SHIFT',
-        `Mutual shift between ${staffA.name} and ${staffB.name} from ${date} to ${to_date || date}`,
-        {
-          action: 'MUTUAL_SHIFT',
-          staff_id: staffA.id,
-          staff_name: `${staffA.name} ↔ ${staffB.name}`,
-          staff_b_id: staffB.id,
+        return res.json({
+          success: true,
+          message: `Successfully executed mutual shift of places between ${staffA.name} and ${staffB.name}`,
+          staff_a: staffA.name,
+          staff_b: staffB.name,
           dates: datesToProcess
-        }
-      );
-
-      return res.json({
-        success: true,
-        message: `Successfully executed mutual shift of places between ${staffA.name} and ${staffB.name}`,
-        staff_a: staffA.name,
-        staff_b: staffB.name,
-        dates: datesToProcess
-      });
-    }
-
-    // SHIFTED / SHIFTED_PLACE: Shift employee away from this link slot to another place / duty / link
-    if (action === 'SHIFTED' || action === 'SHIFTED_PLACE') {
-      const isNonDaily = req.body.is_extra === 1 || req.body.shifted_mode === 'NON_DAILY' || Boolean(req.body.extra_train_no);
-      const extraTrainNo = isNonDaily ? (req.body.extra_train_no || null) : null;
-      const shiftedPlace = req.body.shifted_place ? String(req.body.shifted_place).trim() : (isNonDaily ? 'NON_DAILY_TRAIN' : '');
-      const shiftedLinkNum = req.body.shifted_link_number !== undefined && req.body.shifted_link_number !== null && req.body.shifted_link_number !== ''
-        ? parseInt(req.body.shifted_link_number, 10)
-        : null;
-      const shiftedCatId = req.body.shifted_category_id ? parseInt(req.body.shifted_category_id, 10) : staff.category_id;
-
-      const datesToProcess = [];
-      const fromD = new Date(date + 'T12:00:00');
-      const toD = to_date ? new Date(to_date + 'T12:00:00') : new Date(date + 'T12:00:00');
-      if (toD < fromD) toD.setTime(fromD.getTime());
-      for (let cur = new Date(fromD); cur <= toD; cur.setDate(cur.getDate() + 1)) {
-        const y = cur.getFullYear();
-        const m = String(cur.getMonth() + 1).padStart(2, '0');
-        const d = String(cur.getDate()).padStart(2, '0');
-        datesToProcess.push(`${y}-${m}-${d}`);
+        });
       }
 
-      const shiftDesc = shiftedLinkNum
-        ? `Link #${shiftedLinkNum}${shiftedPlace ? ` (${shiftedPlace})` : ''}`
-        : (isNonDaily && extraTrainNo ? `Non-Daily Train ${extraTrainNo}` : (shiftedPlace || 'Another Place / Duty'));
-      const shiftReason = reason || `Shifted to ${shiftDesc}`;
+      // SHIFTED / SHIFTED_PLACE: Shift employee away from this link slot to another place / duty / link
+      if (action === 'SHIFTED' || action === 'SHIFTED_PLACE') {
+        const isNonDaily = req.body.is_extra === 1 || req.body.shifted_mode === 'NON_DAILY' || Boolean(req.body.extra_train_no);
+        const extraTrainNo = isNonDaily ? (req.body.extra_train_no || null) : null;
+        const shiftedPlace = req.body.shifted_place ? String(req.body.shifted_place).trim() : (isNonDaily ? 'NON_DAILY_TRAIN' : '');
+        const shiftedLinkNum = req.body.shifted_link_number !== undefined && req.body.shifted_link_number !== null && req.body.shifted_link_number !== ''
+          ? parseInt(req.body.shifted_link_number, 10)
+          : null;
+        const shiftedCatId = req.body.shifted_category_id ? parseInt(req.body.shifted_category_id, 10) : staff.category_id;
 
-      const undoSnapshots = [];
-      for (const dStr of datesToProcess) {
-        const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-        let subOverride = null;
-        let subMuster = null;
-        if (replacement_staff_id) {
-          subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+        const datesToProcess = [];
+        const fromD = new Date(date + 'T12:00:00');
+        const toD = to_date ? new Date(to_date + 'T12:00:00') : new Date(date + 'T12:00:00');
+        if (toD < fromD) toD.setTime(fromD.getTime());
+        for (let cur = new Date(fromD); cur <= toD; cur.setDate(cur.getDate() + 1)) {
+          const y = cur.getFullYear();
+          const m = String(cur.getMonth() + 1).padStart(2, '0');
+          const d = String(cur.getDate()).padStart(2, '0');
+          datesToProcess.push(`${y}-${m}-${d}`);
         }
-        undoSnapshots.push({
-          date: dStr,
-          override: existingOverride || null,
-          muster: existingMuster || null,
-          subOverride,
-          subMuster
-        });
 
-        const dayOffset = getDayOffset(category.anchor_date, dStr);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const shiftDesc = shiftedLinkNum
+          ? `Link #${shiftedLinkNum}${shiftedPlace ? ` (${shiftedPlace})` : ''}`
+          : (isNonDaily && extraTrainNo ? `Non-Daily Train ${extraTrainNo}` : (shiftedPlace || 'Another Place / Duty'));
+        const shiftReason = reason || `Shifted to ${shiftDesc}`;
 
-        const newStatus = shiftedLinkNum !== null ? 'CHANGED_LINK' : (isNonDaily ? 'EXTRA_CREW' : 'SHIFTED');
+        const undoSnapshots = [];
+        for (const dStr of datesToProcess) {
+          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
+          let subOverride = null;
+          let subMuster = null;
+          if (replacement_staff_id) {
+            subOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+            subMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
+          }
+          undoSnapshots.push({
+            date: dStr,
+            override: existingOverride || null,
+            muster: existingMuster || null,
+            subOverride,
+            subMuster
+          });
 
-        await run(
-          `INSERT INTO overrides (
+          const dayOffset = getDayOffset(category.anchor_date, dStr);
+          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+
+          const newStatus = shiftedLinkNum !== null ? 'CHANGED_LINK' : (isNonDaily ? 'EXTRA_CREW' : 'SHIFTED');
+
+          await run(
+            `INSERT INTO overrides (
             staff_id, date, original_link_number, overridden_link_number, status,
             substitute_staff_id, substitute_name, reason, target_category_id,
             shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
@@ -6563,51 +6562,51 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
              is_extra = excluded.is_extra,
              shifted_from_link = COALESCE(overrides.shifted_from_link, excluded.shifted_from_link),
              shifted_from_train = COALESCE(overrides.shifted_from_train, excluded.shifted_from_train)`,
-          [
-            staff_id,
-            dStr,
-            originalLink,
-            shiftedLinkNum,
-            newStatus,
-            shiftReason,
-            shiftedCatId,
-            shiftedPlace || (isNonDaily ? 'NON_DAILY_TRAIN' : null),
-            extraTrainNo,
-            isNonDaily ? 1 : 0,
-            originalLink || null,
-            null
-          ]
-        );
+            [
+              staff_id,
+              dStr,
+              originalLink,
+              shiftedLinkNum,
+              newStatus,
+              shiftReason,
+              shiftedCatId,
+              shiftedPlace || (isNonDaily ? 'NON_DAILY_TRAIN' : null),
+              extraTrainNo,
+              isNonDaily ? 1 : 0,
+              originalLink || null,
+              null
+            ]
+          );
 
-        // Muster record: P (Present on duty at the shifted place)
-        await run(
-          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          // Muster record: P (Present on duty at the shifted place)
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
            VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              code = 'P',
              remarks = excluded.remarks,
              updated_by = excluded.updated_by,
              updated_at = CURRENT_TIMESTAMP`,
-          [staff_id, dStr, shiftReason]
-        );
+            [staff_id, dStr, shiftReason]
+          );
 
-        await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
-          targetLink: shiftedLinkNum,
-          targetTrain: extraTrainNo || shiftedPlace,
-          isLeave: false,
-          remarks: shiftReason
-        });
+          await syncDutyChangeAcrossAllModules({ get, all, run }, staff_id, dStr, {
+            targetLink: shiftedLinkNum,
+            targetTrain: extraTrainNo || shiftedPlace,
+            isLeave: false,
+            remarks: shiftReason
+          });
 
-        // If replacement staff is provided to take over this original link slot:
-        if (replacement_staff_id) {
-          const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
-          if (subStaff) {
-            const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
-            const subReason = `Substitute for ${staff.name} (${shiftReason}) on Link #${originalLink}`;
+          // If replacement staff is provided to take over this original link slot:
+          if (replacement_staff_id) {
+            const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
+            if (subStaff) {
+              const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
+              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, dStr), subCat.cycle_length);
+              const subReason = `Substitute for ${staff.name} (${shiftReason}) on Link #${originalLink}`;
 
-            await run(
-              `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+              await run(
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
@@ -6616,75 +6615,75 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                  substitute_name = excluded.substitute_name,
                  reason = excluded.reason,
                  target_category_id = excluded.target_category_id`,
-              [subStaff.id, dStr, subOrigLink, originalLink, staff.id, staff.name, subReason, staff.category_id]
-            );
+                [subStaff.id, dStr, subOrigLink, originalLink, staff.id, staff.name, subReason, staff.category_id]
+              );
 
-            await run(
-              `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+              await run(
+                `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  code = 'P',
                  remarks = excluded.remarks,
                  updated_by = excluded.updated_by,
                  updated_at = CURRENT_TIMESTAMP`,
-              [subStaff.id, dStr, subReason]
-            );
+                [subStaff.id, dStr, subReason]
+              );
 
-            if (subStaff.category_id === 4) {
-              const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-              const targetDObj = new Date(dStr + 'T12:00:00');
-              const targetDayOfWeek = dayNames[targetDObj.getDay()];
-              const resolvedDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, targetDayOfWeek, subStaff.rest_day);
-              if (resolvedDuty && resolvedDuty.code) {
-                await syncLRSheetRecord(subStaff.id, dStr, resolvedDuty.code, subReason);
+              if (subStaff.category_id === 4) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const targetDObj = new Date(dStr + 'T12:00:00');
+                const targetDayOfWeek = dayNames[targetDObj.getDay()];
+                const resolvedDuty = await resolveDutyCodeForLRStaff(subStaff.id, dStr, targetDayOfWeek, subStaff.rest_day);
+                if (resolvedDuty && resolvedDuty.code) {
+                  await syncLRSheetRecord(subStaff.id, dStr, resolvedDuty.code, subReason);
+                }
               }
+              await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
+                targetLink: originalLink,
+                isLeave: false,
+                remarks: subReason
+              });
             }
-            await syncDutyChangeAcrossAllModules({ get, all, run }, subStaff.id, dStr, {
-              targetLink: originalLink,
-              isLeave: false,
-              remarks: subReason
-            });
           }
         }
+
+        const undoData = {
+          action: 'SHIFTED',
+          staff_id,
+          staff_name: staff.name,
+          dates: datesToProcess,
+          replacement_staff_id: replacement_staff_id || null,
+          snapshots: undoSnapshots
+        };
+
+        await logAudit(
+          'Admin',
+          'SHIFTED',
+          `Shifted ${staff.name} to ${shiftDesc} on ${date}. Original slot updated.`,
+          undoData
+        );
+
+        return res.json({
+          success: true,
+          message: `Shifted ${staff.name} to ${shiftDesc} on ${date}! Original slot updated.`
+        });
       }
 
-      const undoData = {
-        action: 'SHIFTED',
-        staff_id,
-        staff_name: staff.name,
-        dates: datesToProcess,
-        replacement_staff_id: replacement_staff_id || null,
-        snapshots: undoSnapshots
-      };
+      // UNDO_SHIFT: Revert shift and restore original employee
+      if (action === 'UNDO_SHIFT') {
+        await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
+        await run('DELETE FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff_id, date]);
+        await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
+        await syncDocumentsAndEarningsForStaffDate(staff_id, date, { dutyText: null, isLeaveOrRest: false });
+        await logAudit('Admin', 'UNDO_SHIFT', `Reverted shift for ${staff.name} on ${date} and restored to original cyclic link`, {
+          staff_id,
+          staff_name: staff.name,
+          date
+        });
+        return res.json({ success: true, message: 'Shift undone and staff restored to original cyclic link.' });
+      }
 
-      await logAudit(
-        'Admin',
-        'SHIFTED',
-        `Shifted ${staff.name} to ${shiftDesc} on ${date}. Original slot updated.`,
-        undoData
-      );
-
-      return res.json({
-        success: true,
-        message: `Shifted ${staff.name} to ${shiftDesc} on ${date}! Original slot updated.`
-      });
-    }
-
-    // UNDO_SHIFT: Revert shift and restore original employee
-    if (action === 'UNDO_SHIFT') {
-      await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
-      await run('DELETE FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff_id, date]);
-      await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
-      await syncDocumentsAndEarningsForStaffDate(staff_id, date, { dutyText: null, isLeaveOrRest: false });
-      await logAudit('Admin', 'UNDO_SHIFT', `Reverted shift for ${staff.name} on ${date} and restored to original cyclic link`, {
-        staff_id,
-        staff_name: staff.name,
-        date
-      });
-      return res.json({ success: true, message: 'Shift undone and staff restored to original cyclic link.' });
-    }
-
-    return res.status(400).json({ error: 'Invalid action specified' });
+      return res.status(400).json({ error: 'Invalid action specified' });
     });
   } catch (err) {
     console.error('Error changing duty status:', err);
@@ -7146,8 +7145,8 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
   try {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
-    if (parseInt(staff.category_id, 10) === 1) {
-      return res.status(400).json({ error: 'Conductors (COR) cannot be assigned to Non-Daily trains.' });
+    if (parseInt(staff.category_id, 10) === 1 && (is_extra === 1 || !target_link || (target_category_id && parseInt(target_category_id, 10) !== 1))) {
+      return res.status(400).json({ error: 'Conductors (COR) can only be assigned to COR (AC coaches) links.' });
     }
 
     const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
@@ -7163,7 +7162,7 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     const parsedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
     const effectiveTargetCat = isExtraCrew
       ? staff.category_id
-      : ((parsedTargetCat && parsedTargetCat !== 4) ? parsedTargetCat : (effectiveLink && effectiveLink <= 21 ? 1 : 2));
+      : ((parsedTargetCat && parsedTargetCat !== 4) ? parsedTargetCat : (staff.category_id === 1 ? 1 : 2));
     const shiftedPlace = isExtraCrew ? 'EXTRA_DOWN_BELOW' : `Link #${effectiveLink}`;
     const reason = isExtraCrew
       ? `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} as Extra Staff (down below)`
@@ -7769,7 +7768,7 @@ app.get('/api/audit-logs', async (req, res) => {
       if (row.undo_data) {
         try {
           parsedUndo = typeof row.undo_data === 'string' ? JSON.parse(row.undo_data) : row.undo_data;
-        } catch (e) {}
+        } catch (e) { }
       }
       const meta = deriveAuditMetadata(row.action_type, row.description, parsedUndo);
       return {
@@ -7891,7 +7890,7 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
     if (log.undo_data) {
       try {
         undoData = JSON.parse(log.undo_data);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let undoneSuccess = false;
@@ -8768,7 +8767,7 @@ app.get('/api/roster', async (req, res) => {
     // Determine start and end dates
     let startDate = start_date;
     let endDate = end_date;
-    
+
     if (!startDate || !endDate) {
       const y = parseInt(year, 10) || new Date().getFullYear();
       const m = parseInt(month, 10) || (new Date().getMonth() + 1);
@@ -8786,7 +8785,7 @@ app.get('/api/roster', async (req, res) => {
 
     // Get all overrides and muster records for staff members in this category during this date range
     const staffIdsList = staffMembers.map(s => s.id).join(',');
-    
+
     let overrides = [];
     let musterRecords = [];
     let lrRecords = [];
@@ -8803,7 +8802,7 @@ app.get('/api/roster', async (req, res) => {
           AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
       `);
 
-      
+
       // Load direct overrides AND substitute overrides
       overrides = await all(
         `SELECT o.*, s1.name as regular_staff_name, s1.category_id as regular_staff_category
@@ -8813,7 +8812,7 @@ app.get('/api/roster', async (req, res) => {
            AND date(o.date) >= date(?) AND date(o.date) <= date(?)`,
         [startDate, endDate]
       );
-      
+
       musterRecords = await all(
         `SELECT * FROM muster_records 
          WHERE staff_id IN (${staffIdsList}) 
@@ -8846,7 +8845,7 @@ app.get('/api/roster', async (req, res) => {
 
       nonDailyTrains = await all('SELECT * FROM non_daily_trains');
     }
-    
+
     // Index muster records by staff_id + date
     const musterMap = {};
     musterRecords.forEach(m => {
@@ -8885,7 +8884,7 @@ app.get('/api/roster', async (req, res) => {
 
     const dates = [];
     const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
+
     const [sy, sm, sd] = startDate.split('-').map(Number);
     const [ey, em, ed] = endDate.split('-').map(Number);
     const curDate = new Date(sy, sm - 1, sd);
@@ -8920,7 +8919,7 @@ app.get('/api/roster', async (req, res) => {
       let lastAssignedLink = null;
       let lastTargetCat = null;
       let lastAssignedNonDaily = null;
-      
+
       for (const d of dates) {
         const { anchor_date: curAnchorDate, cycle_length: curCycleLength } = getCategoryParamsForDate(staffCat, d.dateString);
         const staffDayOffset = getDayOffset(curAnchorDate, d.dateString);
@@ -9029,7 +9028,8 @@ app.get('/api/roster', async (req, res) => {
 
               if (linkMatch) {
                 linkNum = parseInt(linkMatch[1], 10);
-                targetCatId = (linkNum > 21) ? 2 : 1;
+                const rawCat = directOv?.target_category_id ? parseInt(directOv.target_category_id, 10) : null;
+                targetCatId = (rawCat && rawCat !== 4) ? rawCat : (/COR|CONDUCTOR/i.test(code) || /COR/i.test(remarks) ? 1 : (staff.category_id === 1 ? 1 : 2));
                 status = 'CHANGED_LINK';
                 customSetType = `Link #${linkNum}`;
                 overrideReason = remarks || `Link #${linkNum}`;
@@ -9110,7 +9110,7 @@ app.get('/api/roster', async (req, res) => {
             } else if (directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined) {
               linkNum = parseInt(directOv.overridden_link_number, 10);
               const rawCat = directOv.target_category_id ? parseInt(directOv.target_category_id, 10) : null;
-              targetCatId = (rawCat && rawCat !== 4) ? rawCat : (linkNum > 21 ? 2 : 1);
+              targetCatId = (rawCat && rawCat !== 4) ? rawCat : (s.category_id === 1 ? 1 : 2);
               status = directOv.status || 'DUTY';
               lastAssignedLink = linkNum;
               lastTargetCat = targetCatId;
@@ -9208,7 +9208,7 @@ app.get('/api/roster', async (req, res) => {
               const rawRegCat = subOv.regular_staff_category ? parseInt(subOv.regular_staff_category, 10) : null;
               targetCatId = (rawSubCat && rawSubCat !== 4)
                 ? rawSubCat
-                : ((rawRegCat && rawRegCat !== 4) ? rawRegCat : (linkNum > 21 ? 2 : 1));
+                : ((rawRegCat && rawRegCat !== 4) ? rawRegCat : (s.category_id === 1 ? 1 : 2));
               status = 'SUBSTITUTE';
               overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'} on Link #${linkNum} (${subOv.leave_type || subOv.status || 'Leave'})`;
               lastAssignedLink = linkNum;
@@ -9313,13 +9313,19 @@ app.get('/api/roster', async (req, res) => {
                 lastAssignedNonDaily = null;
               } else if (linkCodeMatch || /^\d+$/.test(code)) {
                 linkNum = parseInt(linkCodeMatch ? linkCodeMatch[1] : code, 10);
-                const matchedLink = allLinks.find(l => 
-                  l.link_number === linkNum && 
+                const preferredCat = (s.category_id === 1) ? 1 : 2;
+                const matchedLink = allLinks.find(l =>
+                  l.link_number === linkNum &&
+                  l.category_id === preferredCat &&
+                  (!l.effective_from || l.effective_from <= d.dateString) &&
+                  (!l.effective_to || l.effective_to >= d.dateString)
+                ) || allLinks.find(l =>
+                  l.link_number === linkNum &&
                   l.category_id !== 4 &&
                   (!l.effective_from || l.effective_from <= d.dateString) &&
                   (!l.effective_to || l.effective_to >= d.dateString)
                 );
-                targetCatId = matchedLink ? matchedLink.category_id : (linkNum > 21 ? 2 : 1);
+                targetCatId = matchedLink ? matchedLink.category_id : preferredCat;
                 status = 'DUTY';
                 isRest = false;
                 isOverridden = true;
@@ -9328,9 +9334,9 @@ app.get('/api/roster', async (req, res) => {
                 lastTargetCat = targetCatId;
                 lastAssignedNonDaily = null;
               } else {
-                const matchedLink = allLinks.find(l => 
-                  l.category_id !== 4 && 
-                  l.train_numbers && 
+                const matchedLink = allLinks.find(l =>
+                  l.category_id !== 4 &&
+                  l.train_numbers &&
                   (l.train_numbers.includes(code) || code.includes(l.train_numbers)) &&
                   (!l.effective_from || l.effective_from <= d.dateString) &&
                   (!l.effective_to || l.effective_to >= d.dateString)
@@ -9372,13 +9378,19 @@ app.get('/api/roster', async (req, res) => {
                 const earnLinkMatch = String(earn.duty).trim().match(/^(?:LINK\s*#?|L-)(\d+)$/i);
                 if (earnLinkMatch) {
                   linkNum = parseInt(earnLinkMatch[1], 10);
+                  const preferredCat = (s.category_id === 1) ? 1 : 2;
                   const matchedLink = allLinks.find(l =>
+                    l.link_number === linkNum &&
+                    l.category_id === preferredCat &&
+                    (!l.effective_from || l.effective_from <= d.dateString) &&
+                    (!l.effective_to || l.effective_to >= d.dateString)
+                  ) || allLinks.find(l =>
                     l.link_number === linkNum &&
                     l.category_id !== 4 &&
                     (!l.effective_from || l.effective_from <= d.dateString) &&
                     (!l.effective_to || l.effective_to >= d.dateString)
                   );
-                  targetCatId = matchedLink ? matchedLink.category_id : (linkNum > 21 ? 2 : 1);
+                  targetCatId = matchedLink ? matchedLink.category_id : preferredCat;
                   status = 'DUTY';
                   isRest = false;
                   overrideReason = earn.remarks || `Daily Duty Allotment: Link #${linkNum}`;
@@ -9428,13 +9440,13 @@ app.get('/api/roster', async (req, res) => {
           let dutyDetails = null;
           if (linkNum !== null) {
             if (linkNum <= 100) {
-              dutyDetails = allLinks.find(l => 
-                l.category_id === targetCatId && 
+              dutyDetails = allLinks.find(l =>
+                l.category_id === targetCatId &&
                 l.link_number === linkNum &&
                 (!l.effective_from || l.effective_from <= d.dateString) &&
                 (!l.effective_to || l.effective_to >= d.dateString)
-              ) || allLinks.find(l => 
-                l.link_number === linkNum && 
+              ) || allLinks.find(l =>
+                l.link_number === linkNum &&
                 l.category_id !== 4 &&
                 (!l.effective_from || l.effective_from <= d.dateString) &&
                 (!l.effective_to || l.effective_to >= d.dateString)
@@ -9574,7 +9586,7 @@ app.get('/api/roster', async (req, res) => {
               lastAssignedNonDaily = null;
             } else if (directOv.overridden_link_number !== null && directOv.overridden_link_number !== undefined) {
               linkNum = directOv.overridden_link_number;
-              targetCatId = directOv.target_category_id || (linkNum > 21 ? 2 : currentCatId);
+              targetCatId = directOv.target_category_id || (currentCatId === 1 ? 1 : 2);
               status = directOv.status || 'CHANGED_LINK';
               lastAssignedLink = linkNum;
               lastTargetCat = targetCatId;
@@ -9632,7 +9644,7 @@ app.get('/api/roster', async (req, res) => {
               : subOv.original_link_number;
             if (assignedLink) {
               linkNum = assignedLink;
-              targetCatId = subOv.target_category_id || (assignedLink > 21 ? 2 : currentCatId);
+              targetCatId = subOv.target_category_id || (subOv.regular_staff_category || (currentCatId === 1 ? 1 : 2));
               status = 'DUTY';
               overrideReason = subOv.reason || `Substitute for ${subOv.regular_staff_name || 'Staff'} on Link #${linkNum}`;
               lastAssignedLink = linkNum;
@@ -10021,7 +10033,7 @@ app.post('/api/staff/:id/change-weekly-rest', requireAdmin, async (req, res) => 
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
     const allCategoryStaff = await all('SELECT * FROM staff WHERE category_id = ? ORDER BY row_position', [category.id]);
-    
+
     // Find staff member in this category whose current weekly rest is new_rest_weekday
     const targetStaff = allCategoryStaff.find(s => {
       const restDate = findScheduledRestDate(s.row_position, category.anchor_date, category.anchor_date, category.cycle_length);
@@ -10033,7 +10045,7 @@ app.post('/api/staff/:id/change-weekly-rest', requireAdmin, async (req, res) => 
       const posB = targetStaff.row_position;
       await run('UPDATE staff SET row_position = ? WHERE id = ?', [posB, staff.id]);
       await run('UPDATE staff SET row_position = ? WHERE id = ?', [posA, targetStaff.id]);
-      
+
       await logAudit(
         'Admin',
         'CHANGE_WEEKLY_REST',
@@ -10235,7 +10247,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
           const dayOfWeek = dayNames[dObj.getDay()];
           const isScheduledRestDay = (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) ||
-                                     (staff.name && staff.name.toUpperCase().includes(dayOfWeek + ' REST'));
+            (staff.name && staff.name.toUpperCase().includes(dayOfWeek + ' REST'));
 
           if (lrRecord && lrRecord.duty_code && lrRecord.duty_code.trim() !== '') {
             const code = lrRecord.duty_code.trim();
@@ -10287,16 +10299,21 @@ app.get('/api/reports/daily-view', async (req, res) => {
               isRest = false;
               resolvedTrainNumbers = code;
 
-              const linkMatch = code.match(/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*(\d+)$/i)
-                || (remarks ? remarks.match(/Link\s*#?(\d+)/i) : null)
-                || (override && override.overridden_link_number ? [null, String(override.overridden_link_number)] : null);
+              const linkMatch = (override && override.overridden_link_number !== null && override.overridden_link_number !== undefined)
+                ? [null, String(override.overridden_link_number)]
+                : (code.match(/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*(\d+)$/i)
+                  || (remarks ? remarks.match(/Link\s*#?(\d+)/i) : null));
 
               if (linkMatch) {
                 const linkNum = parseInt(linkMatch[1], 10);
                 activeLink = linkNum;
-                status = 'CHANGED_LINK';
-                const isCor = /COR|CONDUCTOR/i.test(code) || /COR/i.test(remarks) || (linkNum <= 21);
-                targetCategoryId = isCor ? 1 : 2;
+                status = (override && override.status) ? override.status : 'CHANGED_LINK';
+                const isCor = (override && override.target_category_id)
+                  ? parseInt(override.target_category_id, 10) === 1
+                  : (/COR|CONDUCTOR/i.test(code) || /COR/i.test(remarks) || staff.category_id === 1);
+                targetCategoryId = (override && override.target_category_id)
+                  ? parseInt(override.target_category_id, 10)
+                  : (isCor ? 1 : 2);
                 const linkDef = await getActiveLinkDef(targetCategoryId, linkNum, date);
                 if (linkDef) {
                   resolvedFromStation = linkDef.from_station || 'GNT';
@@ -10329,7 +10346,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             substituteStaffId = override.substitute_staff_id;
             substituteName = override.substitute_name;
             overrideReason = override.reason || '';
-            targetCategoryId = override.target_category_id || (activeLink ? (activeLink > 21 ? 2 : 1) : null);
+            targetCategoryId = override.target_category_id || (activeLink ? (activeLink > 21 ? 2 : (staff.category_id === 1 ? 1 : 2)) : null);
             leaveType = override.leave_type;
             activeExtraTrain = override.extra_train_no;
             isRest = ['REST', 'AVAILABLE_FOR_BOOKING'].includes(status);
@@ -10462,7 +10479,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         let overrideReason = '';
         let targetCategoryId = null;
         let leaveType = null;
-        
+
         let multiDayContinuation = null;
         if (override) {
           activeLink = override.overridden_link_number;
@@ -10592,7 +10609,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
           const dayNameUpper = days[dObj.getDay()];
           if ((staff.rest_day && staff.rest_day.toUpperCase() === dayNameUpper) ||
-              (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
+            (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
             isCat4RestDay = true;
             status = 'REST';
           }
@@ -10917,7 +10934,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
         if (!override && cat.id === 4) {
           const dayNameUpper = currentDayName.slice(0, 3).toUpperCase();
           if ((staff.rest_day && staff.rest_day.toUpperCase() === dayNameUpper) ||
-              (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
+            (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
             isCat4RestDay = true;
             status = 'REST';
           }
@@ -11458,7 +11475,7 @@ app.post('/api/duty-register/populate-from-roster', requireAdmin, async (req, re
     }
 
     const categories = await all('SELECT * FROM categories');
-    
+
     for (const cat of categories) {
       const staffMembers = await all(
         'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position',
@@ -11483,7 +11500,7 @@ app.post('/api/duty-register/populate-from-roster', requireAdmin, async (req, re
         }
 
         const isRest = activeLink === null || (dutyDetails && dutyDetails.is_rest === 1);
-        
+
         let train_out = '';
         let coach_out = '';
         let train_return = '';
@@ -11505,7 +11522,7 @@ app.post('/api/duty-register/populate-from-roster', requireAdmin, async (req, re
            VALUES (?, 1, ?, ?, ?, ?, ?, ?)`,
           [date, train_out, coach_out, train_return, coach_return, duty_label, 'Auto-populated from roster']
         );
-        
+
         const entryId = result.lastID;
         await run(
           `INSERT INTO duty_register_staff (entry_id, staff_id) VALUES (?, ?)`,
@@ -11652,7 +11669,7 @@ app.get('/api/duty-register/reconciliation', async (req, res) => {
             // Match train numbers
             const trainMismatch = pTrains.length > 0 && actTrains.length > 0 &&
               !pTrains.some(pt => actTrains.some(at => at.includes(pt) || pt.includes(at)));
-            
+
             // Match coaches
             const coachMismatch = planned.coaches && actual.coach_out && !isCoachCompatible(planned.coaches, actual.coach_out);
 
@@ -12624,7 +12641,7 @@ async function syncDailyEarningsItemToDiary(staffId, dateStr, twt_nc, twt_fare, 
            train_no = CASE WHEN (train_no IS NULL OR train_no = '' OR train_no = '---') AND ? != '' THEN ? ELSE train_no END
        WHERE staff_id = ? AND month_year = ? AND date_str IN (?, ?, ?, ?)`,
       [totalCases, collectedRs, gstAmt, totalAmt, dutyStr || '', dutyStr || '', staffId, monthYear, dateStr, ddPad, ddShort, ddFull]
-    ).catch(() => {});
+    ).catch(() => { });
   }
 }
 
@@ -12743,7 +12760,7 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
           item.act_arr || '', item.act_arr || '', item.act_arr || '',
           staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
         ]
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     await logAudit(
@@ -12928,7 +12945,7 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
             item.arr_time || '', item.arr_time || '', item.arr_time || '',
             staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
           ]
-        ).catch(() => {});
+        ).catch(() => { });
         await run(
           `UPDATE nda_entries 
            SET act_dep = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_dep END,
@@ -12939,7 +12956,7 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
             item.arr_time || '', item.arr_time || '', item.arr_time || '',
             staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
           ]
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -13862,13 +13879,13 @@ app.get('/api/muster', async (req, res) => {
               : { anchor_date: staff.anchor_date, cycle_length: staff.cycle_length };
             const dayOffset = getDayOffset(catParams.anchor_date, d.dateStr);
             const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
-            
+
             if (staff.category_id === 4) {
               if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) isRest = true;
               else if (staff.name.toUpperCase().includes(`${d.dayOfWeek} REST`)) isRest = true;
             } else {
-              const lDef = linkNum !== null ? links.find(l => 
-                l.category_id === staff.category_id && 
+              const lDef = linkNum !== null ? links.find(l =>
+                l.category_id === staff.category_id &&
                 l.link_number === linkNum &&
                 (!l.effective_from || l.effective_from <= d.dateStr) &&
                 (!l.effective_to || l.effective_to >= d.dateStr)
@@ -13895,7 +13912,7 @@ app.get('/api/muster', async (req, res) => {
         if (counts[code] !== undefined) counts[code]++;
         if (grandTotals[code] !== undefined) grandTotals[code]++;
         const isRestDayWorked = (staffCr && staffCr.dates && staffCr.dates.includes(d.dateStr)) ||
-                                (remarks && /rest day worked|cr credit|cr against rest/i.test(remarks));
+          (remarks && /rest day worked|cr credit|cr against rest/i.test(remarks));
         days[d.dateStr] = { code, isManual, remarks, isRestDayWorked };
       }
 
@@ -13947,133 +13964,133 @@ app.get('/api/muster', async (req, res) => {
 async function syncMusterToSchedulesAndApprovals(staffId, dateStr, cleanCode, remarks = '') {
   return await withTransaction(async () => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  const isLeave = ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(cleanCode);
-  const isSick = cleanCode === 'SICK';
-  const isCr = cleanCode === 'CR';
-  const isRest = cleanCode === 'R';
-  const isAbsent = cleanCode === 'O';
-  const isBlank = cleanCode === '' || cleanCode === null || cleanCode === undefined;
+    const isLeave = ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(cleanCode);
+    const isSick = cleanCode === 'SICK';
+    const isCr = cleanCode === 'CR';
+    const isRest = cleanCode === 'R';
+    const isAbsent = cleanCode === 'O';
+    const isBlank = cleanCode === '' || cleanCode === null || cleanCode === undefined;
 
-  const dateParts = dateStr.split('-');
-  const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
+    const dateParts = dateStr.split('-');
+    const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
 
-  if (isBlank) {
-    const status = 'MARK_LATER';
-    const reason = remarks ? `Muster Blank (${remarks})` : 'Mark Reason Later (Muster Blank)';
-    const disallowRemark = `Disallowed: Deleted from duty slot (Reason to be marked later)`;
+    if (isBlank) {
+      const status = 'MARK_LATER';
+      const reason = remarks ? `Muster Blank (${remarks})` : 'Mark Reason Later (Muster Blank)';
+      const disallowRemark = `Disallowed: Deleted from duty slot (Reason to be marked later)`;
 
-    await run(
-      `INSERT INTO overrides (staff_id, date, overridden_link_number, status, reason, leave_type)
+      await run(
+        `INSERT INTO overrides (staff_id, date, overridden_link_number, status, reason, leave_type)
        VALUES (?, ?, NULL, ?, ?, NULL)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          overridden_link_number = NULL,
          status = excluded.status,
          reason = excluded.reason,
          leave_type = NULL`,
-      [staffId, dateStr, status, reason]
-    );
+        [staffId, dateStr, status, reason]
+      );
 
-    await run(
-      `UPDATE ta_approvals 
+      await run(
+        `UPDATE ta_approvals 
        SET status = 'REJECTED', 
            claim_amount = 0, 
            ta_percentage = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
 
-    await run(
-      `UPDATE ta_entries 
+      await run(
+        `UPDATE ta_entries 
        SET ta_b1 = '', 
            days_claiming_ta = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
 
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: 'BLANK', remarks: reason });
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: 'BLANK', remarks: reason });
 
-    if (staff && staff.category_id === 4) {
-      await syncLRSheetRecord(staffId, dateStr, '', remarks);
+      if (staff && staff.category_id === 4) {
+        await syncLRSheetRecord(staffId, dateStr, '', remarks);
+      }
+      return;
     }
-    return;
-  }
 
-  if (isLeave || isSick || isCr || isRest || isAbsent) {
-    const status = isLeave ? 'LEAVE' : (isSick ? 'SICK' : (isCr ? 'CR' : (isRest ? 'REST' : 'ABSENT')));
-    const reason = `Muster: ${cleanCode}${remarks ? ` (${remarks})` : ''}`;
-    const leaveType = isLeave ? cleanCode : null;
-    const disallowRemark = `Disallowed: On Leave/Absent as per Muster Chart (${cleanCode})`;
+    if (isLeave || isSick || isCr || isRest || isAbsent) {
+      const status = isLeave ? 'LEAVE' : (isSick ? 'SICK' : (isCr ? 'CR' : (isRest ? 'REST' : 'ABSENT')));
+      const reason = `Muster: ${cleanCode}${remarks ? ` (${remarks})` : ''}`;
+      const leaveType = isLeave ? cleanCode : null;
+      const disallowRemark = `Disallowed: On Leave/Absent as per Muster Chart (${cleanCode})`;
 
-    // 1. Upsert into overrides
-    await run(
-      `INSERT INTO overrides (staff_id, date, overridden_link_number, status, reason, leave_type)
+      // 1. Upsert into overrides
+      await run(
+        `INSERT INTO overrides (staff_id, date, overridden_link_number, status, reason, leave_type)
        VALUES (?, ?, NULL, ?, ?, ?)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          overridden_link_number = NULL,
          status = excluded.status,
          reason = excluded.reason,
          leave_type = excluded.leave_type`,
-      [staffId, dateStr, status, reason, leaveType]
-    );
+        [staffId, dateStr, status, reason, leaveType]
+      );
 
-    // 2. Disallow TA claims on leave/sick/rest/absent days in ta_approvals
-    await run(
-      `UPDATE ta_approvals 
+      // 2. Disallow TA claims on leave/sick/rest/absent days in ta_approvals
+      await run(
+        `UPDATE ta_approvals 
        SET status = 'REJECTED', 
            claim_amount = 0, 
            ta_percentage = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
 
-    // 3. Disallow in ta_entries as well if custom entries exist
-    await run(
-      `UPDATE ta_entries 
+      // 3. Disallow in ta_entries as well if custom entries exist
+      await run(
+        `UPDATE ta_entries 
        SET ta_b1 = '', 
            days_claiming_ta = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
 
-    // 4. Sync NDA, Diary, and Daily Earnings for this date
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: cleanCode, remarks: reason });
+      // 4. Sync NDA, Diary, and Daily Earnings for this date
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: cleanCode, remarks: reason });
 
-    // 5. If staff is Category 4 (LR), synchronize to lr_sheet_records
-    if (staff && staff.category_id === 4) {
-      const lrCode = cleanCode === 'SICK' ? 'S' : cleanCode;
-      await syncLRSheetRecord(staffId, dateStr, lrCode, reason, 'Muster Roll Sync');
-    }
-  } else if (cleanCode === 'P' || cleanCode === 'E') {
-    // If an automated muster override existed, clean it up so regular duty resumes
-    await run(
-      `DELETE FROM overrides 
-       WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%' OR reason LIKE 'Muster Blank%')`,
-      [staffId, dateStr]
-    );
-
-    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
-
-    let resolvedDutyCode = '';
-    // If staff is Category 4 (LR), resolve duty or set available
-    if (staff && staff.category_id === 4) {
-      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-      const dObj = new Date(dateStr + 'T12:00:00');
-      const dayOfWeek = dayNames[dObj.getDay()];
-      const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
-      if (resolved && resolved.code) {
-        resolvedDutyCode = resolved.code;
-        await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Muster: Present', 'Muster Roll Sync');
-      } else {
-        resolvedDutyCode = 'AVL';
-        await syncLRSheetRecord(staffId, dateStr, 'AVL', 'Present at HQ', 'Muster Roll Sync');
+      // 5. If staff is Category 4 (LR), synchronize to lr_sheet_records
+      if (staff && staff.category_id === 4) {
+        const lrCode = cleanCode === 'SICK' ? 'S' : cleanCode;
+        await syncLRSheetRecord(staffId, dateStr, lrCode, reason, 'Muster Roll Sync');
       }
-    }
+    } else if (cleanCode === 'P' || cleanCode === 'E') {
+      // If an automated muster override existed, clean it up so regular duty resumes
+      await run(
+        `DELETE FROM overrides 
+       WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%' OR reason LIKE 'Muster Blank%')`,
+        [staffId, dateStr]
+      );
 
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedDutyCode, remarks: remarks || 'Muster: Present' });
+      await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+
+      let resolvedDutyCode = '';
+      // If staff is Category 4 (LR), resolve duty or set available
+      if (staff && staff.category_id === 4) {
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const dObj = new Date(dateStr + 'T12:00:00');
+        const dayOfWeek = dayNames[dObj.getDay()];
+        const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
+        if (resolved && resolved.code) {
+          resolvedDutyCode = resolved.code;
+          await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Muster: Present', 'Muster Roll Sync');
+        } else {
+          resolvedDutyCode = 'AVL';
+          await syncLRSheetRecord(staffId, dateStr, 'AVL', 'Present at HQ', 'Muster Roll Sync');
+        }
+      }
+
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedDutyCode, remarks: remarks || 'Muster: Present' });
     }
   });
 }
@@ -14121,32 +14138,32 @@ async function restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr) 
 async function revertMusterFromSchedulesAndApprovals(staffId, dateStr) {
   return await withTransaction(async () => {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  const dateParts = dateStr.split('-');
-  const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
+    const dateParts = dateStr.split('-');
+    const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
 
-  await run(
-    `DELETE FROM overrides 
+    await run(
+      `DELETE FROM overrides 
      WHERE staff_id = ? AND date = ? AND (reason LIKE 'Muster:%' OR reason LIKE 'Muster Chart:%' OR reason LIKE 'Muster Blank%')`,
-    [staffId, dateStr]
-  );
-  await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+      [staffId, dateStr]
+    );
+    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
 
-  // If staff is Category 4 (LR), resolve baseline or delete override record
-  let resolvedCode = '';
-  if (staff && staff.category_id === 4) {
-    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const dObj = new Date(dateStr + 'T12:00:00');
-    const dayOfWeek = dayNames[dObj.getDay()];
-    const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
-    if (resolved && resolved.code) {
-      resolvedCode = resolved.code;
-      await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Baseline', 'Muster Roll Sync');
-    } else {
-      await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+    // If staff is Category 4 (LR), resolve baseline or delete override record
+    let resolvedCode = '';
+    if (staff && staff.category_id === 4) {
+      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const dObj = new Date(dateStr + 'T12:00:00');
+      const dayOfWeek = dayNames[dObj.getDay()];
+      const resolved = await resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staff.rest_day);
+      if (resolved && resolved.code) {
+        resolvedCode = resolved.code;
+        await syncLRSheetRecord(staffId, dateStr, resolved.code, resolved.remarks || 'Baseline', 'Muster Roll Sync');
+      } else {
+        await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+      }
     }
-  }
 
-  await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedCode, remarks: '' });
+    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: resolvedCode, remarks: '' });
   });
 }
 
@@ -14532,7 +14549,7 @@ app.post('/api/muster/add-employee', async (req, res) => {
       if (targetCatId === 4) {
         try {
           await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
-        } catch (e) {}
+        } catch (e) { }
       }
 
       await logAudit(req.user ? req.user.role : 'Admin', 'ADD_MUSTER_EMPLOYEE', `Added existing staff '${existing.name}' to Category ${targetCatId} at position ${nextPos}`);
@@ -14574,7 +14591,7 @@ app.post('/api/muster/add-employee', async (req, res) => {
     if (targetCatId === 4) {
       try {
         await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     await logAudit(req.user ? req.user.role : 'Admin', 'ADD_MUSTER_EMPLOYEE', `Created new staff '${cleanName}' in Category ${targetCatId} at position ${nextPos}`);
@@ -14621,20 +14638,18 @@ app.post('/api/muster/delete-employee', async (req, res) => {
     const oldPos = staff.row_position;
 
     if (permanent_delete) {
-      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
-      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
-      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) { }
+      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) { }
+      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) { } try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) { }
       await run('DELETE FROM staff WHERE id = ?', [staff_id]);
     } else {
       await run('UPDATE staff SET active = 0, category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
@@ -14648,7 +14663,7 @@ app.post('/api/muster/delete-employee', async (req, res) => {
       if (catId === 4) {
         try {
           await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -14798,9 +14813,9 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
         return { code: NON_DAILY_LINK_TRAINS[num], remarks: ov.reason || '' };
       }
       const rawCat = ov.target_category_id ? parseInt(ov.target_category_id, 10) : null;
-      const catId = (rawCat && rawCat !== 4) ? rawCat : (sub ? (sub.staff_cat || sub.target_category_id || 2) : (num > 21 ? 2 : 1));
+      const catId = (rawCat && rawCat !== 4) ? rawCat : (sub ? (sub.staff_cat || sub.target_category_id || 2) : 2);
       const link = links.find(l => l.category_id === catId && l.link_number === num)
-                || links.find(l => l.category_id !== 4 && l.link_number === num);
+        || links.find(l => l.category_id !== 4 && l.link_number === num);
       if (link) {
         if (link.is_rest) return { code: 'R', remarks: ov.reason || '' };
         if (link.train_numbers && link.train_numbers.toUpperCase() !== 'NON DAILY') {
@@ -14866,13 +14881,13 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
           ? (prev1Ov.original_link_number || prev1Ov.overridden_link_number)
           : (prev1Ov.overridden_link_number !== null && prev1Ov.overridden_link_number !== undefined ? prev1Ov.overridden_link_number : null);
         const rawPrev1Cat = prev1Ov.target_category_id ? parseInt(prev1Ov.target_category_id, 10) : null;
-        const prev1Cat = (rawPrev1Cat && rawPrev1Cat !== 4) ? rawPrev1Cat : (prev1Ov === prev1Sub ? (prev1Ov.staff_cat || 2) : (prev1Link && prev1Link <= 21 ? 1 : 2));
+        const prev1Cat = (rawPrev1Cat && rawPrev1Cat !== 4) ? rawPrev1Cat : (prev1Ov === prev1Sub ? (prev1Ov.staff_cat || 2) : 2);
         const setInfo1 = getLinkSetDetails(prev1Cat, prev1Link);
         if (setInfo1 && setInfo1.dayIndexInSet < setInfo1.setLength) {
           const nextLegIndex = setInfo1.dayIndexInSet;
           const nextLegLinkNum = setInfo1.setLinks[nextLegIndex];
           const nextLink = links.find(l => l.category_id === prev1Cat && l.link_number === nextLegLinkNum)
-                        || links.find(l => l.category_id !== 4 && l.link_number === nextLegLinkNum);
+            || links.find(l => l.category_id !== 4 && l.link_number === nextLegLinkNum);
           if (nextLink && nextLink.train_numbers) {
             return { code: formatTrainString(nextLink.train_numbers), remarks: `Day ${nextLegIndex + 1} of Link #${setInfo1.setLinks[0]} (${setInfo1.setLength}-day link set)` };
           }
@@ -14927,7 +14942,7 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
           const leg3Index = setInfo2.dayIndexInSet + 1;
           const leg3LinkNum = setInfo2.setLinks[leg3Index];
           const link3 = links.find(l => l.category_id === prev2Cat && l.link_number === leg3LinkNum)
-                     || links.find(l => l.category_id !== 4 && l.link_number === leg3LinkNum);
+            || links.find(l => l.category_id !== 4 && l.link_number === leg3LinkNum);
           if (link3 && link3.train_numbers) {
             return { code: formatTrainString(link3.train_numbers), remarks: `Day ${leg3Index + 1} of Link #${setInfo2.setLinks[0]} (${setInfo2.setLength}-day link set)` };
           }
@@ -15386,24 +15401,24 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
     if (!staff) return;
 
-  const dateParts = dateStr.split('-');
-  const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
+    const dateParts = dateStr.split('-');
+    const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dateStr;
 
-  if (!dutyCode || dutyCode.trim() === '') {
-    // 1. Cleared / Reset cell
-    await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
-    await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
-    await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
-    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: '', remarks: '' });
-    return;
-  }
+    if (!dutyCode || dutyCode.trim() === '') {
+      // 1. Cleared / Reset cell
+      await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+      await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+      await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
+      await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: '', remarks: '' });
+      return;
+    }
 
-  const clean = dutyCode.trim();
-  const upper = clean.toUpperCase();
+    const clean = dutyCode.trim();
+    const upper = clean.toUpperCase();
 
-  // 1. Upsert LR Sheet Record
-  await run(`
+    // 1. Upsert LR Sheet Record
+    await run(`
     INSERT INTO lr_sheet_records (staff_id, date, duty_code, remarks, updated_by, updated_at)
     VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
     ON CONFLICT(staff_id, date) DO UPDATE SET
@@ -15413,22 +15428,22 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
       updated_at = CURRENT_TIMESTAMP
   `, [staffId, dateStr, clean, remarks || null]);
 
-  // 2. Classify duty code
-  const isSick = upper === 'S' || upper === 'SICK';
-  const isLeave = ['CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'OD', 'NH', 'L', 'CAP'].includes(upper);
-  const isRest = upper === 'R' || upper === 'REST';
-  const isCr = upper === 'CR';
-  const isAbsent = upper === 'O' || upper === 'ABSENT';
-  const isAvailable = ['AVL', 'SPARE', 'REST_HQ', 'STANDBY', 'AVAILABLE'].includes(upper);
+    // 2. Classify duty code
+    const isSick = upper === 'S' || upper === 'SICK';
+    const isLeave = ['CL', 'LAP', 'LHAP', 'CCL', 'SCL', 'OD', 'NH', 'L', 'CAP'].includes(upper);
+    const isRest = upper === 'R' || upper === 'REST';
+    const isCr = upper === 'CR';
+    const isAbsent = upper === 'O' || upper === 'ABSENT';
+    const isAvailable = ['AVL', 'SPARE', 'REST_HQ', 'STANDBY', 'AVAILABLE'].includes(upper);
 
-  if (isSick || isLeave || isRest || isCr || isAbsent) {
-    const musterCode = isSick ? 'SICK' : (isLeave ? (upper === 'L' || upper === 'CAP' ? 'LAP' : upper) : (isRest ? 'R' : (isCr ? 'CR' : 'O')));
-    const status = isLeave ? 'LEAVE' : (isSick ? 'SICK' : (isCr ? 'CR' : (isRest ? 'REST' : 'ABSENT')));
-    const reason = `LR Sheet: ${clean}${remarks ? ` (${remarks})` : ''}`;
-    const leaveType = isLeave ? musterCode : null;
+    if (isSick || isLeave || isRest || isCr || isAbsent) {
+      const musterCode = isSick ? 'SICK' : (isLeave ? (upper === 'L' || upper === 'CAP' ? 'LAP' : upper) : (isRest ? 'R' : (isCr ? 'CR' : 'O')));
+      const status = isLeave ? 'LEAVE' : (isSick ? 'SICK' : (isCr ? 'CR' : (isRest ? 'REST' : 'ABSENT')));
+      const reason = `LR Sheet: ${clean}${remarks ? ` (${remarks})` : ''}`;
+      const leaveType = isLeave ? musterCode : null;
 
-    await run(
-      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id, leave_type)
+      await run(
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id, leave_type)
        VALUES (?, ?, NULL, NULL, ?, ?, 4, ?)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          overridden_link_number = NULL,
@@ -15436,87 +15451,87 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
          reason = excluded.reason,
          target_category_id = 4,
          leave_type = excluded.leave_type`,
-      [staffId, dateStr, status, reason, leaveType]
-    );
+        [staffId, dateStr, status, reason, leaveType]
+      );
 
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
        VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          code = excluded.code,
          remarks = excluded.remarks,
          updated_by = excluded.updated_by,
          updated_at = CURRENT_TIMESTAMP`,
-      [staffId, dateStr, musterCode, reason]
-    );
+        [staffId, dateStr, musterCode, reason]
+      );
 
-    const disallowRemark = `Disallowed: On Leave/Absent as per LR Sheet (${clean})`;
-    await run(
-      `UPDATE ta_approvals 
+      const disallowRemark = `Disallowed: On Leave/Absent as per LR Sheet (${clean})`;
+      await run(
+        `UPDATE ta_approvals 
        SET status = 'REJECTED', 
            claim_amount = 0, 
            ta_percentage = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
-    await run(
-      `UPDATE ta_entries 
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
+      await run(
+        `UPDATE ta_entries 
        SET ta_b1 = '', 
            days_claiming_ta = NULL, 
            remarks = ?
        WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-      [disallowRemark, staffId, dateStr, dateStr, altDateStr]
-    );
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
-  } else if (isAvailable) {
-    const reason = `LR Standby at HQ: ${clean}${remarks ? ` (${remarks})` : ''}`;
-    await run(
-      `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
+        [disallowRemark, staffId, dateStr, dateStr, altDateStr]
+      );
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
+    } else if (isAvailable) {
+      const reason = `LR Standby at HQ: ${clean}${remarks ? ` (${remarks})` : ''}`;
+      await run(
+        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
        VALUES (?, ?, NULL, NULL, 'AVAILABLE_FOR_BOOKING', ?, 4)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          overridden_link_number = NULL,
          status = 'AVAILABLE_FOR_BOOKING',
          reason = excluded.reason,
          target_category_id = 4`,
-      [staffId, dateStr, reason]
-    );
-    await run(
-      `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+        [staffId, dateStr, reason]
+      );
+      await run(
+        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
        VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
        ON CONFLICT(staff_id, date) DO UPDATE SET
          code = 'P',
          remarks = excluded.remarks,
          updated_by = excluded.updated_by,
          updated_at = CURRENT_TIMESTAMP`,
-      [staffId, dateStr, reason]
-    );
-    await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
-    await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
-  } else {
-    // Train duty or Link duty
-    const isCorExplicit = /COR|CONDUCTOR/i.test(clean) || (options.target_category_id === 1);
-    const linkMatch = clean.match(/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*(\d+)/i) || (options.link_number ? [null, String(options.link_number)] : null);
+        [staffId, dateStr, reason]
+      );
+      await restoreMusterTaApprovalsAndEntries(staffId, dateStr, altDateStr);
+      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: true, dutyCode: clean, remarks: reason });
+    } else {
+      // Train duty or Link duty
+      const isCorExplicit = /COR|CONDUCTOR/i.test(clean) || (options.target_category_id === 1);
+      const linkMatch = clean.match(/^(?:(?:COR|SL|CONDUCTOR|SLEEPER)\s*)?(?:LINK|L)[\s#-]*(\d+)/i) || (options.link_number ? [null, String(options.link_number)] : null);
 
-    if (linkMatch) {
-      const linkNum = options.link_number ? parseInt(options.link_number, 10) : parseInt(linkMatch[1], 10);
-      let targetCatId = options.target_category_id ? parseInt(options.target_category_id, 10) : (isCorExplicit ? 1 : null);
-      if (!targetCatId) {
-        if (linkNum > 21) {
-          targetCatId = 2; // Category 2 Sleeper
-        } else {
-          const corCheck = await get('SELECT id FROM links WHERE category_id = 1 AND link_number = ?', [linkNum]);
-          targetCatId = corCheck ? 1 : 2;
+      if (linkMatch) {
+        const linkNum = options.link_number ? parseInt(options.link_number, 10) : parseInt(linkMatch[1], 10);
+        let targetCatId = options.target_category_id ? parseInt(options.target_category_id, 10) : (isCorExplicit ? 1 : null);
+        if (!targetCatId) {
+          if (linkNum > 21) {
+            targetCatId = 2; // Category 2 Sleeper
+          } else {
+            const corCheck = await get('SELECT id FROM links WHERE category_id = 1 AND link_number = ?', [linkNum]);
+            targetCatId = corCheck ? 1 : 2;
+          }
         }
-      }
 
-      const linkDef = await get('SELECT train_numbers, from_station, to_station, coaches, set_type FROM links WHERE category_id = ? AND link_number = ?', [targetCatId, linkNum]);
-      const catLabel = targetCatId === 1 ? 'COR' : 'SL';
-      const linkTrain = linkDef?.train_numbers ? ` (${linkDef.train_numbers})` : '';
-      const reason = remarks ? `Assigned to ${catLabel} Link #${linkNum}${linkTrain} • ${remarks}` : `Assigned to ${catLabel} Link #${linkNum}${linkTrain}`;
+        const linkDef = await get('SELECT train_numbers, from_station, to_station, coaches, set_type FROM links WHERE category_id = ? AND link_number = ?', [targetCatId, linkNum]);
+        const catLabel = targetCatId === 1 ? 'COR' : 'SL';
+        const linkTrain = linkDef?.train_numbers ? ` (${linkDef.train_numbers})` : '';
+        const reason = remarks ? `Assigned to ${catLabel} Link #${linkNum}${linkTrain} • ${remarks}` : `Assigned to ${catLabel} Link #${linkNum}${linkTrain}`;
 
-      await run(
-        `INSERT INTO overrides (
+        await run(
+          `INSERT INTO overrides (
           staff_id, date, overridden_link_number, status, target_category_id,
           reason, original_link_number, extra_train_no, is_extra,
           shifted_from_link, shifted_from_train, shifted_place,
@@ -15530,38 +15545,38 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
           extra_train_no = NULL,
           is_extra = 0,
           shifted_place = 'LR_SHEET'`,
-        [staffId, dateStr, linkNum, targetCatId, reason]
-      );
+          [staffId, dateStr, linkNum, targetCatId, reason]
+        );
 
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
          VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            code = 'P',
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staffId, dateStr, reason]
-      );
+          [staffId, dateStr, reason]
+        );
 
-      await run(
-        `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
-        [staffId, dateStr, dateStr, altDateStr]
-      );
-      const y = parseInt(dateParts[0], 10);
-      const m = parseInt(dateParts[1], 10);
-      try {
-        const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-        await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
-      } catch (err) {
-        console.warn('Error regenerating TA claims in LR sync:', err.message);
-      }
-      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason, target_category_id: targetCatId, link_number: linkNum });
-    } else {
-      // Regular train duty (e.g. 12805, 17281, 12734, GTL, etc.)
-      const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
-      await run(
-        `INSERT INTO overrides (
+        await run(
+          `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+          [staffId, dateStr, dateStr, altDateStr]
+        );
+        const y = parseInt(dateParts[0], 10);
+        const m = parseInt(dateParts[1], 10);
+        try {
+          const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+          await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+        } catch (err) {
+          console.warn('Error regenerating TA claims in LR sync:', err.message);
+        }
+        await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason, target_category_id: targetCatId, link_number: linkNum });
+      } else {
+        // Regular train duty (e.g. 12805, 17281, 12734, GTL, etc.)
+        const reason = `LR Assigned Train ${clean}${remarks ? ` (${remarks})` : ''}`;
+        await run(
+          `INSERT INTO overrides (
           staff_id, date, overridden_link_number, status, target_category_id,
           reason, original_link_number, extra_train_no, is_extra,
           shifted_from_link, shifted_from_train, shifted_place,
@@ -15575,34 +15590,34 @@ async function syncLRSheetCellChange(staffId, dateStr, dutyCode, remarks = '', o
           extra_train_no = excluded.extra_train_no,
           is_extra = 1,
           shifted_place = 'LR_SHEET'`,
-        [staffId, dateStr, reason, clean]
-      );
-      await run(
-        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+          [staffId, dateStr, reason, clean]
+        );
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
          VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            code = 'P',
            remarks = excluded.remarks,
            updated_by = excluded.updated_by,
            updated_at = CURRENT_TIMESTAMP`,
-        [staffId, dateStr, reason]
-      );
+          [staffId, dateStr, reason]
+        );
 
-      await run(
-        `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
-        [staffId, dateStr, dateStr, altDateStr]
-      );
-      const y = parseInt(dateParts[0], 10);
-      const m = parseInt(dateParts[1], 10);
-      try {
-        const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-        await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
-      } catch (err) {
-        console.warn('Error regenerating TA claims in LR sync:', err.message);
+        await run(
+          `DELETE FROM ta_approvals WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?) AND (status = 'PENDING' OR remarks LIKE 'Disallowed%')`,
+          [staffId, dateStr, dateStr, altDateStr]
+        );
+        const y = parseInt(dateParts[0], 10);
+        const m = parseInt(dateParts[1], 10);
+        try {
+          const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+          await generatePendingTaClaimsForMonth({ run, get, all }, y, m, staffId);
+        } catch (err) {
+          console.warn('Error regenerating TA claims in LR sync:', err.message);
+        }
+        await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
       }
-      await syncDocumentsAndEarningsForStaffDate(staffId, dateStr, { isOffDuty: false, dutyCode: clean, remarks: reason });
     }
-  }
   });
 }
 
@@ -15799,7 +15814,7 @@ app.post('/api/lr-sheet/add-member', async (req, res) => {
     // Keep categories cycle length in sync with current LR count
     try {
       await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
-    } catch (e) {}
+    } catch (e) { }
 
     await logAudit(req.user ? req.user.role : 'Admin', 'ADD_LR_MEMBER', `Added LR staff member '${staffName}' (ID: ${targetStaffId}) at position ${nextPos} with Rest: ${cleanRest}`);
 
@@ -15844,20 +15859,19 @@ app.post('/api/lr-sheet/remove-member', async (req, res) => {
     const staffName = staff.name;
 
     if (permanent_delete) {
-      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
-      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) {}
-      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM seniority_staff WHERE staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) {}
-      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) {}
+      try { await run('DELETE FROM muster_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM overrides WHERE staff_id = ? OR substitute_staff_id = ?', [staff_id, staff_id]); } catch (e) { }
+      try { await run('DELETE FROM ta_approvals WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM ta_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM nda_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM diary_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM daily_earnings_entries WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM duty_register_staff WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM leave_requests WHERE staff_id = ? OR swap_staff_id = ?', [staff_id, staff_id]); } catch (e) { }
+      try { await run('UPDATE users SET staff_id = NULL WHERE staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('UPDATE non_daily_trains SET assigned_staff_id = NULL WHERE assigned_staff_id = ?', [staff_id]); } catch (e) { }
+      try { await run('DELETE FROM lr_duty_completions WHERE staff_id = ?', [staff_id]); } catch (e) { }
       await run('DELETE FROM staff WHERE id = ?', [staff_id]);
     } else {
       await run('UPDATE staff SET active = 0, category_id = NULL, row_position = NULL WHERE id = ?', [staff_id]);
@@ -15872,7 +15886,7 @@ app.post('/api/lr-sheet/remove-member', async (req, res) => {
     // Update categories cycle length
     try {
       await run(`UPDATE categories SET cycle_length = (SELECT COUNT(*) FROM staff WHERE category_id = 4) WHERE id = 4`);
-    } catch (e) {}
+    } catch (e) { }
 
     await logAudit(req.user ? req.user.role : 'Admin', 'REMOVE_LR_MEMBER', `${permanent_delete ? 'Permanently deleted' : 'Removed from LR pool'} staff '${staffName}' (was position ${oldPos})`);
 

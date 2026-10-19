@@ -587,18 +587,18 @@ export default function DutyEditModal({
   const targetCategoryId = useMemo(() => {
     if (dutyModal.target_category_id) return String(dutyModal.target_category_id);
     if (dutyModal.targetCategoryId) return String(dutyModal.targetCategoryId);
+    if (dutyModal.categoryId && dutyModal.categoryId !== 4) return String(dutyModal.categoryId);
     const linkNum = dutyModal.link_number ?? dutyModal.currentLink ?? dutyModal.originalLink;
     if (linkNum !== null && linkNum !== undefined && linkNum !== '' && safeLinksList.length > 0) {
       const parsedLinkNum = parseInt(linkNum, 10);
-      if (dutyModal.categoryId && dutyModal.categoryId !== 4) {
-        const directMatch = safeLinksList.find(l => l.link_number === parsedLinkNum && l.category_id === dutyModal.categoryId);
-        if (directMatch) return String(directMatch.category_id);
-      }
+      const preferredCat = (dutyModal.categoryId === 1) ? 1 : 2;
+      const directMatch = safeLinksList.find(l => l.link_number === parsedLinkNum && l.category_id === preferredCat);
+      if (directMatch) return String(directMatch.category_id);
       const anyMatch = safeLinksList.find(l => l.link_number === parsedLinkNum);
       if (anyMatch) return String(anyMatch.category_id);
     }
     if (dutyModal.categoryId && dutyModal.categoryId !== 4) return String(dutyModal.categoryId);
-    return '1';
+    return '2';
   }, [dutyModal, safeLinksList]);
 
   const targetLink = useMemo(() => {
@@ -616,9 +616,8 @@ export default function DutyEditModal({
 
   const isCorSlot = useMemo(() => {
     const cId = parseInt(targetCategoryId, 10);
-    const lNum = parseInt(targetLink, 10);
-    return cId === 1 || (lNum >= 1 && lNum <= 21);
-  }, [targetCategoryId, targetLink]);
+    return cId === 1;
+  }, [targetCategoryId]);
 
   // Find link details if present
   const linkDetails = useMemo(() => {

@@ -886,6 +886,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }) {
                               name: staff.name,
                               designation: staff.designation,
                               categoryId: staff.categoryId,
+                              initialMode: 'ASSIGN_DUTY',
                               actualLinkNumber: staff.link_number,
                               calculatedLinkNumber: staff.original_link_number,
                               train_numbers: staff.train_numbers,

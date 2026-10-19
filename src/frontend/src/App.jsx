@@ -2951,9 +2951,19 @@ export default function App() {
       staffDuty.isVacantMarkLater || 
       (staffDuty.name && staffDuty.name.toUpperCase().includes('VACANT'))
     );
-    const staffId = typeof rawStaffId === 'string' && (rawStaffId.startsWith('vacant-') || rawStaffId.startsWith('vacant-upgrade-') || rawStaffId.startsWith('vacant-shifted-') || rawStaffId.startsWith('vacant-advance-') || rawStaffId.startsWith('vacant-avl-') || rawStaffId.startsWith('vacant-mark-later-'))
-      ? parseInt(rawStaffId.replace('vacant-upgrade-', '').replace('vacant-shifted-', '').replace('vacant-advance-', '').replace('vacant-avl-', '').replace('vacant-mark-later-', '').replace(/^vacant-.*?-(\d+)$/, '$1').replace(/^vacant-\d+$/, ''), 10) || null
-      : rawStaffId;
+    let staffId = null;
+    if (typeof rawStaffId === 'string') {
+      if (rawStaffId.startsWith('vacant-slot-')) {
+        staffId = null;
+      } else {
+        const match = rawStaffId.match(/^vacant-(?:upgrade-|shifted-|advance-|avl-|mark-later-)?(\d+)$/);
+        if (match) {
+          staffId = parseInt(match[1], 10);
+        }
+      }
+    } else if (typeof rawStaffId === 'number') {
+      staffId = rawStaffId;
+    }
     const staffObj = typeof staffId === 'number' ? allStaffList.find(s => s.id === staffId) : null;
     const staffName = isVacant ? (staffDuty.name || (staffObj ? staffObj.name : 'Vacant Slot')) : (staffDuty.name || staffDuty.staffName);
     const designation = staffDuty.designation || '';
@@ -2973,7 +2983,7 @@ export default function App() {
       originalStaffId: staffDuty.originalStaffId || staffId,
       shiftedStaffId: (staffDuty.isVacantShifted || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-shifted-'))) ? staffId : null,
       advanceStaffId: (staffDuty.isVacantAdvance || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-advance-'))) ? staffId : null,
-      originalStaffName: staffDuty.originalStaffName || null,
+      originalStaffName: staffDuty.originalStaffName || (staffId && staffObj ? staffObj.name : null),
       name: staffName,
       designation,
       categoryId,
@@ -6573,7 +6583,7 @@ export default function App() {
                         const dLink = parseInt(duty.link_number, 10);
                         const targetCat = duty.target_category_id != null 
                           ? parseInt(duty.target_category_id, 10) 
-                          : (duty.status === 'SUBSTITUTE' ? 1 : parseInt(duty.categoryId, 10));
+                          : (duty.categoryId === 1 ? 1 : 2);
                         
                         if (targetCat !== parseInt(lDef.categoryId, 10)) return false;
 
@@ -6642,7 +6652,7 @@ export default function App() {
                         (originalSickOrLeaveDuty.status === 'CHANGED_LINK' && parseInt(originalSickOrLeaveDuty.link_number, 10) !== parseInt(lDef.linkNum, 10))
                       );
 
-                      let subId = (originalSickOrLeaveDuty && !isSleeperUpgradedAway && !isStaffShiftedAway && !isUtilisedAdvance) 
+                      let subId = originalSickOrLeaveDuty 
                         ? (originalSickOrLeaveDuty.substituteStaffId || originalSickOrLeaveDuty.substitute_staff_id) 
                         : null;
 
