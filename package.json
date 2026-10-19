@@ -2,16 +2,16 @@
   "name": "railway-roster-manager",
   "version": "1.0.0",
   "description": "Railway Staff Link-Rotation Roster Manager",
-  "main": "src/backend/server.js",
+  "main": "src/backend/server.ts",
   "scripts": {
-    "start": "node src/backend/server.js",
+    "start": "tsx src/backend/server.ts",
     "build": "npm --prefix src/frontend install && npm --prefix src/frontend run build",
     "postinstall": "npm --prefix src/frontend install && npm --prefix src/frontend run build",
-    "dev:backend": "node src/backend/server.js",
+    "dev:backend": "tsx src/backend/server.ts",
     "dev:frontend": "npm run dev --prefix src/frontend",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "migrate:mysql": "node src/backend/migrate_to_mysql.js",
-    "test": "node src/backend/test_rotation.js"
+    "migrate:mysql": "tsx src/backend/migrate_to_mysql.ts",
+    "typecheck": "tsc --noEmit && npm --prefix src/frontend run build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -23,6 +23,11 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }
