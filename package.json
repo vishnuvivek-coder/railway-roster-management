@@ -2,9 +2,9 @@
   "name": "railway-roster-manager",
   "version": "1.0.0",
   "description": "Railway Staff Link-Rotation Roster Manager",
-  "main": "src/backend/server.ts",
+  "main": "src/backend/server.js",
   "scripts": {
-    "start": "tsx src/backend/server.ts",
+    "start": "node src/backend/server.js",
     "build": "npm --prefix src/frontend install && npm --prefix src/frontend run build",
     "postinstall": "npm --prefix src/frontend install && npm --prefix src/frontend run build",
     "dev:backend": "tsx src/backend/server.ts",
@@ -20,14 +20,14 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.5",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
-    "concurrently": "^10.0.3",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "concurrently": "^10.0.3"
   }
 }
