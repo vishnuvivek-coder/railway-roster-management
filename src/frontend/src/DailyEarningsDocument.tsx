@@ -15,11 +15,13 @@ export interface DailyEarningsDocumentProps {
   setYear?: (y: any) => void;
   month?: string | number;
   setMonth?: (m: any) => void;
+  isEmployee?: boolean;
+  lockedStaffId?: string | number;
 }
 
 export default function DailyEarningsDocument({
   authToken,
-  categories,
+  categories = [],
   selectedCatId,
   setSelectedCatId,
   selectedStaffId: propSelectedStaffId,
@@ -27,13 +29,24 @@ export default function DailyEarningsDocument({
   year: propYear,
   setYear: propSetYear,
   month: propMonth,
-  setMonth: propSetMonth
+  setMonth: propSetMonth,
+  isEmployee = false,
+  lockedStaffId
 }: DailyEarningsDocumentProps) {
   // Mode selection:
   // 'continuous' -> Multi-Day Continuous Daily Summary (exact format of user's spreadsheet screenshot)
   // 'single_day' -> Single Date View (Category Separated)
   // 'monthly'    -> Individual Staff Monthly Breakdown (1 staff for 30/31 days)
-  const [viewMode, setViewMode] = useState('continuous');
+  const [viewMode, setViewMode] = useState(() => isEmployee ? 'monthly' : 'continuous');
+
+  useEffect(() => {
+    if (isEmployee) {
+      setViewMode('monthly');
+      if (lockedStaffId && setSelectedStaffId) {
+        setSelectedStaffId(String(lockedStaffId));
+      }
+    }
+  }, [isEmployee, lockedStaffId]);
 
   // Duty Filter: 'booked_only' (Booked to Duty), 'on_duty' (Booked + Outstation), 'all' (All Staff)
   const [dutyFilter, setDutyFilter] = useState('on_duty');
@@ -551,80 +564,82 @@ export default function DailyEarningsDocument({
     <div className="daily-earnings-container" style={{ width: '100%', maxWidth: '100%', margin: '0 auto', paddingBottom: '60px' }}>
       
       {/* Mode Switcher Tabs */}
-      <div className="no-print" style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '12px',
-        marginBottom: '16px',
-        flexWrap: 'wrap'
-      }}>
-        <button
-          type="button"
-          onClick={() => setViewMode('continuous')}
-          className="btn"
-          style={{
-            padding: '10px 24px',
-            borderRadius: '6px',
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            background: viewMode === 'continuous'
-              ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-              : 'var(--bg-secondary)',
-            color: viewMode === 'continuous' ? '#0D0D0F' : 'var(--color-text-secondary)',
-            border: viewMode === 'continuous' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-            boxShadow: viewMode === 'continuous' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          Daily Summary Register (Continuous Multi-Day Sheet)
-        </button>
+      {!isEmployee && (
+        <div className="no-print" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          marginBottom: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <button
+            type="button"
+            onClick={() => setViewMode('continuous')}
+            className="btn"
+            style={{
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 800,
+              fontSize: '0.92rem',
+              background: viewMode === 'continuous'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'continuous' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'continuous' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'continuous' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Daily Summary Register (Continuous Multi-Day Sheet)
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setViewMode('single_day')}
-          className="btn"
-          style={{
-            padding: '10px 24px',
-            borderRadius: '6px',
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            background: viewMode === 'single_day'
-              ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-              : 'var(--bg-secondary)',
-            color: viewMode === 'single_day' ? '#0D0D0F' : 'var(--color-text-secondary)',
-            border: viewMode === 'single_day' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-            boxShadow: viewMode === 'single_day' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          Single Day View
-        </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('single_day')}
+            className="btn"
+            style={{
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 800,
+              fontSize: '0.92rem',
+              background: viewMode === 'single_day'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'single_day' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'single_day' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'single_day' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Single Day View
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setViewMode('monthly')}
-          className="btn"
-          style={{
-            padding: '10px 24px',
-            borderRadius: '6px',
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            background: viewMode === 'monthly'
-              ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-              : 'var(--bg-secondary)',
-            color: viewMode === 'monthly' ? '#0D0D0F' : 'var(--color-text-secondary)',
-            border: viewMode === 'monthly' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-            boxShadow: viewMode === 'monthly' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          Employee Monthly Sheet (Whole Month)
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setViewMode('monthly')}
+            className="btn"
+            style={{
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 800,
+              fontSize: '0.92rem',
+              background: viewMode === 'monthly'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'monthly' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'monthly' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'monthly' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Employee Monthly Sheet (Whole Month)
+          </button>
+        </div>
+      )}
 
       {/* Control Panel (Hidden during Print) */}
       <div className="no-print card" style={{
@@ -801,27 +816,45 @@ export default function DailyEarningsDocument({
             /* Controls for Monthly Mode */
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <div style={{ flexGrow: 1, minWidth: '240px' }}>
-                  <SearchableStaffSelect
-                    staffList={[...staffList].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))}
-                    value={selectedStaffId}
-                    onChange={(val) => { if (setSelectedStaffId) setSelectedStaffId(val); }}
-                    customStyles={{
-                      control: (base, state) => ({
-                        ...base,
-                        background: 'transparent',
-                        borderColor: 'transparent',
-                        boxShadow: 'none',
-                        minHeight: '28px',
-                        fontSize: '0.88rem',
-                        fontWeight: 700,
-                        color: 'var(--primary)'
-                      }),
-                      singleValue: (base) => ({
-                        ...base,
-                        color: 'var(--primary)'
-                      })
-                    }}
-                  />
+                  {isEmployee ? (
+                    <div style={{
+                      padding: '8px 16px',
+                      background: 'rgba(212, 161, 92, 0.1)',
+                      border: '1px solid var(--border-gold)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontWeight: 700,
+                      color: 'var(--primary)',
+                      fontSize: '0.9rem'
+                    }}>
+                      <span>👤 {currentEmpName} ({currentEmpDesig})</span>
+                      <span style={{ fontSize: '0.75rem', opacity: 0.8, marginLeft: 'auto' }}>My Diary / Earnings</span>
+                    </div>
+                  ) : (
+                    <SearchableStaffSelect
+                      staffList={[...staffList].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))}
+                      value={selectedStaffId}
+                      onChange={(val) => { if (setSelectedStaffId) setSelectedStaffId(val); }}
+                      customStyles={{
+                        control: (base, state) => ({
+                          ...base,
+                          background: 'transparent',
+                          borderColor: 'transparent',
+                          boxShadow: 'none',
+                          minHeight: '28px',
+                          fontSize: '0.88rem',
+                          fontWeight: 700,
+                          color: 'var(--primary)'
+                        }),
+                        singleValue: (base) => ({
+                          ...base,
+                          color: 'var(--primary)'
+                        })
+                      }}
+                    />
+                  )}
                 </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

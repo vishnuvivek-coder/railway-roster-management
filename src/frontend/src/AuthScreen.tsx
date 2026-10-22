@@ -145,11 +145,25 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           </div>
         )}
 
+        {/* Info Banner for PF Number Login */}
+        <div style={{
+          background: 'rgba(56, 189, 248, 0.08)',
+          border: '1px solid rgba(56, 189, 248, 0.25)',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          marginBottom: '20px',
+          color: 'var(--color-text-secondary)',
+          fontSize: '0.82rem',
+          lineHeight: 1.45
+        }}>
+          <strong style={{ color: '#38bdf8' }}>💡 Employee Sign In:</strong> Use your <strong style={{ color: '#fff' }}>PF Number</strong> as both username & password to view your Monthly Movement, TA, NDA, and Diary.
+        </div>
+
         {/* Pure Manual Sign In Form */}
         <form onSubmit={handleLoginSubmit}>
           <div className="form-group" style={{ marginBottom: '20px' }}>
             <label className="form-label" style={{ fontWeight: 600, fontSize: '0.88rem' }}>
-              Railway ID / Username
+              Railway ID / PF Number
             </label>
             <input
               type="text"
@@ -157,7 +171,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               autoFocus
               autoComplete="username"
               className="form-input"
-              placeholder="Enter your ID"
+              placeholder="e.g. 24609272641 or 12345"
               value={loginForm.username}
               onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
               style={{
@@ -192,7 +206,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               required
               autoComplete="current-password"
               className="form-input"
-              placeholder="Enter your password"
+              placeholder="Password (default is your PF Number)"
               value={loginForm.password}
               onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               style={{

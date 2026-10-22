@@ -476,6 +476,23 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Middleware: Enforce Admin Role or Self Staff Member
+function requireAdminOrSelfStaff(staffIdParam = 'staffId') {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const role = (req.user.role || '').toLowerCase();
+    if (role === 'admin') return next();
+
+    const targetStaffId = req.params[staffIdParam] || req.body[staffIdParam] || req.query[staffIdParam];
+    if (req.user.staff_id && targetStaffId && String(req.user.staff_id) === String(targetStaffId)) {
+      return next();
+    }
+    return res.status(403).json({ error: 'Permission denied: You are only authorized to view and manage your own employee record.' });
+  };
+}
+
 app.use(authenticateToken);
 
 // Helper to determine if date is an 18047 run day (Sunday, Tuesday, Wednesday, Friday)
@@ -1598,52 +1615,100 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password are required.' });
   }
 
-  const cleanUsername = username.trim().toLowerCase();
+  const rawUsername = String(username).trim();
+  const cleanUsername = rawUsername.toLowerCase();
+  const rawPassword = String(password).trim();
 
   try {
-    const user = await get(
-      'SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE username = ? OR email = ?',
+    let user = await get(
+      'SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
       [cleanUsername, cleanUsername]
     );
 
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password.' });
+    // If not found in users table, check if username matches staff.pf_no
+    let staffMember = null;
+    if (user && user.staff_id) {
+      staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [user.staff_id]);
+    }
+    if (!staffMember) {
+      staffMember = await get(
+        'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
+        [cleanUsername]
+      );
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    // Auto-provision on the fly if valid staff member with matching PF
+    if (!user && staffMember) {
+      const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
+      const insertResult = await run(
+        `INSERT INTO users (username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by)
+         VALUES (?, ?, NULL, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
+        [staffMember.pf_no.trim().toLowerCase(), staffMember.name, passwordHash, staffMember.id]
+      );
+      user = {
+        id: insertResult.lastID,
+        username: staffMember.pf_no.trim().toLowerCase(),
+        name: staffMember.name,
+        email: null,
+        password_hash: passwordHash,
+        role: 'Employee',
+        status: 'APPROVED',
+        staff_id: staffMember.id
+      };
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
+    }
+
+    // Verify password:
+    // 1) bcrypt check against user.password_hash
+    // 2) If staff member exists, also allow their pf_no directly as default password
+    // 3) Also if username equals password (e.g. PF number entered as both)
+    let isMatch = await bcrypt.compare(rawPassword, user.password_hash);
+    if (!isMatch && staffMember && staffMember.pf_no) {
+      if (rawPassword.toLowerCase() === staffMember.pf_no.trim().toLowerCase()) {
+        isMatch = true;
+      }
+    }
+    if (!isMatch && rawPassword.toLowerCase() === user.username.toLowerCase()) {
+      isMatch = true;
+    }
+
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid username or password.' });
+      return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
     }
 
     // Status verification check
     if (user.status === 'PENDING') {
       return res.status(403).json({
-        error: 'Your account is currently PENDING verification by the Administrator. Please contact the Master Admin to approve your account.',
+        error: 'Your account is currently PENDING verification by the Administrator.',
         status: 'PENDING'
       });
     }
 
     if (user.status === 'REJECTED') {
       return res.status(403).json({
-        error: 'Your account registration was not approved or has been suspended. Please contact the administrator.',
+        error: 'Your account registration was not approved or has been suspended.',
         status: 'REJECTED'
       });
     }
 
-    // Issue JWT Token for approved user
+    // Issue JWT Token for approved user (includes staff_id)
     const token = jwt.sign(
       {
         id: user.id,
         username: user.username,
         name: user.name,
         role: user.role,
-        status: user.status
+        status: user.status,
+        staff_id: user.staff_id
       },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    await logAudit(user.role, 'USER_LOGIN', `User ${user.username} (${user.name}) logged in`);
+    await logAudit(user.role, 'USER_LOGIN', `User ${user.username} (${user.name}) logged in as ${user.role}`);
 
     res.json({
       success: true,
@@ -1655,7 +1720,8 @@ app.post('/api/auth/login', async (req, res) => {
         email: user.email,
         role: user.role,
         status: user.status,
-        staff_id: user.staff_id
+        staff_id: user.staff_id,
+        pf_no: staffMember?.pf_no || user.username
       }
     });
   } catch (err) {
@@ -1692,7 +1758,13 @@ app.get('/api/auth/me', async (req, res) => {
       return res.status(403).json({ error: 'Account not active or not approved' });
     }
 
-    res.json({ user });
+    let pf_no = user.username;
+    if (user.staff_id) {
+      const st = await get('SELECT pf_no FROM staff WHERE id = ?', [user.staff_id]);
+      if (st && st.pf_no) pf_no = st.pf_no;
+    }
+
+    res.json({ user: { ...user, pf_no } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired session token' });
   }
@@ -11776,7 +11848,7 @@ const { generateStaffTaJournal, generatePendingTaClaimsForMonth, calculateAbsenc
 //   • Auto-Syncs To   : None
 //   • Summary         : Generates or retrieves the monthly TA Journal for an employee, merging saved `ta_entries`, `ta_approvals`, Daily Summary `overrides`, `muster_records`, and `lr_sheet_records` per date.
 // ============================================================================
-app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
+app.get('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -11818,7 +11890,7 @@ app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
 //   • Auto-Syncs To   : ta_approvals, overrides, muster_records, lr_sheet_records, nda_entries, diary_entries, daily_earnings_entries, audit_logs
 //   • Summary         : Saves an employee’s monthly TA Journal rows into `ta_entries`, updates matching `ta_approvals`, and syncs edited train duties across Daily Summary (`overrides`), Muster Roll, LR Sheet, NDA, Diary, and Daily Earnings.
 // ============================================================================
-app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
+app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const { month_year, start_date, end_date, entries, employee_meta } = req.body;
@@ -11990,7 +12062,7 @@ app.post('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
 //   • Auto-Syncs To   : audit_logs
 //   • Summary         : Clears manual `ta_entries` for the selected employee and month so the TA Journal dynamically regenerates from the live Roster/Muster/TA Approvals.
 // ============================================================================
-app.delete('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
+app.delete('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const startDate = req.query.start_date || req.query.startDate;
@@ -12625,7 +12697,7 @@ const { generateStaffNdaJournal } = require('./nda_generator');
 //   • Auto-Syncs To   : None
 //   • Summary         : Generates or retrieves the monthly NDA Journal for an employee, merging saved `nda_entries` per date with live Roster, Overrides, Muster, LR Sheet, and Daily Earnings duties.
 // ============================================================================
-app.get('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
+app.get('/api/documents/nda/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     let year = parseInt(req.query.year, 10);
@@ -12720,7 +12792,7 @@ async function syncDailyEarningsItemToDiary(staffId, dateStr, twt_nc, twt_fare, 
 //   • Auto-Syncs To   : overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, diary_entries, daily_earnings_entries, audit_logs
 //   • Summary         : Saves manual edits in the NDA Journal to `nda_entries` and synchronizes any duty/train modifications across Daily Summary, Muster, LR Sheet, TA, Diary, and Daily Earnings.
 // ============================================================================
-app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
+app.post('/api/documents/nda/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const { month_year, entries, employee_meta } = req.body;
@@ -12860,7 +12932,7 @@ app.post('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
 //   • Auto-Syncs To   : audit_logs
 //   • Summary         : Deletes saved `nda_entries` for the employee/month so NDA recalculates dynamically from live Roster/Muster/Override data.
 // ============================================================================
-app.delete('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
+app.delete('/api/documents/nda/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -12899,7 +12971,7 @@ const { generateStaffDiary } = require('./diary_generator');
 //   • Auto-Syncs To   : None
 //   • Summary         : Generates or retrieves the monthly Staff Diary for an employee, merging saved `diary_entries` per date with live Roster, Overrides, Muster, LR Sheet, and EFT figures from `daily_earnings_entries`.
 // ============================================================================
-app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
+app.get('/api/documents/diary/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     let year = parseInt(req.query.year, 10);
@@ -12946,7 +13018,7 @@ app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => 
 //   • Auto-Syncs To   : daily_earnings_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Saves the employee’s monthly Diary into `diary_entries`, cross-updates EFT cases/amounts in `daily_earnings_entries`, and syncs duty changes across Roster, Muster, TA, and NDA.
 // ============================================================================
-app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
+app.post('/api/documents/diary/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const { month_year, entries, employee_meta } = req.body;
@@ -13067,7 +13139,7 @@ app.post('/api/documents/diary/:staffId', authenticateToken, async (req, res) =>
 //   • Auto-Syncs To   : audit_logs
 //   • Summary         : Clears saved `diary_entries` for the month so the Staff Diary regenerates from live Roster, Muster, and Daily Earnings.
 // ============================================================================
-app.delete('/api/documents/diary/:staffId', authenticateToken, async (req, res) => {
+app.delete('/api/documents/diary/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -13177,7 +13249,7 @@ app.get('/api/documents/daily-earnings/range', authenticateToken, async (req, re
 //   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Saves Daily Earnings across a multi-day range one employee at a time into `daily_earnings_entries` and cascades changes to all linked modules.
 // ============================================================================
-app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, res) => {
+app.post('/api/documents/daily-earnings/range', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { days } = req.body;
     if (!Array.isArray(days)) {
@@ -13317,7 +13389,7 @@ app.post('/api/documents/daily-earnings/range', authenticateToken, async (req, r
 //   • Auto-Syncs To   : None
 //   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
 // ============================================================================
-app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
+app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -13344,7 +13416,7 @@ app.get('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async
 //   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Saves a full month of Daily Earnings for a single employee into `daily_earnings_entries` and syncs with Staff Diary, TA, NDA, Muster, and Roster.
 // ============================================================================
-app.post('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
+app.post('/api/documents/daily-earnings/staff/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const { entries, year, month } = req.body;
@@ -13482,7 +13554,7 @@ app.post('/api/documents/daily-earnings/staff/:staffId', authenticateToken, asyn
 //   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
 // ============================================================================
-app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, async (req, res) => {
+app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
   try {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
@@ -13523,7 +13595,7 @@ app.delete('/api/documents/daily-earnings/staff/:staffId', authenticateToken, as
 //   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Saves Daily Earnings rows one employee at a time into `daily_earnings_entries`, syncs EFT figures into `diary_entries`, and propagates duty/train updates across all modules.
 // ============================================================================
-app.post('/api/documents/daily-earnings', authenticateToken, async (req, res) => {
+app.post('/api/documents/daily-earnings', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { date, depot_title, entries } = req.body;
     if (!date || !Array.isArray(entries)) {
@@ -13656,7 +13728,7 @@ app.post('/api/documents/daily-earnings', authenticateToken, async (req, res) =>
 //   • Auto-Syncs To   : diary_entries, overrides, muster_records, lr_sheet_records, ta_approvals, ta_entries, nda_entries, audit_logs
 //   • Summary         : Daily Earnings operation synchronized across Staff Diary, Roster, and Employee Documents.
 // ============================================================================
-app.delete('/api/documents/daily-earnings', authenticateToken, async (req, res) => {
+app.delete('/api/documents/daily-earnings', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { date, category_id } = req.query;
     if (!date) return res.status(400).json({ error: 'Date is required' });

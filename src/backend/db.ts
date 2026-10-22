@@ -206,6 +206,13 @@ async function initDb() {
         await mysqlPool.query(schemaSql);
       }
 
+      // Step 3b: Ensure users.role allows 'Employee'
+      try {
+        await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'");
+      } catch (alterErr) {
+        // Table may have already been altered or SQLite in-memory fallback
+      }
+
       // Step 4: Ensure Admin 12345 / CLICKME exists
       const clickmeHash = await bcrypt.hash('CLICKME', 10);
       const primaryAdmin = await get("SELECT * FROM users WHERE username = '12345'");
@@ -222,6 +229,9 @@ async function initDb() {
           [clickmeHash]
         );
       }
+
+      // Step 4b: Ensure each Staff with PF number has an active Employee user account
+      await syncStaffPfAccounts(run, all, get);
 
       // Step 5: Check if staff or categories are present
       const staffCount = await get("SELECT COUNT(*) as count FROM staff");
@@ -1727,6 +1737,46 @@ async function initDb() {
     }
   } catch (e) {
     console.error('Failed to sync staff seniority/pf details:', e.message);
+  }
+
+  // Auto-sync staff accounts for PF login
+  await syncStaffPfAccounts(run, all, get);
+}
+
+/**
+ * Synchronize staff PF numbers into users table
+ * Allows employees to log in using their PF number as username and password
+ */
+async function syncStaffPfAccounts(runFn, allFn, getFn) {
+  try {
+    const staffList = await allFn("SELECT id, name, pf_no, designation FROM staff WHERE pf_no IS NOT NULL AND TRIM(pf_no) != ''");
+    if (!staffList || staffList.length === 0) return;
+
+    let createdCount = 0;
+    for (const s of staffList) {
+      const cleanPf = s.pf_no.trim().toLowerCase();
+      const existing = await getFn('SELECT id, username, role, staff_id FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?', [cleanPf, s.id]);
+      if (!existing) {
+        const hash = await bcrypt.hash(s.pf_no.trim(), 10);
+        await runFn(
+          `INSERT INTO users (username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by)
+           VALUES (?, ?, NULL, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
+          [cleanPf, s.name, hash, s.id]
+        );
+        createdCount++;
+      } else {
+        const targetRole = (existing.role || '').toLowerCase() === 'admin' ? 'Admin' : 'Employee';
+        await runFn(
+          "UPDATE users SET staff_id = ?, username = ?, role = ?, status = 'APPROVED' WHERE id = ?",
+          [s.id, cleanPf, targetRole, existing.id]
+        );
+      }
+    }
+    if (createdCount > 0) {
+      console.log(`[Auth Provisioning] Synchronized ${createdCount} staff PF accounts.`);
+    }
+  } catch (err) {
+    console.error('Error synchronizing staff PF accounts:', err.message);
   }
 }
 

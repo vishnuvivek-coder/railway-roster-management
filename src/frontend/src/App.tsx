@@ -1195,6 +1195,8 @@ export default function App() {
 
   // Derived Admin Role status
   const isAdmin = currentUser?.role === 'Admin';
+  // Restricted Employee Role status
+  const isEmployee = currentUser?.role === 'Employee' || (!isAdmin && Boolean(currentUser?.staff_id));
   const { device, isIOS, isAndroid, isMobile, isDesktop, deviceMode, setDeviceMode, detectedPlatform } = useDevice();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -2009,6 +2011,35 @@ export default function App() {
 
     fetchAllStaff();
   }, []);
+
+  // Employee auto-lock and isolation
+  useEffect(() => {
+    if (isEmployee && currentUser?.staff_id) {
+      const empIdStr = String(currentUser.staff_id);
+      if (selectedStaffId !== empIdStr) {
+        setSelectedStaffId(empIdStr);
+      }
+      if (docStaffId !== empIdStr) {
+        setDocStaffId(empIdStr);
+      }
+      if (allStaffList && allStaffList.length > 0) {
+        const myStaff = allStaffList.find(s => String(s.id) === empIdStr);
+        if (myStaff && myStaff.category_id && String(selectedCatId) !== String(myStaff.category_id)) {
+          setSelectedCatId(String(myStaff.category_id));
+        }
+      }
+      // Restrict activeTab if on unauthorized tab
+      const allowedEmployeeTabs = ['daily', 'documents', 'leaves'];
+      if (!allowedEmployeeTabs.includes(activeTab)) {
+        setActiveTab('daily');
+      }
+      // Restrict docSubTab if on unauthorized doc tab
+      const allowedDocSubTabs = ['ta', 'nda', 'diary', 'earnings'];
+      if (activeTab === 'documents' && !allowedDocSubTabs.includes(docSubTab)) {
+        setDocSubTab('ta');
+      }
+    }
+  }, [isEmployee, currentUser, allStaffList, selectedStaffId, docStaffId, selectedCatId, activeTab, docSubTab]);
 
   // Fetch all staff, links, and entries for Daily Duty Register when tab active
   useEffect(() => {
@@ -4871,6 +4902,53 @@ export default function App() {
         </div>
 
         <ul className="nav-links">
+          {isEmployee ? (
+            <>
+              <li 
+                className={`nav-item ${activeTab === 'daily' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('daily'); setIsMobileMenuOpen(false); }}
+                title="Path: /daily"
+              >
+                <span>👤</span> My Monthly Movement
+              </li>
+              <li 
+                className={`nav-item ${activeTab === 'documents' && docSubTab === 'ta' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('documents'); setDocSubTab('ta'); setIsMobileMenuOpen(false); }}
+                title="Path: /documents/ta"
+              >
+                <span>📑</span> My TA Document
+              </li>
+              <li 
+                className={`nav-item ${activeTab === 'documents' && docSubTab === 'nda' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('documents'); setDocSubTab('nda'); setIsMobileMenuOpen(false); }}
+                title="Path: /documents/nda"
+              >
+                <span>🌙</span> My NDA Document
+              </li>
+              <li 
+                className={`nav-item ${activeTab === 'documents' && docSubTab === 'diary' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('documents'); setDocSubTab('diary'); setIsMobileMenuOpen(false); }}
+                title="Path: /documents/diary"
+              >
+                <span>📖</span> My Staff Diary (E.F.T)
+              </li>
+              <li 
+                className={`nav-item ${activeTab === 'documents' && docSubTab === 'earnings' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('documents'); setDocSubTab('earnings'); setIsMobileMenuOpen(false); }}
+                title="Path: /documents/earnings"
+              >
+                <span>💰</span> My Daily Earnings
+              </li>
+              <li 
+                className={`nav-item ${activeTab === 'leaves' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('leaves'); setIsMobileMenuOpen(false); }}
+                title="Path: /leaves"
+              >
+                <span>✉️</span> My Leave / Swap
+              </li>
+            </>
+          ) : (
+            <>
           <li 
             className={`nav-item ${activeTab === 'daily' ? 'active' : ''}`}
             onClick={() => { setActiveTab('daily'); setIsMobileMenuOpen(false); }}
@@ -4963,6 +5041,9 @@ export default function App() {
           >
             <span>📜</span> Audit Logs
           </li>
+
+          </>
+          )}
 
           {/* Master Admin User Approvals & Verification */}
           {currentUser?.role === 'Admin' && (
@@ -5225,6 +5306,28 @@ export default function App() {
 
           {activeTab === 'daily' && (
             <>
+              {isEmployee ? (
+                <div className="filter-group" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'rgba(212, 161, 92, 0.1)',
+                  border: '1px solid var(--border-gold)',
+                  borderRadius: '8px',
+                  padding: '6px 14px'
+                }}>
+                  <span style={{ fontSize: '1.2rem' }}>👤</span>
+                  <div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--primary)' }}>
+                      {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.name || currentUser?.name || 'My Movement'}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                      PF: {currentUser?.username || currentUser?.pf_no || '-'} • Designation: {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.designation || 'TTI'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="filter-group">
                 <label className="form-label" style={{ marginBottom: 0 }}>Category Filter:</label>
                 <select 
@@ -5272,6 +5375,9 @@ export default function App() {
                   }}
                 />
               </div>
+
+                </>
+              )}
 
               {/* View Mode Toggle: Month vs Custom Range */}
               <div className="filter-group">
@@ -5789,7 +5895,7 @@ export default function App() {
                   );
                 }
                 // Find selected staff member row
-                const staffRow = rosterData.rows.find(r => String(r.staffId) === String(selectedStaffId)) || rosterData.rows[0];
+                const staffRow = rosterData.rows.find(r => String(r.staffId) === String(selectedStaffId)) || (isEmployee ? null : rosterData.rows[0]);
                 
                 if (!staffRow) {
                   return (
@@ -13843,12 +13949,26 @@ export default function App() {
                 
                 <div className="form-group" style={{ zIndex: 11 }}>
                   <label className="form-label">Staff Member:</label>
+                  {isEmployee ? (
+                    <div style={{
+                      padding: '8px 12px',
+                      background: 'rgba(212, 161, 92, 0.1)',
+                      border: '1px solid var(--border-gold)',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      color: 'var(--primary)',
+                      fontSize: '0.9rem'
+                    }}>
+                      {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.name || currentUser?.name || 'My Profile'}
+                    </div>
+                  ) : (
                   <SearchableStaffSelect
                     staffList={staffList}
                     value={leaveForm.staff_id}
                     onChange={(val) => setLeaveForm({ ...leaveForm, staff_id: val })}
                     placeholder="-- Select Staff --"
                   />
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -13957,7 +14077,10 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leaveRequests.map((req) => {
+                    {(isEmployee 
+                      ? leaveRequests.filter(req => String(req.staff_id) === String(currentUser?.staff_id) || String(req.swapper_staff_id) === String(currentUser?.staff_id))
+                      : leaveRequests
+                    ).map((req) => {
                       const fromD = req.from_date || req.date;
                       const toD = req.to_date || fromD;
                       const dayDiff = req.type === 'LEAVE' && fromD && toD 
@@ -14909,7 +15032,9 @@ export default function App() {
                 💰 Daily Earnings
               </button>
 
-              <button
+              {!isEmployee && (
+                <>
+                <button
                 type="button"
                 onClick={() => setDocSubTab('muster')}
                 className="btn"
@@ -14952,11 +15077,15 @@ export default function App() {
               >
                 📊 Amenity Booking Chart
               </button>
+                </>
+              )}
             </div>
 
             <div style={{ display: docSubTab === 'ta' ? 'block' : 'none' }}>
               <TaDocument
                 authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
                 categories={categories}
                 selectedCatId={selectedCatId}
                 setSelectedCatId={setSelectedCatId}
@@ -14981,6 +15110,8 @@ export default function App() {
             <div style={{ display: docSubTab === 'nda' ? 'block' : 'none' }}>
               <NdaDocument
                 authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
                 categories={categories}
                 selectedCatId={selectedCatId}
                 setSelectedCatId={setSelectedCatId}
@@ -15005,6 +15136,8 @@ export default function App() {
             <div style={{ display: docSubTab === 'diary' ? 'block' : 'none' }}>
               <DiaryDocument
                 authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
                 categories={categories}
                 selectedCatId={selectedCatId}
                 setSelectedCatId={setSelectedCatId}
@@ -15029,6 +15162,8 @@ export default function App() {
             <div style={{ display: docSubTab === 'earnings' ? 'block' : 'none' }}>
               <DailyEarningsDocument
                 authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
                 categories={categories}
                 selectedCatId={selectedCatId}
                 setSelectedCatId={setSelectedCatId}

@@ -145,11 +145,13 @@ export interface NdaDocumentProps {
   setYear?: (y: any) => void;
   month?: string | number;
   setMonth?: (m: any) => void;
+  isEmployee?: boolean;
+  lockedStaffId?: string | number;
 }
 
 export default function NdaDocument({
   authToken,
-  categories,
+  categories = [],
   selectedCatId,
   setSelectedCatId,
   selectedStaffId: propSelectedStaffId,
@@ -157,7 +159,9 @@ export default function NdaDocument({
   year: propYear,
   setYear: propSetYear,
   month: propMonth,
-  setMonth: propSetMonth
+  setMonth: propSetMonth,
+  isEmployee = false,
+  lockedStaffId
 }: NdaDocumentProps) {
   const [staffList, setStaffList] = useState([]);
   const [internalStaffId, setInternalStaffId] = useState('');
@@ -826,27 +830,49 @@ export default function NdaDocument({
 
         {/* Filter Controls Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'flex-end' }}>
-          <div>
-            <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>Category</label>
-            <select
-              className="form-input"
-              value={selectedCatId}
-              onChange={(e) => setSelectedCatId(e.target.value)}
-              style={{ padding: '7px 10px', fontSize: '0.85rem' }}
-            >
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name} ({cat.code})</option>
-              ))}
-            </select>
-          </div>
+          {!isEmployee && (
+            <div>
+              <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>Category</label>
+              <select
+                className="form-input"
+                value={selectedCatId}
+                onChange={(e) => setSelectedCatId(e.target.value)}
+                style={{ padding: '7px 10px', fontSize: '0.85rem' }}
+              >
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name} ({cat.code})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ flexGrow: 1, minWidth: '240px' }}>
-            <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>Select Employee Sheet</label>
-            <SearchableStaffSelect
-              staffList={sortedStaffList}
-              value={selectedStaffId}
-              onChange={(val) => setSelectedStaffId(val)}
-            />
+            <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px' }}>
+              {isEmployee ? 'Employee (Your Profile)' : 'Select Employee Sheet'}
+            </label>
+            {isEmployee ? (
+              <div style={{
+                padding: '7px 12px',
+                borderRadius: '8px',
+                background: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.35)',
+                color: '#38bdf8',
+                fontWeight: 700,
+                fontSize: '0.86rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>👤</span>
+                <span>{staffList.find(s => String(s.id) === String(selectedStaffId))?.name || 'My NDA Sheet'} (Locked to Your Profile)</span>
+              </div>
+            ) : (
+              <SearchableStaffSelect
+                staffList={sortedStaffList}
+                value={selectedStaffId}
+                onChange={(val) => setSelectedStaffId(val)}
+              />
+            )}
           </div>
 
           <div>
