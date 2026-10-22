@@ -1848,7 +1848,18 @@ export default function DutyEditModal({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+              if (tag === 'textarea') return;
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+          style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
+        >
           <div style={{
             flex: 1,
             overflowY: 'auto',

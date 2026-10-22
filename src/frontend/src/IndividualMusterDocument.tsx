@@ -244,10 +244,17 @@ export default function IndividualMusterDocument({
         let odCount = 0;
         let absentCount = 0;
 
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const currentDay = now.getDate();
+        const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
         const days = rawCells.map(c => {
           const dateObj = new Date(c.date + 'T12:00:00');
           const dayName = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
           const dayNum = dateObj.getDate();
+          const isPastOrToday = c.date <= todayIso;
 
           let musterCode = c.muster_code;
           let statusDesc = '';
@@ -259,49 +266,49 @@ export default function IndividualMusterDocument({
             statusDesc = c.overrideReason || c.muster_remarks || 'Reported Sick (Medical)';
             badgeBg = 'rgba(239, 68, 68, 0.18)';
             badgeColor = '#ef4444';
-            sickCount++;
+            if (isPastOrToday) sickCount++;
           } else if (musterCode === 'CR' || c.status === 'CR') {
             musterCode = 'CR';
             statusDesc = c.overrideReason || c.muster_remarks || 'Compensatory Rest (CR)';
             badgeBg = 'rgba(139, 92, 246, 0.18)';
             badgeColor = '#a78bfa';
-            crCount++;
+            if (isPastOrToday) crCount++;
           } else if (['CL', 'CCL', 'SCL', 'LAP', 'LHAP'].includes(musterCode) || c.status === 'LEAVE' || c.isLeave) {
             musterCode = musterCode || c.leave_type || 'LAP';
             statusDesc = c.overrideReason || c.muster_remarks || `Sanctioned Leave (${musterCode})`;
             badgeBg = 'rgba(245, 158, 11, 0.18)';
             badgeColor = '#f59e0b';
-            leaveCount++;
+            if (isPastOrToday) leaveCount++;
           } else if (musterCode === 'OD' || c.status === 'OD' || c.leave_type === 'OD') {
             musterCode = 'OD';
             statusDesc = c.overrideReason || c.muster_remarks || 'On Duty (Official / Special)';
             badgeBg = 'rgba(59, 130, 246, 0.18)';
             badgeColor = '#60a5fa';
-            odCount++;
+            if (isPastOrToday) odCount++;
           } else if (musterCode === 'NH') {
             musterCode = 'NH';
             statusDesc = c.overrideReason || c.muster_remarks || 'National Holiday (NH)';
             badgeBg = 'rgba(20, 184, 166, 0.18)';
             badgeColor = '#14b8a6';
-            leaveCount++;
+            if (isPastOrToday) leaveCount++;
           } else if (c.status === 'ABSENT' || musterCode === 'O') {
             musterCode = 'O';
             statusDesc = c.overrideReason || c.muster_remarks || 'Unauthorized Absence (O)';
             badgeBg = 'rgba(239, 68, 68, 0.25)';
             badgeColor = '#f87171';
-            absentCount++;
+            if (isPastOrToday) absentCount++;
           } else if (c.isRest || c.status === 'REST' || musterCode === 'R' || (!c.train_numbers && c.actualLinkNumber === null && c.status !== 'AVAILABLE_FOR_BOOKING')) {
             musterCode = 'R';
             statusDesc = c.overrideReason || c.muster_remarks || 'Weekly Rest (R)';
             badgeBg = 'rgba(107, 114, 128, 0.18)';
             badgeColor = '#9ca3af';
-            rCount++;
+            if (isPastOrToday) rCount++;
           } else {
             musterCode = musterCode || 'P';
             statusDesc = c.overrideReason || c.muster_remarks || (c.train_numbers && c.train_numbers !== '-' ? `Working ${c.train_numbers}` : (c.actualLinkNumber ? `Link #${c.actualLinkNumber}` : 'Present on Duty'));
             badgeBg = 'rgba(16, 185, 129, 0.15)';
             badgeColor = '#10b981';
-            pCount++;
+            if (isPastOrToday) pCount++;
           }
 
           return {
@@ -316,14 +323,17 @@ export default function IndividualMusterDocument({
             statusDesc,
             badgeBg,
             badgeColor,
+            isFuture: !isPastOrToday,
             overrideReason: c.overrideReason || c.muster_remarks,
             isOverridden: !!(c.overrideReason || c.muster_remarks || c.muster_code)
           };
         });
 
+        const completedDays = days.filter(d => d.date <= todayIso).length;
         setDaysData(days);
         setSummary({
-          totalDays: days.length,
+          totalDays: completedDays,
+          cycleTotalDays: days.length,
           present: pCount,
           rest: rCount,
           cr: crCount,

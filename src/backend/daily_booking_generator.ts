@@ -561,3 +561,10 @@ module.exports = {
   KNOWN_TRAIN_METADATA,
   resolveWorkingTrainKey
 };
+
+export {
+  generateDailyBookingChart,
+  KNOWN_TRAIN_METADATA,
+  resolveWorkingTrainKey
+};
+

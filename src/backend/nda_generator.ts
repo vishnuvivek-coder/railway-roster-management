@@ -137,7 +137,39 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
-  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
+
+  // Enforce: NDA should be shown up to date only; do not show estimation for the whole month
+  if (isCurrentMonth && actualEnd > todayIso) {
+    actualEnd = todayIso;
+  }
+  if (isFutureMonth) {
+    return {
+      employee: {
+        id: staff.id,
+        name: staff.name,
+        designation: staff.designation || 'CTI',
+        branch: 'COMMERCIAL',
+        division: 'GNT',
+        hq: staff.hq_station || 'GNT',
+        pay: staff.pay_amount || 68000,
+        pf_no: staff.pf_no || '07323475',
+        bill_unit: staff.bill_unit || '0910629',
+        doa: staff.doa || '05/08/2000',
+        category_name: category.name,
+        category_code: category.code
+      },
+      month_year: monthYearStr,
+      month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
+      period_label: `${actualStart.split('-').reverse().join('/')} to ${todayIso.split('-').reverse().join('/')}`,
+      start_date: actualStart,
+      end_date: todayIso,
+      year: y,
+      month: m,
+      rows: [],
+      total_night_hours: 0
+    };
+  }
 
   const rawLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC, effective_from ASC');
   const allLinks = rawLinks.filter(l =>
@@ -302,9 +334,17 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     const musterCode = muster ? muster.code.toUpperCase() : null;
     const directOverride = directOverrideMap[dateStrIso];
     const subOverride = subOverrideMap[dateStrIso];
-    const override = directOverride || subOverride;
     const lrEntry = lrMap[dateStrIso];
     const earnEntry = earnMap[dateStrIso];
+    const override = directOverride || subOverride || (earnEntry && earnEntry.duty && earnEntry.duty !== 'REST' && !isRestString(earnEntry.duty) ? {
+      extra_train_no: (/^\d{4,5}(?:\/\d{4,5})?$/.test(earnEntry.duty.trim()) ? earnEntry.duty.trim() : null),
+      overridden_link_number: (earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i) ? parseInt(earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i)[1], 10) : null),
+      reason: earnEntry.remarks || earnEntry.duty,
+      status: 'DUTY'
+    } : (earnEntry && (earnEntry.duty === 'REST' || isRestString(earnEntry.duty)) ? {
+      status: 'REST',
+      reason: earnEntry.remarks || 'Rest Day'
+    } : null));
 
     const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
     const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOverride.status) || directOverride.leave_type);
@@ -336,12 +376,19 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
       origIsRest = !link || link.is_rest === 1 || isRestString(link.train_numbers);
       origTrain = origIsRest ? 'REST' : (link.train_numbers || 'REST');
     } else {
-      const dutyCode = lrEntry ? lrEntry.duty_code : (earnEntry ? earnEntry.duty : null);
+      const lrCode = (lrEntry && lrEntry.duty_code)
+        ? lrEntry.duty_code
+        : (directOverride && (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason)))
+          ? (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason))
+          : (subOverride && (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason))))
+            ? (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason)))
+            : (earnEntry && earnEntry.duty ? earnEntry.duty : null);
+      const dutyCode = lrCode;
       origIsRest = !dutyCode ? (isRestString(override ? override.status : null) || isRestString(musterCode)) : isRestString(dutyCode);
       origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
     }
 
-    const remarksStr = (override && override.reason) || (muster ? muster.remarks : '') || (lrEntry ? lrEntry.remarks : '') || '';
+    const remarksStr = (override && override.reason) || (earnEntry && earnEntry.remarks) || (muster ? muster.remarks : '') || (lrEntry ? lrEntry.remarks : '') || '';
 
     const cmp = compareDutyAndResolve({
       origTrain,
@@ -462,3 +509,9 @@ module.exports = {
   generateStaffNdaJournal,
   calculateNightDutyHours
 };
+
+export {
+  generateStaffNdaJournal,
+  calculateNightDutyHours
+};
+

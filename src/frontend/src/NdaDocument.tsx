@@ -9,32 +9,45 @@ const computePresetDates = (preset, y, m) => {
   const mo = parseInt(m, 10) || 9;
   const lastDay = new Date(yr, mo, 0).getDate();
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+  const isCurrentMonth = (yr === currentYear && mo === currentMonth);
+
   const prevYr = mo === 1 ? yr - 1 : yr;
   const prevMo = mo === 1 ? 12 : mo - 1;
   const maxDaysPrev = new Date(prevYr, prevMo, 0).getDate();
   const prev30thDay = Math.min(30, maxDaysPrev);
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
+  const effectiveMonthEnd = isCurrentMonth
+    ? todayIso
+    : `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
   if (preset === 'wage_period') {
+    const rawEnd = `${yr}-${String(mo).padStart(2, '0')}-10`;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-10`
+      end: isCurrentMonth && rawEnd > todayIso ? todayIso : rawEnd
     };
   } else if (preset === 'fortnight_1') {
+    const rawEnd = `${yr}-${String(mo).padStart(2, '0')}-15`;
     return {
       start: prevMonth30thIso,
-      end: `${yr}-${String(mo).padStart(2, '0')}-15`
+      end: isCurrentMonth && rawEnd > todayIso ? todayIso : rawEnd
     };
   } else if (preset === 'fortnight_2') {
     return {
       start: `${yr}-${String(mo).padStart(2, '0')}-16`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      end: effectiveMonthEnd
     };
   }
-  // Default 'full_month' (starting from previous month 30th to last day of selected month)
+  // Default 'full_month' (shown up to date only for current ongoing month)
   return {
     start: prevMonth30thIso,
-    end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    end: effectiveMonthEnd
   };
 };
 

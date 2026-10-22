@@ -1239,10 +1239,51 @@ function formatNatureOfLeave(code, rawDetail) {
   return baseName;
 }
 
-function getDutyRowsForLrTrain(trainStr, dateStr, allLinks = []) {
+function getDutyRowsForLrTrain(trainStr, dateStr, allLinks = [], remarks = '') {
   if (!trainStr) return [];
   const raw = String(trainStr).trim();
   const c = raw.toUpperCase();
+
+  // 0. Extract custom 2-train duty with timestamps from remarks if present
+  if (remarks && (remarks.includes('Tr 1:') || remarks.includes('Tr 1')) && (remarks.includes('Tr 2:') || remarks.includes('Tr 2'))) {
+    const tr1Match = remarks.match(/Tr\s*1:?\s*([^\(]+?)\s*\(([^)]+)\)/i);
+    const tr2Match = remarks.match(/Tr\s*2:?\s*([^\(]+?)\s*\(([^)]+)\)/i);
+    if (tr1Match && tr2Match) {
+      const t1 = tr1Match[1].trim();
+      const segs1 = tr1Match[2].split('➔').map(s => s.trim());
+      const p1 = (segs1[0] || '').split(/\s+/);
+      const f1 = p1[0] || 'GNT';
+      const d1 = p1[1] || '---';
+      const p2 = (segs1[1] || '').split(/\s+/);
+      const to1 = p2[0] || '---';
+      const a1 = p2[1] || '---';
+
+      const t2 = tr2Match[1].trim();
+      const segs2 = tr2Match[2].split('➔').map(s => s.trim());
+      const p3 = (segs2[0] || '').split(/\s+/);
+      const f2 = p3[0] || to1 || '---';
+      const d2 = p3[1] || '---';
+      const p4 = (segs2[1] || '').split(/\s+/);
+      const to2 = p4[0] || 'GNT';
+      const a2 = p4[1] || '---';
+
+      return [
+        { train_no: t1, from: f1, to: to1, dep: d1, arr: a1, ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' },
+        { train_no: t2, from: f2, to: to2, dep: d2, arr: a2, ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }
+      ];
+    }
+  }
+
+  // 0b. If slash-separated compound duty (e.g. 20630 / 17231), resolve both legs
+  if (raw.includes('/') && !c.includes('LINK')) {
+    const parts = raw.split('/').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const rows1 = getDutyRowsForLrTrain(parts[0], dateStr, allLinks, '');
+      const rows2 = getDutyRowsForLrTrain(parts[1], dateStr, allLinks, '');
+      const combined = [...(rows1 || []), ...(rows2 || [])];
+      if (combined.length > 0) return combined;
+    }
+  }
 
   // 1. Compound Outward + Return Pairs (Day 1 shows Outward Leg)
   if (c.includes('17221') && c.includes('17222')) {
@@ -1692,7 +1733,7 @@ function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks
   }
 
   // 6. Train duties:
-  const duties = getDutyRowsForLrTrain(raw, dateStrIso, allLinks);
+  const duties = getDutyRowsForLrTrain(raw, dateStrIso, allLinks, remarks);
   if (duties && duties.length > 0) {
     return { action: 'DISPLAY', duties, remarks: remarks || raw };
   }
@@ -1728,8 +1769,30 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const catMap = {};
   categories.forEach(c => { catMap[c.id] = c; });
 
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const maxDay = daysInMonth;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
+  const numYear = parseInt(year, 10);
+  const numMonth = parseInt(month, 10);
+  const isCurrentMonth = (numYear === currentYear && numMonth === currentMonth);
+  const isFutureMonth = (numYear > currentYear || (numYear === currentYear && numMonth > currentMonth));
+
+  // Never estimate future months
+  if (isFutureMonth) {
+    if (staffId) {
+      await run('DELETE FROM ta_approvals WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
+    } else {
+      await run('DELETE FROM ta_approvals WHERE month_year = ?', [monthYearStr]);
+    }
+    return;
+  }
+
+  const daysInMonth = new Date(numYear, numMonth, 0).getDate();
+  // TA shown up to date only; do not show estimation for the whole month
+  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : daysInMonth;
 
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
@@ -1756,12 +1819,6 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
       cacheMap[`${r.train_no}_${r.run_date}_${r.station_code}`] = r;
     });
   }
-
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const currentDay = now.getDate();
-  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
 
   const allNdaEntries = await all(
     staffId
@@ -1891,8 +1948,15 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
         let duties = [];
 
         if (category.id === 4) {
-          const lrCode = lrEntry ? lrEntry.duty_code : (directOverride ? (directOverride.extra_train_no || directOverride.reason) : (earnEntry ? earnEntry.duty : null));
-          const lrRemarks = (lrEntry && lrEntry.remarks) || (directOverride && directOverride.reason) || (muster ? muster.remarks : '');
+          const lrCode = (lrEntry && lrEntry.duty_code)
+            ? lrEntry.duty_code
+            : (directOverride && (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason)))
+              ? (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason))
+              : (subOverride && (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason))))
+                ? (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason)))
+                : (earnEntry && earnEntry.duty ? earnEntry.duty : null);
+
+          const lrRemarks = (lrEntry && lrEntry.remarks) || (directOverride && directOverride.reason) || (subOverride && subOverride.reason) || (earnEntry && earnEntry.remarks) || (muster ? muster.remarks : '');
 
           const lrRes = resolveLrDutyCode(lrCode, lrRemarks, dateStrIso, linkMap, Object.values(linkMap));
           lastAssignedLink = null;
@@ -1961,8 +2025,18 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             origTrain = 'REST';
           }
 
-          const overrideDuty = directOverride || subOverride;
-          const remarksStr = (overrideDuty && overrideDuty.reason) || (muster ? muster.remarks : '') || '';
+          // Link to daily duty: priority to direct override, substitute override, or daily duty allotment from daily_earnings_entries
+          const overrideDuty = directOverride || subOverride || (earnEntry && earnEntry.duty && earnEntry.duty !== 'REST' && !isRestString(earnEntry.duty) ? {
+            extra_train_no: (/^\d{4,5}(?:\/\d{4,5})?$/.test(earnEntry.duty.trim()) ? earnEntry.duty.trim() : null),
+            overridden_link_number: (earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i) ? parseInt(earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i)[1], 10) : null),
+            reason: earnEntry.remarks || earnEntry.duty,
+            status: 'DUTY'
+          } : (earnEntry && (earnEntry.duty === 'REST' || isRestString(earnEntry.duty)) ? {
+            status: 'REST',
+            reason: earnEntry.remarks || 'Rest Day'
+          } : null));
+
+          const remarksStr = (overrideDuty && overrideDuty.reason) || (earnEntry && earnEntry.remarks) || (muster ? muster.remarks : '') || '';
 
           // First, check if this day is an active multi-day continuation (Non-Daily Return or Multi-Day Link Return)
           // when the staff member is not on leave/standby/overridden on this day.
@@ -2206,7 +2280,15 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
-  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
+
+  // Enforce: TA should be shown up to date only; do not show estimation for the whole month
+  if (isCurrentMonth && actualEnd > todayIso) {
+    actualEnd = todayIso;
+  }
+  if (isFutureMonth && actualEnd > todayIso) {
+    actualEnd = todayIso;
+  }
 
   // 1. Always regenerate claims in ta_approvals for this staff member across all covered months
   // so that any changes in the Daily Summary Duty List are immediately reflected in the TA claim!
@@ -2634,4 +2716,19 @@ module.exports = {
   resolveLrDutyCode,
   getDutyRowsForLrTrain
 };
+
+export {
+  calculateAbsenceAndTa,
+  computeDynamicTa,
+  calculateDayDutiesTa,
+  recalculateJournalRowsTa,
+  generatePendingTaClaimsForMonth,
+  generateStaffTaJournal,
+  getDutyRowsForLinkNumber,
+  resolveDutyCodeToRows,
+  getLinkSetDetails,
+  resolveLrDutyCode,
+  getDutyRowsForLrTrain
+};
+
 

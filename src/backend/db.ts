@@ -43,7 +43,7 @@ const normalizeSqlForMysql = (sql) => {
 };
 
 // Helper to run SQL with automatic dialect normalization
-const run = async (sql, params = []) => {
+const run = async (sql: any, params: any = []): Promise<any> => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -66,7 +66,7 @@ const run = async (sql, params = []) => {
 };
 
 // Helper to query all rows
-const all = async (sql, params = []) => {
+const all = async (sql: any, params: any = []): Promise<any> => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -86,7 +86,7 @@ const all = async (sql, params = []) => {
 };
 
 // Helper to query single row
-const get = async (sql, params = []) => {
+const get = async (sql: any, params: any = []): Promise<any> => {
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -1740,3 +1740,15 @@ module.exports = {
   get,
   withTransaction
 };
+
+export {
+  sqliteDb as db,
+  activeEngine,
+  mysqlPool,
+  initDb,
+  run,
+  all,
+  get,
+  withTransaction
+};
+

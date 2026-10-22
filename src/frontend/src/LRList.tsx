@@ -11,6 +11,19 @@ const QUICK_CODES = [
   { code: 'CAP', label: 'Child Care / CAP', color: '#818cf8', bg: 'rgba(99, 102, 241, 0.18)', border: 'rgba(99, 102, 241, 0.4)' }
 ];
 
+const TWO_TRAIN_PRESETS = [
+  { label: '20630 / 17231', t1: '20630', f1: 'GNT', to1: 'BZA', d1: '06:00', a1: '07:15', t2: '17231', f2: 'BZA', to2: 'GNT', d2: '13:50', a2: '15:20', desc: 'GNT-BZA-GNT Connected Day Duty' },
+  { label: '17252 / 12604', t1: '17252', f1: 'DHNE', to1: 'GNT', d1: '15:30', a1: '23:10', t2: '12604', f2: 'GNT', to2: 'MAS', d2: '22:00', a2: '05:45', desc: 'DHNE Arr ➔ GNT Dep to MAS' },
+  { label: '17244 / 20629', t1: '17244', f1: 'RGDA', to1: 'GNT', d1: '15:30', a1: '04:30', t2: '20629', f2: 'GNT', to2: 'TPTY', d2: '19:10', a2: '01:50', desc: 'RGDA Arr ➔ GNT Dep to TPTY' },
+  { label: '12805 / 12806', t1: '12805', f1: 'BZA', to1: 'GNT', d1: '12:00', a1: '13:15', t2: '12806', f2: 'GNT', to2: 'BZA', d2: '14:30', a2: '15:30', desc: 'BZA-GNT-BZA Janmabhoomi' },
+  { label: '17239 / 17240', t1: '17239', f1: 'GNT', to1: 'BZA', d1: '08:00', a1: '09:00', t2: '17240', f2: 'BZA', to2: 'GNT', d2: '17:00', a2: '18:00', desc: 'Simhadri Intercity Pair' },
+  { label: '17281 / 17282', t1: '17281', f1: 'GNT', to1: 'NS', d1: '17:45', a1: '22:30', t2: '17282', f2: 'NS', to2: 'GNT', d2: '06:00', a2: '10:45', desc: 'GNT-NS-GNT Express' },
+  { label: '17646 / 12796', t1: '17646', f1: 'GNT', to1: 'SC', d1: '07:15', a1: '14:30', t2: '12796', f2: 'SC', to2: 'BZA', d2: '17:30', a2: '23:20', desc: 'GNT-SC ➔ SC-BZA Exp' },
+  { label: '17041 / 17042', t1: '17041', f1: 'GNT', to1: 'RU', d1: '12:20', a1: '19:45', t2: '17042', f2: 'RU', to2: 'GNT', d2: '10:40', a2: '17:40', desc: 'GNT-RU-GNT Service' },
+  { label: '17607 / 17608', t1: '17607', f1: 'GNT', to1: 'RU', d1: '12:20', a1: '19:30', t2: '17608', f2: 'RU', to2: 'GNT', d2: '12:10', a2: '19:20', desc: 'GNT-RU-GNT Return' },
+  { label: '07227 / 07228', t1: '07227', f1: 'GNT', to1: 'CHZ', d1: '06:00', a1: '12:30', t2: '07228', f2: 'CHZ', to2: 'GNT', d2: '05:30', a2: '12:00', desc: 'GNT-CHZ-GNT Express' }
+];
+
 const NON_DAILY_MULTI_DAY_SERVICES = [
   {
     id: '22882_22881',
@@ -255,9 +268,10 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
 
   // Active cell edit modal
   const [editModal, setEditModal] = useState(null);
-  const [dutyAssignTab, setDutyAssignTab] = useState('LINK'); // 'LINK' | 'NON_DAILY' | 'CUSTOM' | 'QUICK'
+  const [dutyAssignTab, setDutyAssignTab] = useState('LINK'); // 'LINK' | 'NON_DAILY' | 'CUSTOM' | 'TWO_TRAINS' | 'QUICK'
   const [selectedLinkCat, setSelectedLinkCat] = useState(1); // 1 = COR, 2 = Sleeper
   const [linkSearch, setLinkSearch] = useState('');
+  const [nonDailySearch, setNonDailySearch] = useState('');
   const [selectedLink, setSelectedLink] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
   const [inputCode, setInputCode] = useState('');
@@ -265,6 +279,19 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
   const [saving, setSaving] = useState(false);
   const [syncingDaily, setSyncingDaily] = useState(false);
   const [syncNotice, setSyncNotice] = useState(null);
+  const [twoTrainsData, setTwoTrainsData] = useState({
+    train1: '',
+    from1: 'GNT',
+    to1: '',
+    dep1: '',
+    arr1: '',
+    train2: '',
+    from2: '',
+    to2: 'GNT',
+    dep2: '',
+    arr2: '',
+    additionalRemarks: ''
+  });
 
   // Reference Drawer / Modal for 2-Day & 3-Day Non-Daily Services
   const [showNonDailyRefModal, setShowNonDailyRefModal] = useState(false);
@@ -556,6 +583,55 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
     }
   };
 
+  // Unified save triggered on Enter key or clicking Save button
+  const handleModalSave = (e?: any) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (saving || !editModal) return;
+
+    if (dutyAssignTab === 'TWO_TRAINS') {
+      const t1 = twoTrainsData.train1.trim();
+      const t2 = twoTrainsData.train2.trim();
+      if (t1 && t2) {
+        const code = `${t1} / ${t2}`;
+        const parts: string[] = [];
+        const f1 = twoTrainsData.from1.trim() || 'GNT';
+        const to1 = twoTrainsData.to1.trim() || '---';
+        const d1 = twoTrainsData.dep1.trim();
+        const a1 = twoTrainsData.arr1.trim();
+        parts.push(`Tr 1: ${t1} (${f1}${d1 ? ' ' + d1 : ''} ➔ ${to1}${a1 ? ' ' + a1 : ''})`);
+
+        const f2 = twoTrainsData.from2.trim() || to1 || '---';
+        const to2 = twoTrainsData.to2.trim() || 'GNT';
+        const d2 = twoTrainsData.dep2.trim();
+        const a2 = twoTrainsData.arr2.trim();
+        parts.push(`Tr 2: ${t2} (${f2}${d2 ? ' ' + d2 : ''} ➔ ${to2}${a2 ? ' ' + a2 : ''})`);
+
+        if (twoTrainsData.additionalRemarks && twoTrainsData.additionalRemarks.trim()) {
+          parts.push(twoTrainsData.additionalRemarks.trim());
+        }
+        const fullRemarks = parts.join(' • ');
+        handleSaveCell(code, fullRemarks);
+        return;
+      }
+    }
+    if (dutyAssignTab === 'NON_DAILY' && selectedService) {
+      handleApplyMultiDayService(selectedService);
+      return;
+    }
+    if (dutyAssignTab === 'LINK' && linkSetInfo && linkSetInfo.isSet) {
+      handleApplyMultiDayLinkSet(linkSetInfo);
+      return;
+    }
+    if (inputCode && inputCode.trim()) {
+      handleSaveCell(inputCode, inputRemarks, selectedLink?.link_number || null, selectedLink?.category_id || null);
+      return;
+    }
+    if (selectedLink) {
+      handleSaveCell(`Link ${selectedLink.link_number}`, inputRemarks || selectedLink.train_number || '', selectedLink.link_number, selectedLink.category_id);
+      return;
+    }
+  };
+
   // Multi-day Link Set details computation for the selected regular link
   const linkSetInfo = useMemo(() => {
     if (!selectedLink) return null;
@@ -564,8 +640,14 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
     const setDetails = getLinkSetDetails(catId, linkNum);
     if (!setDetails || setDetails.setLinks.length <= 1) return null;
 
+    const activeDate = editModal?.day?.dateStr || `${year}-${String(month).padStart(2, '0')}-01`;
+
     const legs = setDetails.setLinks.map((lNum, idx) => {
-      const match = (linksList || []).find(l => l.category_id === catId && l.link_number === lNum);
+      const candidates = (linksList || []).filter(l => l.category_id === catId && l.link_number === lNum);
+      const match = candidates.find(l => selectedLink?.link_set_id && l.link_set_id === selectedLink.link_set_id)
+        || candidates.find(l => (!l.effective_from || l.effective_from <= activeDate) && (!l.effective_to || l.effective_to >= activeDate))
+        || candidates[0];
+
       return {
         linkNumber: lNum,
         dayOffset: idx,
@@ -583,12 +665,45 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
       setLinks: setDetails.setLinks,
       legs
     };
-  }, [selectedLink, linksList]);
+  }, [selectedLink, linksList, editModal, year, month]);
 
   // Available regular links filtered by selected category (COR or Sleeper) and search query
   const filteredAvailableLinks = useMemo(() => {
     if (!linksList || linksList.length === 0) return [];
-    let list = linksList.filter(l => l.category_id === selectedLinkCat && !l.is_rest);
+    const activeDate = editModal?.day?.dateStr || `${year}-${String(month).padStart(2, '0')}-01`;
+
+    // Filter by category, non-rest, and active date range
+    let list = linksList.filter(l => {
+      if (l.category_id !== selectedLinkCat || l.is_rest) return false;
+      if (l.status === 'draft') return false;
+      const effFrom = l.effective_from;
+      const effTo = l.effective_to;
+      if (effFrom && effFrom > activeDate) return false;
+      if (effTo && effTo < activeDate) return false;
+      return true;
+    });
+
+    // Fallback: If date range filtering removed all links (e.g. untracked or future dates), retain non-rest
+    if (list.length === 0) {
+      list = linksList.filter(l => l.category_id === selectedLinkCat && !l.is_rest && l.status !== 'draft');
+    }
+
+    // Deduplicate by link_number so each link number appears only once, picking the latest/best match
+    const dedupedMap = new Map();
+    for (const l of list) {
+      const existing = dedupedMap.get(l.link_number);
+      if (!existing) {
+        dedupedMap.set(l.link_number, l);
+      } else {
+        const existingEff = existing.effective_from || '';
+        const currentEff = l.effective_from || '';
+        if (currentEff > existingEff || (currentEff === existingEff && (l.id || 0) > (existing.id || 0))) {
+          dedupedMap.set(l.link_number, l);
+        }
+      }
+    }
+    list = Array.from(dedupedMap.values());
+
     if (linkSearch.trim()) {
       const q = linkSearch.trim().toLowerCase();
       list = list.filter(l =>
@@ -599,8 +714,27 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
         (l.set_name && l.set_name.toLowerCase().includes(q))
       );
     }
-    return list.sort((a, b) => a.link_number - b.link_number);
-  }, [linksList, selectedLinkCat, linkSearch]);
+    return list.sort((a, b) => Number(a.link_number) - Number(b.link_number));
+  }, [linksList, selectedLinkCat, linkSearch, editModal, year, month]);
+
+  // Filtered Non-Daily 2/3-Day Services for active modal search
+  const filteredNonDailyServices = useMemo(() => {
+    const allServices = sheetData?.nonDailyServices || NON_DAILY_MULTI_DAY_SERVICES;
+    if (!nonDailySearch || !nonDailySearch.trim()) return allServices;
+    const q = nonDailySearch.toLowerCase().trim();
+    return allServices.filter(service => {
+      const nameMatch = (service.name || '').toLowerCase().includes(q);
+      const daysMatch = (service.serviceDays || []).some(d => d.toLowerCase().includes(q));
+      const legsMatch = (service.legs || []).some(leg =>
+        (leg.train || '').toLowerCase().includes(q) ||
+        (leg.dutyCode || '').toLowerCase().includes(q) ||
+        (leg.from || '').toLowerCase().includes(q) ||
+        (leg.to || '').toLowerCase().includes(q) ||
+        (leg.remarks || '').toLowerCase().includes(q)
+      );
+      return nameMatch || daysMatch || legsMatch;
+    });
+  }, [sheetData?.nonDailyServices, nonDailySearch]);
 
   // 1-Click Multi-Day Link Set Booking for LR Staff
   const handleAssignLinkSet = async (linkSet) => {
@@ -1289,13 +1423,87 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                             key={day.dateStr}
                             onClick={() => {
                               if (isAdmin) {
-                                setEditModal({ staff, day, currentCode: displayCode, remarks: rec?.remarks || '' });
-                                setInputCode(displayCode || '');
-                                setInputRemarks(rec?.remarks || '');
+                                const rawCode = displayCode || '';
+                                const rawRemarks = rec?.remarks || '';
+                                setEditModal({ staff, day, currentCode: rawCode, remarks: rawRemarks });
+                                setInputCode(rawCode);
+                                setInputRemarks(rawRemarks);
                                 setSelectedService(null);
                                 setSelectedLink(null);
-                                setDutyAssignTab('LINK');
                                 setLinkSearch('');
+
+                                if (rawCode.includes('/') && !rawCode.toLowerCase().includes('link')) {
+                                  const parts = rawCode.split('/').map(p => p.trim());
+                                  const t1 = parts[0] || '';
+                                  const t2 = parts[1] || '';
+
+                                  let f1 = 'GNT', to1 = 'BZA', d1 = '', a1 = '';
+                                  let f2 = 'BZA', to2 = 'GNT', d2 = '', a2 = '';
+                                  let extraNotes = '';
+
+                                  const tr1Match = rawRemarks.match(/Tr\s*1:?\s*([^\(]+?)\s*\(([^)]+)\)/i);
+                                  const tr2Match = rawRemarks.match(/Tr\s*2:?\s*([^\(]+?)\s*\(([^)]+)\)/i);
+
+                                  if (tr1Match && tr1Match[2]) {
+                                    const segs = tr1Match[2].split('➔').map(s => s.trim());
+                                    const p1 = (segs[0] || '').split(/\s+/);
+                                    if (p1[0]) f1 = p1[0];
+                                    if (p1[1]) d1 = p1[1];
+                                    const p2 = (segs[1] || '').split(/\s+/);
+                                    if (p2[0]) to1 = p2[0];
+                                    if (p2[1]) a1 = p2[1];
+                                  }
+
+                                  if (tr2Match && tr2Match[2]) {
+                                    const segs = tr2Match[2].split('➔').map(s => s.trim());
+                                    const p3 = (segs[0] || '').split(/\s+/);
+                                    if (p3[0]) f2 = p3[0];
+                                    if (p3[1]) d2 = p3[1];
+                                    const p4 = (segs[1] || '').split(/\s+/);
+                                    if (p4[0]) to2 = p4[0];
+                                    if (p4[1]) a2 = p4[1];
+                                  }
+
+                                  const preset = TWO_TRAIN_PRESETS.find(p => (p.t1 === t1 && p.t2 === t2) || (rawCode.includes(p.t1) && rawCode.includes(p.t2)));
+                                  if (preset) {
+                                    if (!d1 && preset.d1) d1 = preset.d1;
+                                    if (!a1 && preset.a1) a1 = preset.a1;
+                                    if (!d2 && preset.d2) d2 = preset.d2;
+                                    if (!a2 && preset.a2) a2 = preset.a2;
+                                    if (f1 === 'GNT' && to1 === 'BZA') { f1 = preset.f1; to1 = preset.to1; }
+                                    if (f2 === 'BZA' && to2 === 'GNT') { f2 = preset.f2; to2 = preset.to2; }
+                                  }
+
+                                  setTwoTrainsData({
+                                    train1: t1,
+                                    from1: f1,
+                                    to1: to1,
+                                    dep1: d1,
+                                    arr1: a1,
+                                    train2: t2,
+                                    from2: f2,
+                                    to2: to2,
+                                    dep2: d2,
+                                    arr2: a2,
+                                    additionalRemarks: extraNotes
+                                  });
+                                  setDutyAssignTab('TWO_TRAINS');
+                                } else {
+                                  setTwoTrainsData({
+                                    train1: '',
+                                    from1: 'GNT',
+                                    to1: 'BZA',
+                                    dep1: '',
+                                    arr1: '',
+                                    train2: '',
+                                    from2: 'BZA',
+                                    to2: 'GNT',
+                                    dep2: '',
+                                    arr2: '',
+                                    additionalRemarks: ''
+                                  });
+                                  setDutyAssignTab('LINK');
+                                }
                               }
                             }}
                             style={{
@@ -1462,7 +1670,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
           zIndex: 9999,
           padding: '16px'
         }}>
-          <div className="card" style={{
+          <div className="card"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+                if (tag === 'textarea') return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleModalSave(e);
+              }
+            }}
+            style={{
             background: '#1a1a1d',
             border: '1px solid var(--border-gold)',
             borderRadius: '16px',
@@ -1508,10 +1726,10 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
               <strong style={{ color: '#fff' }}>ANY Specific Train Number / Custom Duty</strong>.
             </div>
 
-            {/* 4-Tab Switcher */}
+            {/* 5-Tab Switcher */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(5, 1fr)',
               gap: '6px',
               marginBottom: '18px',
               background: 'rgba(255, 255, 255, 0.05)',
@@ -1524,7 +1742,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 style={{
                   padding: '9px 4px',
                   borderRadius: '7px',
-                  fontSize: '0.79rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   border: 'none',
@@ -1542,7 +1760,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 style={{
                   padding: '9px 4px',
                   borderRadius: '7px',
-                  fontSize: '0.79rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   border: 'none',
@@ -1560,7 +1778,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 style={{
                   padding: '9px 4px',
                   borderRadius: '7px',
-                  fontSize: '0.79rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   border: 'none',
@@ -1570,7 +1788,25 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                   transition: 'all 0.15s'
                 }}
               >
-                ✏️ Any Train
+                🚂 1 Train
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDutyAssignTab('TWO_TRAINS'); setSelectedLink(null); setSelectedService(null); }}
+                style={{
+                  padding: '9px 4px',
+                  borderRadius: '7px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: dutyAssignTab === 'TWO_TRAINS' ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : 'transparent',
+                  color: dutyAssignTab === 'TWO_TRAINS' ? '#fff' : 'var(--color-text-secondary)',
+                  boxShadow: dutyAssignTab === 'TWO_TRAINS' ? '0 2px 8px rgba(139, 92, 246, 0.4)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                🔄 2 Trains (Times)
               </button>
               <button
                 type="button"
@@ -1578,7 +1814,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 style={{
                   padding: '9px 4px',
                   borderRadius: '7px',
-                  fontSize: '0.79rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   border: 'none',
@@ -1641,6 +1877,20 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     placeholder="Search link # or train..."
                     value={linkSearch}
                     onChange={(e) => setLinkSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (filteredAvailableLinks && filteredAvailableLinks.length > 0) {
+                          const first = filteredAvailableLinks[0];
+                          setSelectedLink(first);
+                          setInputCode(`Link ${first.link_number}`);
+                          setInputRemarks(first.train_numbers ? `Train ${first.train_numbers}` : '');
+                          handleSaveCell(`Link ${first.link_number}`, first.train_numbers ? `Train ${first.train_numbers}` : '', first.link_number, first.category_id);
+                        } else {
+                          handleModalSave(e);
+                        }
+                      }
+                    }}
                     style={{
                       padding: '4px 8px',
                       borderRadius: '6px',
@@ -1667,7 +1917,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     const catLabel = l.category_id === 1 ? 'COR' : 'SL';
                     return (
                       <div
-                        key={`${l.category_id}_${l.link_number}`}
+                        key={`link-${l.id || `${l.category_id}_${l.link_number}`}`}
                         onClick={() => {
                           setSelectedLink(l);
                           const isCor = l.category_id === 1;
@@ -1838,18 +2088,54 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 background: 'rgba(56, 189, 248, 0.08)',
                 border: '1px solid rgba(56, 189, 248, 0.35)'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                   <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>🚆</span> 2-Day & 3-Day Non-Daily Services (One-Click Booking)
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                    Selected Day: {editModal.day.dayOfWeek}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search non-daily trains, route, day..."
+                      value={nonDailySearch}
+                      onChange={(e) => setNonDailySearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (filteredNonDailyServices && filteredNonDailyServices.length > 0) {
+                            const first = filteredNonDailyServices[0];
+                            setSelectedService(first);
+                            setInputCode(first.legs[0].dutyCode);
+                            setInputRemarks(first.legs[0].remarks);
+                            handleApplyMultiDayService(first);
+                          } else {
+                            handleModalSave(e);
+                          }
+                        }
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.76rem',
+                        background: 'rgba(0,0,0,0.4)',
+                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                        color: '#fff',
+                        width: '210px',
+                        outline: 'none'
+                      }}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
+                      Day: <strong>{editModal.day.dayOfWeek}</strong>
+                    </span>
+                  </div>
                 </div>
 
                 {/* Service list options */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {(sheetData?.nonDailyServices || NON_DAILY_MULTI_DAY_SERVICES).map(service => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {filteredNonDailyServices.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '0.78rem' }}>
+                      No non-daily services matching "{nonDailySearch}". Try train number (e.g. 17221, 12755, 17069).
+                    </div>
+                  ) : filteredNonDailyServices.map(service => {
                     const isDayMatch = service.serviceDays.includes(editModal.day.dayOfWeek);
                     const isSelected = selectedService?.id === service.id;
 
@@ -1981,6 +2267,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     placeholder="e.g. 12603, 17221, 22882, 17254 / 12795, GTL, TPTY, STN"
                     value={inputCode}
                     onChange={(e) => setInputCode(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
                     style={{ borderRadius: '8px', fontSize: '0.9rem', width: '100%' }}
                     autoFocus
                   />
@@ -1995,6 +2282,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     placeholder="e.g. Relieved for extra train, Spl Order 44/2"
                     value={inputRemarks}
                     onChange={(e) => setInputRemarks(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
                     style={{ borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
                   />
                 </div>
@@ -2021,7 +2309,397 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
               </div>
             )}
 
-            {/* TAB 4: QUICK REST / LEAVE CODES */}
+            {/* TAB 4: 2 TRAINS WITH TIMESTAMPS */}
+            {dutyAssignTab === 'TWO_TRAINS' && (
+              <div style={{
+                marginBottom: '18px',
+                padding: '14px',
+                borderRadius: '10px',
+                background: 'rgba(139, 92, 246, 0.08)',
+                border: '1px solid rgba(139, 92, 246, 0.35)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🔄</span> Connected 2-Train Duty with Timestamps
+                  </div>
+                  <span style={{ fontSize: '0.70rem', color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px' }}>
+                    Split / Round Duty
+                  </span>
+                </div>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.74rem', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                  Assign LR staff to a 2-train duty (e.g. 20630 / 17231). Specify departure and arrival timestamps for exact TA & night allowance calculations.
+                </p>
+
+                {/* Quick Presets */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', color: '#c084fc', marginBottom: '6px', fontWeight: 700 }}>
+                    ⚡ Division Quick Presets (Click to Fill):
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {TWO_TRAIN_PRESETS.map(p => {
+                      const isMatch = twoTrainsData.train1 === p.t1 && twoTrainsData.train2 === p.t2;
+                      return (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => {
+                            setTwoTrainsData({
+                              train1: p.t1,
+                              from1: p.f1,
+                              to1: p.to1,
+                              dep1: p.d1,
+                              arr1: p.a1,
+                              train2: p.t2,
+                              from2: p.f2,
+                              to2: p.to2,
+                              dep2: p.d2,
+                              arr2: p.a2,
+                              additionalRemarks: p.desc
+                            });
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: isMatch ? 'rgba(139, 92, 246, 0.4)' : 'rgba(255,255,255,0.05)',
+                            color: isMatch ? '#fff' : 'inherit',
+                            border: `1px solid ${isMatch ? '#a855f7' : 'rgba(255,255,255,0.1)'}`,
+                            transition: 'all 0.15s'
+                          }}
+                          title={p.desc}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Train 1 & Train 2 Dual Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                  {/* Train 1 Card */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)'
+                  }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38bdf8', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>🚂</span> Train 1 (First Leg / Outward)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Train #
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 20630"
+                          value={twoTrainsData.train1}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, train1: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            fontWeight: 700
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          From Stn
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="GNT"
+                          value={twoTrainsData.from1}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, from1: e.target.value.toUpperCase() }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            textTransform: 'uppercase'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          To Stn
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="BZA"
+                          value={twoTrainsData.to1}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, to1: e.target.value.toUpperCase(), from2: prev.from2 || e.target.value.toUpperCase() }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            textTransform: 'uppercase'
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Dep Time (HH:MM)
+                        </label>
+                        <input
+                          type="time"
+                          value={twoTrainsData.dep1}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, dep1: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '5px',
+                            fontSize: '0.76rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Arr Time (HH:MM)
+                        </label>
+                        <input
+                          type="time"
+                          value={twoTrainsData.arr1}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, arr1: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '5px',
+                            fontSize: '0.76rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Train 2 Card */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)'
+                  }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#c084fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>🚂</span> Train 2 (Second Leg / Return)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Train #
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 17231"
+                          value={twoTrainsData.train2}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, train2: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            fontWeight: 700
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          From Stn
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="BZA"
+                          value={twoTrainsData.from2}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, from2: e.target.value.toUpperCase() }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            textTransform: 'uppercase'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          To Stn
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="GNT"
+                          value={twoTrainsData.to2}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, to2: e.target.value.toUpperCase() }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '5px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff',
+                            textTransform: 'uppercase'
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Dep Time (HH:MM)
+                        </label>
+                        <input
+                          type="time"
+                          value={twoTrainsData.dep2}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, dep2: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '5px',
+                            fontSize: '0.76rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>
+                          Arr Time (HH:MM)
+                        </label>
+                        <input
+                          type="time"
+                          value={twoTrainsData.arr2}
+                          onChange={(e) => setTwoTrainsData(prev => ({ ...prev, arr2: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '5px',
+                            fontSize: '0.76rem',
+                            background: 'rgba(255,255,255,0.07)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            color: '#fff'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Notes / Order Reference */}
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginBottom: '3px', fontWeight: 600 }}>
+                    Additional Remarks / Spl Memo (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Relieved for connected night train, Order 44/2"
+                    value={twoTrainsData.additionalRemarks}
+                    onChange={(e) => setTwoTrainsData(prev => ({ ...prev, additionalRemarks: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#fff'
+                    }}
+                  />
+                </div>
+
+                {/* Live Preview Box */}
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px'
+                }}>
+                  <div style={{ fontSize: '0.74rem' }}>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Duty Code: </span>
+                    <strong style={{ color: '#c084fc' }}>
+                      {twoTrainsData.train1 && twoTrainsData.train2 ? `${twoTrainsData.train1} / ${twoTrainsData.train2}` : 'Enter both train numbers...'}
+                    </strong>
+                  </div>
+                  <div style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
+                    {twoTrainsData.train1 && twoTrainsData.train2 ? (
+                      `Tr 1: ${twoTrainsData.train1} (${twoTrainsData.from1 || 'GNT'}${twoTrainsData.dep1 ? ' ' + twoTrainsData.dep1 : ''} ➔ ${twoTrainsData.to1 || '---'}${twoTrainsData.arr1 ? ' ' + twoTrainsData.arr1 : ''}) • Tr 2: ${twoTrainsData.train2} (${twoTrainsData.from2 || '---'}${twoTrainsData.dep2 ? ' ' + twoTrainsData.dep2 : ''} ➔ ${twoTrainsData.to2 || 'GNT'}${twoTrainsData.arr2 ? ' ' + twoTrainsData.arr2 : ''})`
+                    ) : (
+                      'Timestamps will be saved to remarks'
+                    )}
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={saving || !twoTrainsData.train1.trim() || !twoTrainsData.train2.trim()}
+                  onClick={handleModalSave}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>💾</span> Save 2-Train Duty ({twoTrainsData.train1 && twoTrainsData.train2 ? `${twoTrainsData.train1} / ${twoTrainsData.train2}` : 'Enter trains'}) (Enter ↵)
+                </button>
+              </div>
+            )}
+
+            {/* TAB 5: QUICK REST / LEAVE CODES */}
             {dutyAssignTab === 'QUICK' && (
               <div style={{
                 marginBottom: '18px',
@@ -2105,6 +2783,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     placeholder="e.g. Sanctioned via memo / Leave App"
                     value={inputRemarks}
                     onChange={(e) => setInputRemarks(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
                     style={{ borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
                   />
                 </div>
@@ -2151,6 +2830,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                       placeholder="e.g. Link 19, 12805"
                       value={inputCode}
                       onChange={(e) => setInputCode(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
                       style={{ borderRadius: '6px', fontSize: '0.82rem', width: '100%' }}
                     />
                   </div>
@@ -2164,6 +2844,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                       placeholder="Remarks"
                       value={inputRemarks}
                       onChange={(e) => setInputRemarks(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleModalSave(e); } }}
                       style={{ borderRadius: '6px', fontSize: '0.82rem', width: '100%' }}
                     />
                   </div>
@@ -2188,7 +2869,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                   type="button"
                   className="btn btn-secondary"
                   disabled={saving}
-                  onClick={() => { setEditModal(null); setSelectedService(null); setSelectedLink(null); }}
+                  onClick={() => { setEditModal(null); setSelectedService(null); setSelectedLink(null); setNonDailySearch(''); }}
                   style={{ fontSize: '0.82rem' }}
                 >
                   Cancel
@@ -2196,8 +2877,8 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={saving || !inputCode.trim()}
-                  onClick={() => handleSaveCell(inputCode, inputRemarks, selectedLink?.link_number || null, selectedLink?.category_id || null)}
+                  disabled={saving || (!inputCode.trim() && !selectedLink && !selectedService)}
+                  onClick={(e) => handleModalSave(e)}
                   style={{
                     background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))',
                     border: 'none',
@@ -2229,7 +2910,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
           zIndex: 9999,
           padding: '20px'
         }}>
-          <div className="card" style={{
+          <div className="card"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+                if (tag === 'textarea') return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleModalSave(e);
+              }
+            }}
+            style={{
             background: '#18181b',
             border: '1px solid rgba(56, 189, 248, 0.4)',
             borderRadius: '16px',
@@ -2424,7 +3115,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
           zIndex: 9999,
           padding: '16px'
         }}>
-          <div className="card" style={{
+          <div className="card"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+                if (tag === 'textarea') return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleModalSave(e);
+              }
+            }}
+            style={{
             background: '#1a1a1d',
             border: '1px solid rgba(59, 130, 246, 0.45)',
             borderRadius: '16px',
@@ -2664,7 +3365,17 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
           zIndex: 9999,
           padding: '16px'
         }}>
-          <div className="card" style={{
+          <div className="card"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+                if (tag === 'textarea') return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleModalSave(e);
+              }
+            }}
+            style={{
             background: '#1a1a1d',
             border: '1px solid rgba(239, 68, 68, 0.45)',
             borderRadius: '16px',

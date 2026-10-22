@@ -507,6 +507,14 @@ async function syncJourneyLegsMultiSource(journeyLegs, dbHelper, forceRefresh = 
   return updatedLegs;
 }
 
+export {
+  fetchWhereIsMyTrain,
+  fetchRailYatri,
+  fetchMultiSourceTrainTimings,
+  syncJourneyLegsMultiSource,
+  resolveDateIso
+};
+
 module.exports = {
   fetchWhereIsMyTrain,
   fetchRailYatri,

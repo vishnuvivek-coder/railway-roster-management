@@ -342,6 +342,8 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }: TaA
   };
 
   const stats = approvalsData?.stats || { total: 0, pending: 0, approved: 0, rejected: 0, total_pending_amount: 0, total_approved_amount: 0 };
+  const now = new Date();
+  const isCurrentMonth = (parseInt(year, 10) === now.getFullYear() && parseInt(month, 10) === (now.getMonth() + 1));
 
   return (
     <div className="ta-approvals-container" style={{ padding: '8px 0 40px 0' }}>
@@ -504,13 +506,13 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }: TaA
           padding: '16px'
         }}>
           <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
-            📊 Total Month Claims
+            📊 {isCurrentMonth ? 'Total Claims (Up to Date)' : 'Total Month Claims'}
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)', margin: '4px 0' }}>
             {stats.total}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-            Duties across all categories
+            {isCurrentMonth ? 'Duties completed up to date (no future estimation)' : 'Duties across all categories'}
           </div>
         </div>
       </div>

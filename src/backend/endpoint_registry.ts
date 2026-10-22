@@ -1200,6 +1200,14 @@ function dataFlowTraceMiddleware(req, res, next) {
   next();
 }
 
+export {
+  ALL_LINKED_ROSTER_MODULES,
+  ENDPOINT_GROUPS,
+  FLAT_ENDPOINTS,
+  lookupEndpointFlow,
+  dataFlowTraceMiddleware
+};
+
 module.exports = {
   ALL_LINKED_ROSTER_MODULES,
   ENDPOINT_GROUPS,

@@ -15,27 +15,41 @@ const computePresetDates = (preset, y, m) => {
   const prev30thDay = Math.min(30, maxDaysPrev);
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+  const isCurrentMonth = (yr === currentYear && mo === currentMonth);
+
+  // Upto date cutoff: for current month, do not show estimation for the whole month
+  const effectiveMonthEnd = isCurrentMonth
+    ? `${yr}-${String(mo).padStart(2, '0')}-${String(Math.min(lastDay, currentDay)).padStart(2, '0')}`
+    : `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
   if (preset === 'wage_period') {
     // 11th of prev month to 10th of selected month (IR wage period)
+    const targetEnd = `${yr}-${String(mo).padStart(2, '0')}-10`;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-10`
+      end: isCurrentMonth && targetEnd > todayIso ? todayIso : targetEnd
     };
   } else if (preset === 'fortnight_1') {
+    const targetEnd = `${yr}-${String(mo).padStart(2, '0')}-15`;
     return {
       start: prevMonth30thIso,
-      end: `${yr}-${String(mo).padStart(2, '0')}-15`
+      end: isCurrentMonth && targetEnd > todayIso ? todayIso : targetEnd
     };
   } else if (preset === 'fortnight_2') {
     return {
       start: `${yr}-${String(mo).padStart(2, '0')}-16`,
-      end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      end: effectiveMonthEnd
     };
   }
-  // Default 'full_month' (starting from previous month 30th to last day of selected month)
+  // Default 'full_month' / up-to-date (starting from previous month 30th to up-to-date cutoff)
   return {
     start: prevMonth30thIso,
-    end: `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    end: effectiveMonthEnd
   };
 };
 

@@ -381,3 +381,11 @@ module.exports = {
   compareDutyAndResolve,
   getDutyRowsForTrain
 };
+
+export {
+  isRestString,
+  extractTrainNumbers,
+  compareDutyAndResolve,
+  getDutyRowsForTrain
+};
+

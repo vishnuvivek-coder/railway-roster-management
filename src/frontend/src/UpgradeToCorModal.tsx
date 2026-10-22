@@ -415,8 +415,8 @@ export default function UpgradeToCorModal({
                     required
                     style={{ fontWeight: 700 }}
                   >
-                    {corLinksData.map(l => (
-                      <option key={l.link_number} value={l.link_number}>
+                    {corLinksData.map((l, idx) => (
+                      <option key={`cor-link-${l.id || l.link_number || idx}`} value={l.link_number}>
                         Link {l.link_number}: {l.train_numbers} {l.is_vacant ? '(VACANT)' : `(Occ: ${l.occupant?.name || 'Filled'})`}
                       </option>
                     ))}

@@ -11781,8 +11781,21 @@ app.get('/api/documents/ta/:staffId', authenticateToken, async (req, res) => {
     const staffId = parseInt(req.params.staffId, 10);
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
     const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
-    const startDate = req.query.start_date || req.query.startDate || null;
-    const endDate = req.query.end_date || req.query.endDate || null;
+    let startDate = req.query.start_date || req.query.startDate || null;
+    let endDate = req.query.end_date || req.query.endDate || null;
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    const isCurrentMonth = (year === currentYear && month === currentMonth);
+
+    if (isCurrentMonth) {
+      if (!endDate || endDate > todayIso) {
+        endDate = todayIso;
+      }
+    }
 
     const journal = await generateStaffTaJournal({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(journal);
@@ -12082,13 +12095,36 @@ app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
     const month = parseInt(req.query.month, 10) || (new Date().getMonth() + 1);
-    const startDate = req.query.start_date || req.query.startDate || null;
-    const endDate = req.query.end_date || req.query.endDate || null;
+    let startDate = req.query.start_date || req.query.startDate || null;
+    let endDate = req.query.end_date || req.query.endDate || null;
     const categoryId = req.query.category_id && req.query.category_id !== 'ALL' ? parseInt(req.query.category_id, 10) : null;
     const status = req.query.status && req.query.status !== 'ALL' ? req.query.status.toUpperCase() : null;
     const search = req.query.search ? req.query.search.trim().toLowerCase() : '';
 
     const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+
+    const isCurrentMonth = (year === currentYear && month === currentMonth);
+    const isFutureMonth = (year > currentYear || (year === currentYear && month > currentMonth));
+
+    // For future months, never return estimated claims
+    if (isFutureMonth && (!startDate || startDate > todayIso)) {
+      return res.json({
+        success: true,
+        claims: [],
+        stats: { total: 0, pending: 0, approved: 0, rejected: 0, total_pending_amount: 0, total_approved_amount: 0 }
+      });
+    }
+
+    // Clamp endDate to todayIso for current month so future estimates are never shown
+    if (isCurrentMonth && endDate && endDate > todayIso) {
+      endDate = todayIso;
+    }
 
     // Auto-generate pending claims if none exist for this month or range
     if (startDate && endDate) {
@@ -12111,6 +12147,14 @@ app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
       }
     }
 
+    const hasDateRange = Boolean(startDate && endDate);
+    let whereCondition = hasDateRange
+      ? 'a.duty_date >= ? AND a.duty_date <= ?'
+      : (isCurrentMonth ? 'a.month_year = ? AND a.duty_date <= ?' : 'a.month_year = ?');
+    let baseParams = hasDateRange
+      ? [startDate, endDate]
+      : (isCurrentMonth ? [monthYearStr, todayIso] : [monthYearStr]);
+
     // Fetch summary statistics
     let statsSql = `
       SELECT 
@@ -12122,9 +12166,9 @@ app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
         SUM(CASE WHEN a.status = 'APPROVED' THEN a.claim_amount ELSE 0 END) as total_approved_amount
       FROM ta_approvals a
       JOIN staff s ON a.staff_id = s.id
-      WHERE ${(startDate && endDate) ? 'a.duty_date >= ? AND a.duty_date <= ?' : 'a.month_year = ?'}
+      WHERE ${whereCondition}
     `;
-    const statsParams = (startDate && endDate) ? [startDate, endDate] : [monthYearStr];
+    const statsParams = [...baseParams];
     if (categoryId) {
       statsSql += ' AND s.category_id = ?';
       statsParams.push(categoryId);
@@ -12143,9 +12187,9 @@ app.get('/api/ta-approvals', authenticateToken, async (req, res) => {
       FROM ta_approvals a
       JOIN staff s ON a.staff_id = s.id
       JOIN categories c ON s.category_id = c.id
-      WHERE ${(startDate && endDate) ? 'a.duty_date >= ? AND a.duty_date <= ?' : 'a.month_year = ?'}
+      WHERE ${whereCondition}
     `;
-    const listParams = (startDate && endDate) ? [startDate, endDate] : [monthYearStr];
+    const listParams = [...baseParams];
 
     if (categoryId) {
       listSql += ' AND s.category_id = ?';
@@ -12360,12 +12404,23 @@ app.post('/api/ta-approvals/accept-all', requireAdmin, async (req, res) => {
     const m = parseInt(month, 10) || (new Date().getMonth() + 1);
     const monthYearStr = `${y}-${String(m).padStart(2, '0')}`;
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    const isCurrentMonth = (y === currentYear && m === currentMonth);
+
     let sql = `
       SELECT a.id, a.staff_id, a.date_str, s.name as staff_name FROM ta_approvals a
       JOIN staff s ON a.staff_id = s.id
       WHERE a.month_year = ? AND a.status = 'PENDING'
     `;
     const params: any[] = [monthYearStr];
+    if (isCurrentMonth) {
+      sql += ' AND a.duty_date <= ?';
+      params.push(todayIso);
+    }
     if (category_id && category_id !== 'ALL') {
       sql += ' AND s.category_id = ?';
       params.push(parseInt(category_id, 10));
@@ -12583,8 +12638,18 @@ app.get('/api/documents/nda/:staffId', authenticateToken, async (req, res) => {
     if (!year) year = new Date().getFullYear();
     if (!month) month = new Date().getMonth() + 1;
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    const isCurrentMonth = (year === currentYear && month === currentMonth);
+
     const startDate = req.query.start_date || null;
-    const endDate = req.query.end_date || null;
+    let endDate = req.query.end_date || null;
+    if (isCurrentMonth && (!endDate || endDate > todayIso)) {
+      endDate = todayIso;
+    }
 
     const journal = await generateStaffNdaJournal({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(journal);
@@ -12847,8 +12912,18 @@ app.get('/api/documents/diary/:staffId', authenticateToken, async (req, res) => 
     if (!year) year = new Date().getFullYear();
     if (!month) month = new Date().getMonth() + 1;
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    const isCurrentMonth = (year === currentYear && month === currentMonth);
+
     const startDate = req.query.start_date || null;
-    const endDate = req.query.end_date || null;
+    let endDate = req.query.end_date || null;
+    if (isCurrentMonth && (!endDate || endDate > todayIso)) {
+      endDate = todayIso;
+    }
 
     const diary = await generateStaffDiary({ get, all, run }, staffId, year, month, startDate, endDate);
     res.json(diary);

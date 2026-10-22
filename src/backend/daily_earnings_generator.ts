@@ -302,16 +302,67 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
     };
   }
 
-  const y = parseInt(year, 10) || new Date().getFullYear();
-  const m = parseInt(month, 10) || (new Date().getMonth() + 1);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
+
+  const y = parseInt(year, 10) || currentYear;
+  const m = parseInt(month, 10) || currentMonth;
   const daysInMonth = new Date(y, m, 0).getDate();
   const daysOfWeek = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
   const monthStr = String(m).padStart(2, '0');
   const monthName = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' });
 
+  const isCurrentMonth = (y === currentYear && m === currentMonth);
+  const isFutureMonth = (y > currentYear || (y === currentYear && m > currentMonth));
+
+  // Determine up-to-date cutoff: do not show estimation for the whole month
+  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
+
+  if (isFutureMonth) {
+    return {
+      employee: {
+        id: staff.id,
+        name: staff.name,
+        designation: staff.designation || 'TTI',
+        category_name: category.name,
+        category_code: category.code,
+        category_id: staff.category_id
+      },
+      year: y,
+      month: m,
+      month_name: monthName,
+      days: [],
+      totals: {
+        twt_nc: 0,
+        twt_fare: 0,
+        twt_penalty: 0,
+        ir_nc: 0,
+        ir_fare: 0,
+        ir_penalty: 0,
+        ubl_nc: 0,
+        ubl_amt: 0,
+        nc_eff_nc: 0,
+        nc_eff_amt: 0,
+        gst: 0,
+        z652_nc: 0,
+        z652_amt: 0,
+        oc_nc: 0,
+        oc_amt: 0,
+        nc_gtot_nc: 0,
+        nc_gtot_amt: 0,
+        total_days: 0,
+        duty_days_count: 0,
+        rest_days_count: 0,
+        active_earnings_days: 0
+      }
+    };
+  }
+
   // Fetch all saved earnings entries for this staff in this month
   const startDateStr = `${y}-${monthStr}-01`;
-  const endDateStr = `${y}-${monthStr}-${String(daysInMonth).padStart(2, '0')}`;
+  const endDateStr = `${y}-${monthStr}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
 
   const savedEntries = await all(
     `SELECT * FROM daily_earnings_entries 
@@ -328,7 +379,7 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
   }
 
   const days = [];
-  for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+  for (let dayNum = 1; dayNum <= maxDay; dayNum++) {
     const dayStr = String(dayNum).padStart(2, '0');
     const dateIso = `${y}-${monthStr}-${dayStr}`;
     const dateFormatted = `${dayStr}-${monthStr}-${y}`;
@@ -488,7 +539,7 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
     oc_amt: days.reduce((s, r) => s + r.oc_amt, 0),
     nc_gtot_nc: days.reduce((s, r) => s + r.nc_gtot_nc, 0),
     nc_gtot_amt: days.reduce((s, r) => s + r.nc_gtot_amt, 0),
-    total_days: daysInMonth,
+    total_days: maxDay,
     duty_days_count: days.filter(d => !d.is_rest).length,
     rest_days_count: days.filter(d => d.is_rest).length,
     active_earnings_days: days.filter(d => d.has_earnings).length
@@ -571,3 +622,10 @@ module.exports = {
   generateStaffMonthlyEarnings,
   generateRangeDailyEarnings
 };
+
+export {
+  generateDailyEarnings,
+  generateStaffMonthlyEarnings,
+  generateRangeDailyEarnings
+};
+
