@@ -1629,7 +1629,7 @@ export default function DailyEarningsDocument({
                 {currentEmpName}
               </span>
               <span style={{ fontSize: '11px', color: '#555', marginLeft: '12px', fontWeight: 600 }}>
-                DESIG: {currentEmpDesig} | HQ: {monthlyData?.employee?.hq_station || 'GNT'} | BILL UNIT: {monthlyData?.employee?.bill_unit || '0910629'}
+                DESIG: {currentEmpDesig} | HQ: {monthlyData?.employee?.hq_station || 'GNT'} | BILL UNIT: {(monthlyData?.employee?.bill_unit && monthlyData?.employee?.bill_unit !== '0910629') ? monthlyData?.employee?.bill_unit : ''}
               </span>
             </div>
             <div>

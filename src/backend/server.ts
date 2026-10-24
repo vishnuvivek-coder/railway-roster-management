@@ -1635,7 +1635,7 @@ app.post('/api/auth/check-pf', async (req, res) => {
 
         const insSt = await run(
           `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
-           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
         );
         staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
@@ -1713,7 +1713,7 @@ app.post('/api/auth/set-pin', async (req, res) => {
         else if (sen.designation === 'Sr.CCTC' || sen.designation === 'CCTC') catId = 4;
         const insSt = await run(
           `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
-           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
         );
         staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
@@ -1865,7 +1865,7 @@ app.post('/api/auth/login', async (req, res) => {
 
         const insResult = await run(
           `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
-           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [senMember.name, senMember.designation || 'TTI', defaultCatId, defaultCatId, senMember.pf_number, senMember.sl_no]
         );
         staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insResult.lastID]);
@@ -12170,7 +12170,12 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
 
     // Update employee profile metadata if provided
     if (employee_meta) {
-      const { name, designation, pay, pf_no, bill_unit, doa, hq } = employee_meta;
+      const { name, designation, pay, pf_no, bill_unit, bill_unit_no, doa, hq } = employee_meta;
+      const cleanPf = (pf_no && pf_no !== '07323475') ? String(pf_no).trim() : null;
+      const rawBillUnit = bill_unit || bill_unit_no;
+      const cleanBillUnit = (rawBillUnit && rawBillUnit !== '0910629') ? String(rawBillUnit).trim() : null;
+      const cleanDoa = (doa && doa !== '05/08/2000') ? String(doa).trim() : null;
+
       if (name) {
         await run('UPDATE staff SET name = ? WHERE id = ?', [name, staffId]);
       }
@@ -12178,8 +12183,8 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
         await run('UPDATE staff SET designation = ? WHERE id = ?', [designation, staffId]);
       }
       await run(
-        `UPDATE staff SET pay_amount = ?, pf_no = ?, bill_unit = ?, doa = ?, hq_station = ? WHERE id = ?`,
-        [pay || 68000, pf_no || '07323475', bill_unit || '0910629', doa || '05/08/2000', hq || 'GNT', staffId]
+        `UPDATE staff SET pay_amount = ?, pf_no = COALESCE(?, pf_no), bill_unit = ?, doa = ?, hq_station = ? WHERE id = ?`,
+        [pay || 68000, cleanPf, cleanBillUnit, cleanDoa, hq || 'GNT', staffId]
       );
     }
 

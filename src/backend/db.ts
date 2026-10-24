@@ -739,10 +739,10 @@ async function initDb() {
   `);
 
   const staffAddCols = [
-    `ALTER TABLE staff ADD COLUMN pf_no TEXT DEFAULT '07323475'`,
-    `ALTER TABLE staff ADD COLUMN bill_unit TEXT DEFAULT '0910629'`,
+    `ALTER TABLE staff ADD COLUMN pf_no TEXT DEFAULT NULL`,
+    `ALTER TABLE staff ADD COLUMN bill_unit TEXT DEFAULT NULL`,
     `ALTER TABLE staff ADD COLUMN pay_amount INTEGER DEFAULT 68000`,
-    `ALTER TABLE staff ADD COLUMN doa TEXT DEFAULT '05/08/2000'`,
+    `ALTER TABLE staff ADD COLUMN doa TEXT DEFAULT NULL`,
     `ALTER TABLE staff ADD COLUMN hq_station TEXT DEFAULT 'GNT'`,
     `ALTER TABLE staff ADD COLUMN t_code_no TEXT DEFAULT '7133'`,
     `ALTER TABLE staff ADD COLUMN hrms_id TEXT DEFAULT ''`,
@@ -1709,7 +1709,7 @@ async function initDb() {
         if (!existing) {
           await run(
             `INSERT INTO staff (name, designation, category_id, row_position, pf_no, seniority_no, active, join_date, bill_unit, pay_amount, doa, hq_station, rest_day, t_code_no, hrms_id)
-             VALUES (?, ?, NULL, 0, ?, ?, 1, '2026-07-01', '0910629', 68000, '05/08/2000', 'GNT', 'SUN', '7133', '')`,
+             VALUES (?, ?, NULL, 0, ?, ?, 1, '2026-07-01', NULL, 68000, NULL, 'GNT', 'SUN', '7133', '')`,
             [m.name, m.desg, m.pf, m.seniority_no]
           );
         }

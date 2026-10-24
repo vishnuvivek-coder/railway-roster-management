@@ -2689,9 +2689,9 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       division: 'GNT',
       hq: staff.hq_station || 'GNT',
       pay: staff.pay_amount || 68000,
-      pf_no: staff.pf_no || '07323475',
-      bill_unit: staff.bill_unit || '0910629',
-      doa: staff.doa || '05/08/2000',
+      pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : '',
+      bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
+      doa: (staff.doa && staff.doa !== '05/08/2000') ? String(staff.doa) : '',
       category_id: staff.category_id,
       category_name: category.name,
       category_code: category.code

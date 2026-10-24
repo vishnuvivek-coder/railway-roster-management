@@ -246,8 +246,8 @@ export default function NdaDocument({
   const [editableMeta, setEditableMeta] = useState({
     name: 'K V RAMANA RAO',
     designation: 'CTI',
-    bill_unit: '0910629',
-    pf_no: '07323475',
+    bill_unit: '',
+    pf_no: '',
     full_name_sign: 'K V RAMANA RAO',
     designation_sign: '(CTI/SL/GNT)'
   });
@@ -317,8 +317,8 @@ export default function NdaDocument({
             setEditableMeta({
               name: empName,
               designation: empDesig,
-              bill_unit: data.employee.bill_unit || '0910629',
-              pf_no: data.employee.pf_no || '07323475',
+              bill_unit: (data.employee.bill_unit && data.employee.bill_unit !== '0910629') ? data.employee.bill_unit : '',
+              pf_no: (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : '',
               full_name_sign: empName,
               designation_sign: `(${empDesig}/SL/GNT)`
             });

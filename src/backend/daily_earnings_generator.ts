@@ -554,8 +554,8 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
       category_name: category.name,
       category_code: category.code,
       hq_station: staff.hq_station || 'GNT',
-      bill_unit: staff.bill_unit || '0910629',
-      pf_no: staff.pf_no || '07323475'
+      bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
+      pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : ''
     },
     year: y,
     month: m,

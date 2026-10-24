@@ -44,7 +44,12 @@ export async function saveTaDocument(staffId: any, data: any, currentUser: any =
 
     // Update employee profile metadata if provided
     if (employee_meta) {
-      const { name, designation, pay, pf_no, bill_unit, doa, hq } = employee_meta;
+      const { name, designation, pay, pf_no, bill_unit, bill_unit_no, doa, hq } = employee_meta;
+      const cleanPf = (pf_no && pf_no !== '07323475') ? String(pf_no).trim() : null;
+      const rawBillUnit = bill_unit || bill_unit_no;
+      const cleanBillUnit = (rawBillUnit && rawBillUnit !== '0910629') ? String(rawBillUnit).trim() : null;
+      const cleanDoa = (doa && doa !== '05/08/2000') ? String(doa).trim() : null;
+
       if (name) {
         await run('UPDATE staff SET name = ? WHERE id = ?', [name, staffId]);
       }
@@ -52,8 +57,8 @@ export async function saveTaDocument(staffId: any, data: any, currentUser: any =
         await run('UPDATE staff SET designation = ? WHERE id = ?', [designation, staffId]);
       }
       await run(
-        `UPDATE staff SET pay_amount = ?, pf_no = ?, bill_unit = ?, doa = ?, hq_station = ? WHERE id = ?`,
-        [pay || 68000, pf_no || '07323475', bill_unit || '0910629', doa || '05/08/2000', hq || 'GNT', staffId]
+        `UPDATE staff SET pay_amount = ?, pf_no = COALESCE(?, pf_no), bill_unit = ?, doa = ?, hq_station = ? WHERE id = ?`,
+        [pay || 68000, cleanPf, cleanBillUnit, cleanDoa, hq || 'GNT', staffId]
       );
     }
 

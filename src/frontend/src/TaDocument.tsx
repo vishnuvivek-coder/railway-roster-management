@@ -187,9 +187,9 @@ export default function TaDocument({
     month_name: '30/09/2026 TO 31/10/2026',
     year: '2026',
     pay: '68000',
-    pf_no: '07323475',
-    bill_unit_no: '0910629',
-    doa: '05/08/2000',
+    pf_no: '',
+    bill_unit_no: '',
+    doa: '',
     full_name_sign: 'K V RAMANA RAO',
     designation_sign: '(CTI/SL/GNT)',
     vertical_object_text: (String(selectedCatId) === '1' || !selectedCatId) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'
@@ -314,9 +314,11 @@ export default function TaDocument({
               month_name: data.period_label || data.month_name || 'SEPTEMBER',
               year: String(data.year || '2026'),
               pay: String(data.employee.pay || '68000'),
-              pf_no: data.employee.pf_no || '07323475',
-              bill_unit_no: data.employee.bill_unit || data.employee.bill_no || '0910629',
-              doa: data.employee.doa || '05/08/2000',
+              pf_no: (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : '',
+              bill_unit_no: (data.employee.bill_unit && data.employee.bill_unit !== '0910629')
+                ? data.employee.bill_unit
+                : (data.employee.bill_no && data.employee.bill_no !== '0910629' ? data.employee.bill_no : ''),
+              doa: (data.employee.doa && data.employee.doa !== '05/08/2000') ? data.employee.doa : '',
               full_name_sign: empName === 'K V R RAO' ? 'K V RAMANA RAO' : empName,
               designation_sign: `(${empDesig}/SL/GNT)`,
               vertical_object_text: (data.employee.category_id === 1 || data.employee.category_code === 'COR' || (data.employee.category_name && data.employee.category_name.toUpperCase().includes('COR')) || String(selectedCatId) === '1')
@@ -841,6 +843,7 @@ export default function TaDocument({
         })),
         employee_meta: {
           ...editableMeta,
+          bill_unit: editableMeta.bill_unit_no,
           vertical_object_text: effectiveObjText
         }
       };
@@ -1632,15 +1635,15 @@ export default function TaDocument({
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center' }}>
                   <div>
                     PF No. &nbsp;
-                    <input type="text" value={editableMeta.pf_no} onChange={(e) => handleMetaChange('pf_no', e.target.value)} style={{ ...headerInputStyle, width: '80px' }} />
+                    <input type="text" value={editableMeta.pf_no} onChange={(e) => handleMetaChange('pf_no', e.target.value)} style={{ ...headerInputStyle, width: '105px' }} />
                   </div>
                   <div>
                     Bill Unit No. &nbsp;
-                    <input type="text" value={editableMeta.bill_unit_no} onChange={(e) => handleMetaChange('bill_unit_no', e.target.value)} style={{ ...headerInputStyle, width: '70px' }} />
+                    <input type="text" value={editableMeta.bill_unit_no} onChange={(e) => handleMetaChange('bill_unit_no', e.target.value)} style={{ ...headerInputStyle, width: '85px' }} />
                   </div>
                   <div>
                     DOA : &nbsp;
-                    <input type="text" value={editableMeta.doa} onChange={(e) => handleMetaChange('doa', e.target.value)} style={{ ...headerInputStyle, width: '85px' }} />
+                    <input type="text" value={editableMeta.doa} onChange={(e) => handleMetaChange('doa', e.target.value)} style={{ ...headerInputStyle, width: '90px' }} />
                   </div>
                 </div>
               </div>

@@ -73,8 +73,8 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
         division: 'GNT',
         hq: staff.hq_station || 'GNT',
         pay: staff.pay_amount || 68000,
-        pf_no: staff.pf_no || '07323475',
-        bill_unit: staff.bill_unit || '0910629',
+        pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : '',
+        bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
         t_code_no: staff.t_code_no || '2410',
         category_name: category.name,
         category_code: category.code
@@ -522,8 +522,8 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       division: 'GNT',
       hq: staff.hq_station || 'GNT',
       pay: staff.pay_amount || 68000,
-      pf_no: staff.pf_no || '07323475',
-      bill_unit: staff.bill_unit || '0910629',
+      pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : '',
+      bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
       category_name: category.name,
       category_code: category.code
     },
