@@ -121,6 +121,14 @@ app.get('/api/system/data-flow-map', (req, res) => {
 // Initialize Database on startup
 initDb().then(async () => {
   console.log('Database loaded and ready.');
+  // Ensure pin_hash column exists across all database engines (SQLite & MySQL)
+  try {
+    await run("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+  } catch (e) {
+    try {
+      await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+    } catch (err) {}
+  }
   // Clear only temporary NTES network run cache on startup, NEVER delete user data!
   try {
     await run("DELETE FROM actual_train_runs WHERE source = 'NTES'");
@@ -1638,10 +1646,27 @@ app.post('/api/auth/check-pf', async (req, res) => {
       return res.status(404).json({ error: 'PF Number not found in the division seniority register.' });
     }
 
-    const user = await get(
-      'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
-      [cleanPf, staffMember.id]
-    );
+    let user = null;
+    try {
+      user = await get(
+        'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
+        [cleanPf, staffMember.id]
+      );
+    } catch (colErr) {
+      // Dynamic migration if pin_hash column is not yet present on SQLite / cloud deployment
+      try {
+        await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+        user = await get(
+          'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
+          [cleanPf, staffMember.id]
+        );
+      } catch (retryErr) {
+        user = await get(
+          'SELECT id, username, name, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
+          [cleanPf, staffMember.id]
+        );
+      }
+    }
 
     res.json({
       exists: true,
@@ -1722,7 +1747,16 @@ app.post('/api/auth/set-pin', async (req, res) => {
         staff_id: staffMember.id
       };
     } else {
-      await run('UPDATE users SET pin_hash = ?, staff_id = ? WHERE id = ?', [pinHash, staffMember.id, user.id]);
+      try {
+        await run('UPDATE users SET pin_hash = ?, staff_id = ? WHERE id = ?', [pinHash, staffMember.id, user.id]);
+      } catch (colErr) {
+        try {
+          await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+          await run('UPDATE users SET pin_hash = ?, staff_id = ? WHERE id = ?', [pinHash, staffMember.id, user.id]);
+        } catch (e) {
+          throw colErr;
+        }
+      }
     }
 
     const token = jwt.sign(
@@ -1785,10 +1819,26 @@ app.post('/api/auth/login', async (req, res) => {
     : rawUsername;
 
   try {
-    let user = await get(
-      'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
-      [cleanUsername, cleanUsername]
-    );
+    let user = null;
+    try {
+      user = await get(
+        'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
+        [cleanUsername, cleanUsername]
+      );
+    } catch (colErr) {
+      try {
+        await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+        user = await get(
+          'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
+          [cleanUsername, cleanUsername]
+        );
+      } catch (e) {
+        user = await get(
+          'SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
+          [cleanUsername, cleanUsername]
+        );
+      }
+    }
 
     // If not found in users table, check if username matches staff.pf_no
     let staffMember = null;

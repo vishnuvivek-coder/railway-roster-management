@@ -206,11 +206,16 @@ async function initDb() {
         await mysqlPool.query(schemaSql);
       }
 
-      // Step 3b: Ensure users.role allows 'Employee'
+      // Step 3b: Ensure users.role allows 'Employee' and pin_hash exists
       try {
         await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'");
       } catch (alterErr) {
         // Table may have already been altered or SQLite in-memory fallback
+      }
+      try {
+        await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+      } catch (pinErr) {
+        // Column may already exist
       }
 
       // Step 4: Ensure Admin 12345 / CLICKME exists
@@ -259,6 +264,7 @@ async function initDb() {
       name TEXT NOT NULL,
       email TEXT UNIQUE,
       password_hash TEXT NOT NULL,
+      pin_hash TEXT,
       role TEXT NOT NULL DEFAULT 'Staff', -- 'Admin', 'Staff', 'Viewer'
       status TEXT NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'APPROVED', 'REJECTED'
       staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
@@ -267,6 +273,13 @@ async function initDb() {
       approved_by TEXT
     )
   `);
+
+  // Ensure pin_hash column exists on existing SQLite databases
+  try {
+    await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+  } catch (e) {
+    // Column already exists
+  }
 
   // Seed Registered Admin Account (ID: 12345 / Password: CLICKME)
   const clickmeHash = await bcrypt.hash('CLICKME', 10);
