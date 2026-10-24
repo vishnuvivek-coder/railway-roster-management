@@ -1611,13 +1611,16 @@ app.post('/api/auth/register', async (req, res) => {
 // ============================================================================
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required.' });
+  if (!username) {
+    return res.status(400).json({ error: 'Railway PF Number or Username is required.' });
   }
 
   const rawUsername = String(username).trim();
   const cleanUsername = rawUsername.toLowerCase();
-  const rawPassword = String(password).trim();
+  // If password is not provided, allow staff to authenticate directly with their PF Number
+  const rawPassword = (password !== undefined && password !== null && String(password).trim() !== '')
+    ? String(password).trim()
+    : rawUsername;
 
   try {
     let user = await get(
