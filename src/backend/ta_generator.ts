@@ -1983,7 +1983,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             linkNum = lrRes.linkNum || null;
             duties = lrRes.duties || [];
             duties.forEach(dRow => {
-              dRow.remarks = lrRes.remarks || dRow.remarks;
+              dRow.remarks = ''; // For LR employees, TA remarks should be empty
             });
           }
         } else {
@@ -2183,7 +2183,8 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           const claimAmt = taPct !== null && taPct !== undefined ? Math.round(taPct * daRate) : 0;
           const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
           const claimStatus = isEffectiveLeave ? 'REJECTED' : 'APPROVED';
-          const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (duty.remarks || '');
+          const isLrCat = category.id === 4 || (category.code && category.code.toUpperCase().includes('LR'));
+          const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (isLrCat ? '' : (duty.remarks || ''));
 
           await run(
             `INSERT OR REPLACE INTO ta_approvals (
@@ -2660,11 +2661,19 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   // Recalculate TA claims across the finalized journal rows to ensure 24-hr cycle rules
   cleanedRows = recalculateJournalRowsTa(cleanedRows);
 
+  const isLrStaffMember = Boolean(
+    staff.category_id === 4 ||
+    category.id === 4 ||
+    (category.code && category.code.toUpperCase().includes('LR')) ||
+    (category.name && (category.name.toUpperCase().includes('LEAVE RESERVE') || category.name.toUpperCase().includes('LR')))
+  );
+
   // Re-index row order and is_same_date_as_prev
   finalRows = cleanedRows.map((r, idx) => ({
     ...r,
     row_order: idx + 1,
-    is_same_date_as_prev: idx > 0 && !r.is_leave && !cleanedRows[idx - 1].is_leave && r.date_str === cleanedRows[idx - 1].date_str
+    is_same_date_as_prev: idx > 0 && !r.is_leave && !cleanedRows[idx - 1].is_leave && r.date_str === cleanedRows[idx - 1].date_str,
+    remarks: isLrStaffMember ? (r.is_leave ? (r.remarks || r.nature_of_leave || '') : '') : (r.remarks || '')
   }));
 
   const totalDays = finalRows.reduce((sum, r) => sum + (parseFloat(r.days_claiming_ta || r.ta_b1) || 0), 0);

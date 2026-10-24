@@ -203,6 +203,13 @@ export default function TaDocument({
     (selectedStaffObj?.category_id === 1) ||
     (String(selectedCatId) === '1')
   );
+  const isLrStaff = Boolean(
+    (journalData?.employee?.category_id === 4) ||
+    (journalData?.employee?.category_code === 'LR_STAFF') ||
+    (journalData?.employee?.category_name && (journalData.employee.category_name.toUpperCase().includes('LR') || journalData.employee.category_name.toUpperCase().includes('LEAVE RESERVE'))) ||
+    (selectedStaffObj?.category_id === 4) ||
+    (String(selectedCatId) === '4')
+  );
 
   // Auto-initialize selectedCatId if categories are loaded
   useEffect(() => {
@@ -253,6 +260,14 @@ export default function TaDocument({
       .then(res => res.json())
       .then(data => {
         if (data && !data.error) {
+          const isLrEmployee = Boolean(
+            data.employee?.category_id === 4 ||
+            data.employee?.category_code === 'LR_STAFF' ||
+            (data.employee?.category_name && (data.employee.category_name.toUpperCase().includes('LR') || data.employee.category_name.toUpperCase().includes('LEAVE RESERVE'))) ||
+            selectedStaffObj?.category_id === 4 ||
+            String(selectedCatId) === '4'
+          );
+
           // Normalize row structure with A1, A, B1, Ord
           const normalizedRows = (data.rows || []).map(r => {
             let b1Val = '';
@@ -261,6 +276,7 @@ export default function TaDocument({
             } else if (r.days_claiming_ta !== null && r.days_claiming_ta !== undefined) {
               b1Val = String(r.days_claiming_ta);
             }
+            const isLeaveRow = !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave')));
             return {
               ...r,
               ta_a1: r.ta_a1 || '',
@@ -268,9 +284,9 @@ export default function TaDocument({
               ta_b1: b1Val,
               ta_ord: r.ta_ord || '',
               object_of_journey: r.object_of_journey || '',
-              remarks: r.remarks || r.nature_of_leave || '',
+              remarks: (isLrEmployee && !isLeaveRow && r.train_no !== '---') ? '' : (r.remarks || r.nature_of_leave || ''),
               nature_of_leave: r.nature_of_leave || '',
-              is_leave: !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave'))),
+              is_leave: isLeaveRow,
               is_manual_ta: !!(r.is_manual_ta || r._isSaved)
             };
           });
