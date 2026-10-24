@@ -1637,6 +1637,26 @@ app.post('/api/auth/login', async (req, res) => {
       );
     }
 
+    // Fallback: If not yet in staff table, check master division seniority list
+    if (!staffMember) {
+      const senMember = await get(
+        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
+        [cleanUsername]
+      );
+      if (senMember) {
+        let defaultCatId = 2; // TTI / Sleeper Staff
+        if (senMember.designation === 'CTI') defaultCatId = 1;
+        else if (senMember.designation === 'Sr.CCTC' || senMember.designation === 'CCTC') defaultCatId = 4;
+
+        const insResult = await run(
+          `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+          [senMember.name, senMember.designation || 'TTI', defaultCatId, defaultCatId, senMember.pf_number, senMember.sl_no]
+        );
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insResult.lastID]);
+      }
+    }
+
     // Auto-provision on the fly if valid staff member with matching PF
     if (!user && staffMember) {
       const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
