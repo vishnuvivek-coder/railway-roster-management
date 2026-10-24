@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(191) UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
+  pin_hash VARCHAR(255) DEFAULT NULL,
   role ENUM('Admin', 'Staff', 'Viewer', 'Employee') NOT NULL DEFAULT 'Employee',
   status ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'APPROVED',
   staff_id INT DEFAULT NULL,

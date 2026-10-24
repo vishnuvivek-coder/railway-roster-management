@@ -1599,6 +1599,168 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Verify PF Number & Check PIN Status for Staff Login
+// ============================================================================
+app.post('/api/auth/check-pf', async (req, res) => {
+  const { pf_no } = req.body;
+  if (!pf_no || !String(pf_no).trim()) {
+    return res.status(400).json({ error: 'Railway PF Number is required.' });
+  }
+
+  const cleanPf = String(pf_no).trim().toLowerCase();
+
+  try {
+    let staffMember = await get(
+      'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
+      [cleanPf]
+    );
+
+    if (!staffMember) {
+      const sen = await get(
+        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
+        [cleanPf]
+      );
+      if (sen) {
+        let catId = 2;
+        if (sen.designation === 'CTI') catId = 1;
+        else if (sen.designation === 'Sr.CCTC' || sen.designation === 'CCTC') catId = 4;
+
+        const insSt = await run(
+          `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+          [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
+        );
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
+      }
+    }
+
+    if (!staffMember) {
+      return res.status(404).json({ error: 'PF Number not found in the division seniority register.' });
+    }
+
+    const user = await get(
+      'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
+      [cleanPf, staffMember.id]
+    );
+
+    res.json({
+      exists: true,
+      name: staffMember.name,
+      designation: staffMember.designation,
+      pf_no: staffMember.pf_no,
+      category_id: staffMember.category_id,
+      has_pin: Boolean(user && user.pin_hash)
+    });
+  } catch (err) {
+    console.error('Check PF error:', err);
+    res.status(500).json({ error: 'Database query failed: ' + err.message });
+  }
+});
+
+// Configure / Set 4-Digit Personal PIN for Staff
+// ============================================================================
+app.post('/api/auth/set-pin', async (req, res) => {
+  const { pf_no, pin } = req.body;
+  if (!pf_no || !pin) {
+    return res.status(400).json({ error: 'PF Number and 4-digit PIN are required.' });
+  }
+
+  const cleanPin = String(pin).trim();
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return res.status(400).json({ error: 'PIN must be exactly 4 numeric digits (0000-9999).' });
+  }
+
+  const cleanPf = String(pf_no).trim().toLowerCase();
+
+  try {
+    let staffMember = await get(
+      'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
+      [cleanPf]
+    );
+    if (!staffMember) {
+      const sen = await get(
+        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
+        [cleanPf]
+      );
+      if (sen) {
+        let catId = 2;
+        if (sen.designation === 'CTI') catId = 1;
+        else if (sen.designation === 'Sr.CCTC' || sen.designation === 'CCTC') catId = 4;
+        const insSt = await run(
+          `INSERT INTO staff (name, designation, category_id, row_position, active, pf_no, seniority_no, bill_unit, pay_amount, hq_station)
+           VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, '0910629', 68000, 'GNT')`,
+          [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
+        );
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
+      }
+    }
+
+    if (!staffMember) {
+      return res.status(404).json({ error: 'Staff member not found in roster.' });
+    }
+
+    const pinHash = await bcrypt.hash(cleanPin, 10);
+    const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
+
+    let user = await get(
+      'SELECT id, username, name, email, role, status, staff_id FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
+      [cleanPf, staffMember.id]
+    );
+
+    if (!user) {
+      const insResult = await run(
+        `INSERT INTO users (username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by)
+         VALUES (?, ?, NULL, ?, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System 4-Digit PIN Setup')`,
+        [staffMember.pf_no.trim().toLowerCase(), staffMember.name, passwordHash, pinHash, staffMember.id]
+      );
+      user = {
+        id: insResult.lastID,
+        username: staffMember.pf_no.trim().toLowerCase(),
+        name: staffMember.name,
+        role: 'Employee',
+        status: 'APPROVED',
+        staff_id: staffMember.id
+      };
+    } else {
+      await run('UPDATE users SET pin_hash = ?, staff_id = ? WHERE id = ?', [pinHash, staffMember.id, user.id]);
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        staff_id: user.staff_id
+      },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    await logAudit(user.role, 'PIN_SETUP', `Staff ${staffMember.name} (${staffMember.pf_no}) configured 4-digit PIN`);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        staff_id: user.staff_id,
+        pf_no: staffMember.pf_no,
+        category_id: staffMember.category_id
+      },
+      message: '4-Digit PIN set successfully'
+    });
+  } catch (err) {
+    console.error('Set PIN error:', err);
+    res.status(500).json({ error: 'Failed to configure PIN: ' + err.message });
+  }
+});
+
 // Login User
 // ============================================================================
 // [ENDPOINT DATA-FLOW] POST /api/auth/login
@@ -1624,7 +1786,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     let user = await get(
-      'SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
+      'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
       [cleanUsername, cleanUsername]
     );
 
@@ -1684,22 +1846,38 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
     }
 
-    // Verify password:
-    // 1) bcrypt check against user.password_hash
-    // 2) If staff member exists, also allow their pf_no directly as default password
-    // 3) Also if username equals password (e.g. PF number entered as both)
-    let isMatch = await bcrypt.compare(rawPassword, user.password_hash);
-    if (!isMatch && staffMember && staffMember.pf_no) {
-      if (rawPassword.toLowerCase() === staffMember.pf_no.trim().toLowerCase()) {
+    // Verify PIN or password:
+    let isMatch = false;
+    const submittedPin = req.body.pin ? String(req.body.pin).trim() : null;
+
+    if (submittedPin) {
+      // User is authenticating with a 4-digit security PIN
+      if (user.pin_hash) {
+        isMatch = await bcrypt.compare(submittedPin, user.pin_hash);
+      }
+      if (!isMatch) {
+        return res.status(401).json({ error: 'Incorrect 4-digit PIN. Please try again.' });
+      }
+    } else {
+      // User is authenticating with password or direct credentials
+      if (/^\d{4}$/.test(rawPassword) && user.pin_hash) {
+        isMatch = await bcrypt.compare(rawPassword, user.pin_hash);
+      }
+      if (!isMatch && user.password_hash) {
+        isMatch = await bcrypt.compare(rawPassword, user.password_hash);
+      }
+      if (!isMatch && staffMember && staffMember.pf_no) {
+        if (rawPassword.toLowerCase() === staffMember.pf_no.trim().toLowerCase()) {
+          isMatch = true;
+        }
+      }
+      if (!isMatch && rawPassword.toLowerCase() === user.username.toLowerCase()) {
         isMatch = true;
       }
-    }
-    if (!isMatch && rawPassword.toLowerCase() === user.username.toLowerCase()) {
-      isMatch = true;
-    }
 
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
+      if (!isMatch) {
+        return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
+      }
     }
 
     // Status verification check
