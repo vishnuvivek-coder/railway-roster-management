@@ -1710,6 +1710,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     await logAudit(user.role, 'USER_LOGIN', `User ${user.username} (${user.name}) logged in as ${user.role}`);
 
+    const userCategoryId = staffMember?.category_id || null;
+
     res.json({
       success: true,
       token,
@@ -1721,7 +1723,8 @@ app.post('/api/auth/login', async (req, res) => {
         role: user.role,
         status: user.status,
         staff_id: user.staff_id,
-        pf_no: staffMember?.pf_no || user.username
+        pf_no: staffMember?.pf_no || user.username,
+        category_id: userCategoryId
       }
     });
   } catch (err) {
@@ -1759,12 +1762,27 @@ app.get('/api/auth/me', async (req, res) => {
     }
 
     let pf_no = user.username;
+    let category_id = null;
     if (user.staff_id) {
-      const st = await get('SELECT pf_no FROM staff WHERE id = ?', [user.staff_id]);
-      if (st && st.pf_no) pf_no = st.pf_no;
+      const st = await get('SELECT pf_no, category_id FROM staff WHERE id = ?', [user.staff_id]);
+      if (st) {
+        if (st.pf_no) pf_no = st.pf_no;
+        if (st.category_id) category_id = st.category_id;
+      }
+    }
+    if (!category_id && user.username) {
+      const st = await get('SELECT id, pf_no, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?', [user.username.trim().toLowerCase()]);
+      if (st) {
+        if (!user.staff_id) {
+          await run('UPDATE users SET staff_id = ? WHERE id = ?', [st.id, user.id]);
+          user.staff_id = st.id;
+        }
+        if (st.pf_no) pf_no = st.pf_no;
+        if (st.category_id) category_id = st.category_id;
+      }
     }
 
-    res.json({ user: { ...user, pf_no } });
+    res.json({ user: { ...user, pf_no, category_id } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired session token' });
   }

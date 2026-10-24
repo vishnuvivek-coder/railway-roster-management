@@ -1267,7 +1267,16 @@ export default function App() {
   }, [activeTab, docSubTab]);
   const [userRole, setUserRole] = useState(() => currentUser?.role || 'Admin');
   const [categories, setCategories] = useState([]);
-  const [selectedCatId, setSelectedCatId] = useState('');
+  const [selectedCatId, setSelectedCatId] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('railway_user');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u?.category_id) return String(u.category_id);
+      }
+    } catch (e) {}
+    return '';
+  });
   
   // Shared Document Selection State (Synchronized across TA, NDA, and DIARY)
   const [docStaffId, setDocStaffId] = useState(() => {
@@ -2001,7 +2010,11 @@ export default function App() {
       .then(data => {
         setCategories(data);
         if (data.length > 0) {
-          setSelectedCatId(data[0].id.toString());
+          if (currentUser?.category_id) {
+            setSelectedCatId(String(currentUser.category_id));
+          } else {
+            setSelectedCatId(prev => prev || data[0].id.toString());
+          }
         }
       });
 
@@ -2022,7 +2035,9 @@ export default function App() {
       if (docStaffId !== empIdStr) {
         setDocStaffId(empIdStr);
       }
-      if (allStaffList && allStaffList.length > 0) {
+      if (currentUser?.category_id && String(selectedCatId) !== String(currentUser.category_id)) {
+        setSelectedCatId(String(currentUser.category_id));
+      } else if (allStaffList && allStaffList.length > 0) {
         const myStaff = allStaffList.find(s => String(s.id) === empIdStr);
         if (myStaff && myStaff.category_id && String(selectedCatId) !== String(myStaff.category_id)) {
           setSelectedCatId(String(myStaff.category_id));
@@ -2113,9 +2128,10 @@ export default function App() {
   };
 
   const fetchRoster = (overrideStart, overrideEnd) => {
-    if (!selectedCatId) return;
+    const activeCat = (isEmployee && currentUser?.category_id) ? String(currentUser.category_id) : selectedCatId;
+    if (!activeCat) return;
     setLoadingRoster(true);
-    let url = `${API_BASE}/roster?category_id=${selectedCatId}`;
+    let url = `${API_BASE}/roster?category_id=${activeCat}`;
     
     if (activeTab === 'daily' && movementDateMode === 'range') {
       const s = overrideStart || movementStartDate;
@@ -4805,6 +4821,13 @@ export default function App() {
           setCurrentUser(user);
           setAuthToken(token);
           setUserRole(user.role);
+          if (user.category_id) {
+            setSelectedCatId(String(user.category_id));
+          }
+          if (user.staff_id) {
+            setSelectedStaffId(String(user.staff_id));
+            setDocStaffId(String(user.staff_id));
+          }
         }} 
       />
     );
@@ -5322,7 +5345,7 @@ export default function App() {
                       {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.name || currentUser?.name || 'My Movement'}
                     </div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)' }}>
-                      PF: {currentUser?.username || currentUser?.pf_no || '-'} • Designation: {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.designation || 'TTI'}
+                      PF: {currentUser?.username || currentUser?.pf_no || '-'} • Designation: {(allStaffList || []).find(s => String(s.id) === String(currentUser?.staff_id))?.designation || 'TTI'} • Category: {categories.find(c => String(c.id) === String(currentUser?.category_id || selectedCatId))?.name || '-'}
                     </div>
                   </div>
                 </div>
@@ -5898,6 +5921,14 @@ export default function App() {
                 const staffRow = rosterData.rows.find(r => String(r.staffId) === String(selectedStaffId)) || (isEmployee ? null : rosterData.rows[0]);
                 
                 if (!staffRow) {
+                  if (isEmployee) {
+                    return (
+                      <div className="spinner-container" style={{ padding: '40px', textAlign: 'center' }}>
+                        <div className="spinner" style={{ margin: '0 auto 16px auto' }}></div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Loading your schedule and roster movements...</div>
+                      </div>
+                    );
+                  }
                   return (
                     <div className="alert-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
                       <span>⚠️</span> No staff members found in this category.
@@ -15087,7 +15118,7 @@ export default function App() {
                 isEmployee={isEmployee}
                 lockedStaffId={currentUser?.staff_id}
                 categories={categories}
-                selectedCatId={selectedCatId}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
                 setSelectedCatId={setSelectedCatId}
                 selectedStaffId={docStaffId}
                 setSelectedStaffId={(id) => {
@@ -15113,7 +15144,7 @@ export default function App() {
                 isEmployee={isEmployee}
                 lockedStaffId={currentUser?.staff_id}
                 categories={categories}
-                selectedCatId={selectedCatId}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
                 setSelectedCatId={setSelectedCatId}
                 selectedStaffId={docStaffId}
                 setSelectedStaffId={(id) => {
@@ -15139,7 +15170,7 @@ export default function App() {
                 isEmployee={isEmployee}
                 lockedStaffId={currentUser?.staff_id}
                 categories={categories}
-                selectedCatId={selectedCatId}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
                 setSelectedCatId={setSelectedCatId}
                 selectedStaffId={docStaffId}
                 setSelectedStaffId={(id) => {
@@ -15165,7 +15196,7 @@ export default function App() {
                 isEmployee={isEmployee}
                 lockedStaffId={currentUser?.staff_id}
                 categories={categories}
-                selectedCatId={selectedCatId}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
                 setSelectedCatId={setSelectedCatId}
                 selectedStaffId={docStaffId}
                 setSelectedStaffId={(id) => {

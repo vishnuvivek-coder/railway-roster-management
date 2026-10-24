@@ -101,10 +101,14 @@ export default function DailyEarningsDocument({
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setStaffList(data);
-          const exists = data.some(s => s.id.toString() === selectedStaffId?.toString());
-          if (!exists) {
-            const firstValid = data.find(s => !s.name.includes('VACANT')) || data[0];
-            setSelectedStaffId(firstValid.id.toString());
+          if (lockedStaffId) {
+            setSelectedStaffId(lockedStaffId.toString());
+          } else {
+            const exists = data.some(s => s.id.toString() === selectedStaffId?.toString());
+            if (!exists) {
+              const firstValid = data.find(s => !s.name.includes('VACANT')) || data[0];
+              setSelectedStaffId(firstValid.id.toString());
+            }
           }
         }
       })
