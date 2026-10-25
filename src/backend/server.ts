@@ -7485,7 +7485,7 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
   try {
     const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
     if (!staff) return res.status(404).json({ error: 'Staff member not found' });
-    if (parseInt(staff.category_id, 10) === 1 && (is_extra === 1 || !target_link || (target_category_id && parseInt(target_category_id, 10) !== 1))) {
+    if (parseInt(staff.category_id, 10) === 1 && !is_extra && target_category_id && parseInt(target_category_id, 10) !== 1) {
       return res.status(400).json({ error: 'Conductors (COR) can only be assigned to COR (AC coaches) links.' });
     }
 
@@ -7526,6 +7526,9 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
         shifted_from_link = excluded.shifted_from_link,
         shifted_from_train = excluded.shifted_from_train,
         shifted_place = excluded.shifted_place,
+        leave_type = NULL,
+        substitute_staff_id = NULL,
+        substitute_name = NULL,
         advance_train_no = NULL,
         is_advance_duty = 0`,
       [
@@ -7786,6 +7789,9 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
         shifted_from_link = excluded.shifted_from_link,
         shifted_from_train = excluded.shifted_from_train,
         shifted_place = 'NON_DAILY_TRAIN',
+        leave_type = NULL,
+        substitute_staff_id = NULL,
+        substitute_name = NULL,
         advance_train_no = NULL,
         is_advance_duty = 0`,
       [
@@ -10944,6 +10950,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
               status = 'AVAILABLE_FOR_BOOKING';
               overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+              leaveType = null;
             }
           }
         }
@@ -11346,6 +11353,7 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
             if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
               status = 'AVAILABLE_FOR_BOOKING';
               overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+              leaveType = null;
             }
           }
         }

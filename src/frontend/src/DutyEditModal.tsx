@@ -886,7 +886,22 @@ export default function DutyEditModal({
           };
         }
 
-        // 3. Leave, Sick, CR, Absent (applies to staff currently on recorded leave)
+        // 3. Released / Reported Fit / Available for booking at HQ
+        if (
+          activeDuty.status === 'AVAILABLE_FOR_BOOKING' ||
+          (activeDuty.muster_code && ['P', 'E'].includes(activeDuty.muster_code.toUpperCase()) && (activeDuty.leave_type || activeDuty.overrideReason))
+        ) {
+          return {
+            isAssigned: false,
+            isUnavailable: false,
+            unavailableReason: '',
+            trainDesc: 'Available for Booking (Reported Fit / HQ)',
+            linkNum: null,
+            trainNo: null
+          };
+        }
+
+        // 4. Leave, Sick, CR, Absent (applies to staff currently on recorded leave)
         if (
           ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) ||
           activeDuty.leave_type ||
@@ -903,7 +918,7 @@ export default function DutyEditModal({
           };
         }
 
-        // 4. Weekly REST checks (cyclic rest link for Categories 1, 2, 3; for LR staff, nominated rest is for reference only)
+        // 5. Weekly REST checks (cyclic rest link for Categories 1, 2, 3; for LR staff, nominated rest is for reference only)
         if (
           !isCat4 &&
           (activeDuty.status === 'REST' ||
@@ -916,18 +931,6 @@ export default function DutyEditModal({
             unavailableReason: 'Weekly REST',
             trainDesc: 'Weekly REST',
             linkNum: activeDuty.link_number || null,
-            trainNo: null
-          };
-        }
-
-        // 5. Released / Available for booking at HQ
-        if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
-          return {
-            isAssigned: false,
-            isUnavailable: false,
-            unavailableReason: '',
-            trainDesc: 'Available for Booking (HQ)',
-            linkNum: null,
             trainNo: null
           };
         }
@@ -1132,6 +1135,11 @@ export default function DutyEditModal({
         // When upgrading Sleeper TTI to vacant COR slot from any place
         if (assignCatId === 'UPGRADE_SLEEPER_ANY') {
           return String(s.category_id) === '2';
+        }
+
+        if (assignCatId === 'RETURNED_LEAVE') {
+          const assignStatus = getStaffAssignmentStatus(s, selectedDate);
+          return assignStatus.isUnavailable || assignStatus.trainDesc.includes('Available for Booking') || assignStatus.trainDesc.includes('Reported Fit');
         }
 
         if (assignCatId === 'NON_DAILY') {
@@ -1382,7 +1390,14 @@ export default function DutyEditModal({
   const doExecuteAssign = async (assignedStaffObj, linkNum, targetCatIdNum) => {
     setSubmitting(true);
     try {
-      const origId = dutyModal.originalStaffId || (dutyModal.staffId && isSlotVacant ? dutyModal.staffId : null);
+      const cleanStaffId = (val) => {
+        if (!val) return null;
+        if (typeof val === 'number') return val > 0 ? val : null;
+        if (typeof val === 'string' && val.startsWith('vacant-slot')) return null;
+        const match = String(val).match(/\d+/);
+        return match ? parseInt(match[0], 10) : null;
+      };
+      const origId = cleanStaffId(dutyModal.originalStaffId) || cleanStaffId(dutyModal.staffId);
       const assignPayload = {
         staff_id: assignedStaffObj.id,
         date: selectedDate,
@@ -4355,6 +4370,7 @@ export default function DutyEditModal({
                       ...(isCorSlot ? [{ id: 'UPGRADE_SLEEPER_ANY', label: '⭐ Upgrade Sleeper TTI (From Any Place)' }] : []),
                       { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
                       { id: 'ALL', label: 'All Available' },
+                      { id: 'RETURNED_LEAVE', label: '🏖️ Returned / On Leave' },
                       { id: '1', label: 'Conductors (COR)' },
                       { id: '2', label: 'Sleeper / TTI' },
                       { id: '3', label: 'Ladies / TTE' },

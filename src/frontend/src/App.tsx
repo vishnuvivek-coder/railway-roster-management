@@ -3275,6 +3275,15 @@ export default function App() {
       ? ((vacantDuty || targetSpecificDuty).categoryId || 1) 
       : (targetGroup.links?.[0]?.categoryId || dragData?.sourceCategoryId || 2);
 
+    const cleanStaffId = (val) => {
+      if (!val) return null;
+      if (typeof val === 'number') return val > 0 ? val : null;
+      if (typeof val === 'string' && val.startsWith('vacant-slot')) return null;
+      const match = String(val).match(/\d+/);
+      return match ? parseInt(match[0], 10) : null;
+    };
+    const resolvedReplaceStaffId = cleanStaffId(replaceStaffId) || cleanStaffId(vacantDuty?.originalStaffId) || null;
+
     try {
       const res = await fetch(`${API_BASE}/duty/drag-assign-train`, {
         method: 'POST',
@@ -3293,7 +3302,7 @@ export default function App() {
           target_link: targetLink,
           target_category_id: targetCatId,
           is_extra: isExtra ? 1 : 0,
-          replace_staff_id: replaceStaffId || undefined
+          replace_staff_id: resolvedReplaceStaffId || undefined
         })
       });
 
@@ -6882,6 +6891,7 @@ export default function App() {
                             isLeave: false,
                             isSick: false,
                             isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: 'UTILISED_ADVANCE',
                             isRestLink: slot.isRestLink || lDef.isRest
@@ -6906,6 +6916,7 @@ export default function App() {
                             isLeave: false,
                             isSick: false,
                             isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: 'UPGRADED',
                             isRestLink: slot.isRestLink || lDef.isRest
@@ -6935,6 +6946,7 @@ export default function App() {
                             isLeave: false,
                             isSick: false,
                             isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: 'SHIFTED',
                             isRestLink: slot.isRestLink || lDef.isRest
@@ -6959,6 +6971,7 @@ export default function App() {
                             isLeave: false,
                             isSick: false,
                             isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: 'AVAILABLE_FOR_BOOKING',
                             isRestLink: slot.isRestLink || lDef.isRest
@@ -7008,6 +7021,7 @@ export default function App() {
                             isLeave: originalSickOrLeaveDuty.status === 'LEAVE',
                             isSick: originalSickOrLeaveDuty.status === 'SICK',
                             isCr: originalSickOrLeaveDuty.status === 'CR',
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: originalSickOrLeaveDuty.status,
                             isRestLink: slot.isRestLink || lDef.isRest
@@ -16051,15 +16065,44 @@ export default function App() {
               }
             } else {
               const targetGroup = targetTrain.targetGroup;
+
+              // Check if already assigned to this train
+              if (targetGroup.duties && targetGroup.duties.some(d => String(d.staffId) === String(s.id))) {
+                alert(`${s.name} is already assigned to Train ${targetTrain.train_number}.`);
+                return;
+              }
+
+              // Check for matching vacant duty on this train
+              const staffMember = (allStaffList || []).find(st => String(st.id) === String(s.id));
+              const staffCatId = staffMember?.category_id || s.category_id;
+
+              const isVacantDuty = (d) => Boolean(
+                d && (d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED'))))
+              );
+
+              // 1. Try to find a vacant slot matching the employee's category (COR for Conductor, Non-COR for Sleeper/TTE)
+              let matchingVacantDuty = (targetGroup.duties || []).find(d => {
+                if (!isVacantDuty(d)) return false;
+                if (staffCatId === 1) return parseInt(d.categoryId, 10) === 1;
+                return parseInt(d.categoryId, 10) !== 1;
+              });
+
+              // 2. If no exact category match, find any vacant slot (unless Conductor which can only take COR slots)
+              if (!matchingVacantDuty && staffCatId !== 1) {
+                matchingVacantDuty = (targetGroup.duties || []).find(d => isVacantDuty(d));
+              }
+
+              const forceExtra = !matchingVacantDuty;
+
               if (currentWorking) {
                 setAppShiftConfirm({
                   staffName: s.name,
                   currentTrainDesc: currentWorking,
-                  targetTrainDesc: `Train ${targetTrain.train_number}`,
-                  onConfirm: () => doActualDropStaff(s.id, s.name, targetGroup, true, null, null)
+                  targetTrainDesc: matchingVacantDuty ? `Train ${targetTrain.train_number} (Link #${matchingVacantDuty.link_number})` : `Train ${targetTrain.train_number} (Extra Crew)`,
+                  onConfirm: () => doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null)
                 });
               } else {
-                doActualDropStaff(s.id, s.name, targetGroup, true, null, null);
+                doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null);
               }
             }
           };
