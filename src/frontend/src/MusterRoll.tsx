@@ -209,6 +209,26 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     return list;
   }, []);
 
+  const safeFetchWithRetry = async (url, options = {}, retries = 3, onRetryNotice = null) => {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url, options);
+        return res;
+      } catch (err) {
+        lastErr = err;
+        const isNetworkErr = err?.name === 'TypeError' || String(err?.message || '').toLowerCase().includes('fetch');
+        if (isNetworkErr && attempt < retries) {
+          if (onRetryNotice) onRetryNotice(attempt, retries);
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+        } else {
+          throw err;
+        }
+      }
+    }
+    throw lastErr;
+  };
+
   const fetchMuster = async (cycleStart = selectedCycleStart) => {
     try {
       setLoading(true);
@@ -217,7 +237,12 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (cycleStart) url += 'cycle_start=' + encodeURIComponent(cycleStart) + '&';
       if (selectedCategory && selectedCategory !== 'ALL') url += 'category_id=' + encodeURIComponent(selectedCategory) + '&';
 
-      const res = await fetch(url);
+      const res = await safeFetchWithRetry(
+        url,
+        {},
+        3,
+        (attempt, max) => showToast(`Connecting to server on Render (${attempt}/${max})...`)
+      );
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to fetch muster roll data');
@@ -252,19 +277,24 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     try {
       setSavingCell(true);
       const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
-      const res = await fetch('/api/muster/update-cell', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      const res = await safeFetchWithRetry(
+        '/api/muster/update-cell',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({
+            staff_id: staffId,
+            date: dateStr,
+            code: newCode,
+            remarks
+          })
         },
-        body: JSON.stringify({
-          staff_id: staffId,
-          date: dateStr,
-          code: newCode,
-          remarks
-        })
-      });
+        3,
+        (attempt, max) => showToast(`Server is waking up on Render. Retrying connection (${attempt}/${max})...`)
+      );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update muster code');
@@ -299,6 +329,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       setActiveCellModal(null);
       showToast('Attendance code saved permanently to database');
+      await fetchMuster(selectedCycleStart);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
       }));
@@ -313,14 +344,19 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     try {
       setSavingCell(true);
       const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
-      const res = await fetch('/api/muster/reset-cell', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      const res = await safeFetchWithRetry(
+        '/api/muster/reset-cell',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+          },
+          body: JSON.stringify({ staff_id: staffId, date: dateStr })
         },
-        body: JSON.stringify({ staff_id: staffId, date: dateStr })
-      });
+        3,
+        (attempt, max) => showToast(`Server is waking up on Render. Retrying connection (${attempt}/${max})...`)
+      );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to reset cell');
@@ -800,14 +836,19 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       let errDays = 0;
       let errText = '';
       if (updates.length > 0) {
-        const res = await fetch('/api/muster/batch-update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        const res = await safeFetchWithRetry(
+          '/api/muster/batch-update',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+            },
+            body: JSON.stringify({ updates })
           },
-          body: JSON.stringify({ updates })
-        });
+          3,
+          (attempt, max) => showToast(`Server is waking up on Render. Retrying save (${attempt}/${max})...`)
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to save muster records');
         savedDays = data.savedCount !== undefined ? data.savedCount : updates.length;
@@ -857,7 +898,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           const manualUpdates = [];
           if (s.days) {
             Object.entries(s.days).forEach(([dateStr, dayData]) => {
-              if (dayData && dayData.isManual && dayData.code) {
+              if (dayData && dayData.code !== undefined && dayData.code !== null) {
                 manualUpdates.push({
                   staff_id: s.id,
                   date: dateStr,
@@ -869,14 +910,19 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
           }
 
           if (manualUpdates.length > 0) {
-            const res = await fetch('/api/muster/batch-update', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+            const res = await safeFetchWithRetry(
+              '/api/muster/batch-update',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                },
+                body: JSON.stringify({ updates: manualUpdates })
               },
-              body: JSON.stringify({ updates: manualUpdates })
-            });
+              3,
+              (attempt, max) => showToast(`Server is waking up on Render. Retrying batch save (${attempt}/${max})...`)
+            );
             const data = await res.json();
             if (!res.ok) {
               throw new Error(data.error || 'Failed to save muster cells');

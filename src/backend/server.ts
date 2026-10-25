@@ -142,8 +142,14 @@ initDb().then(async () => {
   } catch (e) {
     console.error('Failed to backfill LR sheet overrides on startup:', e);
   }
+
+  // Start HTTP server only AFTER database is fully initialized
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Roster backend server is running on port ${PORT}`);
+  });
 }).catch(err => {
   console.error('Database initialization failed:', err);
+  process.exit(1);
 });
 
 function formatDateDisplay(iso) {
@@ -14731,11 +14737,11 @@ app.post('/api/muster/batch-update', requireAdmin, async (req, res) => {
 
     for (const item of updates) {
       try {
-        if (!item.staff_id || !item.date || !item.code) {
+        if (!item.staff_id || !item.date || item.code === undefined || item.code === null) {
           throw new Error('Missing staff_id, date, or attendance code');
         }
-        const cleanCode = String(item.code).trim().toUpperCase();
-        if (!ALLOWED_MUSTER_CODES.includes(cleanCode)) {
+        const cleanCode = String(item.code || '').trim().toUpperCase();
+        if (cleanCode !== '' && !ALLOWED_MUSTER_CODES.includes(cleanCode)) {
           throw new Error(`Invalid attendance code "${cleanCode}" on ${item.date}`);
         }
 
@@ -16619,7 +16625,4 @@ if (frontendDistPath) {
   });
 }
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Roster backend server is running on port ${PORT}`);
-});
+// Server started after database initialization above.

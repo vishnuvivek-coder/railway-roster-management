@@ -15,6 +15,19 @@ sqliteDb.run('PRAGMA journal_mode = WAL');
 sqliteDb.run('PRAGMA busy_timeout = 10000');
 let mysqlPool = null;
 let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
+let isInitializing = false;
+let initDbPromise: Promise<void> | null = null;
+
+const ensureDbReady = async () => {
+  if (isInitializing) return;
+  if (initDbPromise) {
+    try {
+      await initDbPromise;
+    } catch (e) {
+      // Fallback allowed
+    }
+  }
+};
 
 const { AsyncLocalStorage } = require('async_hooks');
 const txStorage = new AsyncLocalStorage();
@@ -44,6 +57,7 @@ const normalizeSqlForMysql = (sql) => {
 
 // Helper to run SQL with automatic dialect normalization
 const run = async (sql: any, params: any = []): Promise<any> => {
+  await ensureDbReady();
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -67,6 +81,7 @@ const run = async (sql: any, params: any = []): Promise<any> => {
 
 // Helper to query all rows
 const all = async (sql: any, params: any = []): Promise<any> => {
+  await ensureDbReady();
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -87,6 +102,7 @@ const all = async (sql: any, params: any = []): Promise<any> => {
 
 // Helper to query single row
 const get = async (sql: any, params: any = []): Promise<any> => {
+  await ensureDbReady();
   const txStore = txStorage.getStore();
   if (activeEngine === 'mysql') {
     const cleanSql = normalizeSqlForMysql(sql);
@@ -114,6 +130,7 @@ let txMutex: Promise<any> = Promise.resolve();
  * Supports transparent nesting and automatic connection pooling.
  */
 const withTransaction = async (callback) => {
+  await ensureDbReady();
   const existingTx = txStorage.getStore();
   // If already executing inside an active transaction, reuse it (prevents nested transaction collision)
   if (existingTx && existingTx.inTx) {
@@ -159,7 +176,7 @@ const withTransaction = async (callback) => {
   });
 };
 
-async function initDb() {
+async function initDbInternal() {
   const dbTypePref = (process.env.DB_TYPE || 'sqlite').toLowerCase();
   
   if (dbTypePref === 'mysql') {
@@ -1754,6 +1771,19 @@ async function initDb() {
 
   // Auto-sync staff accounts for PF login
   await syncStaffPfAccounts(run, all, get);
+}
+
+async function initDb() {
+  if (initDbPromise) return initDbPromise;
+  isInitializing = true;
+  initDbPromise = (async () => {
+    try {
+      await initDbInternal();
+    } finally {
+      isInitializing = false;
+    }
+  })();
+  return initDbPromise;
 }
 
 /**
