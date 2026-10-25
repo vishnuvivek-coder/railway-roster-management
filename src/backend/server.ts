@@ -143,6 +143,22 @@ initDb().then(async () => {
     console.error('Failed to backfill LR sheet overrides on startup:', e);
   }
 
+  // Clean up non-daily placeholder text in ta_approvals and ta_entries so actual train numbers are always noted
+  try {
+    await run("UPDATE ta_approvals SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 53 OR link_number = 60)");
+    await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 54 OR link_number = 61)");
+    await run("UPDATE ta_approvals SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 55 OR link_number = 62)");
+    await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
+
+    await run("UPDATE ta_entries SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%53%' OR remarks LIKE '%60%')");
+    await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%54%' OR remarks LIKE '%61%')");
+    await run("UPDATE ta_entries SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%55%' OR remarks LIKE '%62%')");
+    await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
+    console.log('Cleaned up non-daily placeholder train numbers in ta_approvals and ta_entries.');
+  } catch (e) {
+    console.error('Failed to clean non-daily train numbers on startup:', e);
+  }
+
   // Start HTTP server only AFTER database is fully initialized
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Roster backend server is running on port ${PORT}`);

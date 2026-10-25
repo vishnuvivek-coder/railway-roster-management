@@ -277,9 +277,18 @@ function compareDutyAndResolve({
   );
 
   if (isSameTrain) {
-    const finalTrain = origStr;
+    let finalTrain = origStr;
     const effectiveLn = resolvedRemarksLinkNum !== null ? resolvedRemarksLinkNum : origLinkNum;
     const effectiveCat = resolvedRemarksCatId || categoryId;
+    if (/non\s*daily/i.test(finalTrain)) {
+      if (effectiveLn === 53 || effectiveLn === 60) finalTrain = '22882';
+      else if (effectiveLn === 54 || effectiveLn === 61) finalTrain = '17221';
+      else if (effectiveLn === 55 || effectiveLn === 62) finalTrain = '17069';
+      else {
+        const m = finalTrain.match(/\b\d{4,5}\b/);
+        finalTrain = m ? m[0] : '17221';
+      }
+    }
     const dutyRows = resolveDutyRowsWithLinkPriority(effectiveLn, effectiveCat, finalTrain, allLinks, dateStr);
     return {
       action: 'DISPLAY',
@@ -294,7 +303,17 @@ function compareDutyAndResolve({
   // CONDITION 2:
   // if both have different train numbers (or changed link) then display the train number in the remarks column
   // (cause that is the final decision) in the TA,NDA,DIARY document
-  const finalTrain = remarksTrain;
+  let finalTrain = remarksTrain;
+  const effectiveLn = resolvedRemarksLinkNum !== null ? resolvedRemarksLinkNum : origLinkNum;
+  if (/non\s*daily/i.test(finalTrain)) {
+    if (effectiveLn === 53 || effectiveLn === 60) finalTrain = '22882';
+    else if (effectiveLn === 54 || effectiveLn === 61) finalTrain = '17221';
+    else if (effectiveLn === 55 || effectiveLn === 62) finalTrain = '17069';
+    else {
+      const m = (remarksStr || finalTrain).match(/\b\d{4,5}\b/);
+      finalTrain = m ? m[0] : '17221';
+    }
+  }
   const dutyRows = resolveDutyRowsWithLinkPriority(
     resolvedRemarksLinkNum,
     resolvedRemarksCatId || categoryId,
@@ -365,8 +384,13 @@ function getDutyRowsForTrain(trainStr, allLinks = [], dateStr = null, preferredC
     }));
   }
 
+  let fallbackTr = clean;
+  if (/non\s*daily/i.test(clean)) {
+    fallbackTr = '17221';
+  }
+
   return [{
-    train_no: clean,
+    train_no: fallbackTr,
     from: 'GNT',
     to: '---',
     dep: '17:45',

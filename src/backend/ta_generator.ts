@@ -861,14 +861,36 @@ function getDutyRowsForLinkNumber(categoryId, linkNumber, link, dateStr = null) 
         ];
       }
       case 53:
+      case 60:
+        return [
+          { train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 }
+        ];
       case 54:
+      case 61:
+        return [
+          { train_no: '17221', from: 'GNT', to: 'WADI', dep: '13:35', arr: '00:05', ta: 0.7 }
+        ];
       case 55:
-        return []; // Non daily links
+      case 62:
+        return [
+          { train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.7 }
+        ];
       default:
         if (link && link.train_numbers && link.train_numbers !== 'REST' && link.train_numbers !== 'OFF') {
+          let trNo = link.train_numbers.split('/')[0] || link.train_numbers;
+          if (/non\s*daily/i.test(trNo)) {
+            const ln = parseInt(link.link_number, 10);
+            if (ln === 53 || ln === 60) trNo = '22882';
+            else if (ln === 54 || ln === 61) trNo = '17221';
+            else if (ln === 55 || ln === 62) trNo = '17069';
+            else {
+              const match = trNo.match(/\b\d{4,5}\b/);
+              trNo = match ? match[0] : '17221';
+            }
+          }
           return [
             {
-              train_no: link.train_numbers.split('/')[0] || link.train_numbers,
+              train_no: trNo,
               from: link.from_station || 'GNT',
               to: link.to_station || '---',
               dep: '17:45',
@@ -1707,7 +1729,7 @@ function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks
   }
 
   // 3. Standby / Available at HQ
-  if (['AVL', 'SPARE', 'SPARE (HQ)', 'HQ', 'STANDBY', 'GNT', 'NON DAILY LINKS'].includes(c)) {
+  if (['AVL', 'SPARE', 'SPARE (HQ)', 'HQ', 'STANDBY', 'GNT'].includes(c)) {
     return { action: 'STANDBY', remarks: remarks || 'Standby at HQ' };
   }
 
@@ -2018,8 +2040,23 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             } else if (category.id === 2 && origLinkNum === 52) {
               const retT = is18048Day(dateStrIso) ? '18048' : '17226';
               origTrain = `${retT}, PILOT(12703)`;
+            } else if (category.id === 2 && (origLinkNum === 53 || origLinkNum === 60)) {
+              origTrain = '22882';
+            } else if (category.id === 2 && (origLinkNum === 54 || origLinkNum === 61)) {
+              origTrain = '17221';
+            } else if (category.id === 2 && (origLinkNum === 55 || origLinkNum === 62)) {
+              origTrain = '17069';
             } else {
               origTrain = origLink ? (origLink.train_numbers || 'REST') : 'REST';
+              if (/non\s*daily/i.test(origTrain)) {
+                if (origLinkNum === 53 || origLinkNum === 60) origTrain = '22882';
+                else if (origLinkNum === 54 || origLinkNum === 61) origTrain = '17221';
+                else if (origLinkNum === 55 || origLinkNum === 62) origTrain = '17069';
+                else {
+                  const m = origTrain.match(/\b\d{4,5}\b/);
+                  origTrain = m ? m[0] : '17221';
+                }
+              }
             }
           } else {
             origTrain = 'REST';
@@ -2186,6 +2223,18 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           const isLrCat = category.id === 4 || (category.code && category.code.toUpperCase().includes('LR'));
           const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (isLrCat ? '' : (duty.remarks || ''));
 
+          let dutyTrainNo = isEffectiveLeave ? '---' : (duty.train_no || '---');
+          if (/non\s*daily/i.test(dutyTrainNo)) {
+            const ln = Number(linkNum);
+            if (ln === 53 || ln === 60) dutyTrainNo = '22882';
+            else if (ln === 54 || ln === 61) dutyTrainNo = '17221';
+            else if (ln === 55 || ln === 62) dutyTrainNo = '17069';
+            else {
+              const m = (duty.remarks || claimRemark || '').match(/\b\d{4,5}\b/);
+              dutyTrainNo = m ? m[0] : '17221';
+            }
+          }
+
           await run(
             `INSERT OR REPLACE INTO ta_approvals (
               staff_id, month_year, duty_date, date_str, link_number, train_no,
@@ -2193,7 +2242,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               da_rate, claim_amount, status, object_of_journey, row_order, remarks
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              staff.id, monthYearStr, dateStrIso, dateStrDisplay, linkNum, duty.train_no,
+              staff.id, monthYearStr, dateStrIso, dateStrDisplay, linkNum, dutyTrainNo,
               duty.from_station, duty.to_station, duty.dep_time, duty.arr_time, absenceHours, taPct,
               daRate, claimAmt, claimStatus, category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES', rowOrder, claimRemark
             ]
@@ -2559,6 +2608,18 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         }
       }
 
+      let rowTrainNo = item.train_no || '---';
+      if (/non\s*daily/i.test(rowTrainNo)) {
+        const ln = Number(item.link_number);
+        if (ln === 53 || ln === 60) rowTrainNo = '22882';
+        else if (ln === 54 || ln === 61) rowTrainNo = '17221';
+        else if (ln === 55 || ln === 62) rowTrainNo = '17069';
+        else {
+          const m = (rowRemarks || '').match(/\b\d{4,5}\b/);
+          rowTrainNo = m ? m[0] : '17221';
+        }
+      }
+
       finalRows.push({
         id: item.id || null,
         _isSaved: item._isSaved || false,
@@ -2568,7 +2629,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         date_iso: dIso,
         duty_date: dIso,
         is_same_date_as_prev: finalRows.length > 0 && dIso === finalRows[finalRows.length - 1].date_iso,
-        train_no: item.train_no || '---',
+        train_no: rowTrainNo,
         from_station: item.from_station || '---',
         to_station: item.to_station || '---',
         dep_time: item.dep_time || '---',

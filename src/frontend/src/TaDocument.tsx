@@ -281,14 +281,26 @@ export default function TaDocument({
               b1Val = String(r.days_claiming_ta);
             }
             const isLeaveRow = !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave')));
+            let trainNo = r.train_no || '---';
+            if (/non\s*daily/i.test(trainNo)) {
+              const ln = Number(r.link_number);
+              if (ln === 53 || ln === 60) trainNo = '22882';
+              else if (ln === 54 || ln === 61) trainNo = '17221';
+              else if (ln === 55 || ln === 62) trainNo = '17069';
+              else {
+                const m = (r.remarks || '').match(/\b\d{4,5}\b/);
+                trainNo = m ? m[0] : '17221';
+              }
+            }
             return {
               ...r,
+              train_no: trainNo,
               ta_a1: r.ta_a1 || '',
               ta_a: r.ta_a || '',
               ta_b1: b1Val,
               ta_ord: r.ta_ord || '',
               object_of_journey: r.object_of_journey || '',
-              remarks: (isLrEmployee && !isLeaveRow && r.train_no !== '---') ? '' : (r.remarks || r.nature_of_leave || ''),
+              remarks: (isLrEmployee && !isLeaveRow && trainNo !== '---') ? '' : (r.remarks || r.nature_of_leave || ''),
               nature_of_leave: r.nature_of_leave || '',
               is_leave: isLeaveRow,
               is_manual_ta: !!(r.is_manual_ta || r._isSaved)
