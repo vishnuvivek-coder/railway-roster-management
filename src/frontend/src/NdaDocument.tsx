@@ -95,7 +95,7 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
     return 8;
   }
 
-  // Same day journey with both Departure and Arrival
+  // 1. Both Departure and Arrival are known
   if (depMins !== null && arrMins !== null) {
     if (arrMins >= depMins) {
       let nightMins = 0;
@@ -104,15 +104,15 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
       if (nightMins <= 0) return null;
       return Math.round(nightMins / 60);
     } else {
-      const startMins = depMins;
-      const endMins = 1440 + arrMins;
-      const nightMins = Math.max(0, Math.min(endMins, 1800) - Math.max(startMins, 1320));
-      if (nightMins <= 0) return null;
-      return Math.round(nightMins / 60);
+      const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
+      const day2Night = Math.max(0, Math.min(arrMins, 360) - 0);
+      const totalMins = day1Night + day2Night;
+      if (totalMins <= 0) return null;
+      return Math.round(totalMins / 60);
     }
   }
 
-  // Arrival leg from overnight journey
+  // 2. Arrival leg from overnight journey
   if (depMins === null && arrMins !== null) {
     let priorNight = 0;
     if (trainNo === '12734') priorNight = 70;
@@ -127,6 +127,19 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
 
     const morningMins = Math.min(arrMins, 360);
     const totalNight = priorNight + morningMins;
+    if (totalNight <= 0) return null;
+    return Math.round(totalNight / 60);
+  }
+
+  // 3. Departure only (e.g. departure continuing into next day)
+  if (depMins !== null && arrMins === null) {
+    const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
+    let morningMins = 360;
+    if (trainNo === '12604') morningMins = 345;
+    else if (trainNo === '17251') morningMins = 300;
+    else if (trainNo === '20630') morningMins = 355;
+    else if (trainNo === '17225') morningMins = 310;
+    const totalNight = day1Night + morningMins;
     if (totalNight <= 0) return null;
     return Math.round(totalNight / 60);
   }
@@ -1331,7 +1344,7 @@ export default function NdaDocument({
                   {(journalData.rows || []).map((row, idx) => {
                     const isDitto = row.date_str === '"' || row.is_same_date_as_prev;
                     const displayDate = isDitto ? '"' : (row.date_str || '');
-                    const displayHours = row.night_hours && Number(row.night_hours) > 0 ? row.night_hours : '';
+                    const displayHours = (row.night_hours !== null && row.night_hours !== undefined && row.night_hours !== '') ? row.night_hours : '';
                     const clean = (val) => (!val || val === '---' || val === '--') ? '' : val;
 
                     return (
