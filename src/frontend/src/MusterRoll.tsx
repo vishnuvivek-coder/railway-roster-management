@@ -42,6 +42,8 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
   // Active cell edit modal
   const [activeCellModal, setActiveCellModal] = useState(null);
+  const [selectedCellCode, setSelectedCellCode] = useState(null);
+  const [saveResultModal, setSaveResultModal] = useState(null);
   const [cellRemarks, setCellRemarks] = useState('');
   const [savingCell, setSavingCell] = useState(false);
   const [rangeEditModal, setRangeEditModal] = useState(null);
@@ -327,14 +329,33 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         return { ...prev, staff: newStaff };
       });
 
+      const staffName = activeCellModal?.staffName || `Employee #${staffId}`;
       setActiveCellModal(null);
       showToast('Attendance code saved permanently to database');
       await fetchMuster(selectedCycleStart);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
       }));
+
+      // Pop-up saying YES if saved
+      setSaveResultModal({
+        success: true,
+        staffName,
+        dateStr,
+        code: newCode,
+        message: newCode === '' ? 'Muster cell set to BLANK (Fill Later) and saved permanently!' : `Muster code '${newCode}' saved permanently to database!`
+      });
     } catch (err) {
-      alert('Error updating muster code: ' + err.message);
+      const staffName = activeCellModal?.staffName || `Employee #${staffId}`;
+      console.error('Error updating muster code:', err);
+      // Pop-up saying NO if not saved
+      setSaveResultModal({
+        success: false,
+        staffName,
+        dateStr,
+        code: newCode,
+        message: err.message || 'Failed to save attendance code. Please try again.'
+      });
     } finally {
       setSavingCell(false);
     }
@@ -361,14 +382,33 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to reset cell');
 
+      const staffName = activeCellModal?.staffName || `Employee #${staffId}`;
       setActiveCellModal(null);
       showToast('Cell reset and saved permanently to database');
       await fetchMuster(selectedCycleStart);
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId, date: dateStr, source: 'muster_roll', timestamp: Date.now() }
       }));
+
+      // Pop-up saying YES if saved
+      setSaveResultModal({
+        success: true,
+        staffName,
+        dateStr,
+        code: 'RESET',
+        message: 'Muster cell reset back to cyclic baseline and saved permanently!'
+      });
     } catch (err) {
-      alert('Error resetting cell: ' + err.message);
+      const staffName = activeCellModal?.staffName || `Employee #${staffId}`;
+      console.error('Error resetting cell:', err);
+      // Pop-up saying NO if not saved
+      setSaveResultModal({
+        success: false,
+        staffName,
+        dateStr,
+        code: 'RESET',
+        message: err.message || 'Failed to reset muster cell. Please try again.'
+      });
     } finally {
       setSavingCell(false);
     }
@@ -2312,6 +2352,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                                 isManual: dayData.isManual,
                                 remarks: dayData.remarks || ''
                               });
+                              setSelectedCellCode(dayData.code !== undefined && dayData.code !== null ? dayData.code : 'P');
                               setCellRemarks(dayData.remarks || '');
                             }
                           }}
@@ -2570,8 +2611,15 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               fontSize: '0.84rem'
             }}>
               <div>Employee: <strong style={{ color: '#f3f4f6' }}>{activeCellModal.staffName}</strong> ({activeCellModal.designation || 'Staff'})</div>
-              <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Date: <strong>{activeCellModal.dateStr}</strong> ({activeCellModal.dayOfWeek}) | Current: <strong>{activeCellModal.currentCode}</strong></span>
+              <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>
+                  Date: <strong>{activeCellModal.dateStr}</strong> ({activeCellModal.dayOfWeek}) | Current: <strong>{activeCellModal.currentCode || 'P'}</strong>
+                  {selectedCellCode !== null && selectedCellCode !== activeCellModal.currentCode && (
+                    <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 800 }}>
+                      ➔ Selected: {selectedCellCode === '' ? 'BLANK' : selectedCellCode}
+                    </span>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -2584,7 +2632,7 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                       designation: activeCellModal.designation,
                       fromDate: fDate,
                       toDate: lDate,
-                      code: activeCellModal.currentCode || 'P',
+                      code: selectedCellCode !== null ? selectedCellCode : (activeCellModal.currentCode || 'P'),
                       remarks: cellRemarks || ''
                     });
                     setActiveCellModal(null);
@@ -2614,14 +2662,15 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             <button
               type="button"
               disabled={savingCell}
-              onClick={() => handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, '', cellRemarks || 'Mark Reason Later (Muster Blank)')}
+              onClick={() => setSelectedCellCode('')}
+              onDoubleClick={() => handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, '', cellRemarks || 'Mark Reason Later (Muster Blank)')}
               style={{
                 width: '100%',
                 padding: '9px 12px',
                 marginBottom: '12px',
                 borderRadius: '8px',
-                border: activeCellModal.currentCode === '' ? '2px solid #f59e0b' : '1px dashed #f59e0b',
-                background: activeCellModal.currentCode === '' ? 'rgba(245, 158, 11, 0.22)' : 'rgba(245, 158, 11, 0.08)',
+                border: selectedCellCode === '' ? '2.5px solid #f59e0b' : '1px dashed #f59e0b',
+                background: selectedCellCode === '' ? 'rgba(245, 158, 11, 0.28)' : 'rgba(245, 158, 11, 0.08)',
                 color: '#fbbf24',
                 fontWeight: 700,
                 fontSize: '0.84rem',
@@ -2630,28 +2679,35 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
+                boxShadow: selectedCellCode === '' ? '0 0 12px rgba(245, 158, 11, 0.45)' : 'none',
                 transition: 'all 0.15s ease'
               }}
-              title="Leave muster attendance blank for this date so it can be filled later"
+              title="Click to select Blank; then click Save below (or double click to save instantly)"
             >
               <span>⏳</span>
               <span>Keep Muster Blank / Fill Later</span>
+              {selectedCellCode === '' && (
+                <span style={{ marginLeft: 'auto', background: '#f59e0b', color: '#000', borderRadius: '10px', padding: '1px 8px', fontSize: '0.72rem', fontWeight: 800 }}>
+                  ✓ SELECTED
+                </span>
+              )}
             </button>
 
-            {/* Grid of 10 Options */}
+            {/* Grid of 13 Attendance Options */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginBottom: '18px' }}>
               {MUSTER_CODES.map(c => {
-                const isSelected = activeCellModal.currentCode === c.code;
+                const isSelected = selectedCellCode === c.code;
                 return (
                   <button
                     key={c.code}
                     type="button"
                     disabled={savingCell}
-                    onClick={() => handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, c.code, cellRemarks)}
+                    onClick={() => setSelectedCellCode(c.code)}
+                    onDoubleClick={() => handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, c.code, cellRemarks)}
                     style={{
                       padding: '10px 4px',
                       borderRadius: '8px',
-                      border: isSelected ? '2px solid ' + c.color : '1px solid var(--border-glass)',
+                      border: isSelected ? '2.5px solid ' + c.color : '1px solid var(--border-glass)',
                       background: isSelected ? c.bg : 'rgba(255,255,255,0.03)',
                       color: c.color,
                       fontWeight: 800,
@@ -2662,9 +2718,25 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '2px',
+                      boxShadow: isSelected ? '0 0 12px ' + c.color + '55' : 'none',
+                      transform: isSelected ? 'scale(1.04)' : 'none',
+                      position: 'relative',
                       transition: 'all 0.15s ease'
                     }}
+                    title={`Click to select ${c.code}; click Save below (or double click) to save`}
                   >
+                    {isSelected && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '2px',
+                        right: '4px',
+                        fontSize: '0.65rem',
+                        lineHeight: 1,
+                        fontWeight: 900
+                      }}>
+                        ✓
+                      </span>
+                    )}
                     <span>{c.code}</span>
                     <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--color-text-muted)', textAlign: 'center', lineHeight: 1.1 }}>
                       {c.code === 'P' ? 'Duty' : c.code === 'R' ? 'Rest' : c.code === 'O' ? 'Absent' : c.code === 'E' ? 'Emerg' : c.code === 'NH' ? 'Nat Hol' : c.code}
@@ -2687,30 +2759,200 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
               />
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              {activeCellModal.isManual && (
+            {/* Action Buttons with explicit Save option */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                {activeCellModal.isManual && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={savingCell}
+                    onClick={() => handleResetCell(activeCellModal.staffId, activeCellModal.dateStr)}
+                    style={{ fontSize: '0.78rem', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)' }}
+                  >
+                    Reset to Cyclic Baseline
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   disabled={savingCell}
-                  onClick={() => handleResetCell(activeCellModal.staffId, activeCellModal.dateStr)}
-                  style={{ fontSize: '0.78rem', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)' }}
-                >
-                  Reset to Cyclic Baseline
-                </button>
-              )}
-              <div style={{ marginLeft: 'auto' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
                   onClick={() => setActiveCellModal(null)}
-                  style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                  style={{ fontSize: '0.84rem', padding: '7px 16px', borderRadius: '7px' }}
                 >
                   Cancel
                 </button>
+                <button
+                  type="button"
+                  disabled={savingCell}
+                  onClick={() => {
+                    const codeToSave = selectedCellCode !== null ? selectedCellCode : (activeCellModal.currentCode || 'P');
+                    const rem = codeToSave === '' ? (cellRemarks || 'Mark Reason Later (Muster Blank)') : cellRemarks;
+                    handleUpdateCode(activeCellModal.staffId, activeCellModal.dateStr, codeToSave, rem);
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '7px',
+                    padding: '8px 22px',
+                    fontSize: '0.88rem',
+                    fontWeight: 800,
+                    cursor: savingCell ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.45)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {savingCell ? (
+                    <>
+                      <span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>💾</span>
+                      <span>Save ({selectedCellCode === '' ? 'Blank' : (selectedCellCode || activeCellModal.currentCode || 'P')})</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Modal: YES if Saved, NO if Not Saved */}
+      {saveResultModal && (
+        <div
+          className="no-print"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.78)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSaveResultModal(null);
+          }}
+        >
+          <div
+            style={{
+              background: '#181b22',
+              border: saveResultModal.success ? '2px solid #10b981' : '2px solid #ef4444',
+              borderRadius: '14px',
+              padding: '24px 28px',
+              maxWidth: '430px',
+              width: '90%',
+              textAlign: 'center',
+              boxShadow: saveResultModal.success
+                ? '0 20px 50px rgba(16, 185, 129, 0.35)'
+                : '0 20px 50px rgba(239, 68, 68, 0.35)'
+            }}
+          >
+            {/* Icon & "YES" / "NO" Badge */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{
+                width: '62px',
+                height: '62px',
+                borderRadius: '50%',
+                margin: '0 auto 12px',
+                background: saveResultModal.success ? 'rgba(16, 185, 129, 0.18)' : 'rgba(239, 68, 68, 0.18)',
+                border: saveResultModal.success ? '2px solid #10b981' : '2px solid #ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '2rem'
+              }}>
+                {saveResultModal.success ? '✅' : '❌'}
+              </div>
+
+              <div style={{
+                display: 'inline-block',
+                padding: '4px 18px',
+                borderRadius: '20px',
+                background: saveResultModal.success ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)',
+                color: saveResultModal.success ? '#10b981' : '#ef4444',
+                fontSize: '1.2rem',
+                fontWeight: 900,
+                letterSpacing: '1px'
+              }}>
+                {saveResultModal.success ? 'YES — SAVED' : 'NO — NOT SAVED'}
+              </div>
+            </div>
+
+            {/* Details Box */}
+            <div style={{
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              marginBottom: '18px',
+              fontSize: '0.86rem',
+              textAlign: 'left',
+              color: '#d1d5db',
+              border: '1px solid rgba(255,255,255,0.08)'
+            }}>
+              <div style={{ marginBottom: '6px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Employee: </span>
+                <strong style={{ color: '#ffffff' }}>{saveResultModal.staffName}</strong>
+              </div>
+              <div style={{ marginBottom: '6px' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Date: </span>
+                <strong style={{ color: '#ffffff' }}>{saveResultModal.dateStr}</strong>
+              </div>
+              {saveResultModal.code !== undefined && (
+                <div style={{ marginBottom: '6px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Muster Code: </span>
+                  <strong style={{
+                    color: saveResultModal.code === '' ? '#fbbf24' : (saveResultModal.success ? '#10b981' : '#f87171'),
+                    background: 'rgba(255,255,255,0.08)',
+                    padding: '2px 8px',
+                    borderRadius: '4px'
+                  }}>
+                    {saveResultModal.code === '' ? 'BLANK (Fill Later)' : saveResultModal.code}
+                  </strong>
+                </div>
+              )}
+              <div style={{ fontSize: '0.8rem', color: saveResultModal.success ? '#9ca3af' : '#fca5a5', marginTop: '6px' }}>
+                {saveResultModal.message}
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setSaveResultModal(null)}
+              style={{
+                width: '100%',
+                background: saveResultModal.success
+                  ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                fontSize: '0.92rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: saveResultModal.success
+                  ? '0 4px 14px rgba(16, 185, 129, 0.4)'
+                  : '0 4px 14px rgba(239, 68, 68, 0.4)'
+              }}
+            >
+              OK
+            </button>
           </div>
         </div>
       )}
