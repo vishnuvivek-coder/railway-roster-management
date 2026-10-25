@@ -1,6 +1,4 @@
-const { getDayOffset, getBaseLinkNumber } = require('./rotation');
-const { getDutyRowsForLinkNumber } = require('./ta_generator');
-const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
+const { generateStaffTaJournal } = require('./ta_generator');
 
 /**
  * Helper to parse time strings like '17:45', '5:10', '00:50', '23:30' into minutes from 00:00 (0..1439)
@@ -83,8 +81,9 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
 }
 
 /**
- * Generate complete NDA Journal for a staff member for a given month/year
- * SCHEDULE contains expected timetable times, ACTUAL contains synced/real NTES times
+ * Generate complete NDA Journal for a staff member for a given month/year.
+ * Uses generateStaffTaJournal as the definitive single source of truth for all
+ * duties, link rotations, multi-day sets, non-daily/special trains, and timings.
  */
 async function generateStaffNdaJournal(db, staffId, year, month, startDate = null, endDate = null) {
   const { get, all } = db;
@@ -112,105 +111,23 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     };
   }
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const currentDay = now.getDate();
-  const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
-
-  const y = parseInt(year, 10) || currentYear;
-  const m = parseInt(month, 10) || currentMonth;
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const monthYearStr = `${y}-${String(m).padStart(2, '0')}`;
-
-  const isCurrentMonth = (y === currentYear && m === currentMonth);
-  const isFutureMonth = (y > currentYear || (y === currentYear && m > currentMonth));
-
-  // Determine up-to-date cutoff for current/past/future month
-  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
-  const upToDateIso = `${y}-${String(m).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
-
-  const prevYr = m === 1 ? y - 1 : y;
-  const prevMo = m === 1 ? 12 : m - 1;
-  const maxDaysPrev = new Date(prevYr, prevMo, 0).getDate();
-  const prev30thDay = Math.min(30, maxDaysPrev);
-  const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
-
-  let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
-  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
-
-  // Enforce: NDA should be shown up to date only; do not show estimation for the whole month
-  if (isCurrentMonth && actualEnd > todayIso) {
-    actualEnd = todayIso;
-  }
-  if (isFutureMonth) {
+  // 1. Generate the authoritative TA Journal (Single Source of Truth)
+  const taJournal = await generateStaffTaJournal(db, staffId, year, month, startDate, endDate);
+  if (!taJournal || !taJournal.rows) {
     return {
-      employee: {
-        id: staff.id,
-        name: staff.name,
-        designation: staff.designation || 'CTI',
-        branch: 'COMMERCIAL',
-        division: 'GNT',
-        hq: staff.hq_station || 'GNT',
-        pay: staff.pay_amount || 68000,
-        pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : '',
-        bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
-        doa: (staff.doa && staff.doa !== '05/08/2000') ? String(staff.doa) : '',
-        category_name: category.name,
-        category_code: category.code
-      },
-      month_year: monthYearStr,
-      month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
-      period_label: `${actualStart.split('-').reverse().join('/')} to ${todayIso.split('-').reverse().join('/')}`,
-      start_date: actualStart,
-      end_date: todayIso,
-      year: y,
-      month: m,
+      employee: staff,
+      month_year: `${year}-${String(month).padStart(2, '0')}`,
+      period_label: '',
+      year,
+      month,
       rows: [],
       total_night_hours: 0
     };
   }
 
-  const rawLinks = await all('SELECT * FROM links ORDER BY category_id ASC, link_number ASC, effective_from ASC');
-  const allLinks = rawLinks.filter(l =>
-    l.status !== 'draft' &&
-    (!l.effective_from || l.effective_from <= actualEnd) &&
-    (!l.effective_to || l.effective_to >= actualStart)
-  );
-  const linkMap = {};
-  allLinks.forEach(l => {
-    linkMap[`${l.category_id}_${l.link_number}`] = l;
-    if (l.category_id === category.id) {
-      linkMap[l.link_number] = l;
-    }
-  });
+  const monthYearStr = taJournal.month_year || `${year}-${String(month).padStart(2, '0')}`;
 
-  const getLinkNumForDate = (dateIso) => {
-    const curAnchor = category.id === 2
-      ? (dateIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
-      : category.anchor_date;
-    const curCycle = category.id === 2
-      ? (dateIso < '2026-10-01' ? 63 : 56)
-      : category.cycle_length;
-    const offset = getDayOffset(curAnchor, dateIso);
-    return getBaseLinkNumber(staff.row_position, offset, curCycle);
-  };
-
-  function resolveDutyDateIso(r) {
-    if (r.duty_date && /^\d{4}-\d{2}-\d{2}$/.test(r.duty_date)) return r.duty_date;
-    if (r.date_iso && /^\d{4}-\d{2}-\d{2}$/.test(r.date_iso)) return r.date_iso;
-    if (r.date_str) {
-      const parts = r.date_str.trim().split('/');
-      if (parts.length === 3) {
-        let [d, mStr, yr] = parts;
-        if (yr.length === 2) yr = '20' + yr;
-        return `${yr}-${mStr.padStart(2, '0')}-${d.padStart(2, '0')}`;
-      }
-    }
-    return null;
-  }
-
-  // 1. Fetch saved custom entries from nda_entries if present for this month/year
+  // 2. Fetch saved custom entries from nda_entries for this staff member and month
   const allSavedEntries = await all(
     `SELECT * FROM nda_entries 
      WHERE staff_id = ? AND month_year = ? ORDER BY row_order ASC, id ASC`,
@@ -218,288 +135,83 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
   );
   const savedEntries = allSavedEntries || [];
 
-  // 2. Fetch TA entries for this staff in date range to copy synced timings
-  const taEntries = await all(
-    `SELECT * FROM ta_entries 
-     WHERE staff_id = ? AND (
-       (duty_date >= ? AND duty_date <= ?) OR 
-       month_year = ?
-     ) ORDER BY row_order ASC`,
-    [staffId, actualStart, actualEnd, monthYearStr]
-  );
-  const taMap = {};
-  if (Array.isArray(taEntries)) {
-    taEntries.forEach((r, idx) => {
-      taMap[`${r.date_str}_${r.train_no}`] = r;
-      taMap[`${r.duty_date}_${r.train_no}`] = r;
-      taMap[`row_${r.row_order}`] = r;
-      taMap[`idx_${idx}`] = r;
-    });
-  }
-
-  // SQLite cache lookup for live train runs
-  const cachedRuns = await all(
-    'SELECT * FROM actual_train_runs WHERE run_date >= ? AND run_date <= ?',
-    [actualStart, actualEnd]
-  );
-  const cacheMap = {};
-  if (Array.isArray(cachedRuns)) {
-    cachedRuns.forEach(r => {
-      cacheMap[`${r.train_no}_${r.run_date}_${r.station_code}`] = r;
-    });
-  }
-
-  // Fetch muster records for this staff in date range
-  const musterRecords = await all(
-    'SELECT * FROM muster_records WHERE staff_id = ? AND date >= ? AND date <= ?',
-    [staff.id, actualStart, actualEnd]
-  );
-  const musterMap = {};
-  if (Array.isArray(musterRecords)) {
-    musterRecords.forEach(m => {
-      musterMap[m.date] = m;
-    });
-  }
-
-  // Fetch direct & substitute overrides for this staff in date range
-  const overridesRecords = await all(
-    'SELECT * FROM overrides WHERE (staff_id = ? OR substitute_staff_id = ?) AND date >= ? AND date <= ?',
-    [staff.id, staff.id, actualStart, actualEnd]
-  );
-  const directOverrideMap = {};
-  const subOverrideMap = {};
-  if (Array.isArray(overridesRecords)) {
-    overridesRecords.forEach(o => {
-      if (o.staff_id === staff.id) directOverrideMap[o.date] = o;
-      if (o.substitute_staff_id === staff.id) subOverrideMap[o.date] = o;
-    });
-  }
-
-  // Fetch LR Sheet records & Daily Earnings entries for Category 4 (LR) linkage
-  const lrRecords = await all(
-    'SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date >= ? AND date <= ?',
-    [staff.id, actualStart, actualEnd]
-  );
-  const lrMap = {};
-  if (Array.isArray(lrRecords)) {
-    lrRecords.forEach(r => {
-      lrMap[r.date] = r;
-    });
-  }
-
-  const earnRecords = await all(
-    'SELECT * FROM daily_earnings_entries WHERE staff_id = ? AND date >= ? AND date <= ?',
-    [staff.id, actualStart, actualEnd]
-  );
-  const earnMap = {};
-  if (Array.isArray(earnRecords)) {
-    earnRecords.forEach(e => {
-      earnMap[e.date] = e;
-    });
-  }
-
-  // Index saved entries by ISO date so any date updated in Daily Summary / Muster / LR Sheet regenerates cleanly
-  const savedByDateMap = {};
-  if (Array.isArray(savedEntries)) {
-    savedEntries.forEach(r => {
-      const dIso = resolveDutyDateIso(r);
-      if (dIso) {
-        if (!savedByDateMap[dIso]) savedByDateMap[dIso] = [];
-        savedByDateMap[dIso].push(r);
-      }
-    });
-  }
-
-  // Generate date list between actualStart and actualEnd
-  const dateList = [];
-  const curD = new Date(actualStart + 'T12:00:00');
-  const endD = new Date(actualEnd + 'T12:00:00');
-
-  while (curD <= endD) {
-    const cy = curD.getFullYear();
-    const cm = String(curD.getMonth() + 1).padStart(2, '0');
-    const cd = String(curD.getDate()).padStart(2, '0');
-    dateList.push(`${cy}-${cm}-${cd}`);
-    curD.setDate(curD.getDate() + 1);
-  }
+  const savedNdaMap = {};
+  savedEntries.forEach(s => {
+    if (s.date_str && s.train_no) {
+      savedNdaMap[`${s.date_str}_${s.train_no}`] = s;
+    }
+  });
 
   const rows = [];
   let rowOrder = 0;
 
-  for (const dateStrIso of dateList) {
-    const dParts = dateStrIso.split('-');
-    const dateStrDisplay = `${parseInt(dParts[2], 10)}/${parseInt(dParts[1], 10)}/${dParts[0].slice(-2)}`;
-
-    const muster = musterMap[dateStrIso];
-    const musterCode = muster ? muster.code.toUpperCase() : null;
-    const directOverride = directOverrideMap[dateStrIso];
-    const subOverride = subOverrideMap[dateStrIso];
-    const lrEntry = lrMap[dateStrIso];
-    const earnEntry = earnMap[dateStrIso];
-    const override = directOverride || subOverride || (earnEntry && earnEntry.duty && earnEntry.duty !== 'REST' && !isRestString(earnEntry.duty) ? {
-      extra_train_no: (/^\d{4,5}(?:\/\d{4,5})?$/.test(earnEntry.duty.trim()) ? earnEntry.duty.trim() : null),
-      overridden_link_number: (earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i) ? parseInt(earnEntry.duty.match(/(?:Link|link)\s*#?\s*(\d+)/i)[1], 10) : null),
-      reason: earnEntry.remarks || earnEntry.duty,
-      status: 'DUTY'
-    } : (earnEntry && (earnEntry.duty === 'REST' || isRestString(earnEntry.duty)) ? {
-      status: 'REST',
-      reason: earnEntry.remarks || 'Rest Day'
-    } : null));
-
-    const isMusterLeave = muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O', 'NH'].includes(musterCode);
-    const isDirectLeave = directOverride && (['LEAVE', 'SICK', 'CR', 'REST', 'ABSENT', 'MARK_LATER'].includes(directOverride.status) || directOverride.leave_type);
-
-    // If custom NDA rows were saved for this date and the staff member was not subsequently marked on leave/rest/standby
-    if (savedByDateMap[dateStrIso] && savedByDateMap[dateStrIso].length > 0 && !isMusterLeave && !isDirectLeave) {
-      for (const sRow of savedByDateMap[dateStrIso]) {
-        rowOrder++;
-        rows.push({
-          ...sRow,
-          row_order: rowOrder,
-          sched_dep: sRow.sched_dep || '',
-          sched_arr: sRow.sched_arr || '',
-          act_dep: (sRow.act_dep && sRow.act_dep !== '---') ? sRow.act_dep : '',
-          act_arr: (sRow.act_arr && sRow.act_arr !== '---') ? sRow.act_arr : '',
-          is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === sRow.date_str
-        });
-      }
+  for (const taRow of taJournal.rows) {
+    // Railway Rule: Leave days and rest days are omitted from the official NDA journal (allowance only for worked train runs)
+    if (taRow.is_leave || taRow.train_no === '---' || !taRow.train_no) {
       continue;
     }
 
-    let origLinkNum = null;
-    let origTrain = null;
-    let origIsRest = false;
+    rowOrder++;
+    const trainNo = taRow.train_no;
+    const dateStr = taRow.date_str;
+    const dateIso = taRow.date_iso || taRow.duty_date;
 
-    if (category.id !== 4) {
-      origLinkNum = getLinkNumForDate(dateStrIso);
-      const link = linkMap[origLinkNum];
-      origIsRest = !link || link.is_rest === 1 || isRestString(link.train_numbers);
-      origTrain = origIsRest ? 'REST' : (link.train_numbers || 'REST');
-    } else {
-      const lrCode = (lrEntry && lrEntry.duty_code)
-        ? lrEntry.duty_code
-        : (directOverride && (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason)))
-          ? (directOverride.extra_train_no || directOverride.advance_train_no || (directOverride.overridden_link_number ? `Link #${directOverride.overridden_link_number}` : directOverride.reason))
-          : (subOverride && (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason))))
-            ? (subOverride.extra_train_no || (subOverride.overridden_link_number ? `Link #${subOverride.overridden_link_number}` : (subOverride.original_link_number ? `Link #${subOverride.original_link_number}` : subOverride.reason)))
-            : (earnEntry && earnEntry.duty ? earnEntry.duty : null);
-      const dutyCode = lrCode;
-      origIsRest = !dutyCode ? (isRestString(override ? override.status : null) || isRestString(musterCode)) : isRestString(dutyCode);
-      origTrain = origIsRest ? 'REST' : (dutyCode || 'SPARE (HQ)');
+    let actDep = (taRow.dep_time && taRow.dep_time !== '---') ? taRow.dep_time : '';
+    let actArr = (taRow.arr_time && taRow.arr_time !== '---') ? taRow.arr_time : '';
+    let fromStn = (taRow.from_station && taRow.from_station !== '---') ? taRow.from_station : '';
+    let toStn = (taRow.to_station && taRow.to_station !== '---') ? taRow.to_station : '';
+
+    let nightHours = calculateNightDutyHours(actDep, actArr, fromStn, toStn, trainNo);
+
+    // If there is an existing saved custom nda_entry matching this date and train, overlay custom edits
+    const saved = savedNdaMap[`${dateStr}_${trainNo}`];
+    if (saved) {
+      if (saved.night_hours !== null && saved.night_hours !== undefined) {
+        nightHours = parseFloat(saved.night_hours);
+      }
+      if (saved.act_dep && saved.act_dep !== '---') {
+        actDep = saved.act_dep;
+      }
+      if (saved.act_arr && saved.act_arr !== '---') {
+        actArr = saved.act_arr;
+      }
+      if (saved.from_station && saved.from_station !== '---') {
+        fromStn = saved.from_station;
+      }
+      if (saved.to_station && saved.to_station !== '---') {
+        toStn = saved.to_station;
+      }
     }
 
-    const remarksStr = (override && override.reason) || (earnEntry && earnEntry.remarks) || (muster ? muster.remarks : '') || (lrEntry ? lrEntry.remarks : '') || '';
-
-    const cmp = compareDutyAndResolve({
-      origTrain,
-      origIsRest,
-      origLinkNum,
-      actualLinkNum: override?.overridden_link_number !== undefined ? override.overridden_link_number : null,
-      targetCategoryId: override?.target_category_id || category.id,
-      remarks: remarksStr,
-      overrideDuty: override,
-      muster,
-      allLinks: Object.values(linkMap),
-      categoryId: category.id,
-      dateStr: dateStrIso
+    rows.push({
+      id: saved ? saved.id : null,
+      row_order: rowOrder,
+      link_number: taRow.link_number || null,
+      date_str: dateStr,
+      date_iso: dateIso,
+      is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === dateStr,
+      train_no: trainNo,
+      sched_dep: '', // Left blank in official document
+      sched_arr: '', // Left blank in official document
+      act_dep: actDep,
+      act_arr: actArr,
+      from_station: fromStn,
+      to_station: toStn,
+      night_hours: nightHours
     });
-
-    // Condition 3: Rest day skipped in NDA document!
-    // Leave / Standby also skipped in NDA journal
-    if (cmp.action === 'SKIP' || cmp.action === 'LEAVE' || cmp.action === 'STANDBY') {
-      continue;
-    }
-
-    let duties = cmp.duty_rows;
-    if (!duties || duties.length === 0) {
-      if (cmp.train_no) {
-        duties = [{ train_no: cmp.train_no, from: 'GNT', to: '---', dep: '17:45', arr: '---' }];
-      } else {
-        continue;
-      }
-    }
-
-    const effectiveLinkNum = (override && override.overridden_link_number) ? override.overridden_link_number : origLinkNum;
-
-    for (const duty of duties) {
-      rowOrder++;
-      const isOutboundOnly = (!duty.arr || duty.arr === '---');
-      const isInboundOnly = (!duty.dep || duty.dep === '---');
-
-      const schedDep = (duty.dep && duty.dep !== '---') ? duty.dep : '';
-      const schedArr = (duty.arr && duty.arr !== '---') ? duty.arr : '';
-
-      let actualDep = (duty.dep && duty.dep !== '---') ? duty.dep : '';
-      let actualArr = (duty.arr && duty.arr !== '---') ? duty.arr : '';
-
-      // 1. Inherit from synced TA entry if available
-      const taMatch = taMap[`${dateStrDisplay}_${duty.train_no}`] || taMap[`${dateStrIso}_${duty.train_no}`] || taMap[`row_${rowOrder}`];
-      if (taMatch) {
-        if (duty.dep && duty.dep !== '---' && taMatch.dep_time && taMatch.dep_time !== '---') actualDep = taMatch.dep_time;
-        if (duty.arr && duty.arr !== '---' && taMatch.arr_time && taMatch.arr_time !== '---') actualArr = taMatch.arr_time;
-      } else {
-        // 2. Or from actual_train_runs cache
-        if (duty.dep && duty.dep !== '---' && duty.from && duty.from !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`]) {
-          const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.from}`];
-          if (cached.act_dep && cached.act_dep !== '---') actualDep = cached.act_dep;
-        }
-        if (duty.arr && duty.arr !== '---' && duty.to && duty.to !== '---' && cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`]) {
-          const cached = cacheMap[`${duty.train_no}_${dateStrIso}_${duty.to}`];
-          if (cached.act_arr && cached.act_arr !== '---') actualArr = cached.act_arr;
-        }
-      }
-
-      if (actualDep === '---') actualDep = '';
-      if (actualArr === '---') actualArr = '';
-
-      const fromStn = isOutboundOnly ? (duty.from || '') : (isInboundOnly ? '' : (duty.from || ''));
-      const toStn = isInboundOnly ? (duty.to || '') : (isOutboundOnly ? '' : (duty.to || ''));
-
-      const nightHours = calculateNightDutyHours(actualDep, actualArr, duty.from, duty.to, duty.train_no);
-
-      rows.push({
-        id: null,
-        row_order: rowOrder,
-        link_number: effectiveLinkNum,
-        date_str: dateStrDisplay,
-        date_iso: dateStrIso,
-        is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === dateStrDisplay,
-        train_no: duty.train_no,
-        sched_dep: '', // Left blank in official document
-        sched_arr: '', // Left blank in official document
-        act_dep: actualDep,
-        act_arr: actualArr,
-        from_station: fromStn,
-        to_station: toStn,
-        night_hours: nightHours
-      });
-    }
   }
 
   const totalHours = rows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
 
   return {
-    employee: {
-      id: staff.id,
-      name: staff.name,
-      designation: staff.designation || 'CTI',
-      branch: 'COMMERCIAL',
-      division: 'GNT',
-      hq: staff.hq_station || 'GNT',
-      pay: staff.pay_amount || 68000,
-      pf_no: (staff.pf_no && staff.pf_no !== '07323475') ? String(staff.pf_no) : '',
-      bill_unit: (staff.bill_unit && staff.bill_unit !== '0910629') ? String(staff.bill_unit) : '',
-      doa: (staff.doa && staff.doa !== '05/08/2000') ? String(staff.doa) : '',
-      category_name: category.name,
-      category_code: category.code
-    },
+    employee: taJournal.employee || staff,
     month_year: monthYearStr,
-    month_name: new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' }).toUpperCase(),
-    period_label: `${actualStart.split('-').reverse().join('/')} to ${actualEnd.split('-').reverse().join('/')}`,
-    start_date: actualStart,
-    end_date: actualEnd,
-    year: y,
-    month: m,
+    month_name: taJournal.month_name || '',
+    period_label: taJournal.period_label || '',
+    start_date: taJournal.start_date,
+    end_date: taJournal.end_date,
+    year: taJournal.year,
+    month: taJournal.month,
     rows,
     total_night_hours: Math.round(totalHours)
   };
@@ -514,4 +226,3 @@ export {
   generateStaffNdaJournal,
   calculateNightDutyHours
 };
-
