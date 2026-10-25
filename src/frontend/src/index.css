@@ -1029,6 +1029,21 @@ p, span, label, input, select, button, td, th {
 }
 
 /* ==========================================================================
+   DOCUMENT & TABLE HORIZONTAL SCROLL HELPERS
+   ========================================================================== */
+
+.mobile-table-scroll-hint {
+  display: none;
+}
+
+.document-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ==========================================================================
    BADGES & PILLS
    ========================================================================== */
 
@@ -1662,6 +1677,171 @@ html, body {
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
+  }
+
+  /* 4. MOBILE DOCUMENT SHEETS & UNCOMPRESSED TABLES (NDA, TA, DIARY, EARNINGS, MUSTER) */
+  .mobile-table-scroll-hint {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    padding: 7px 12px !important;
+    margin: 8px 0 12px 0 !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: var(--primary) !important;
+    background: rgba(212, 161, 92, 0.12) !important;
+    border: 1px dashed rgba(212, 161, 92, 0.4) !important;
+    border-radius: 8px !important;
+    letter-spacing: 0.02em !important;
+    user-select: none !important;
+  }
+
+  .mobile-table-scroll-hint span {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* Printable document sheets scale smoothly to mobile screen width */
+  .printable-document-sheet,
+  .nda-document-paper,
+  .ta-document-paper,
+  .diary-document-paper,
+  .daily-earnings-paper {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    padding: 14px 10px !important;
+    margin: 0 auto 20px auto !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4) !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Scrollable wrappers provide momentum horizontal swipe */
+  .document-table-scroll,
+  .nda-table-wrapper,
+  .ta-table-wrapper,
+  .diary-table-wrapper,
+  .daily-earnings-table-wrapper,
+  .individual-muster-table-wrapper {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin-bottom: 12px !important;
+    border-radius: 6px !important;
+    scrollbar-width: thin !important;
+  }
+
+  /* Prevent table column compression across all document and report tables */
+  .document-table-scroll table,
+  .nda-document-table,
+  .ta-document-table,
+  .diary-document-table,
+  .daily-earnings-table,
+  .individual-muster-table,
+  .staff-movement-table {
+    width: max-content !important;
+    table-layout: auto !important;
+    border-collapse: collapse !important;
+  }
+
+  /* Legible minimum widths on mobile screens */
+  .nda-document-table {
+    min-width: 820px !important;
+  }
+
+  .ta-document-table {
+    min-width: 1050px !important;
+  }
+
+  .diary-document-table {
+    min-width: 1150px !important;
+  }
+
+  .daily-earnings-table {
+    min-width: 880px !important;
+  }
+
+  .individual-muster-table {
+    min-width: 760px !important;
+  }
+
+  .table-responsive .roster-table {
+    min-width: 880px !important;
+    width: max-content !important;
+  }
+
+  .data-table-container .data-table {
+    min-width: 880px !important;
+    width: max-content !important;
+  }
+
+  /* Touch-friendly table cell padding */
+  .document-table-scroll th,
+  .document-table-scroll td,
+  .printable-document-sheet th,
+  .printable-document-sheet td {
+    padding: 6px 8px !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap !important;
+  }
+
+  /* Preserve compact proportional inputs within document tables */
+  .document-table-scroll input,
+  .document-table-scroll select,
+  .printable-document-sheet input,
+  .printable-document-sheet select,
+  .ta-inline-input {
+    font-size: 13px !important;
+    min-height: 28px !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Responsive document action toolbar */
+  .document-action-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-bottom: 14px !important;
+  }
+
+  .document-action-toolbar .btn,
+  .document-action-toolbar button {
+    flex: 1 1 calc(50% - 6px) !important;
+    min-height: 42px !important;
+    font-size: 0.86rem !important;
+    justify-content: center !important;
+  }
+
+  /* Responsive preset selector pills with swipe */
+  .preset-tabs-mobile {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    padding-bottom: 6px !important;
+    gap: 6px !important;
+    scrollbar-width: thin !important;
+  }
+
+  .preset-tabs-mobile button {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    padding: 7px 12px !important;
+  }
+
+  .document-meta-header {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    font-size: 0.84rem !important;
   }
 }
 

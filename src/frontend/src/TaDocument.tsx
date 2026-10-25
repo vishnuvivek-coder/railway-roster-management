@@ -1563,7 +1563,7 @@ export default function TaDocument({
           {/* ====================================================
              PAGE 1 OF 2 (EXACT REPLICA OF EXCEL SHEET 1)
              ==================================================== */}
-          <div className="ta-page-sheet" style={{
+          <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1661,9 +1661,14 @@ export default function TaDocument({
               </div>
             </div>
 
+            {/* Mobile Scroll Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+
             {/* 12-Column Main Table (Page 1) */}
-            <div>
-              <table style={{
+            <div className="ta-table-wrapper document-table-scroll">
+              <table className="ta-document-table" style={{
                 width: '100%',
                 tableLayout: 'fixed',
                 borderCollapse: 'collapse',
@@ -1957,7 +1962,7 @@ export default function TaDocument({
           {/* ====================================================
              PAGE 2 OF 2 (EXACT REPLICA OF EXCEL SHEET 2)
              ==================================================== */}
-          <div className="ta-page-sheet" style={{
+          <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1974,9 +1979,14 @@ export default function TaDocument({
             flexDirection: 'column'
           }}>
             
+            {/* Mobile Scroll Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+
             {/* 12-Column Main Table (Page 2 Continuation) */}
-            <div>
-              <table style={{
+            <div className="ta-table-wrapper document-table-scroll">
+              <table className="ta-document-table" style={{
                 width: '100%',
                 tableLayout: 'fixed',
                 borderCollapse: 'collapse',

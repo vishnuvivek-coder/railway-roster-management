@@ -1216,9 +1216,14 @@ export default function IndividualMusterDocument({
             </div>
           </div>
 
+          {/* Mobile Scroll Hint */}
+          <div className="mobile-table-scroll-hint no-print">
+            <span>⇄ Swipe horizontally to view full table</span>
+          </div>
+
           {/* Daily Muster & Duties Table */}
-          <div className="table-responsive" style={{ border: '1px solid var(--border-glass)', borderRadius: '8px', overflow: 'hidden' }}>
-            <table className="roster-table" style={{ width: '100%', fontSize: '0.86rem' }}>
+          <div className="table-responsive individual-muster-table-wrapper document-table-scroll" style={{ border: '1px solid var(--border-glass)', borderRadius: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table className="roster-table individual-muster-table" style={{ width: '100%', fontSize: '0.86rem' }}>
               <thead>
                 <tr style={{ background: 'rgba(255, 255, 255, 0.04)' }}>
                   <th style={{ width: '50px', textAlign: 'center' }}>Day</th>

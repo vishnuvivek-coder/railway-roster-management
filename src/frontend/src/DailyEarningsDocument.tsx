@@ -967,7 +967,7 @@ export default function DailyEarningsDocument({
         /* ========================================================================================= */
         /* VIEW 1: CONTINUOUS MULTI-DAY REGISTER (EXACT FORMAT MATCHING USER SPREADSHEET SCREENSHOT) */
         /* ========================================================================================= */
-        <div className="daily-earnings-sheet-paper" style={{
+        <div className="daily-earnings-sheet-paper daily-earnings-paper printable-document-sheet" style={{
           background: '#FFFFFF',
           color: '#000000',
           padding: '16px',
@@ -977,12 +977,17 @@ export default function DailyEarningsDocument({
           border: '1px solid #C0C0C0',
           fontFamily: 'Arial, sans-serif'
         }}>
+          {/* Mobile Scroll Hint */}
+          <div className="mobile-table-scroll-hint no-print">
+            <span>⇄ Swipe horizontally to view full table</span>
+          </div>
+
           {rangeDays.map((dayData, dayIdx) => {
             const filteredRows = filterRows(dayData.rows);
             const daySubtotal = computeSubtotal(dayData.rows);
 
             return (
-              <div key={dayData.date || dayIdx} style={{ marginBottom: '20px' }}>
+              <div key={dayData.date || dayIdx} className="daily-earnings-table-wrapper document-table-scroll" style={{ marginBottom: '20px' }}>
                 <table className="daily-earnings-table" style={{
                   width: '100%',
                   borderCollapse: 'collapse',

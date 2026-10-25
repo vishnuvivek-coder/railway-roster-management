@@ -1253,7 +1253,7 @@ export default function DiaryDocument({
           {/* ====================================================
              PAGE 1 OF 2 (LEGAL LANDSCAPE - 100% FULL PAGE FILL)
              ==================================================== */}
-          <div className="diary-page-sheet" style={{
+          <div className="diary-page-sheet diary-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1319,9 +1319,14 @@ export default function DiaryDocument({
               </div>
             </div>
 
+            {/* Mobile Scroll Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+
             {/* 18-Column Official Table (Page 1) */}
-            <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
-              <table style={{
+            <div className="diary-table-wrapper document-table-scroll" style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
+              <table className="diary-document-table" style={{
                 width: '100%',
                 tableLayout: 'fixed',
                 borderCollapse: 'collapse',
@@ -1620,7 +1625,7 @@ export default function DiaryDocument({
           {/* ====================================================
              PAGE 2 OF 2 (LEGAL LANDSCAPE - 100% FULL PAGE FILL)
              ==================================================== */}
-          <div className="diary-page-sheet" style={{
+          <div className="diary-page-sheet diary-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1655,9 +1660,14 @@ export default function DiaryDocument({
               </div>
             </div>
 
+            {/* Mobile Scroll Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+
             {/* 18-Column Official Table (Page 2) */}
-            <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
-              <table style={{
+            <div className="diary-table-wrapper document-table-scroll" style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
+              <table className="diary-document-table" style={{
                 width: '100%',
                 tableLayout: 'fixed',
                 borderCollapse: 'collapse',

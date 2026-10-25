@@ -802,8 +802,13 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }: TaA
             )}
           </div>
         ) : (
-          <div className="data-table-container" style={{ maxHeight: '680px', overflowY: 'auto' }}>
-            <table className="data-table" style={{ width: '100%', fontSize: '0.84rem' }}>
+          <>
+            {/* Mobile Scroll Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+            <div className="data-table-container document-table-scroll" style={{ maxHeight: '680px', overflowY: 'auto' }}>
+              <table className="data-table" style={{ width: '100%', fontSize: '0.84rem' }}>
               <thead>
                 <tr style={{ background: '#17171a', position: 'sticky', top: 0, zIndex: 10 }}>
                   {isAdmin && (
@@ -1036,7 +1041,8 @@ export default function TaApprovals({ isAdmin, authToken, categories = [] }: TaA
               </tbody>
             </table>
           </div>
-        )}
+        </>
+      )}
       </div>
     </div>
   );

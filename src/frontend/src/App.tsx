@@ -6062,6 +6062,9 @@ export default function App() {
                     </div>
 
                     {/* Table View */}
+                    <div className="mobile-table-scroll-hint no-print">
+                      <span>⇄ Swipe horizontally to view full movement details</span>
+                    </div>
                     <div className="table-responsive" style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-glass)' }}>
                       <table className="roster-table" style={{ width: '100%' }}>
                         <thead>

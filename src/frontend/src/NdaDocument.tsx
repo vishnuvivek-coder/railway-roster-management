@@ -788,7 +788,7 @@ export default function NdaDocument({
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="document-action-toolbar btn-group" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={handleSyncNtes}
               disabled={syncingNtes || loading}
@@ -987,7 +987,7 @@ export default function NdaDocument({
           </div>
 
           {/* Quick Period Presets */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="preset-tabs-mobile" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginRight: '4px' }}>
               Quick Presets:
             </span>
@@ -1199,7 +1199,7 @@ export default function NdaDocument({
         </div>
       ) : journalData ? (
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div className="nda-page-sheet" style={{
+          <div className="nda-page-sheet nda-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1231,7 +1231,7 @@ export default function NdaDocument({
             </div>
 
             {/* Metadata Header Block: NAME, DESIG, BILL UNIT NO, PF NO */}
-            <div style={{
+            <div className="document-meta-header" style={{
               display: 'grid',
               gridTemplateColumns: '65px 1fr auto',
               alignItems: 'center',
@@ -1306,9 +1306,14 @@ export default function NdaDocument({
               </div>
             </div>
 
+            {/* Mobile Swipe Hint */}
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view full table</span>
+            </div>
+
             {/* Official NDA 9-Column Table */}
-            <div>
-              <table style={{
+            <div className="nda-table-wrapper document-table-scroll">
+              <table className="nda-document-table" style={{
                 width: '100%',
                 borderCollapse: 'collapse',
                 border: '1.5px solid #000',

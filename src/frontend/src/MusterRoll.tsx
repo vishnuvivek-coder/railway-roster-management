@@ -2039,6 +2039,9 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
             border: '1px solid var(--border-glass)',
             overflow: 'hidden'
           }}>
+            <div className="mobile-table-scroll-hint no-print">
+              <span>⇄ Swipe horizontally to view all dates and staff</span>
+            </div>
             <div className="muster-table-container" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '72vh' }}>
               <table className="roster-table muster-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#18181b' }}>
