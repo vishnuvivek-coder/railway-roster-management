@@ -3369,6 +3369,35 @@ export default function App() {
     });
   };
 
+  const openQuickAssignForTrain = (groupOrItem, isNonDaily = false) => {
+    if (isNonDaily) {
+      setQuickAssignNonDailyTrain({
+        isNonDaily: true,
+        trainItem: groupOrItem,
+        train_number: groupOrItem.train_number,
+        departure_station: groupOrItem.departure_station,
+        arrival_station: groupOrItem.arrival_station,
+        departure_time: groupOrItem.departure_time,
+        arrival_time: groupOrItem.arrival_time,
+        id: groupOrItem.id
+      });
+    } else {
+      setQuickAssignNonDailyTrain({
+        isNonDaily: false,
+        targetGroup: groupOrItem,
+        train_number: groupOrItem.firstTrain,
+        departure_station: groupOrItem.firstFrom || 'GNT',
+        arrival_station: groupOrItem.firstTo || 'Outstation',
+        departure_time: '',
+        arrival_time: '',
+        slotId: groupOrItem.slotId
+      });
+    }
+    setQuickAssignSearch('');
+    setQuickAssignShowBusy(false);
+    setQuickAssignCatId('ALL');
+  };
+
   const handleDragDropOnTrain = async (dragData, targetGroup, targetSpecificDuty = null, forceExtra = false) => {
     if (!isAdmin) return;
     if (!dragData || !targetGroup) return;
@@ -8344,6 +8373,30 @@ export default function App() {
                                             : (draggedStaff
                                               ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
                                               : `➕ Drag & drop employee here (adds down below as extra crew for Train ${group.firstTrain})`)}
+                                          {isAdmin && (
+                                            <button
+                                              type="button"
+                                              className="btn btn-primary no-print"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openQuickAssignForTrain(group, false);
+                                              }}
+                                              style={{
+                                                marginLeft: '12px',
+                                                padding: '3px 10px',
+                                                fontSize: '0.74rem',
+                                                fontWeight: 700,
+                                                borderRadius: '5px',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                              }}
+                                              title={`Add new/extra employees to Train ${group.firstTrain}`}
+                                            >
+                                              ➕ Add More Employees
+                                            </button>
+                                          )}
                                           {activeMovingStaff && (
                                             <button
                                               type="button"
@@ -8841,6 +8894,30 @@ export default function App() {
                                               : (draggedStaff
                                                 ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
                                                 : '➕ Drag & drop employee here (adds down below as extra crew)')}
+                                            {isAdmin && (
+                                              <button
+                                                type="button"
+                                                className="btn btn-primary no-print"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  openQuickAssignForTrain(group, false);
+                                                }}
+                                                style={{
+                                                  marginLeft: '8px',
+                                                  padding: '2px 8px',
+                                                  fontSize: '0.72rem',
+                                                  fontWeight: 700,
+                                                  borderRadius: '4px',
+                                                  cursor: 'pointer',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '3px'
+                                                }}
+                                                title={`Add new/extra employees to Train ${group.firstTrain}`}
+                                              >
+                                                ➕ Add More Employees
+                                              </button>
+                                            )}
                                             {activeMovingStaff && (
                                               <button
                                                 type="button"
@@ -9993,6 +10070,26 @@ export default function App() {
                                               <span className="badge badge-approved" style={{ fontSize: '0.84rem', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                                 👤 <strong>{assignedStaffName}</strong> ({assignedStaffDesg})
                                               </span>
+                                              {isAdmin && (
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-primary no-print"
+                                                  onClick={() => openQuickAssignForTrain(item, true)}
+                                                  style={{
+                                                    padding: '3px 9px',
+                                                    fontSize: '0.73rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '5px',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                  }}
+                                                  title={`Add more employees to Train ${item.train_number}`}
+                                                >
+                                                  ➕ Add More Employees
+                                                </button>
+                                              )}
                                             </div>
                                           ) : (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
@@ -10010,12 +10107,7 @@ export default function App() {
                                                 <button
                                                   type="button"
                                                   className="btn btn-primary no-print"
-                                                  onClick={() => {
-                                                    setQuickAssignNonDailyTrain(item);
-                                                    setQuickAssignSearch('');
-                                                    setQuickAssignShowBusy(false);
-                                                    setQuickAssignCatId('ALL');
-                                                  }}
+                                                  onClick={() => openQuickAssignForTrain(item, true)}
                                                   style={{
                                                     padding: '4px 10px',
                                                     fontSize: '0.74rem',
@@ -15790,15 +15882,15 @@ export default function App() {
       )}
 
       {/* ---------------------------------------------------- */}
-      {/* QUICK ASSIGN STAFF TO NON-DAILY TRAIN MODAL          */}
+      {/* QUICK ASSIGN / ADD EMPLOYEES TO TRAIN MODAL          */}
       {/* ---------------------------------------------------- */}
       {quickAssignNonDailyTrain && (() => {
         const q = quickAssignSearch.toLowerCase().trim();
 
-        // 1. Gather all non-vacant running staff eligible for Non-Daily trains (exclude Conductors/COR Category 1 and Depot Incharges)
+        // 1. Gather all non-vacant running staff eligible for trains (exclude only Depot Incharges)
         const validStaff = (allStaffList || []).filter(s => 
           s.name && !s.name.toUpperCase().includes('VACANT') &&
-          s.category_id !== null && s.category_id !== undefined && parseInt(s.category_id, 10) !== 1 && s.row_position > 0 &&
+          s.category_id !== null && s.category_id !== undefined && s.row_position > 0 &&
           !['MV PRASAD', 'P PRATHAP'].includes(s.name.trim().toUpperCase())
         );
 
@@ -15813,12 +15905,23 @@ export default function App() {
           const isBusy = Boolean(currentWorking);
 
           // Leave / Sick check
-          const isLeaveOrSick = d && (
-            ['SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(d.status) ||
-            d.leave_type ||
+          const isMarkedLeaveInMuster = d && (
+            ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.status) ||
+            Boolean(d.leave_type) ||
             (d.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(String(d.muster_code).toUpperCase()))
           );
-          const leaveReason = d ? (d.status === 'MARK_LATER' ? 'Reason Later' : (d.leave_type || d.muster_code || d.status)) : '';
+
+          // Returned from leave / reported fit
+          const isReturnedFromLeave = Boolean(
+            d && (
+              d.status === 'AVAILABLE_FOR_BOOKING' ||
+              (d.overrideReason && /fit|returned|available|booking/i.test(d.overrideReason)) ||
+              (d.muster_code && ['P', 'E'].includes(String(d.muster_code).toUpperCase()) && (d.leave_type || d.overrideReason))
+            )
+          );
+
+          const isLeaveOrSick = isMarkedLeaveInMuster && !isReturnedFromLeave;
+          const leaveReason = d ? (d.leave_type || d.muster_code || d.status) : '';
 
           const isLR = s.category_id === 4;
           const linkNum = d ? parseInt(d.link_number, 10) : null;
@@ -15831,8 +15934,12 @@ export default function App() {
           let statusBadgeColor = '#34d399';
           let statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
 
-          if (isLeaveOrSick) {
-            statusLabel = (d && d.status === 'MARK_LATER') ? '⏳ Reason Later' : `🏖️ ${leaveReason || 'On Leave / Sick'}`;
+          if (isReturnedFromLeave) {
+            statusLabel = '🟢 Available (Reported Fit / Released at HQ)';
+            statusBadgeColor = '#34d399';
+            statusBadgeBg = 'rgba(16, 185, 129, 0.2)';
+          } else if (isLeaveOrSick) {
+            statusLabel = `🏖️ ${leaveReason || 'On Leave / Sick'}`;
             statusBadgeColor = '#f87171';
             statusBadgeBg = 'rgba(239, 68, 68, 0.15)';
           } else if (isBusy) {
@@ -15870,6 +15977,8 @@ export default function App() {
             currentWorking,
             isBusy,
             isLeaveOrSick,
+            isReturnedFromLeave,
+            leaveReason,
             isLR,
             isNonDailyLink,
             isWeeklyRest,
@@ -15885,9 +15994,12 @@ export default function App() {
         const filteredStaff = staffWithStatus.filter(s => {
           // Category filter
           if (quickAssignCatId === 'ENTIRE_ROSTER') {
-            // Show all
+            // Show all staff in the roster
+          } else if (quickAssignCatId === 'RETURNED_LEAVE') {
+            // Show staff who returned from leave or are marked on leave
+            if (!s.isReturnedFromLeave && !s.isLeaveOrSick) return false;
           } else if (quickAssignCatId === 'ALL') {
-            // All available candidates
+            // All available candidates (including those who reported fit / returned from leave)
             if (s.isLeaveOrSick) return false;
             if (s.isBusy && !quickAssignShowBusy) return false;
           } else if (quickAssignCatId === 'NON_DAILY') {
@@ -15910,29 +16022,55 @@ export default function App() {
           }
           return true;
         }).sort((a, b) => {
-          // In ALL Available view: prioritize LR pool, then Non-Daily, then Weekly Rest, then alphabetical
           if (quickAssignCatId === 'ALL') {
-            const priority = (st) => (st.isLR ? 1 : st.isNonDailyLink ? 2 : st.isReleasedHq ? 3 : st.isWeeklyRest ? 4 : 5);
+            const priority = (st) => (st.isReturnedFromLeave ? 0 : st.isLR ? 1 : st.isNonDailyLink ? 2 : st.isReleasedHq ? 3 : st.isWeeklyRest ? 4 : 5);
             if (priority(a) !== priority(b)) return priority(a) - priority(b);
+          } else if (quickAssignCatId === 'RETURNED_LEAVE') {
+            if (a.isReturnedFromLeave !== b.isReturnedFromLeave) return a.isReturnedFromLeave ? -1 : 1;
           }
           return (a.name || '').trim().localeCompare((b.name || '').trim());
         });
 
-        const handleSelectStaffForNonDaily = (s) => {
+        const handleSelectStaffForTrain = (s) => {
           const currentWorking = s.currentWorking || getStaffCurrentWorkingTrain(s.id);
           const targetTrain = quickAssignNonDailyTrain;
           setQuickAssignNonDailyTrain(null);
 
-          if (currentWorking) {
-            setAppShiftConfirm({
-              staffName: s.name,
-              currentTrainDesc: currentWorking,
-              targetTrainDesc: `Non-Daily Train ${targetTrain.train_number}`,
-              onConfirm: () => doActualAssignNonDaily(s.id, s.name, targetTrain, null)
-            });
-          } else {
-            doActualAssignNonDaily(s.id, s.name, targetTrain, null);
+          const proceedWithAssignment = () => {
+            if (targetTrain.isNonDaily) {
+              const trainItem = targetTrain.trainItem || targetTrain;
+              if (currentWorking) {
+                setAppShiftConfirm({
+                  staffName: s.name,
+                  currentTrainDesc: currentWorking,
+                  targetTrainDesc: `Non-Daily Train ${targetTrain.train_number}`,
+                  onConfirm: () => doActualAssignNonDaily(s.id, s.name, trainItem, null)
+                });
+              } else {
+                doActualAssignNonDaily(s.id, s.name, trainItem, null);
+              }
+            } else {
+              const targetGroup = targetTrain.targetGroup;
+              if (currentWorking) {
+                setAppShiftConfirm({
+                  staffName: s.name,
+                  currentTrainDesc: currentWorking,
+                  targetTrainDesc: `Train ${targetTrain.train_number}`,
+                  onConfirm: () => doActualDropStaff(s.id, s.name, targetGroup, true, null, null)
+                });
+              } else {
+                doActualDropStaff(s.id, s.name, targetGroup, true, null, null);
+              }
+            }
+          };
+
+          if (s.isLeaveOrSick) {
+            if (!window.confirm(`${s.name} is currently marked as ${s.leaveReason || 'On Leave / Sick'}. Assigning them to this train will mark them as reported fit and on duty. Proceed?`)) {
+              return;
+            }
           }
+
+          proceedWithAssignment();
         };
 
         return (
@@ -15957,11 +16095,11 @@ export default function App() {
             <div 
               className="card" 
               style={{ 
-                maxWidth: '720px', 
+                maxWidth: '740px', 
                 width: '100%', 
                 maxHeight: '88vh',
-                display: 'flex',
-                flexDirection: 'column',
+                display: 'flex', 
+                flexDirection: 'column', 
                 background: 'var(--bg-card, #1e293b)', 
                 border: '1px solid var(--border-glass)', 
                 borderRadius: '16px', 
@@ -15975,10 +16113,10 @@ export default function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)' }}>
-                    ➕ Assign Staff to Train {quickAssignNonDailyTrain.train_number}
+                    ➕ {quickAssignNonDailyTrain.isNonDaily ? 'Assign Staff to Non-Daily Train' : 'Add Employee to Train'} {quickAssignNonDailyTrain.train_number}
                   </h3>
                   <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary)' }}>
-                    {quickAssignNonDailyTrain.departure_station} ({quickAssignNonDailyTrain.departure_time || '-'}) ➔ {quickAssignNonDailyTrain.arrival_station} ({quickAssignNonDailyTrain.arrival_time || '-'}) • Date: <strong>{selectedDate}</strong>
+                    {quickAssignNonDailyTrain.departure_station || 'GNT'} {quickAssignNonDailyTrain.departure_time ? `(${quickAssignNonDailyTrain.departure_time})` : ''} ➔ {quickAssignNonDailyTrain.arrival_station || 'Outstation'} {quickAssignNonDailyTrain.arrival_time ? `(${quickAssignNonDailyTrain.arrival_time})` : ''} • Date: <strong>{selectedDate}</strong>
                   </p>
                 </div>
                 <button
@@ -16001,11 +16139,13 @@ export default function App() {
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
                 {[
                   { id: 'ALL', label: '🟢 All Available' },
+                  { id: 'RETURNED_LEAVE', label: '🏖️ Returned / On Leave' },
                   { id: '4', label: '📋 LR Relief Pool' },
                   { id: 'NON_DAILY', label: '⚡ Non-Daily Pool' },
+                  { id: '1', label: '🎩 Conductors (COR)' },
                   { id: '2', label: '🛌 Sleeper / TTI' },
                   { id: '3', label: '👩 Ladies / TTE' },
-                  { id: 'ENTIRE_ROSTER', label: '👥 All Non-COR Staff' }
+                  { id: 'ENTIRE_ROSTER', label: '👥 Entire Depot Roster' }
                 ].map(cat => {
                   const isSelected = quickAssignCatId === cat.id;
                   return (
@@ -16153,7 +16293,7 @@ export default function App() {
                         <button
                           type="button"
                           className={isBusy ? 'btn btn-secondary' : 'btn btn-primary'}
-                          onClick={() => handleSelectStaffForNonDaily(s)}
+                          onClick={() => handleSelectStaffForTrain(s)}
                           style={{
                             padding: '6px 14px',
                             fontSize: '0.78rem',
@@ -16166,7 +16306,7 @@ export default function App() {
                             border: isBusy ? 'none' : undefined
                           }}
                         >
-                          {isBusy ? '⇄ Shift Duty' : '✓ Assign'}
+                          {isBusy ? '⇄ Shift Duty' : s.isLeaveOrSick ? '✓ Report Fit & Assign' : '✓ Assign to Train'}
                         </button>
                       </div>
                     );

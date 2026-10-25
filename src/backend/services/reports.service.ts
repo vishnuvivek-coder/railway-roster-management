@@ -494,8 +494,12 @@ export async function getDailyView(query: any) {
             activeLink = null;
             isOverridden = true;
             overrideReason = `Muster: Absent (O)${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'E') {
+          } else if (musterCode === 'P' || musterCode === 'E') {
             status = 'DUTY';
+            if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
+              status = 'AVAILABLE_FOR_BOOKING';
+              overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+            }
           }
         }
 
@@ -875,8 +879,12 @@ export async function getAvailabilitySheet(query: any) {
             activeLink = null;
             dutyDetails = null;
             isOverridden = true;
-          } else if (musterCode === 'E') {
+          } else if (musterCode === 'P' || musterCode === 'E') {
             status = 'DUTY';
+            if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
+              status = 'AVAILABLE_FOR_BOOKING';
+              overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+            }
           }
         }
 

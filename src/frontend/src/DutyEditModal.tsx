@@ -886,13 +886,13 @@ export default function DutyEditModal({
           };
         }
 
-        // 3. Leave, Sick, CR, Absent, Mark Later (applies to all staff including LR)
+        // 3. Leave, Sick, CR, Absent (applies to staff currently on recorded leave)
         if (
-          ['SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(activeDuty.status) ||
+          ['SICK', 'LEAVE', 'CR', 'ABSENT'].includes(activeDuty.status) ||
           activeDuty.leave_type ||
-          (activeDuty.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O', 'R'].includes(activeDuty.muster_code.toUpperCase()))
+          (activeDuty.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH', 'SICK', 'CR', 'O'].includes(activeDuty.muster_code.toUpperCase()))
         ) {
-          const reason = activeDuty.status === 'MARK_LATER' ? 'Reason Later' : (activeDuty.leave_type || activeDuty.muster_code || activeDuty.status);
+          const reason = activeDuty.leave_type || activeDuty.muster_code || activeDuty.status;
           return {
             isAssigned: false,
             isUnavailable: true,
@@ -1679,7 +1679,9 @@ export default function DutyEditModal({
         if (shiftedMode !== 'MUTUAL' && (hasReplacementAction || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
           const repStatus = getStaffAssignmentStatus(chosenRepObj, selectedDate);
           if (repStatus.isUnavailable && !isUpgradingToCor && (deleteReason === 'REASSIGN_STAFF' ? reassignCatFilter : replacementCatId) !== 'ENTIRE_ROSTER') {
-            throw new Error(`${chosenRepObj.name} is currently on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned as replacement. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
+            if (!window.confirm(`${chosenRepObj.name} is currently marked on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate}. Assigning them will mark them as reported fit / on duty. Proceed?`)) {
+              return;
+            }
           }
           if (repStatus.isAssigned && !isUpgradingToCor) {
             setShiftConfirmDialog({
@@ -1713,10 +1715,12 @@ export default function DutyEditModal({
         const linkNum = targetLink ? parseInt(targetLink, 10) : null;
         const targetCatIdNum = parseInt(targetCategoryId, 10);
 
-        // If employee is unavailable and not entire roster selection, block assignment
+        // If employee was marked unavailable (e.g. Leave / Sick), confirm before assigning to duty
         const assignStatus = getStaffAssignmentStatus(assignedStaffObj, selectedDate);
         if (assignStatus.isUnavailable && assignCatId !== 'ENTIRE_ROSTER') {
-          throw new Error(`${assignedStaffObj.name} is currently on ${assignStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate} and cannot be assigned to duty. Choose 'All Employees (Entire Roster)' if you want to assign them.`);
+          if (!window.confirm(`${assignedStaffObj.name} is currently marked on ${assignStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate}. Assigning them will mark them as reported fit and on duty. Proceed?`)) {
+            return;
+          }
         }
 
         // If employee is already working another train/duty, confirm before shifting

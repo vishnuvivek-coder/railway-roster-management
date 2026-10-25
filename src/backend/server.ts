@@ -10939,8 +10939,12 @@ app.get('/api/reports/daily-view', async (req, res) => {
             activeLink = null;
             isOverridden = true;
             overrideReason = `Muster: Absent (O)${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'E') {
+          } else if (musterCode === 'P' || musterCode === 'E') {
             status = 'DUTY';
+            if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
+              status = 'AVAILABLE_FOR_BOOKING';
+              overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+            }
           }
         }
 
@@ -11337,8 +11341,12 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
             activeLink = null;
             dutyDetails = null;
             isOverridden = true;
-          } else if (musterCode === 'E') {
+          } else if (musterCode === 'P' || musterCode === 'E') {
             status = 'DUTY';
+            if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
+              status = 'AVAILABLE_FOR_BOOKING';
+              overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+            }
           }
         }
 
