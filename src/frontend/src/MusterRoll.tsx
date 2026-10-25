@@ -271,9 +271,16 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
       if (e.detail && e.detail.source === 'muster_roll') return;
       fetchMuster(selectedCycleStart);
     };
+    const handleTriggerSaveAll = () => {
+      handleSaveAllMuster();
+    };
     window.addEventListener('railway_roster_data_updated', handleRosterUpdate);
-    return () => window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
-  }, [selectedCycleStart, selectedCategory]);
+    window.addEventListener('railway_trigger_muster_save_all', handleTriggerSaveAll);
+    return () => {
+      window.removeEventListener('railway_roster_data_updated', handleRosterUpdate);
+      window.removeEventListener('railway_trigger_muster_save_all', handleTriggerSaveAll);
+    };
+  }, [selectedCycleStart, selectedCategory, cycleData, authToken]);
 
   const handleUpdateCode = async (staffId, dateStr, newCode, remarks = '') => {
     try {
@@ -907,7 +914,17 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
 
       const msg = `Saved muster details for ${staff.name}: ${savedDays} day(s) saved successfully, ${errDays} had an error.${errText}`;
       showToast(msg);
-      if (errDays > 0) alert(msg);
+
+      // Pop-up saying YES if saved, NO if not saved
+      setSaveResultModal({
+        success: errDays === 0,
+        staffName: staff.name,
+        dateStr: `All Dates in Cycle (${selectedCycleStart || 'Current Cycle'})`,
+        code: `${savedDays} Days`,
+        message: errDays === 0
+          ? `Muster details for ${staff.name} (${savedDays} day(s)) saved permanently to database!`
+          : `Saved ${savedDays} day(s), but ${errDays} had an error.${errText}`
+      });
 
       window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
         detail: { staffId: staff.id, source: 'muster_roll', timestamp: Date.now() }
@@ -918,6 +935,13 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
     } catch (err) {
       console.error('Error saving individual muster:', err);
       showToast(`Error saving ${staff.name}: ${err.message}`);
+      setSaveResultModal({
+        success: false,
+        staffName: staff.name,
+        dateStr: `Cycle (${selectedCycleStart || 'Current Cycle'})`,
+        code: 'FAILED',
+        message: err.message || 'Failed to save muster records. Please try again.'
+      });
     } finally {
       setSavingStaffId(null);
     }
@@ -989,11 +1013,26 @@ export default function MusterRoll({ isAdmin, categories = [], authToken, API_BA
         : '';
       const msg = `Muster Roll Save Complete: ${savedEmployeesCount} employee(s) saved successfully, ${errorEmployeesCount} employee(s) had an error.${errText}`;
       showToast(msg);
-      if (errorEmployeesCount > 0) {
-        alert(msg);
-      }
+
+      // Pop-up saying YES if saved, NO if not saved
+      setSaveResultModal({
+        success: errorEmployeesCount === 0,
+        staffName: `All Division Staff (${savedEmployeesCount} Employees)`,
+        dateStr: `Complete Cycle (${selectedCycleStart || 'Current Cycle'})`,
+        code: 'ALL STAFF',
+        message: errorEmployeesCount === 0
+          ? `Muster Roll Save Complete: All ${savedEmployeesCount} employee(s) saved permanently to database!`
+          : `Saved ${savedEmployeesCount} employee(s), but ${errorEmployeesCount} had an error.${errText}`
+      });
     } catch (err) {
       showToast(`Error: ${err.message}`);
+      setSaveResultModal({
+        success: false,
+        staffName: 'All Division Staff',
+        dateStr: `Cycle (${selectedCycleStart || 'Current Cycle'})`,
+        code: 'ALL STAFF',
+        message: err.message || 'Failed to save muster roll. Please try again.'
+      });
     } finally {
       setLoading(false);
     }

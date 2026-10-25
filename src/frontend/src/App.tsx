@@ -2551,6 +2551,9 @@ export default function App() {
 
   const handleSaveMusterRoll = async () => {
     try {
+      // 1. Dispatch trigger to MusterRoll to save all attendance codes directly to database
+      window.dispatchEvent(new CustomEvent('railway_trigger_muster_save_all'));
+
       const targetList = (staffList && staffList.length > 0) ? staffList : allStaffList;
       let savedCount = 0;
       let errorCount = 0;
@@ -2586,21 +2589,12 @@ export default function App() {
       }
 
       await notifyAllModulesUpdated('muster_save');
-      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
-        detail: { source: 'muster_floating_save', timestamp: Date.now() }
-      }));
-      window.dispatchEvent(new CustomEvent('railway_muster_updated', {
-        detail: { source: 'muster_floating_save', timestamp: Date.now() }
-      }));
       const errText = errors.length > 0
         ? ` | Errors: ${errors.map(e => `${e.staff_name}: ${e.error}`).join('; ')}`
         : '';
-      const msg = `💾 Muster Roll Save Complete: ${savedCount} employee(s) saved successfully, ${errorCount} had an error.${errText}`;
+      const msg = `💾 Muster Roll Save Triggered: Saving staff order and attendance records...${errText}`;
       setTaNdaToast(msg);
       setDragNotice(msg);
-      if (errorCount > 0) {
-        alert(msg);
-      }
       setTimeout(() => {
         setTaNdaToast(null);
         setDragNotice(null);

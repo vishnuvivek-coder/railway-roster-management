@@ -1031,11 +1031,50 @@ export default function IndividualMusterDocument({
               className="btn btn-primary"
               disabled={savingRange}
               onClick={async () => {
-                await loadMusterData();
-                setStatusFeedback({
-                  type: 'success',
-                  message: `Muster for ${staffInfo?.name || 'employee'} verified & saved permanently to database!`
-                });
+                if (!selectedStaffId) return;
+                try {
+                  setSavingRange(true);
+                  const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+                  const updates = (monthDays || []).map(d => ({
+                    staff_id: parseInt(selectedStaffId, 10),
+                    date: d.date,
+                    code: d.musterCode || (d.isRest ? 'R' : 'P'),
+                    remarks: d.statusDesc || undefined
+                  }));
+
+                  if (updates.length > 0) {
+                    const res = await fetch(`${API_BASE}/muster/batch-update`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                      },
+                      body: JSON.stringify({ updates })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to save individual muster');
+                  }
+
+                  await loadMusterData();
+                  window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+                    detail: { staffId: selectedStaffId, source: 'individual_muster', timestamp: Date.now() }
+                  }));
+                  window.dispatchEvent(new CustomEvent('railway_muster_updated', {
+                    detail: { staffId: selectedStaffId, source: 'individual_muster', timestamp: Date.now() }
+                  }));
+                  setStatusFeedback({
+                    type: 'success',
+                    message: `Muster attendance records for ${staffInfo?.name || 'employee'} (${updates.length} days) saved permanently to database!`
+                  });
+                } catch (err) {
+                  console.error('Error saving individual muster:', err);
+                  setStatusFeedback({
+                    type: 'error',
+                    message: `Failed to save muster records: ${err.message}`
+                  });
+                } finally {
+                  setSavingRange(false);
+                }
               }}
               style={{
                 display: 'flex',
@@ -1053,8 +1092,8 @@ export default function IndividualMusterDocument({
               }}
               title="Save and lock all muster attendance records to database"
             >
-              <span></span>
-              <span>Save Individual Muster</span>
+              <span>💾</span>
+              <span>{savingRange ? 'Saving...' : 'Save Individual Muster'}</span>
             </button>
           </div>
 
