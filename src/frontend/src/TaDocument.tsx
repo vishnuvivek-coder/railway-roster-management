@@ -282,14 +282,44 @@ export default function TaDocument({
             }
             const isLeaveRow = !!(r.is_leave || r.nature_of_leave || (r.train_no === '---' && (r.remarks || '').toLowerCase().includes('leave')));
             let trainNo = r.train_no || '---';
-            if (/non\s*daily/i.test(trainNo)) {
-              const ln = Number(r.link_number);
-              if (ln === 53 || ln === 60) trainNo = '22882';
-              else if (ln === 54 || ln === 61) trainNo = '17221';
-              else if (ln === 55 || ln === 62) trainNo = '17069';
-              else {
-                const m = (r.remarks || '').match(/\b\d{4,5}\b/);
-                trainNo = m ? m[0] : '17221';
+            if (!/^\d{4,5}[A-Z]?(\s*\/\s*\d{4,5}[A-Z]?)?$/.test(trainNo) && trainNo !== '---') {
+              const mTr = trainNo.match(/\b\d{4,5}\b/);
+              if (mTr) {
+                trainNo = mTr[0];
+              } else {
+                const mRmk = (r.remarks || '').match(/\b\d{4,5}\b/);
+                if (mRmk) {
+                  trainNo = mRmk[0];
+                } else {
+                  const cTr = trainNo.trim().toUpperCase();
+                  const stationMap: Record<string, string> = {
+                    'WADI': '22882',
+                    'TPTY': '12734',
+                    'SC': '12705',
+                    'VSKP': '17239',
+                    'GTL': '17225',
+                    'RU': '17069',
+                    'KPD': '07193',
+                    'DHNE': '17253',
+                    'CHZ': '17231',
+                    'DMM': '18063',
+                    'MAS': '12604',
+                    'MS': '16358',
+                    'PILOT': '67230',
+                    'CC': '17239'
+                  };
+                  if (stationMap[cTr]) {
+                    trainNo = stationMap[cTr];
+                  } else if (/non[\s_-]*daily/i.test(trainNo) || /non[\s_-]*daily/i.test(r.remarks || '')) {
+                    const ln = Number(r.link_number);
+                    if (ln === 53 || ln === 60) trainNo = '22882';
+                    else if (ln === 54 || ln === 61) trainNo = '17221';
+                    else if (ln === 55 || ln === 62) trainNo = '17069';
+                    else trainNo = '22882';
+                  } else {
+                    trainNo = '17221';
+                  }
+                }
               }
             }
             return {

@@ -446,7 +446,7 @@ export async function getRosterGrid(query: any) {
                   customFrom = ndt.departure_station || ndt.from_station || 'GNT';
                   customTo = ndt.arrival_station || ndt.to_station || '---';
                   customCoaches = ndt.coaches || 'SL / AC';
-                  customSetType = 'Non-Daily Train';
+                  customSetType = `Non-Daily Train ${customTrainNo}`;
                 } else if (matchedLink) {
                   customFrom = matchedLink.from_station || 'GNT';
                   customTo = matchedLink.to_station || '---';
@@ -745,7 +745,7 @@ export async function getRosterGrid(query: any) {
               customFrom = ndt ? (ndt.departure_station || ndt.from_station || 'GNT') : 'GNT';
               customTo = ndt ? (ndt.arrival_station || ndt.to_station || '---') : '---';
               customCoaches = ndt ? (ndt.coaches || '-') : '-';
-              customSetType = 'Non-Daily Train';
+              customSetType = `Non-Daily Train ${customTrainNo}`;
               linkNum = null;
             }
           }

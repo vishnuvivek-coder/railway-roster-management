@@ -1232,6 +1232,31 @@ function resolveDutyCodeToRows(dutyCode) {
   if (singleMatch) {
     return [{ train_no: singleMatch[0], from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7 }];
   }
+
+  const upperCode = code.toUpperCase();
+  const stationMap = {
+    'WADI': { train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 },
+    'TPTY': { train_no: '12734', from: 'GNT', to: 'TPTY', dep: '21:20', arr: '06:25', ta: 0.3 },
+    'SC':   { train_no: '12705', from: 'GNT', to: 'SC', dep: '15:30', arr: '22:20', ta: 0.7 },
+    'VSKP': { train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7 },
+    'GTL':  { train_no: '17225', from: 'GNT', to: 'GTL', dep: '21:10', arr: '05:00', ta: 0.3 },
+    'RU':   { train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3 },
+    'KPD':  { train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '16:30', ta: 0.7 },
+    'DHNE': { train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:10', arr: '14:15', ta: 0.7 },
+    'CHZ':  { train_no: '17231', from: 'GNT', to: 'CHZ', dep: '13:50', arr: '20:40', ta: 0.7 },
+    'DMM':  { train_no: '18063', from: 'GNT', to: 'DMM', dep: '09:45', arr: '20:30', ta: 0.7 },
+    'MAS':  { train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:40', ta: 0.3 },
+    'MS':   { train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '22:55', ta: 0.7 },
+    'PILOT':{ train_no: '67230', from: 'GNT', to: 'BZA', dep: '17:45', arr: '18:45', ta: 0.7 },
+    'CC':   { train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7 },
+  };
+  if (stationMap[upperCode]) {
+    const s = stationMap[upperCode];
+    return [{ train_no: s.train_no, from: s.from, to: s.to, dep: s.dep, arr: s.arr, ta: s.ta }];
+  }
+  if (/non[\s_-]*daily/i.test(upperCode)) {
+    return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 }];
+  }
   return [];
 }
 
@@ -1690,6 +1715,68 @@ function getDutyRowsForLrTrain(trainStr, dateStr, allLinks = [], remarks = '') {
     return [{ train_no: '17081', from: 'GNT', to: 'TPTY', dep: '18:00', arr: '01:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
   }
 
+  // 3b. Station destination duty resolution for LR staff
+  if (c === 'WADI' || c.includes('WADI')) {
+    return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'TPTY' || c.includes('TPTY')) {
+    return [{ train_no: '12734', from: 'GNT', to: 'TPTY', dep: '21:20', arr: '06:25', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c === 'SC' || c.includes('SC')) {
+    return [{ train_no: '12705', from: 'GNT', to: 'SC', dep: '15:30', arr: '22:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'VSKP' || c.includes('VSKP')) {
+    return [{ train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'GTL' || c.includes('GTL')) {
+    return [{ train_no: '17225', from: 'GNT', to: 'GTL', dep: '21:10', arr: '05:00', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c === 'RU' || c.includes('RU')) {
+    return [{ train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c === 'KPD' || c.includes('KPD')) {
+    return [{ train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '16:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'DHNE' || c.includes('DHNE')) {
+    return [{ train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:10', arr: '14:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'CHZ' || c.includes('CHZ')) {
+    return [{ train_no: '17231', from: 'GNT', to: 'CHZ', dep: '13:50', arr: '20:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'DMM' || c.includes('DMM')) {
+    return [{ train_no: '18063', from: 'GNT', to: 'DMM', dep: '09:45', arr: '20:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'MAS' || c === 'MS') {
+    return [{ train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:40', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  }
+  if (c === 'PILOT' || c.includes('PILOT')) {
+    return [{ train_no: '67230', from: 'GNT', to: 'BZA', dep: '17:45', arr: '18:45', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c === 'CC') {
+    return [{ train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+
+  // 3c. Non-Daily links resolution
+  if (/non[\s_-]*daily/i.test(c)) {
+    const m = (remarks || '').match(/\b\d{4,5}\b/);
+    if (m) {
+      return [{ train_no: m[0], from: 'GNT', to: '---', dep: '10:35', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+    }
+    if (/link\s*#?\s*53/i.test(remarks || '')) {
+      const isReturn = /day\s*[23]|return/i.test(remarks || '');
+      return [{ train_no: isReturn ? '22881' : '22882', from: isReturn ? 'WADI' : 'GNT', to: isReturn ? 'GNT' : 'WADI', dep: isReturn ? '16:55' : '10:35', arr: isReturn ? '02:05' : '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+    }
+    if (/link\s*#?\s*54/i.test(remarks || '')) {
+      const isReturn = /day\s*[23]|return/i.test(remarks || '');
+      return [{ train_no: isReturn ? '17222' : '17221', from: isReturn ? 'WADI' : 'GNT', to: isReturn ? 'GNT' : 'WADI', dep: isReturn ? '23:00' : '13:35', arr: isReturn ? '08:15' : '00:05', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+    }
+    if (/link\s*#?\s*55/i.test(remarks || '')) {
+      const isReturn = /day\s*[23]|return/i.test(remarks || '');
+      return [{ train_no: isReturn ? '17262' : '17069', from: isReturn ? 'RU' : 'GNT', to: isReturn ? 'GNT' : 'RU', dep: isReturn ? '19:25' : '22:40', arr: isReturn ? '07:20' : '07:15', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+    }
+    return [{ train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+
   // 4. Default 4-5 digit train extraction
   const m = c.match(/\b\d{4,5}\b/);
   if (m) {
@@ -1745,11 +1832,28 @@ function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks
     }
   }
 
-  // 5. Outstation stations without trains, e.g. "GTL", "SC", "TPTY", "VSKP"
-  if (['GTL', 'SC', 'TPTY', 'VSKP'].includes(c)) {
+  // 5. Outstation stations without trains, e.g. "GTL", "SC", "TPTY", "VSKP", "WADI", "KPD", etc.
+  const stationDutyMap = {
+    'WADI': { train_no: '22882', from: 'GNT', to: 'WADI', dep: '10:35', arr: '21:10', ta: 0.7 },
+    'TPTY': { train_no: '12734', from: 'GNT', to: 'TPTY', dep: '21:20', arr: '06:25', ta: 0.3 },
+    'SC':   { train_no: '12705', from: 'GNT', to: 'SC', dep: '15:30', arr: '22:20', ta: 0.7 },
+    'VSKP': { train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7 },
+    'GTL':  { train_no: '17225', from: 'GNT', to: 'GTL', dep: '21:10', arr: '05:00', ta: 0.3 },
+    'RU':   { train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3 },
+    'KPD':  { train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '16:30', ta: 0.7 },
+    'DHNE': { train_no: '17253', from: 'GNT', to: 'DHNE', dep: '06:10', arr: '14:15', ta: 0.7 },
+    'CHZ':  { train_no: '17231', from: 'GNT', to: 'CHZ', dep: '13:50', arr: '20:40', ta: 0.7 },
+    'DMM':  { train_no: '18063', from: 'GNT', to: 'DMM', dep: '09:45', arr: '20:30', ta: 0.7 },
+    'MAS':  { train_no: '12604', from: 'GNT', to: 'MAS', dep: '22:00', arr: '05:40', ta: 0.3 },
+    'MS':   { train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '22:55', ta: 0.7 },
+    'PILOT':{ train_no: '67230', from: 'GNT', to: 'BZA', dep: '17:45', arr: '18:45', ta: 0.7 },
+    'CC':   { train_no: '17239', from: 'GNT', to: 'VSKP', dep: '08:00', arr: '18:20', ta: 0.7 },
+  };
+  if (stationDutyMap[c]) {
+    const sInfo = stationDutyMap[c];
     return {
       action: 'DISPLAY',
-      duties: [{ train_no: c, from: 'GNT', to: c, dep: '17:45', arr: '---', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }],
+      duties: [{ train_no: sInfo.train_no, from: sInfo.from, to: sInfo.to, dep: sInfo.dep, arr: sInfo.arr, ta: sInfo.ta, days_claiming_ta: sInfo.ta, ta_percentage: sInfo.ta, ta_b1: String(sInfo.ta) }],
       remarks: remarks || `Deputed to ${c}`
     };
   }
@@ -1760,9 +1864,22 @@ function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks
     return { action: 'DISPLAY', duties, remarks: remarks || raw };
   }
 
-  // Fallback:
-  const singleMatch = raw.match(/\b\d{4,5}\b/);
-  const trainNo = singleMatch ? singleMatch[0] : raw;
+  // Fallback (guaranteed numeric train number):
+  let singleMatch = raw.match(/\b\d{4,5}\b/);
+  if (!singleMatch && remarks) {
+    singleMatch = remarks.match(/\b\d{4,5}\b/);
+  }
+  let trainNo = singleMatch ? singleMatch[0] : null;
+  if (!trainNo) {
+    if (/non[\s_-]*daily/i.test(raw) || /non[\s_-]*daily/i.test(remarks || '')) {
+      if (/link\s*#?\s*53/i.test(remarks || '')) trainNo = '22882';
+      else if (/link\s*#?\s*54/i.test(remarks || '')) trainNo = '17221';
+      else if (/link\s*#?\s*55/i.test(remarks || '')) trainNo = '17069';
+      else trainNo = '22882';
+    } else {
+      trainNo = '17221';
+    }
+  }
   return {
     action: 'DISPLAY',
     duties: [{ train_no: trainNo, from: 'GNT', to: '---', dep: '17:45', arr: '---', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }],
@@ -2023,7 +2140,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               const retT = is18048Day(dateStrIso) ? '18048' : '17226';
               origTrain = `${retT}, 57201`;
             } else if (category.id === 2 && origLinkNum === 50) {
-              origTrain = is18047Day(dateStrIso) ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+              origTrain = is18047Day(dateStrIso) ? '67230, 18047' : '67230, 17225';
             } else if (category.id === 2 && origLinkNum === 51) {
               const dow = new Date(dateStrIso + 'T00:00:00').getDay();
               const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
@@ -2031,7 +2148,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               origTrain = `${inT}, ${retT}`;
             } else if (category.id === 2 && origLinkNum === 52) {
               const retT = is18048Day(dateStrIso) ? '18048' : '17226';
-              origTrain = `${retT}, PILOT(12703)`;
+              origTrain = `${retT}, 12703`;
             } else if (category.id === 2 && (origLinkNum === 53 || origLinkNum === 60)) {
               origTrain = '22882';
             } else if (category.id === 2 && (origLinkNum === 54 || origLinkNum === 61)) {
@@ -2040,7 +2157,7 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               origTrain = '17069';
             } else {
               origTrain = origLink ? (origLink.train_numbers || 'REST') : 'REST';
-              if (/non\s*daily/i.test(origTrain)) {
+              if (/non[\s_-]*daily/i.test(origTrain)) {
                 if (origLinkNum === 53 || origLinkNum === 60) origTrain = '22882';
                 else if (origLinkNum === 54 || origLinkNum === 61) origTrain = '17221';
                 else if (origLinkNum === 55 || origLinkNum === 62) origTrain = '17069';
@@ -2567,14 +2684,44 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
     }
 
     let rowTrainNo = item.train_no || '---';
-    if (/non\s*daily/i.test(rowTrainNo)) {
-      const ln = Number(item.link_number);
-      if (ln === 53 || ln === 60) rowTrainNo = '22882';
-      else if (ln === 54 || ln === 61) rowTrainNo = '17221';
-      else if (ln === 55 || ln === 62) rowTrainNo = '17069';
-      else {
-        const m = (rowRemarks || '').match(/\b\d{4,5}\b/);
-        rowTrainNo = m ? m[0] : '17221';
+    if (!/^\d{4,5}[A-Z]?(\s*\/\s*\d{4,5}[A-Z]?)?$/.test(rowTrainNo) && rowTrainNo !== '---') {
+      const mTr = rowTrainNo.match(/\b\d{4,5}\b/);
+      if (mTr) {
+        rowTrainNo = mTr[0];
+      } else {
+        const mRmk = (rowRemarks || '').match(/\b\d{4,5}\b/);
+        if (mRmk) {
+          rowTrainNo = mRmk[0];
+        } else {
+          const cTr = rowTrainNo.trim().toUpperCase();
+          const stationMap = {
+            'WADI': '22882',
+            'TPTY': '12734',
+            'SC': '12705',
+            'VSKP': '17239',
+            'GTL': '17225',
+            'RU': '17069',
+            'KPD': '07193',
+            'DHNE': '17253',
+            'CHZ': '17231',
+            'DMM': '18063',
+            'MAS': '12604',
+            'MS': '16358',
+            'PILOT': '67230',
+            'CC': '17239'
+          };
+          if (stationMap[cTr]) {
+            rowTrainNo = stationMap[cTr];
+          } else if (/non[\s_-]*daily/i.test(rowTrainNo) || /non[\s_-]*daily/i.test(rowRemarks)) {
+            const ln = Number(item.link_number);
+            if (ln === 53 || ln === 60) rowTrainNo = '22882';
+            else if (ln === 54 || ln === 61) rowTrainNo = '17221';
+            else if (ln === 55 || ln === 62) rowTrainNo = '17069';
+            else rowTrainNo = '22882';
+          } else {
+            rowTrainNo = '17221';
+          }
+        }
       }
     }
 

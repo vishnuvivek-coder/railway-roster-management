@@ -9672,7 +9672,7 @@ app.get('/api/roster', async (req, res) => {
                   customFrom = ndt.departure_station || ndt.from_station || 'GNT';
                   customTo = ndt.arrival_station || ndt.to_station || '---';
                   customCoaches = ndt.coaches || 'SL / AC';
-                  customSetType = 'Non-Daily Train';
+                  customSetType = `Non-Daily Train ${customTrainNo}`;
                 } else if (matchedLink) {
                   customFrom = matchedLink.from_station || 'GNT';
                   customTo = matchedLink.to_station || '---';
@@ -9864,7 +9864,7 @@ app.get('/api/roster', async (req, res) => {
                   customFrom = ndt ? (ndt.departure_station || ndt.from_station || 'GNT') : 'GNT';
                   customTo = ndt ? (ndt.arrival_station || ndt.to_station || '---') : '---';
                   customCoaches = ndt ? (ndt.coaches || 'SL / AC') : '-';
-                  customSetType = ndt ? 'Non-Daily Train' : 'Train Duty';
+                  customSetType = ndt ? `Non-Daily Train ${customTrainNo}` : `Train ${customTrainNo}`;
                   status = 'DUTY';
                   isRest = false;
                   isOverridden = true;
@@ -9971,7 +9971,7 @@ app.get('/api/roster', async (req, res) => {
               customFrom = ndt ? (ndt.departure_station || ndt.from_station || 'GNT') : 'GNT';
               customTo = ndt ? (ndt.arrival_station || ndt.to_station || '---') : '---';
               customCoaches = ndt ? (ndt.coaches || '-') : '-';
-              customSetType = 'Non-Daily Train';
+              customSetType = `Non-Daily Train ${customTrainNo}`;
               linkNum = null;
             }
           }

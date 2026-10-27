@@ -280,7 +280,7 @@ function compareDutyAndResolve({
     let finalTrain = origStr;
     const effectiveLn = resolvedRemarksLinkNum !== null ? resolvedRemarksLinkNum : origLinkNum;
     const effectiveCat = resolvedRemarksCatId || categoryId;
-    if (/non\s*daily/i.test(finalTrain)) {
+    if (/non[\s_-]*daily/i.test(finalTrain)) {
       if (effectiveLn === 53 || effectiveLn === 60) finalTrain = '22882';
       else if (effectiveLn === 54 || effectiveLn === 61) finalTrain = '17221';
       else if (effectiveLn === 55 || effectiveLn === 62) finalTrain = '17069';
@@ -288,6 +288,9 @@ function compareDutyAndResolve({
         const m = finalTrain.match(/\b\d{4,5}\b/);
         finalTrain = m ? m[0] : '17221';
       }
+    } else if (!/^\d{4,5}[A-Z]?(\s*\/\s*\d{4,5}[A-Z]?)?$/.test(finalTrain)) {
+      const stationMap = { 'WADI': '22882', 'TPTY': '12734', 'SC': '12705', 'VSKP': '17239', 'GTL': '17225', 'RU': '17069', 'KPD': '07193', 'DHNE': '17253', 'CHZ': '17231', 'DMM': '18063', 'MAS': '12604', 'MS': '16358', 'PILOT': '67230', 'CC': '17239' };
+      if (stationMap[finalTrain.toUpperCase()]) finalTrain = stationMap[finalTrain.toUpperCase()];
     }
     const dutyRows = resolveDutyRowsWithLinkPriority(effectiveLn, effectiveCat, finalTrain, allLinks, dateStr);
     return {
@@ -305,7 +308,7 @@ function compareDutyAndResolve({
   // (cause that is the final decision) in the TA,NDA,DIARY document
   let finalTrain = remarksTrain;
   const effectiveLn = resolvedRemarksLinkNum !== null ? resolvedRemarksLinkNum : origLinkNum;
-  if (/non\s*daily/i.test(finalTrain)) {
+  if (/non[\s_-]*daily/i.test(finalTrain)) {
     if (effectiveLn === 53 || effectiveLn === 60) finalTrain = '22882';
     else if (effectiveLn === 54 || effectiveLn === 61) finalTrain = '17221';
     else if (effectiveLn === 55 || effectiveLn === 62) finalTrain = '17069';
@@ -313,6 +316,9 @@ function compareDutyAndResolve({
       const m = (remarksStr || finalTrain).match(/\b\d{4,5}\b/);
       finalTrain = m ? m[0] : '17221';
     }
+  } else if (!/^\d{4,5}[A-Z]?(\s*\/\s*\d{4,5}[A-Z]?)?$/.test(finalTrain)) {
+    const stationMap = { 'WADI': '22882', 'TPTY': '12734', 'SC': '12705', 'VSKP': '17239', 'GTL': '17225', 'RU': '17069', 'KPD': '07193', 'DHNE': '17253', 'CHZ': '17231', 'DMM': '18063', 'MAS': '12604', 'MS': '16358', 'PILOT': '67230', 'CC': '17239' };
+    if (stationMap[finalTrain.toUpperCase()]) finalTrain = stationMap[finalTrain.toUpperCase()];
   }
   const dutyRows = resolveDutyRowsWithLinkPriority(
     resolvedRemarksLinkNum,
@@ -385,8 +391,11 @@ function getDutyRowsForTrain(trainStr, allLinks = [], dateStr = null, preferredC
   }
 
   let fallbackTr = clean;
-  if (/non\s*daily/i.test(clean)) {
-    fallbackTr = '17221';
+  const stationMap = { 'WADI': '22882', 'TPTY': '12734', 'SC': '12705', 'VSKP': '17239', 'GTL': '17225', 'RU': '17069', 'KPD': '07193', 'DHNE': '17253', 'CHZ': '17231', 'DMM': '18063', 'MAS': '12604', 'MS': '16358', 'PILOT': '67230', 'CC': '17239' };
+  if (stationMap[clean.toUpperCase()]) {
+    fallbackTr = stationMap[clean.toUpperCase()];
+  } else if (/non[\s_-]*daily/i.test(clean)) {
+    fallbackTr = '22882';
   }
 
   return [{

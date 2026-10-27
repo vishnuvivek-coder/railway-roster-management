@@ -6221,8 +6221,8 @@ export default function App() {
                                       ? `🚆 Booked: ${(cell.target_category_id === 1 ? 'COR ' : 'SL ')}Link #${cell.actualLinkNumber}`
                                       : `🔄 Link #${getLinkDisplayLabel(targetCatId, cell.actualLinkNumber)}`))
                               : (isCat4
-                                  ? `🚆 Booked: ${cell.set_type && cell.set_type !== 'Other / REST' ? cell.set_type : 'Extra / Non-Daily Train'}`
-                                  : (cell.set_type && cell.set_type !== 'Other / REST' ? `🚆 ${cell.set_type}` : '🚆 Extra / Non-Daily Train'));
+                                  ? `🚆 Booked: ${cell.set_type && !/^Non-Daily Train$/i.test(cell.set_type) && cell.set_type !== 'Other / REST' ? cell.set_type : (workedTrainName && workedTrainName !== '-' ? `Train ${workedTrainName}` : 'Extra Train')}`
+                                  : (cell.set_type && !/^Non-Daily Train$/i.test(cell.set_type) && cell.set_type !== 'Other / REST' ? `🚆 ${cell.set_type}` : (workedTrainName && workedTrainName !== '-' ? `🚆 Train ${workedTrainName}` : '🚆 Extra Train')));
 
                             let cellBg = 'transparent';
                             let actuallyWorkedElement = null;
