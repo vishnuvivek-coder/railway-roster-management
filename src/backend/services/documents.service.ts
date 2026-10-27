@@ -75,6 +75,9 @@ export async function saveTaDocument(staffId: any, data: any, currentUser: any =
     // Save all current rows & propagate timings
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i];
+      if (!item.train_no || ['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(item.train_no) || item.is_leave) {
+        continue;
+      }
       let daysClaiming = item.days_claiming_ta !== null && item.days_claiming_ta !== undefined && item.days_claiming_ta !== ''
         ? parseFloat(item.days_claiming_ta)
         : null;

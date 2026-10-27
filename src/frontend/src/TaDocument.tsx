@@ -1619,7 +1619,7 @@ export default function TaDocument({
                 {/* Line 3 */}
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', alignItems: 'center' }}>
                   <div>
-                    are which allowance for &nbsp;
+                    for which allowance for &nbsp;
                     <input 
                       type="text" 
                       value={editableMeta.month_name} 

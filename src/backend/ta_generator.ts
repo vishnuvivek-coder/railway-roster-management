@@ -1989,17 +1989,9 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           }
 
           if (lrRes.action === 'LEAVE') {
-            isEffectiveLeave = true;
-            const effLeaveCode = musterCode || lrRes.leaveCode || 'LEAVE';
-            duties = [{
-              train_no: '---',
-              from: '---',
-              to: '---',
-              dep: '---',
-              arr: '---',
-              remarks: lrRes.remarks || `${effLeaveCode} Leave`,
-              is_leave: true
-            }];
+            lastAssignedLink = null;
+            lastAssignedNonDaily = null;
+            continue;
           } else if (lrRes.action === 'DISPLAY') {
             isEffectiveLeave = false;
             linkNum = lrRes.linkNum || null;
@@ -2135,19 +2127,9 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             }
 
             if (cmp.action === 'LEAVE') {
-              isEffectiveLeave = true;
-              const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
-              duties = [{
-                train_no: '---',
-                from: '---',
-                to: '---',
-                dep: '---',
-                arr: '---',
-                remarks: cmp.remarks || `${effLeaveCode} Leave`,
-                is_leave: true
-              }];
               lastAssignedLink = null;
               lastAssignedNonDaily = null;
+              continue;
             } else if (cmp.action === 'DISPLAY') {
               isEffectiveLeave = false;
               linkNum = (overrideDuty && overrideDuty.overridden_link_number !== null && overrideDuty.overridden_link_number !== undefined)
@@ -2209,21 +2191,25 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
           };
         });
 
-        const calculatedDuties = isEffectiveLeave
-          ? dutiesWithTimings.map(d => ({ ...d, ta_percentage: null, absence_hours: 0 }))
-          : calculateDayDutiesTa(dutiesWithTimings);
+        if (isEffectiveLeave || dutiesWithTimings.length === 0) {
+          continue;
+        }
+
+        const calculatedDuties = calculateDayDutiesTa(dutiesWithTimings);
 
         for (const duty of calculatedDuties) {
+          if (!duty.train_no || ['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(duty.train_no) || duty.is_leave) {
+            continue;
+          }
           rowOrder++;
           const taPct = duty.ta_percentage !== undefined ? duty.ta_percentage : (duty.days_claiming_ta !== undefined ? duty.days_claiming_ta : duty.ta);
           const absenceHours = duty.absence_hours || 0;
           const claimAmt = taPct !== null && taPct !== undefined ? Math.round(taPct * daRate) : 0;
-          const effLeaveCode = musterCode || (directOverride ? (directOverride.leave_type || directOverride.status) : 'LEAVE');
-          const claimStatus = isEffectiveLeave ? 'REJECTED' : 'APPROVED';
+          const claimStatus = 'APPROVED';
           const isLrCat = category.id === 4 || (category.code && category.code.toUpperCase().includes('LR'));
-          const claimRemark = isEffectiveLeave ? `Disallowed: On Leave/Absent as per Muster/Override (${effLeaveCode})` : (isLrCat ? '' : (duty.remarks || ''));
+          const claimRemark = isLrCat ? '' : (duty.remarks || '');
 
-          let dutyTrainNo = isEffectiveLeave ? '---' : (duty.train_no || '---');
+          let dutyTrainNo = duty.train_no || '---';
           if (/non\s*daily/i.test(dutyTrainNo)) {
             const ln = Number(linkNum);
             if (ln === 53 || ln === 60) dutyTrainNo = '22882';
@@ -2412,11 +2398,12 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
     return baseName;
   }
 
-  // 4. Fetch claims in date range
+  // 4. Fetch claims in date range (only valid approved or pending claims with actual trains)
   const approvedClaims = await all(
     `SELECT * FROM ta_approvals 
      WHERE staff_id = ? AND duty_date >= ? AND duty_date <= ? 
-       AND (status = 'APPROVED' OR status = 'PENDING' OR (status = 'REJECTED' AND (remarks LIKE 'Disallowed: On Leave/Absent%' OR remarks LIKE 'Muster%')))
+       AND status IN ('APPROVED', 'PENDING')
+       AND train_no IS NOT NULL AND train_no NOT IN ('---', '-', 'REST', 'OFF', 'SPARE (HQ)', 'SPARE', 'STANDBY')
      ORDER BY duty_date ASC, row_order ASC`,
     [staffId, actualStart, actualEnd]
   );
@@ -2512,8 +2499,8 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dIso, musterMap, staffOverrideMap);
         const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
 
-        // If staff is on leave or standby at HQ on this date, discard
-        if (leaveInfoMap[dIso] || (isStandby && !hasDutyOverride)) {
+        // If staff is on leave or standby at HQ on this date, or if row has no train, discard
+        if (leaveInfoMap[dIso] || (isStandby && !hasDutyOverride) || r.is_leave || !r.train_no || ['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(r.train_no)) {
           return;
         }
 
@@ -2549,10 +2536,15 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       natureOfLeave: formatNatureOfLeave(item.remarks.match(/\(([A-Z]+)\)/) ? item.remarks.match(/\(([A-Z]+)\)/)[1] : 'LEAVE', item.remarks)
     } : null);
 
-    const hasWorkedTrain = item.train_no && !['---', '-', 'REST', 'OFF', 'SPARE (HQ)'].includes(item.train_no) && !item.is_leave;
+    const ov = dIso ? staffOverrideMap[dIso] : null;
+    const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
+    const isStandby = ov && (ov.status === 'AVAILABLE_FOR_BOOKING' || (ov.reason && (ov.reason.toLowerCase().includes('available for booking') || ov.reason.toLowerCase().includes('available for other duty') || ov.reason.toLowerCase().includes('removed from link') || ov.reason.toLowerCase().includes('relieved to hq'))));
 
-    // Condition 3: If employee rest day and both columns declared rest -> Skip day in TA document!
-    if (!hasWorkedTrain && (item.train_no === 'REST' || item.is_rest || (leaveInfo && (leaveInfo.code === 'R' || leaveInfo.code === 'REST')))) {
+    const hasWorkedTrain = item.train_no && !['---', '-', 'REST', 'OFF', 'SPARE (HQ)', 'SPARE', 'STANDBY'].includes(item.train_no) && !item.is_leave;
+
+    // Strict Rule: Show ONLY if employee went to that train.
+    // If employee is on leave, sick, rest, absent, standby, or didn't go to train for any reason -> SKIP THAT DATE!
+    if (!hasWorkedTrain || item.is_leave || item.is_rest || (leaveInfo && !hasDutyOverride) || (isStandby && !hasDutyOverride)) {
       continue;
     }
 
@@ -2562,89 +2554,56 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
         ? 'MANNING SLEEPER COACHES'
         : (item.object_of_journey || (category.id === 1 ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES')));
 
-    if (leaveInfo && !hasWorkedTrain) {
-      if (seenLeaveDates.has(dIso)) {
-        continue; // Suppress duplicate rows on same leave date
+    const b1Val = item.ta_b1 || (item.ta_percentage !== null && item.ta_percentage !== undefined ? String(item.ta_percentage) : (item.days_claiming_ta !== null && item.days_claiming_ta !== undefined ? String(item.days_claiming_ta) : ''));
+    const daysClaim = item.days_claiming_ta !== undefined ? item.days_claiming_ta : (item.ta_percentage !== undefined ? item.ta_percentage : null);
+
+    let rowRemarks = item.remarks || '';
+    if (!rowRemarks && dIso) {
+      if (ov && ov.reason) {
+        rowRemarks = ov.reason;
+      } else if (musterMap[dIso] && musterMap[dIso].remarks) {
+        rowRemarks = musterMap[dIso].remarks;
       }
-      seenLeaveDates.add(dIso);
-
-      finalRows.push({
-        id: item.id || null,
-        row_order: finalRows.length + 1,
-        link_number: item.link_number || 1,
-        date_str: item.date_str || (dIso ? `${parseInt(dIso.split('-')[2], 10)}/${parseInt(dIso.split('-')[1], 10)}/${dIso.split('-')[0].slice(-2)}` : ''),
-        date_iso: dIso,
-        duty_date: dIso,
-        is_same_date_as_prev: false,
-        train_no: '---',
-        from_station: '---',
-        to_station: '---',
-        dep_time: '---',
-        arr_time: '---',
-        ta_a1: '',
-        ta_a: '',
-        ta_b1: '',
-        ta_ord: '',
-        days_claiming_ta: null,
-        absence_hours: 0,
-        claim_amount: 0,
-        is_leave: true,
-        leave_code: leaveInfo.code,
-        nature_of_leave: leaveInfo.natureOfLeave,
-        object_of_journey: resolvedObjectOfJourney,
-        remarks: leaveInfo.natureOfLeave
-      });
-    } else {
-      const b1Val = item.ta_b1 || (item.ta_percentage !== null && item.ta_percentage !== undefined ? String(item.ta_percentage) : (item.days_claiming_ta !== null && item.days_claiming_ta !== undefined ? String(item.days_claiming_ta) : ''));
-      const daysClaim = item.days_claiming_ta !== undefined ? item.days_claiming_ta : (item.ta_percentage !== undefined ? item.ta_percentage : null);
-
-      let rowRemarks = item.remarks || '';
-      if (!rowRemarks && dIso) {
-        const ov = staffOverrideMap[dIso];
-        if (ov && ov.reason) {
-          rowRemarks = ov.reason;
-        } else if (musterMap[dIso] && musterMap[dIso].remarks) {
-          rowRemarks = musterMap[dIso].remarks;
-        }
-      }
-
-      let rowTrainNo = item.train_no || '---';
-      if (/non\s*daily/i.test(rowTrainNo)) {
-        const ln = Number(item.link_number);
-        if (ln === 53 || ln === 60) rowTrainNo = '22882';
-        else if (ln === 54 || ln === 61) rowTrainNo = '17221';
-        else if (ln === 55 || ln === 62) rowTrainNo = '17069';
-        else {
-          const m = (rowRemarks || '').match(/\b\d{4,5}\b/);
-          rowTrainNo = m ? m[0] : '17221';
-        }
-      }
-
-      finalRows.push({
-        id: item.id || null,
-        _isSaved: item._isSaved || false,
-        row_order: finalRows.length + 1,
-        link_number: item.link_number || null,
-        date_str: item.date_str || (dIso ? `${parseInt(dIso.split('-')[2], 10)}/${parseInt(dIso.split('-')[1], 10)}/${dIso.split('-')[0].slice(-2)}` : ''),
-        date_iso: dIso,
-        duty_date: dIso,
-        is_same_date_as_prev: finalRows.length > 0 && dIso === finalRows[finalRows.length - 1].date_iso,
-        train_no: rowTrainNo,
-        from_station: item.from_station || '---',
-        to_station: item.to_station || '---',
-        dep_time: item.dep_time || '---',
-        arr_time: item.arr_time || '---',
-        ta_a1: item.ta_a1 || '',
-        ta_a: item.ta_a || '',
-        ta_b1: b1Val,
-        ta_ord: item.ta_ord || '',
-        days_claiming_ta: daysClaim,
-        absence_hours: item.absence_hours || 0,
-        claim_amount: item.claim_amount || 0,
-        object_of_journey: resolvedObjectOfJourney,
-        remarks: rowRemarks
-      });
     }
+
+    let rowTrainNo = item.train_no || '---';
+    if (/non\s*daily/i.test(rowTrainNo)) {
+      const ln = Number(item.link_number);
+      if (ln === 53 || ln === 60) rowTrainNo = '22882';
+      else if (ln === 54 || ln === 61) rowTrainNo = '17221';
+      else if (ln === 55 || ln === 62) rowTrainNo = '17069';
+      else {
+        const m = (rowRemarks || '').match(/\b\d{4,5}\b/);
+        rowTrainNo = m ? m[0] : '17221';
+      }
+    }
+
+    finalRows.push({
+      id: item.id || null,
+      row_order: finalRows.length + 1,
+      link_number: item.link_number || 1,
+      date_str: item.date_str || (dIso ? `${parseInt(dIso.split('-')[2], 10)}/${parseInt(dIso.split('-')[1], 10)}/${dIso.split('-')[0].slice(-2)}` : ''),
+      date_iso: dIso,
+      duty_date: dIso,
+      is_same_date_as_prev: false,
+      train_no: rowTrainNo,
+      from_station: item.from_station || '---',
+      to_station: item.to_station || '---',
+      dep_time: item.dep_time || '---',
+      arr_time: item.arr_time || '---',
+      ta_a1: item.ta_a1 || '',
+      ta_a: item.ta_a || '',
+      ta_b1: b1Val,
+      ta_ord: item.ta_ord || '',
+      days_claiming_ta: daysClaim,
+      absence_hours: item.absence_hours || 0,
+      claim_amount: item.claim_amount || 0,
+      is_leave: false,
+      leave_code: null,
+      nature_of_leave: null,
+      object_of_journey: resolvedObjectOfJourney,
+      remarks: rowRemarks
+    });
   }
 
   // -------------------------------------------------------------
@@ -2656,7 +2615,10 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   let cleanedRows = [];
   for (let i = 0; i < finalRows.length; i++) {
     const r = finalRows[i];
-    if (r.is_leave || r.train_no === '---' || category.id === 4) {
+    if (r.is_leave || !r.train_no || ['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(r.train_no)) {
+      continue;
+    }
+    if (category.id === 4) {
       cleanedRows.push(r);
       continue;
     }
