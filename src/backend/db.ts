@@ -223,7 +223,7 @@ async function initDbInternal() {
         await mysqlPool.query(schemaSql);
       }
 
-      // Step 3b: Ensure users.role allows 'Employee' and pin_hash exists
+      // Step 3b: Ensure users.role allows 'Employee' and pin_hash exists on users and staff
       try {
         await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'");
       } catch (alterErr) {
@@ -231,6 +231,11 @@ async function initDbInternal() {
       }
       try {
         await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+      } catch (pinErr) {
+        // Column may already exist
+      }
+      try {
+        await mysqlPool.query("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
       } catch (pinErr) {
         // Column may already exist
       }
@@ -291,9 +296,14 @@ async function initDbInternal() {
     )
   `);
 
-  // Ensure pin_hash column exists on existing SQLite databases
+  // Ensure pin_hash column exists on existing SQLite databases (users & staff)
   try {
     await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await run("ALTER TABLE staff ADD COLUMN pin_hash TEXT DEFAULT NULL");
   } catch (e) {
     // Column already exists
   }
@@ -1792,27 +1802,45 @@ async function initDb() {
  */
 async function syncStaffPfAccounts(runFn, allFn, getFn) {
   try {
-    const staffList = await allFn("SELECT id, name, pf_no, designation FROM staff WHERE pf_no IS NOT NULL AND TRIM(pf_no) != ''");
+    // 1. Ensure VACANT positions never retain dummy PF numbers or create ghost user accounts
+    try {
+      await runFn("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
+      await runFn("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
+    } catch (cleanErr) {}
+
+    const staffList = await allFn("SELECT id, name, pf_no, designation, pin_hash FROM staff WHERE pf_no IS NOT NULL AND TRIM(pf_no) != '' AND name NOT LIKE '%VACANT%'");
     if (!staffList || staffList.length === 0) return;
 
     let createdCount = 0;
     for (const s of staffList) {
       const cleanPf = s.pf_no.trim().toLowerCase();
-      const existing = await getFn('SELECT id, username, role, staff_id FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?', [cleanPf, s.id]);
+      const existing = await getFn(
+        'SELECT id, username, role, staff_id, pin_hash FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ? ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC',
+        [cleanPf, s.id]
+      );
+
+      const effectivePin = (existing && existing.pin_hash) || s.pin_hash || null;
+
       if (!existing) {
         const hash = await bcrypt.hash(s.pf_no.trim(), 10);
         await runFn(
-          `INSERT INTO users (username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by)
-           VALUES (?, ?, NULL, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
-          [cleanPf, s.name, hash, s.id]
+          `INSERT INTO users (username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by)
+           VALUES (?, ?, NULL, ?, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
+          [cleanPf, s.name, hash, effectivePin, s.id]
         );
         createdCount++;
       } else {
         const targetRole = (existing.role || '').toLowerCase() === 'admin' ? 'Admin' : 'Employee';
+        // Always preserve existing PIN hash and synchronize
         await runFn(
-          "UPDATE users SET staff_id = ?, username = ?, role = ?, status = 'APPROVED' WHERE id = ?",
-          [s.id, cleanPf, targetRole, existing.id]
+          "UPDATE users SET staff_id = ?, username = ?, role = ?, status = 'APPROVED', pin_hash = COALESCE(pin_hash, ?) WHERE id = ?",
+          [s.id, cleanPf, targetRole, effectivePin, existing.id]
         );
+      }
+
+      // If staff table was missing the pin_hash but user had it, sync to staff table
+      if (effectivePin && !s.pin_hash) {
+        await runFn("UPDATE staff SET pin_hash = ? WHERE id = ?", [effectivePin, s.id]);
       }
     }
     if (createdCount > 0) {

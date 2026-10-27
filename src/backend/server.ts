@@ -129,6 +129,52 @@ initDb().then(async () => {
       await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
     } catch (err) {}
   }
+  try {
+    await run("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+  } catch (e) {
+    try {
+      await run("ALTER TABLE staff ADD COLUMN pin_hash TEXT DEFAULT NULL");
+    } catch (err) {}
+  }
+
+  // Ensure VACANT placeholder duties never hold real employee PF numbers
+  try {
+    await run("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
+    await run("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
+  } catch (e) {}
+
+  // Bidirectionally synchronize users.pin_hash and staff.pin_hash so PINs never disappear
+  try {
+    const usersWithPin = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+    for (const u of usersWithPin) {
+      if (u.staff_id) {
+        await run("UPDATE staff SET pin_hash = ? WHERE id = ? AND (pin_hash IS NULL OR pin_hash = '')", [u.pin_hash, u.staff_id]).catch(() => {});
+      }
+    }
+    const staffWithPin = await all("SELECT id, pf_no, pin_hash FROM staff WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+    for (const s of staffWithPin) {
+      if (s.pf_no) {
+        await run("UPDATE users SET pin_hash = ? WHERE (LOWER(TRIM(username)) = ? OR staff_id = ?) AND (pin_hash IS NULL OR pin_hash = '')", [s.pin_hash, s.pf_no.trim().toLowerCase(), s.id]).catch(() => {});
+      }
+    }
+  } catch (e) {}
+
+  // Mirror active PIN hashes to SQLite roster.db for offline and restart resilience
+  try {
+    const sqlite3Module = require('sqlite3');
+    const sqlitePath = path.join(__dirname, 'roster.db');
+    if (fs.existsSync(sqlitePath)) {
+      const sqlite = new sqlite3Module.Database(sqlitePath);
+      const activePins = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+      for (const p of activePins) {
+        sqlite.run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?", [p.pin_hash, p.username.toLowerCase(), p.staff_id], () => {});
+        if (p.staff_id) {
+          sqlite.run("UPDATE staff SET pin_hash = ? WHERE id = ?", [p.pin_hash, p.staff_id], () => {});
+        }
+      }
+      sqlite.close();
+    }
+  } catch (e) {}
   // Clear only temporary NTES network run cache on startup, NEVER delete user data!
   try {
     await run("DELETE FROM actual_train_runs WHERE source = 'NTES'");
@@ -1638,17 +1684,28 @@ app.post('/api/auth/check-pf', async (req, res) => {
   }
 
   const cleanPf = String(pf_no).trim().toLowerCase();
+  const pfCandidates = [cleanPf];
+  if (cleanPf.length === 8 && /^\d+$/.test(cleanPf)) {
+    pfCandidates.push('246' + cleanPf);
+  } else if (cleanPf.startsWith('246') && cleanPf.length > 3) {
+    pfCandidates.push(cleanPf.slice(3));
+  }
 
   try {
+    const pfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_no)) = ?').join(' OR ');
     let staffMember = await get(
-      'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
-      [cleanPf]
+      `SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff 
+       WHERE (${pfPlaceholders}) AND name NOT LIKE '%VACANT%' 
+       ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+      pfCandidates
     );
 
     if (!staffMember) {
+      const senPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_number)) = ?').join(' OR ');
       const sen = await get(
-        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
-        [cleanPf]
+        `SELECT sl_no, name, designation, pf_number, email FROM seniority_list 
+         WHERE (${senPlaceholders}) LIMIT 1`,
+        pfCandidates
       );
       if (sen) {
         let catId = 2;
@@ -1660,7 +1717,7 @@ app.post('/api/auth/check-pf', async (req, res) => {
            VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
         );
-        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff WHERE id = ?', [insSt.lastID]);
       }
     }
 
@@ -1668,25 +1725,44 @@ app.post('/api/auth/check-pf', async (req, res) => {
       return res.status(404).json({ error: 'PF Number not found in the division seniority register.' });
     }
 
+    const userPfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(username)) = ?').join(' OR ');
     let user = null;
     try {
       user = await get(
-        'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
-        [cleanPf, staffMember.id]
+        `SELECT id, username, name, pin_hash, role, status FROM users 
+         WHERE (${userPfPlaceholders} OR staff_id = ?) 
+         ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+        [...pfCandidates, staffMember.id]
       );
     } catch (colErr) {
       // Dynamic migration if pin_hash column is not yet present on SQLite / cloud deployment
       try {
         await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
         user = await get(
-          'SELECT id, username, name, pin_hash, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
-          [cleanPf, staffMember.id]
+          `SELECT id, username, name, pin_hash, role, status FROM users 
+           WHERE (${userPfPlaceholders} OR staff_id = ?) 
+           ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+          [...pfCandidates, staffMember.id]
         );
       } catch (retryErr) {
         user = await get(
-          'SELECT id, username, name, role, status FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
-          [cleanPf, staffMember.id]
+          `SELECT id, username, name, role, status FROM users 
+           WHERE (${userPfPlaceholders} OR staff_id = ?) LIMIT 1`,
+          [...pfCandidates, staffMember.id]
         );
+      }
+    }
+
+    const effectivePinHash = (user && user.pin_hash) || (staffMember && staffMember.pin_hash) || null;
+    const hasPin = Boolean(effectivePinHash);
+
+    // Mutual self-healing: if one table had the PIN and the other was missing it, heal immediately
+    if (hasPin) {
+      if (user && !user.pin_hash) {
+        await run('UPDATE users SET pin_hash = ? WHERE id = ?', [effectivePinHash, user.id]).catch(() => {});
+      }
+      if (staffMember && !staffMember.pin_hash) {
+        await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [effectivePinHash, staffMember.id]).catch(() => {});
       }
     }
 
@@ -1696,7 +1772,7 @@ app.post('/api/auth/check-pf', async (req, res) => {
       designation: staffMember.designation,
       pf_no: staffMember.pf_no,
       category_id: staffMember.category_id,
-      has_pin: Boolean(user && user.pin_hash)
+      has_pin: hasPin
     });
   } catch (err) {
     console.error('Check PF error:', err);
@@ -1718,16 +1794,27 @@ app.post('/api/auth/set-pin', async (req, res) => {
   }
 
   const cleanPf = String(pf_no).trim().toLowerCase();
+  const pfCandidates = [cleanPf];
+  if (cleanPf.length === 8 && /^\d+$/.test(cleanPf)) {
+    pfCandidates.push('246' + cleanPf);
+  } else if (cleanPf.startsWith('246') && cleanPf.length > 3) {
+    pfCandidates.push(cleanPf.slice(3));
+  }
 
   try {
+    const pfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_no)) = ?').join(' OR ');
     let staffMember = await get(
-      'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
-      [cleanPf]
+      `SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff 
+       WHERE (${pfPlaceholders}) AND name NOT LIKE '%VACANT%' 
+       ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+      pfCandidates
     );
     if (!staffMember) {
+      const senPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_number)) = ?').join(' OR ');
       const sen = await get(
-        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
-        [cleanPf]
+        `SELECT sl_no, name, designation, pf_number, email FROM seniority_list 
+         WHERE (${senPlaceholders}) LIMIT 1`,
+        pfCandidates
       );
       if (sen) {
         let catId = 2;
@@ -1738,7 +1825,7 @@ app.post('/api/auth/set-pin', async (req, res) => {
            VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [sen.name, sen.designation || 'TTI', catId, catId, sen.pf_number, sen.sl_no]
         );
-        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insSt.lastID]);
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff WHERE id = ?', [insSt.lastID]);
       }
     }
 
@@ -1749,9 +1836,11 @@ app.post('/api/auth/set-pin', async (req, res) => {
     const pinHash = await bcrypt.hash(cleanPin, 10);
     const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
 
+    const userPfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(username)) = ?').join(' OR ');
     let user = await get(
-      'SELECT id, username, name, email, role, status, staff_id FROM users WHERE LOWER(TRIM(username)) = ? OR staff_id = ?',
-      [cleanPf, staffMember.id]
+      `SELECT id, username, name, email, role, status, staff_id FROM users 
+       WHERE (${userPfPlaceholders} OR staff_id = ?) LIMIT 1`,
+      [...pfCandidates, staffMember.id]
     );
 
     if (!user) {
@@ -1780,6 +1869,23 @@ app.post('/api/auth/set-pin', async (req, res) => {
         }
       }
     }
+
+    // Persist to staff table as well for dual-table immutability
+    try {
+      await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id]);
+    } catch (e) {}
+
+    // Mirror to SQLite roster.db if available to guarantee dual-engine persistence across restarts
+    try {
+      const sqlite3Module = require('sqlite3');
+      const sqlitePath = path.join(__dirname, 'roster.db');
+      if (fs.existsSync(sqlitePath)) {
+        const sqlite = new sqlite3Module.Database(sqlitePath);
+        sqlite.run('UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?', [pinHash, cleanPf, staffMember.id], () => {});
+        sqlite.run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id], () => {});
+        sqlite.close();
+      }
+    } catch (e) {}
 
     const token = jwt.sign(
       {
@@ -1835,29 +1941,45 @@ app.post('/api/auth/login', async (req, res) => {
 
   const rawUsername = String(username).trim();
   const cleanUsername = rawUsername.toLowerCase();
+  const pfCandidates = [cleanUsername];
+  if (cleanUsername.length === 8 && /^\d+$/.test(cleanUsername)) {
+    pfCandidates.push('246' + cleanUsername);
+  } else if (cleanUsername.startsWith('246') && cleanUsername.length > 3) {
+    pfCandidates.push(cleanUsername.slice(3));
+  }
+
   // If password is not provided, allow staff to authenticate directly with their PF Number
   const rawPassword = (password !== undefined && password !== null && String(password).trim() !== '')
     ? String(password).trim()
     : rawUsername;
 
   try {
+    const userPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(username)) = ?').join(' OR ');
     let user = null;
     try {
       user = await get(
-        'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
-        [cleanUsername, cleanUsername]
+        `SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by 
+         FROM users 
+         WHERE (${userPlaceholders} OR LOWER(TRIM(email)) = ?) 
+         ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+        [...pfCandidates, cleanUsername]
       );
     } catch (colErr) {
       try {
         await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
         user = await get(
-          'SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
-          [cleanUsername, cleanUsername]
+          `SELECT id, username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by 
+           FROM users 
+           WHERE (${userPlaceholders} OR LOWER(TRIM(email)) = ?) 
+           ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+          [...pfCandidates, cleanUsername]
         );
       } catch (e) {
         user = await get(
-          'SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by FROM users WHERE LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ?',
-          [cleanUsername, cleanUsername]
+          `SELECT id, username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by 
+           FROM users 
+           WHERE (${userPlaceholders} OR LOWER(TRIM(email)) = ?) LIMIT 1`,
+          [...pfCandidates, cleanUsername]
         );
       }
     }
@@ -1865,20 +1987,25 @@ app.post('/api/auth/login', async (req, res) => {
     // If not found in users table, check if username matches staff.pf_no
     let staffMember = null;
     if (user && user.staff_id) {
-      staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [user.staff_id]);
+      staffMember = await get('SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff WHERE id = ?', [user.staff_id]);
     }
     if (!staffMember) {
+      const pfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_no)) = ?').join(' OR ');
       staffMember = await get(
-        'SELECT id, name, pf_no, designation, category_id FROM staff WHERE LOWER(TRIM(pf_no)) = ?',
-        [cleanUsername]
+        `SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff 
+         WHERE (${pfPlaceholders}) AND name NOT LIKE '%VACANT%' 
+         ORDER BY (CASE WHEN pin_hash IS NOT NULL THEN 0 ELSE 1 END), id ASC LIMIT 1`,
+        pfCandidates
       );
     }
 
     // Fallback: If not yet in staff table, check master division seniority list
     if (!staffMember) {
+      const senPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(pf_number)) = ?').join(' OR ');
       const senMember = await get(
-        'SELECT sl_no, name, designation, pf_number, email FROM seniority_list WHERE LOWER(TRIM(pf_number)) = ?',
-        [cleanUsername]
+        `SELECT sl_no, name, designation, pf_number, email FROM seniority_list 
+         WHERE (${senPlaceholders}) LIMIT 1`,
+        pfCandidates
       );
       if (senMember) {
         let defaultCatId = 2; // TTI / Sleeper Staff
@@ -1890,7 +2017,7 @@ app.post('/api/auth/login', async (req, res) => {
            VALUES (?, ?, ?, (SELECT COALESCE(MAX(row_position), 0) + 1 FROM staff s2 WHERE s2.category_id = ?), 1, ?, ?, NULL, 68000, 'GNT')`,
           [senMember.name, senMember.designation || 'TTI', defaultCatId, defaultCatId, senMember.pf_number, senMember.sl_no]
         );
-        staffMember = await get('SELECT id, name, pf_no, designation, category_id FROM staff WHERE id = ?', [insResult.lastID]);
+        staffMember = await get('SELECT id, name, pf_no, designation, category_id, pin_hash FROM staff WHERE id = ?', [insResult.lastID]);
       }
     }
 
@@ -1898,9 +2025,9 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user && staffMember) {
       const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
       const insertResult = await run(
-        `INSERT INTO users (username, name, email, password_hash, role, status, staff_id, created_at, approved_at, approved_by)
-         VALUES (?, ?, NULL, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
-        [staffMember.pf_no.trim().toLowerCase(), staffMember.name, passwordHash, staffMember.id]
+        `INSERT INTO users (username, name, email, password_hash, pin_hash, role, status, staff_id, created_at, approved_at, approved_by)
+         VALUES (?, ?, NULL, ?, ?, 'Employee', 'APPROVED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'System PF Auto-Provision')`,
+        [staffMember.pf_no.trim().toLowerCase(), staffMember.name, passwordHash, staffMember.pin_hash || null, staffMember.id]
       );
       user = {
         id: insertResult.lastID,
@@ -1908,6 +2035,7 @@ app.post('/api/auth/login', async (req, res) => {
         name: staffMember.name,
         email: null,
         password_hash: passwordHash,
+        pin_hash: staffMember.pin_hash || null,
         role: 'Employee',
         status: 'APPROVED',
         staff_id: staffMember.id
@@ -1921,19 +2049,29 @@ app.post('/api/auth/login', async (req, res) => {
     // Verify PIN or password:
     let isMatch = false;
     const submittedPin = req.body.pin ? String(req.body.pin).trim() : null;
+    const effectivePinHash = (user && user.pin_hash) || (staffMember && staffMember.pin_hash) || null;
 
     if (submittedPin) {
       // User is authenticating with a 4-digit security PIN
-      if (user.pin_hash) {
-        isMatch = await bcrypt.compare(submittedPin, user.pin_hash);
+      if (effectivePinHash) {
+        isMatch = await bcrypt.compare(submittedPin, effectivePinHash);
       }
       if (!isMatch) {
         return res.status(401).json({ error: 'Incorrect 4-digit PIN. Please try again.' });
       }
+      // Self-heal both records
+      if (effectivePinHash) {
+        if (user && !user.pin_hash) {
+          await run('UPDATE users SET pin_hash = ? WHERE id = ?', [effectivePinHash, user.id]).catch(() => {});
+        }
+        if (staffMember && !staffMember.pin_hash) {
+          await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [effectivePinHash, staffMember.id]).catch(() => {});
+        }
+      }
     } else {
       // User is authenticating with password or direct credentials
-      if (/^\d{4}$/.test(rawPassword) && user.pin_hash) {
-        isMatch = await bcrypt.compare(rawPassword, user.pin_hash);
+      if (/^\d{4}$/.test(rawPassword) && effectivePinHash) {
+        isMatch = await bcrypt.compare(rawPassword, effectivePinHash);
       }
       if (!isMatch && user.password_hash) {
         isMatch = await bcrypt.compare(rawPassword, user.password_hash);
