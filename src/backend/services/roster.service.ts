@@ -178,7 +178,7 @@ export async function getRosterGrid(query: any) {
       const m = String(curDate.getMonth() + 1).padStart(2, '0');
       const d = String(curDate.getDate()).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
-      const catForAnchor = (category.id === 2 ? getCategoryParamsForDate(category, dateStr) : category);
+      const catForAnchor = getCategoryParamsForDate(category, dateStr);
       dates.push({
         dayOfMonth: curDate.getDate(),
         dateString: dateStr,

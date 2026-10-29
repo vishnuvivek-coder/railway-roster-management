@@ -87,31 +87,33 @@ export async function getActiveLinkDef(categoryId: any, linkNumber: any, dateStr
     link = { ...link };
     const num = parseInt(link.link_number, 10);
     const cat = parseInt(link.category_id, 10);
-    if ((cat === 1 && num === 15) || (cat === 2 && num === 50)) {
-      const is18047 = is18047Day(dateStr);
-      if (cat === 1) {
-        link.train_numbers = is18047 ? '67230, 18047' : '67230, 17225';
-      } else {
-        link.train_numbers = is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+    if (dateStr < '2026-11-01') {
+      if ((cat === 1 && num === 15) || (cat === 2 && num === 50)) {
+        const is18047 = is18047Day(dateStr);
+        if (cat === 1) {
+          link.train_numbers = is18047 ? '67230, 18047' : '67230, 17225';
+        } else {
+          link.train_numbers = is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+        }
+      } else if (cat === 1 && num === 16) {
+        const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+        const dow = d.getDay();
+        const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+        link.train_numbers = `${inTrain}, ${retTrain}`;
+      } else if (cat === 1 && num === 17) {
+        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+        link.train_numbers = `${retTrain}, 57201`;
+      } else if (cat === 2 && num === 51) {
+        const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+        const dow = d.getDay();
+        const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+        link.train_numbers = `${inTrain}, ${retTrain}`;
+      } else if (cat === 2 && num === 52) {
+        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+        link.train_numbers = `${retTrain}, PILOT(12703)`;
       }
-    } else if (cat === 1 && num === 16) {
-      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-      const dow = d.getDay();
-      const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-      link.train_numbers = `${inTrain}, ${retTrain}`;
-    } else if (cat === 1 && num === 17) {
-      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-      link.train_numbers = `${retTrain}, 57201`;
-    } else if (cat === 2 && num === 51) {
-      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-      const dow = d.getDay();
-      const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-      link.train_numbers = `${inTrain}, ${retTrain}`;
-    } else if (cat === 2 && num === 52) {
-      const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-      link.train_numbers = `${retTrain}, PILOT(12703)`;
     }
   }
   return link || { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
@@ -120,13 +122,32 @@ export async function getActiveLinkDef(categoryId: any, linkNumber: any, dateStr
 // Helper: Get category parameters (anchor_date, cycle_length) for a given date
 export function getCategoryParamsForDate(cat: any, dateStr: string | null = null) {
   if (!cat) return { anchor_date: '2020-01-01', cycle_length: 21 };
-  if (cat.id === 2 || cat.code === 'TTI_SLEEPER') {
+  const catId = typeof cat === 'number' ? cat : (cat.id || (cat.code === 'TTI_SLEEPER' ? 2 : (cat.code === 'COR' ? 1 : (cat.code === 'LADIES_TTE' ? 3 : 4))));
+
+  if (catId === 1 || cat.code === 'COR') {
+    if (dateStr && dateStr < '2026-11-01') {
+      return { anchor_date: '2026-10-01', cycle_length: 21 };
+    }
+    return { anchor_date: '2026-11-01', cycle_length: 21 };
+  }
+
+  if (catId === 2 || cat.code === 'TTI_SLEEPER') {
     if (dateStr && dateStr < '2026-10-01') {
       return { anchor_date: '2026-08-01', cycle_length: 63 };
-    } else {
+    } else if (dateStr && dateStr < '2026-11-01') {
       return { anchor_date: '2026-10-01', cycle_length: 56 };
+    } else {
+      return { anchor_date: '2026-11-01', cycle_length: 56 };
     }
   }
+
+  if (catId === 3 || cat.code === 'LADIES_TTE') {
+    if (dateStr && dateStr < '2026-11-01') {
+      return { anchor_date: '2026-10-01', cycle_length: 7 };
+    }
+    return { anchor_date: '2026-11-01', cycle_length: 7 };
+  }
+
   return {
     anchor_date: cat.anchor_date || '2020-01-01',
     cycle_length: cat.cycle_length || 21

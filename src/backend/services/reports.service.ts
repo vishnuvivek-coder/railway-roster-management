@@ -499,7 +499,6 @@ export async function getDailyView(query: any) {
             if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
               status = 'AVAILABLE_FOR_BOOKING';
               overrideReason = 'Reported fit / Available at HQ (Muster: P)';
-              leaveType = null;
             }
           }
         }
@@ -885,7 +884,6 @@ export async function getAvailabilitySheet(query: any) {
             if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
               status = 'AVAILABLE_FOR_BOOKING';
               overrideReason = 'Reported fit / Available at HQ (Muster: P)';
-              leaveType = null;
             }
           }
         }
