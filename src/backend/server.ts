@@ -71,10 +71,34 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const { initDb, run, all, get, withTransaction } = require('./db');
+
+const PIN_PEPPER = process.env.PIN_PEPPER || 'RAILWAY_ROSTER_SECURE_PEPPER_2026_!#%*';
+
+async function verifyPinHash(rawPin, hash) {
+  if (!rawPin || !hash) return { matched: false, needsUpgrade: false };
+  try {
+    const hmac = crypto.createHmac('sha256', PIN_PEPPER).update(String(rawPin).trim()).digest('hex');
+    const pepperMatch = await bcrypt.compare(hmac, hash);
+    if (pepperMatch) return { matched: true, needsUpgrade: false };
+  } catch (e) {}
+
+  try {
+    const legacyMatch = await bcrypt.compare(String(rawPin).trim(), hash);
+    if (legacyMatch) return { matched: true, needsUpgrade: true };
+  } catch (e) {}
+
+  return { matched: false, needsUpgrade: false };
+}
+
+async function hashPinSecure(rawPin) {
+  const hmac = crypto.createHmac('sha256', PIN_PEPPER).update(String(rawPin).trim()).digest('hex');
+  return bcrypt.hash(hmac, 12);
+}
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
 const { findScheduledRestDate, computeRestAdjustment, getWeekday, getWeeklyRestWeekday } = require('./restAdjustment');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
@@ -121,7 +145,34 @@ app.get('/api/system/data-flow-map', (req, res) => {
 // Initialize Database on startup
 initDb().then(async () => {
   console.log('Database loaded and ready.');
-  // Ensure pin_hash column exists across all database engines (SQLite & MySQL)
+  // Ensure staff_pins table and pin_hash columns exist across all database engines (SQLite & MySQL)
+  try {
+    await run(`
+      CREATE TABLE IF NOT EXISTS staff_pins (
+        pf_no VARCHAR(50) PRIMARY KEY,
+        staff_id INT,
+        pin_hash VARCHAR(255) NOT NULL,
+        failed_attempts INT DEFAULT 0,
+        locked_until DATETIME DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    try {
+      await run(`
+        CREATE TABLE IF NOT EXISTS staff_pins (
+          pf_no TEXT PRIMARY KEY,
+          staff_id INTEGER,
+          pin_hash TEXT NOT NULL,
+          failed_attempts INTEGER DEFAULT 0,
+          locked_until TEXT DEFAULT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (err) {}
+  }
   try {
     await run("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
   } catch (e) {
@@ -143,18 +194,49 @@ initDb().then(async () => {
     await run("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
   } catch (e) {}
 
-  // Bidirectionally synchronize users.pin_hash and staff.pin_hash so PINs never disappear
+  // Synchronize authoritative PINs from staff_pins into users and staff
   try {
+    const authoritativePins = await all("SELECT pf_no, staff_id, pin_hash FROM staff_pins WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+    for (const ap of authoritativePins) {
+      if (ap.pf_no) {
+        await run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ?", [ap.pin_hash, ap.pf_no.toLowerCase()]).catch(() => {});
+      }
+      if (ap.staff_id) {
+        await run("UPDATE staff SET pin_hash = ? WHERE id = ?", [ap.pin_hash, ap.staff_id]).catch(() => {});
+      }
+    }
+
     const usersWithPin = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
     for (const u of usersWithPin) {
+      if (u.username) {
+        const pf = u.username.trim().toLowerCase();
+        await run(
+          `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+           VALUES (?, ?, ?, 0, NULL)
+           ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
+          [pf, u.staff_id, u.pin_hash]
+        ).catch(async () => {
+          await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, u.staff_id, u.pin_hash]);
+        });
+      }
       if (u.staff_id) {
         await run("UPDATE staff SET pin_hash = ? WHERE id = ? AND (pin_hash IS NULL OR pin_hash = '')", [u.pin_hash, u.staff_id]).catch(() => {});
       }
     }
+
     const staffWithPin = await all("SELECT id, pf_no, pin_hash FROM staff WHERE pin_hash IS NOT NULL AND pin_hash != ''");
     for (const s of staffWithPin) {
       if (s.pf_no) {
-        await run("UPDATE users SET pin_hash = ? WHERE (LOWER(TRIM(username)) = ? OR staff_id = ?) AND (pin_hash IS NULL OR pin_hash = '')", [s.pin_hash, s.pf_no.trim().toLowerCase(), s.id]).catch(() => {});
+        const pf = s.pf_no.trim().toLowerCase();
+        await run(
+          `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+           VALUES (?, ?, ?, 0, NULL)
+           ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
+          [pf, s.id, s.pin_hash]
+        ).catch(async () => {
+          await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, s.id, s.pin_hash]);
+        });
+        await run("UPDATE users SET pin_hash = ? WHERE (LOWER(TRIM(username)) = ? OR staff_id = ?) AND (pin_hash IS NULL OR pin_hash = '')", [s.pin_hash, pf, s.id]).catch(() => {});
       }
     }
   } catch (e) {}
@@ -1793,6 +1875,16 @@ app.post('/api/auth/set-pin', async (req, res) => {
     return res.status(400).json({ error: 'PIN must be exactly 4 numeric digits (0000-9999).' });
   }
 
+  // Reject trivial sequential or repeating PINs
+  const weakPins = [
+    '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
+    '1234', '2345', '3456', '4567', '5678', '6789', '4321', '5432', '6543', '7654', '8765', '9876', '0123',
+    '1212', '2121', '1122', '2211', '1379', '2580', '0852', '9731'
+  ];
+  if (weakPins.includes(cleanPin)) {
+    return res.status(400).json({ error: 'This PIN is too simple or predictable. Please choose a non-sequential, unique 4-digit PIN.' });
+  }
+
   const cleanPf = String(pf_no).trim().toLowerCase();
   const pfCandidates = [cleanPf];
   if (cleanPf.length === 8 && /^\d+$/.test(cleanPf)) {
@@ -1833,7 +1925,8 @@ app.post('/api/auth/set-pin', async (req, res) => {
       return res.status(404).json({ error: 'Staff member not found in roster.' });
     }
 
-    const pinHash = await bcrypt.hash(cleanPin, 10);
+    // High security peppered bcrypt hash (12 salt rounds)
+    const pinHash = await hashPinSecure(cleanPin);
     const passwordHash = await bcrypt.hash(staffMember.pf_no.trim(), 10);
 
     const userPfPlaceholders = pfCandidates.map(() => 'LOWER(TRIM(username)) = ?').join(' OR ');
@@ -1870,12 +1963,22 @@ app.post('/api/auth/set-pin', async (req, res) => {
       }
     }
 
-    // Persist to staff table as well for dual-table immutability
+    // Authoritative persistence in dedicated staff_pins table (resets lockout)
+    await run(
+      `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+       VALUES (?, ?, ?, 0, NULL)
+       ON DUPLICATE KEY UPDATE pin_hash = VALUES(pin_hash), staff_id = VALUES(staff_id), failed_attempts = 0, locked_until = NULL`,
+      [staffMember.pf_no.trim().toLowerCase(), staffMember.id, pinHash]
+    ).catch(async () => {
+      await run(`INSERT OR REPLACE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [staffMember.pf_no.trim().toLowerCase(), staffMember.id, pinHash]);
+    });
+
+    // Persist to staff table as well for multi-table immutability
     try {
       await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id]);
     } catch (e) {}
 
-    // Mirror to SQLite roster.db if available to guarantee dual-engine persistence across restarts
+    // Mirror to SQLite roster.db if available to guarantee persistence across restarts
     try {
       const sqlite3Module = require('sqlite3');
       const sqlitePath = path.join(__dirname, 'roster.db');
@@ -1883,6 +1986,7 @@ app.post('/api/auth/set-pin', async (req, res) => {
         const sqlite = new sqlite3Module.Database(sqlitePath);
         sqlite.run('UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?', [pinHash, cleanPf, staffMember.id], () => {});
         sqlite.run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id], () => {});
+        sqlite.run('INSERT OR REPLACE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)', [staffMember.pf_no.trim().toLowerCase(), staffMember.id, pinHash], () => {});
         sqlite.close();
       }
     } catch (e) {}
@@ -1900,7 +2004,7 @@ app.post('/api/auth/set-pin', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    await logAudit(user.role, 'PIN_SETUP', `Staff ${staffMember.name} (${staffMember.pf_no}) configured 4-digit PIN`);
+    await logAudit(user.role, 'PIN_SETUP', `Staff ${staffMember.name} (${staffMember.pf_no}) configured secure 4-digit PIN`);
 
     res.json({
       success: true,
@@ -1915,7 +2019,7 @@ app.post('/api/auth/set-pin', async (req, res) => {
         pf_no: staffMember.pf_no,
         category_id: staffMember.category_id
       },
-      message: '4-Digit PIN set successfully'
+      message: '4-Digit PIN configured and securely encrypted'
     });
   } catch (err) {
     console.error('Set PIN error:', err);
@@ -2046,45 +2150,74 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
     }
 
-    // Verify PIN or password:
+    // Verify PIN or password with rate limiting, lockout check, and peppered hashing:
+    const cleanPfCandidate = cleanUsername;
+    const lookupStaffId = (staffMember && staffMember.id) || (user && user.staff_id) || 0;
+    let pinRecord = await get(
+      "SELECT pf_no, staff_id, pin_hash, failed_attempts, locked_until FROM staff_pins WHERE LOWER(TRIM(pf_no)) = ? OR staff_id = ?",
+      [cleanPfCandidate, lookupStaffId]
+    ).catch(() => null);
+
+    // 1. Account Lockout Verification (5 failed attempts = 15 min lock)
+    if (pinRecord && pinRecord.locked_until) {
+      const lockTime = new Date(pinRecord.locked_until).getTime();
+      if (lockTime > Date.now()) {
+        const waitMin = Math.ceil((lockTime - Date.now()) / 60000);
+        return res.status(423).json({
+          error: `Account is temporarily locked due to multiple consecutive failed PIN attempts. Please try again after ${waitMin} minute(s) or contact the system administrator.`
+        });
+      }
+    }
+
+    const effectivePinHash = (pinRecord && pinRecord.pin_hash) || (user && user.pin_hash) || (staffMember && staffMember.pin_hash) || null;
+    const hasConfiguredPin = Boolean(effectivePinHash);
+
     let isMatch = false;
     const submittedPin = req.body.pin ? String(req.body.pin).trim() : null;
-    const effectivePinHash = (user && user.pin_hash) || (staffMember && staffMember.pin_hash) || null;
 
-    if (submittedPin) {
-      // User is authenticating with a 4-digit security PIN
-      if (effectivePinHash) {
-        isMatch = await bcrypt.compare(submittedPin, effectivePinHash);
+    if (hasConfiguredPin && user.role !== 'Admin') {
+      // Employee account with a configured 4-digit PIN: MUST supply and verify PIN (no password bypass)
+      const pinInput = submittedPin || (/^\d{4}$/.test(rawPassword) ? rawPassword : null);
+      if (!pinInput) {
+        return res.status(400).json({
+          error: '4-digit security PIN is required to log into this account.',
+          require_pin: true
+        });
       }
-      if (!isMatch) {
-        return res.status(401).json({ error: 'Incorrect 4-digit PIN. Please try again.' });
-      }
-      // Self-heal both records
-      if (effectivePinHash) {
-        if (user && !user.pin_hash) {
-          await run('UPDATE users SET pin_hash = ? WHERE id = ?', [effectivePinHash, user.id]).catch(() => {});
+
+      const { matched, needsUpgrade } = await verifyPinHash(pinInput, effectivePinHash);
+      if (matched) {
+        isMatch = true;
+        // Reset failed attempts upon successful login
+        await run("UPDATE staff_pins SET failed_attempts = 0, locked_until = NULL WHERE LOWER(TRIM(pf_no)) = ? OR staff_id = ?", [cleanPfCandidate, lookupStaffId]).catch(() => {});
+        if (needsUpgrade) {
+          const upgradedHash = await hashPinSecure(pinInput);
+          await run("UPDATE staff_pins SET pin_hash = ? WHERE LOWER(TRIM(pf_no)) = ? OR staff_id = ?", [upgradedHash, cleanPfCandidate, lookupStaffId]).catch(() => {});
+          await run("UPDATE users SET pin_hash = ? WHERE id = ?", [upgradedHash, user.id]).catch(() => {});
+          if (staffMember) await run("UPDATE staff SET pin_hash = ? WHERE id = ?", [upgradedHash, staffMember.id]).catch(() => {});
         }
-        if (staffMember && !staffMember.pin_hash) {
-          await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [effectivePinHash, staffMember.id]).catch(() => {});
+      } else {
+        // Increment failed attempts and trigger lockout if >= 5
+        const currentAttempts = ((pinRecord && pinRecord.failed_attempts) || 0) + 1;
+        if (currentAttempts >= 5) {
+          const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+          await run("UPDATE staff_pins SET failed_attempts = ?, locked_until = ? WHERE LOWER(TRIM(pf_no)) = ? OR staff_id = ?", [currentAttempts, lockUntil, cleanPfCandidate, lookupStaffId]).catch(() => {});
+          return res.status(423).json({
+            error: 'Incorrect 4-digit PIN. Maximum attempts exceeded. Your account is temporarily locked for 15 minutes.'
+          });
+        } else {
+          await run("UPDATE staff_pins SET failed_attempts = ? WHERE LOWER(TRIM(pf_no)) = ? OR staff_id = ?", [currentAttempts, cleanPfCandidate, lookupStaffId]).catch(() => {});
+          const rem = 5 - currentAttempts;
+          return res.status(401).json({
+            error: `Incorrect 4-digit PIN. Attempt ${currentAttempts} of 5 (${rem} attempt${rem === 1 ? '' : 's'} remaining before 15-min lockout).`
+          });
         }
       }
     } else {
-      // User is authenticating with password or direct credentials
-      if (/^\d{4}$/.test(rawPassword) && effectivePinHash) {
-        isMatch = await bcrypt.compare(rawPassword, effectivePinHash);
-      }
-      if (!isMatch && user.password_hash) {
+      // Admin account or unconfigured PIN
+      if (user.password_hash) {
         isMatch = await bcrypt.compare(rawPassword, user.password_hash);
       }
-      if (!isMatch && staffMember && staffMember.pf_no) {
-        if (rawPassword.toLowerCase() === staffMember.pf_no.trim().toLowerCase()) {
-          isMatch = true;
-        }
-      }
-      if (!isMatch && rawPassword.toLowerCase() === user.username.toLowerCase()) {
-        isMatch = true;
-      }
-
       if (!isMatch) {
         return res.status(401).json({ error: 'Invalid Railway ID / PF Number or password.' });
       }

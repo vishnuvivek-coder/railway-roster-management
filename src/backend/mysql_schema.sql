@@ -27,6 +27,20 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
+-- 1b. STAFF PINS TABLE (Authoritative, Persistent & Rate-Limited Employee PINs)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS staff_pins (
+  pf_no VARCHAR(50) NOT NULL PRIMARY KEY,
+  staff_id INT DEFAULT NULL,
+  pin_hash VARCHAR(255) NOT NULL,
+  failed_attempts INT DEFAULT 0,
+  locked_until DATETIME DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_staff_pins_staff (staff_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
 -- 2. CATEGORIES TABLE
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS categories (

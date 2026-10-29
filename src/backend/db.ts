@@ -1819,7 +1819,11 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
         [cleanPf, s.id]
       );
 
-      const effectivePin = (existing && existing.pin_hash) || s.pin_hash || null;
+      let pinRow = null;
+      try {
+        pinRow = await getFn('SELECT pin_hash FROM staff_pins WHERE pf_no = ? OR staff_id = ?', [cleanPf, s.id]);
+      } catch (e) {}
+      const effectivePin = (pinRow && pinRow.pin_hash) || (existing && existing.pin_hash) || s.pin_hash || null;
 
       if (!existing) {
         const hash = await bcrypt.hash(s.pf_no.trim(), 10);
@@ -1838,9 +1842,25 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
         );
       }
 
-      // If staff table was missing the pin_hash but user had it, sync to staff table
+      // If staff table was missing the pin_hash but user/staff_pins had it, sync to staff table
       if (effectivePin && !s.pin_hash) {
         await runFn("UPDATE staff SET pin_hash = ? WHERE id = ?", [effectivePin, s.id]);
+      }
+
+      // If staff_pins was missing it but effectivePin was present, store in staff_pins
+      if (effectivePin && (!pinRow || !pinRow.pin_hash)) {
+        try {
+          await runFn(
+            `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+             VALUES (?, ?, ?, 0, NULL)
+             ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash))`,
+            [cleanPf, s.id, effectivePin]
+          );
+        } catch (e) {
+          try {
+            await runFn(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [cleanPf, s.id, effectivePin]);
+          } catch (err) {}
+        }
       }
     }
     if (createdCount > 0) {
