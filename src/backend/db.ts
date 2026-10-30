@@ -211,8 +211,11 @@ async function initDbInternal() {
     // project-specific CA not in the system trust store.
     // Set rejectUnauthorized: true so the server certificate is always verified.
     let sslConfig: any = undefined;
+    const localCaPath = path.join(__dirname, 'aiven-ca.pem');
     if (process.env.MYSQL_SSL_CA) {
       sslConfig = { ca: process.env.MYSQL_SSL_CA, rejectUnauthorized: true };
+    } else if (fs.existsSync(localCaPath)) {
+      sslConfig = { ca: fs.readFileSync(localCaPath, 'utf8'), rejectUnauthorized: true };
     } else if (isProduction) {
       // No custom CA provided but we are in production: still enforce TLS
       // using system CAs. This will fail for self-signed / private CAs like
