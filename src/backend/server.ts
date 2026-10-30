@@ -75,7 +75,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
-const { initDb, run, all, get, withTransaction } = require('./db');
+const { initDb, run, all, get, withTransaction, getDbEngine } = require('./db');
 
 const PIN_PEPPER = process.env.PIN_PEPPER || 'RAILWAY_ROSTER_SECURE_PEPPER_2026_!#%*';
 
@@ -111,7 +111,9 @@ const {
 } = require('./endpoint_registry');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT && !isNaN(parseInt(process.env.PORT, 10))
+  ? parseInt(process.env.PORT, 10)
+  : 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'railway_roster_luxury_editorial_secret_2026';
 
 app.use(cors());
@@ -145,151 +147,165 @@ app.get('/api/system/data-flow-map', (req, res) => {
 // Initialize Database on startup
 initDb().then(async () => {
   console.log('Database loaded and ready.');
-  // Ensure staff_pins table and pin_hash columns exist across all database engines (SQLite & MySQL)
-  try {
-    await run(`
-      CREATE TABLE IF NOT EXISTS staff_pins (
-        pf_no VARCHAR(50) PRIMARY KEY,
-        staff_id INT,
-        pin_hash VARCHAR(255) NOT NULL,
-        failed_attempts INT DEFAULT 0,
-        locked_until DATETIME DEFAULT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
-  } catch (e) {
+
+  // Start HTTP server immediately once database initialization succeeds
+  // Bound to 0.0.0.0 and process.env.PORT so cloud hosting (Render) detects the open port immediately
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n================================================================`);
+    console.log(`🚀 [SERVER ONLINE] Railway Roster backend listening on port ${PORT}`);
+    console.log(`   Host binding : 0.0.0.0 (all interfaces)`);
+    console.log(`   Environment  : ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Database     : ${typeof getDbEngine === 'function' ? getDbEngine().toUpperCase() : 'CONNECTED'}`);
+    console.log(`================================================================\n`);
+  });
+
+  // Run post-startup housekeeping and sync tasks in the background without blocking the open port
+  (async () => {
+    // Ensure staff_pins table and pin_hash columns exist across all database engines (SQLite & MySQL)
     try {
       await run(`
         CREATE TABLE IF NOT EXISTS staff_pins (
-          pf_no TEXT PRIMARY KEY,
-          staff_id INTEGER,
-          pin_hash TEXT NOT NULL,
-          failed_attempts INTEGER DEFAULT 0,
-          locked_until TEXT DEFAULT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          pf_no VARCHAR(50) PRIMARY KEY,
+          staff_id INT,
+          pin_hash VARCHAR(255) NOT NULL,
+          failed_attempts INT DEFAULT 0,
+          locked_until DATETIME DEFAULT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `);
-    } catch (err) {}
-  }
-  try {
-    await run("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
-  } catch (e) {
+    } catch (e) {
+      try {
+        await run(`
+          CREATE TABLE IF NOT EXISTS staff_pins (
+            pf_no TEXT PRIMARY KEY,
+            staff_id INTEGER,
+            pin_hash TEXT NOT NULL,
+            failed_attempts INTEGER DEFAULT 0,
+            locked_until TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+      } catch (err) {}
+    }
     try {
-      await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
-    } catch (err) {}
-  }
-  try {
-    await run("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
-  } catch (e) {
+      await run("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+    } catch (e) {
+      try {
+        await run("ALTER TABLE users ADD COLUMN pin_hash TEXT DEFAULT NULL");
+      } catch (err) {}
+    }
     try {
-      await run("ALTER TABLE staff ADD COLUMN pin_hash TEXT DEFAULT NULL");
-    } catch (err) {}
-  }
-
-  // Ensure VACANT placeholder duties never hold real employee PF numbers
-  try {
-    await run("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
-    await run("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
-  } catch (e) {}
-
-  // Synchronize authoritative PINs from staff_pins into users and staff
-  try {
-    const authoritativePins = await all("SELECT pf_no, staff_id, pin_hash FROM staff_pins WHERE pin_hash IS NOT NULL AND pin_hash != ''");
-    for (const ap of authoritativePins) {
-      if (ap.pf_no) {
-        await run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ?", [ap.pin_hash, ap.pf_no.toLowerCase()]).catch(() => {});
-      }
-      if (ap.staff_id) {
-        await run("UPDATE staff SET pin_hash = ? WHERE id = ?", [ap.pin_hash, ap.staff_id]).catch(() => {});
-      }
+      await run("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
+    } catch (e) {
+      try {
+        await run("ALTER TABLE staff ADD COLUMN pin_hash TEXT DEFAULT NULL");
+      } catch (err) {}
     }
 
-    const usersWithPin = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
-    for (const u of usersWithPin) {
-      if (u.username) {
-        const pf = u.username.trim().toLowerCase();
-        await run(
-          `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
-           VALUES (?, ?, ?, 0, NULL)
-           ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
-          [pf, u.staff_id, u.pin_hash]
-        ).catch(async () => {
-          await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, u.staff_id, u.pin_hash]);
-        });
-      }
-      if (u.staff_id) {
-        await run("UPDATE staff SET pin_hash = ? WHERE id = ? AND (pin_hash IS NULL OR pin_hash = '')", [u.pin_hash, u.staff_id]).catch(() => {});
-      }
-    }
+    // Ensure VACANT placeholder duties never hold real employee PF numbers
+    try {
+      await run("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
+      await run("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
+    } catch (e) {}
 
-    const staffWithPin = await all("SELECT id, pf_no, pin_hash FROM staff WHERE pin_hash IS NOT NULL AND pin_hash != ''");
-    for (const s of staffWithPin) {
-      if (s.pf_no) {
-        const pf = s.pf_no.trim().toLowerCase();
-        await run(
-          `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
-           VALUES (?, ?, ?, 0, NULL)
-           ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
-          [pf, s.id, s.pin_hash]
-        ).catch(async () => {
-          await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, s.id, s.pin_hash]);
-        });
-        await run("UPDATE users SET pin_hash = ? WHERE (LOWER(TRIM(username)) = ? OR staff_id = ?) AND (pin_hash IS NULL OR pin_hash = '')", [s.pin_hash, pf, s.id]).catch(() => {});
-      }
-    }
-  } catch (e) {}
-
-  // Mirror active PIN hashes to SQLite roster.db for offline and restart resilience
-  try {
-    const sqlite3Module = require('sqlite3');
-    const sqlitePath = path.join(__dirname, 'roster.db');
-    if (fs.existsSync(sqlitePath)) {
-      const sqlite = new sqlite3Module.Database(sqlitePath);
-      const activePins = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
-      for (const p of activePins) {
-        sqlite.run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?", [p.pin_hash, p.username.toLowerCase(), p.staff_id], () => {});
-        if (p.staff_id) {
-          sqlite.run("UPDATE staff SET pin_hash = ? WHERE id = ?", [p.pin_hash, p.staff_id], () => {});
+    // Synchronize authoritative PINs from staff_pins into users and staff
+    try {
+      const authoritativePins = await all("SELECT pf_no, staff_id, pin_hash FROM staff_pins WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+      for (const ap of authoritativePins) {
+        if (ap.pf_no) {
+          await run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ?", [ap.pin_hash, ap.pf_no.toLowerCase()]).catch(() => {});
+        }
+        if (ap.staff_id) {
+          await run("UPDATE staff SET pin_hash = ? WHERE id = ?", [ap.pin_hash, ap.staff_id]).catch(() => {});
         }
       }
-      sqlite.close();
+
+      const usersWithPin = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+      for (const u of usersWithPin) {
+        if (u.username) {
+          const pf = u.username.trim().toLowerCase();
+          await run(
+            `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+             VALUES (?, ?, ?, 0, NULL)
+             ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
+            [pf, u.staff_id, u.pin_hash]
+          ).catch(async () => {
+            await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, u.staff_id, u.pin_hash]);
+          });
+        }
+        if (u.staff_id) {
+          await run("UPDATE staff SET pin_hash = ? WHERE id = ? AND (pin_hash IS NULL OR pin_hash = '')", [u.pin_hash, u.staff_id]).catch(() => {});
+        }
+      }
+
+      const staffWithPin = await all("SELECT id, pf_no, pin_hash FROM staff WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+      for (const s of staffWithPin) {
+        if (s.pf_no) {
+          const pf = s.pf_no.trim().toLowerCase();
+          await run(
+            `INSERT INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until)
+             VALUES (?, ?, ?, 0, NULL)
+             ON DUPLICATE KEY UPDATE pin_hash = COALESCE(staff_pins.pin_hash, VALUES(pin_hash)), staff_id = COALESCE(staff_pins.staff_id, VALUES(staff_id))`,
+            [pf, s.id, s.pin_hash]
+          ).catch(async () => {
+            await run(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [pf, s.id, s.pin_hash]);
+          });
+          await run("UPDATE users SET pin_hash = ? WHERE (LOWER(TRIM(username)) = ? OR staff_id = ?) AND (pin_hash IS NULL OR pin_hash = '')", [s.pin_hash, pf, s.id]).catch(() => {});
+        }
+      }
+    } catch (e) {}
+
+    // Mirror active PIN hashes to SQLite roster.db for offline and restart resilience (only if local file exists)
+    try {
+      const sqlitePath = path.join(__dirname, 'roster.db');
+      if (fs.existsSync(sqlitePath)) {
+        const sqlite3Module = require('sqlite3');
+        const sqlite = new sqlite3Module.Database(sqlitePath);
+        const activePins = await all("SELECT username, staff_id, pin_hash FROM users WHERE pin_hash IS NOT NULL AND pin_hash != ''");
+        for (const p of activePins) {
+          sqlite.run("UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?", [p.pin_hash, p.username.toLowerCase(), p.staff_id], () => {});
+          if (p.staff_id) {
+            sqlite.run("UPDATE staff SET pin_hash = ? WHERE id = ?", [p.pin_hash, p.staff_id], () => {});
+          }
+        }
+        sqlite.close();
+      }
+    } catch (e) {}
+
+    // Clear only temporary NTES network run cache on startup, NEVER delete user data!
+    try {
+      await run("DELETE FROM actual_train_runs WHERE source = 'NTES'");
+      console.log('Cleared temporary NTES cache on startup. User data preserved permanently.');
+    } catch (e) {
+      console.error('Failed to clean cache on startup:', e);
     }
-  } catch (e) {}
-  // Clear only temporary NTES network run cache on startup, NEVER delete user data!
-  try {
-    await run("DELETE FROM actual_train_runs WHERE source = 'NTES'");
-    console.log('Cleared temporary NTES cache on startup. User data preserved permanently.');
-  } catch (e) {
-    console.error('Failed to clean cache on startup:', e);
-  }
-  // Auto-sync LR sheet records with any existing Daily Duty allotments
-  try {
-    await backfillLRSheetFromOverrides();
-  } catch (e) {
-    console.error('Failed to backfill LR sheet overrides on startup:', e);
-  }
 
-  // Clean up non-daily placeholder text in ta_approvals and ta_entries so actual train numbers are always noted
-  try {
-    await run("UPDATE ta_approvals SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 53 OR link_number = 60)");
-    await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 54 OR link_number = 61)");
-    await run("UPDATE ta_approvals SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 55 OR link_number = 62)");
-    await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
+    // Auto-sync LR sheet records with any existing Daily Duty allotments
+    try {
+      await backfillLRSheetFromOverrides();
+    } catch (e) {
+      console.error('Failed to backfill LR sheet overrides on startup:', e);
+    }
 
-    await run("UPDATE ta_entries SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%53%' OR remarks LIKE '%60%')");
-    await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%54%' OR remarks LIKE '%61%')");
-    await run("UPDATE ta_entries SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%55%' OR remarks LIKE '%62%')");
-    await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
-    console.log('Cleaned up non-daily placeholder train numbers in ta_approvals and ta_entries.');
-  } catch (e) {
-    console.error('Failed to clean non-daily train numbers on startup:', e);
-  }
+    // Clean up non-daily placeholder text in ta_approvals and ta_entries so actual train numbers are always noted
+    try {
+      await run("UPDATE ta_approvals SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 53 OR link_number = 60)");
+      await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 54 OR link_number = 61)");
+      await run("UPDATE ta_approvals SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (link_number = 55 OR link_number = 62)");
+      await run("UPDATE ta_approvals SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
 
-  // Start HTTP server only AFTER database is fully initialized
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Roster backend server is running on port ${PORT}`);
+      await run("UPDATE ta_entries SET train_no = '22882' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%53%' OR remarks LIKE '%60%')");
+      await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%54%' OR remarks LIKE '%61%')");
+      await run("UPDATE ta_entries SET train_no = '17069' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%') AND (remarks LIKE '%55%' OR remarks LIKE '%62%')");
+      await run("UPDATE ta_entries SET train_no = '17221' WHERE (train_no LIKE '%NON DAILY%' OR train_no LIKE '%NON_DAILY%')");
+      console.log('Cleaned up non-daily placeholder train numbers in ta_approvals and ta_entries.');
+    } catch (e) {
+      console.error('Failed to clean non-daily train numbers on startup:', e);
+    }
+  })().catch(bgErr => {
+    console.warn('[Post-startup Sync] Background sync warning:', bgErr?.message || bgErr);
   });
 }).catch(err => {
   console.error('Database initialization failed:', err);
@@ -2000,11 +2016,11 @@ app.post('/api/auth/set-pin', async (req, res) => {
       await run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id]);
     } catch (e) {}
 
-    // Mirror to SQLite roster.db if available to guarantee persistence across restarts
+    // Mirror to SQLite roster.db if available to guarantee persistence across restarts (only if file exists)
     try {
-      const sqlite3Module = require('sqlite3');
       const sqlitePath = path.join(__dirname, 'roster.db');
       if (fs.existsSync(sqlitePath)) {
+        const sqlite3Module = require('sqlite3');
         const sqlite = new sqlite3Module.Database(sqlitePath);
         sqlite.run('UPDATE users SET pin_hash = ? WHERE LOWER(TRIM(username)) = ? OR staff_id = ?', [pinHash, cleanPf, staffMember.id], () => {});
         sqlite.run('UPDATE staff SET pin_hash = ? WHERE id = ?', [pinHash, staffMember.id], () => {});
