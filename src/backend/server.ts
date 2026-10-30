@@ -854,9 +854,40 @@ function getLinkSetDetails(categoryId, linkNumber) {
 }
 
 // Helper: Check if staff took leave / sick on a 2 or 3 day link duty on previous day(s), making them available at HQ today
-async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleLength, anchorDate, targetDateStr) {
+async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleLength, anchorDate, targetDateStr, dataPool: any = null) {
   // Helper: Check if staff was on leave / sick on a given date (across overrides, leave requests, and muster records)
   async function checkStaffLeaveOnDate(dateStr) {
+    if (dataPool) {
+      const override = dataPool.overridesMap?.[`${staffId}_${dateStr}`];
+      if (override) {
+        if (override.status === 'AVAILABLE_FOR_BOOKING' || (override.reason && override.reason.toLowerCase().includes('available for booking'))) {
+          return null;
+        }
+        if (['LEAVE', 'SICK', 'CR', 'ABSENT'].includes(override.status) || override.leave_type) {
+          const isSick = override.status === 'SICK' || override.leave_type === 'SICK' || override.leave_type === 'LHAP' || (override.reason && override.reason.toLowerCase().includes('sick'));
+          return { isLeave: true, status: isSick ? 'SICK' : (override.leave_type || override.status), isSick, reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
+        }
+        if (override.overridden_link_number === null && override.reason && (override.reason.toLowerCase().includes('leave') || override.reason.toLowerCase().includes('sick'))) {
+          const isSick = override.reason.toLowerCase().includes('sick');
+          return { isLeave: true, status: isSick ? 'SICK' : 'LEAVE', isSick, reason: override.reason, substituteStaffId: override.substitute_staff_id, substituteName: override.substitute_name };
+        }
+      }
+
+      const leaveReq = dataPool.leaveRequests?.find(l => l.staff_id === staffId && (l.date === dateStr || (l.from_date <= dateStr && l.to_date >= dateStr)));
+      if (leaveReq) {
+        const isSick = leaveReq.type === 'SICK' || (leaveReq.reason && leaveReq.reason.toLowerCase().includes('sick'));
+        return { isLeave: true, status: isSick ? 'SICK' : 'LEAVE', isSick, reason: `Approved ${isSick ? 'Sick' : 'Leave'}: ${leaveReq.reason || 'Leave'}`, substituteStaffId: null, substituteName: null };
+      }
+
+      const muster = dataPool.musterMap?.[`${staffId}_${dateStr}`];
+      if (muster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH', 'SICK', 'CR', 'O'].includes(muster.code?.toUpperCase())) {
+        const isSick = muster.code === 'SICK' || muster.code === 'LHAP';
+        return { isLeave: true, status: isSick ? 'SICK' : muster.code, isSick, reason: `Muster ${isSick ? 'Sick' : 'Leave'} (${muster.code})`, substituteStaffId: null, substituteName: null };
+      }
+
+      return null;
+    }
+
     // 1. Check overrides
     const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffId, dateStr]);
     if (override) {
@@ -901,7 +932,7 @@ async function checkMultiDayLeaveReturn(staffId, categoryId, rowPosition, cycleL
   const todayDayOffset = getDayOffset(anchorDate, targetDateStr);
   const todayLinkNum = getBaseLinkNumber(rowPosition, todayDayOffset, cycleLength);
   if (todayLinkNum === null) return null;
-  const todayLinkDef = await getActiveLinkDef(categoryId, todayLinkNum, targetDateStr);
+  const todayLinkDef = dataPool?.getLinkDef ? dataPool.getLinkDef(categoryId, todayLinkNum, targetDateStr) : await getActiveLinkDef(categoryId, todayLinkNum, targetDateStr);
   if (!todayLinkDef || todayLinkDef.is_rest === 1) return null;
 
   // 3. Check multi-day link set details
@@ -1300,14 +1331,29 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
  * Railway Rule: Minimum 8 to 12 hours rest at headquarters GNT after completing last duty
  * before being available for booking.
  */
-async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, customNow: any = null) {
+async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, customNow: any = null, dataPool: any = null) {
+  const toDateStr = (val: any) => {
+    if (!val) return '';
+    if (val instanceof Date) return val.toISOString().split('T')[0];
+    const s = String(val);
+    return s.length >= 10 ? s.substring(0, 10) : s;
+  };
+
   // 1. Check explicit manual/recorded entries in lr_duty_completions
-  const manual = await get(
-    `SELECT * FROM lr_duty_completions 
-     WHERE staff_id = ? AND date(arrival_date) <= date(?)
-     ORDER BY date(arrival_date) DESC, arrival_time DESC LIMIT 1`,
-    [staffId, targetDateStr]
-  );
+  let manual = null;
+  if (dataPool && dataPool.lrCompletions) {
+    manual = dataPool.lrCompletions.find((c: any) => {
+      const arrD = toDateStr(c.arrival_date);
+      return c.staff_id === staffId && arrD <= targetDateStr;
+    }) || null;
+  } else {
+    manual = await get(
+      `SELECT * FROM lr_duty_completions 
+       WHERE staff_id = ? AND date(arrival_date) <= date(?)
+       ORDER BY date(arrival_date) DESC, arrival_time DESC LIMIT 1`,
+      [staffId, targetDateStr]
+    );
+  }
 
   let lastDuty = null;
   if (manual) {
@@ -1315,7 +1361,7 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
       trainNo: manual.last_train_no,
       fromStation: manual.from_station || '---',
       toStation: manual.to_station || 'GNT',
-      arrivalDate: manual.arrival_date,
+      arrivalDate: toDateStr(manual.arrival_date),
       arrivalTime: manual.arrival_time,
       restHoursRequired: manual.rest_hours_required || 12,
       source: 'RECORDED_COMPLETION',
@@ -1325,23 +1371,40 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
 
   // 2. Check overrides for staff_id (substitute duty or changed link on previous dates up to 7 days)
   if (!lastDuty) {
-    const overrides = await all(
-      `SELECT * FROM overrides 
-       WHERE staff_id = ? AND date(date) <= date(?)
-       ORDER BY date(date) DESC LIMIT 7`,
-      [staffId, targetDateStr]
-    );
+    let overrides = [];
+    if (dataPool && dataPool.overrides) {
+      overrides = dataPool.overrides
+        .filter((o: any) => {
+          const oD = toDateStr(o.date);
+          return o.staff_id === staffId && oD <= targetDateStr;
+        })
+        .sort((a: any, b: any) => {
+          const da = toDateStr(a.date);
+          const db = toDateStr(b.date);
+          return db > da ? 1 : (db < da ? -1 : 0);
+        })
+        .slice(0, 7);
+    } else {
+      overrides = await all(
+        `SELECT * FROM overrides 
+         WHERE staff_id = ? AND date(date) <= date(?)
+         ORDER BY date(date) DESC LIMIT 7`,
+        [staffId, targetDateStr]
+      );
+    }
 
     for (const ov of overrides) {
       if (ov.status === 'REST' || ov.status === 'SICK' || ov.status === 'LEAVE' || ov.status === 'CR' || ov.status === 'ABSENT') {
         continue;
       }
 
+      const ovDateStr = toDateStr(ov.date);
+
       // Check non-daily multi-day service
       const trainStr = ov.extra_train_no || ov.reason || (ov.overridden_link_number ? NON_DAILY_LINK_TRAINS[ov.overridden_link_number] : '');
       const ndMatch = getMultiDayNonDailyMatch(trainStr);
       if (ndMatch) {
-        const arrDateObj = new Date(ov.date + 'T12:00:00');
+        const arrDateObj = new Date(ovDateStr + 'T12:00:00');
         arrDateObj.setDate(arrDateObj.getDate() + (ndMatch.totalDays === 3 ? 2 : 1));
         const arrDateStr = arrDateObj.toISOString().split('T')[0];
         lastDuty = {
@@ -1361,14 +1424,14 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
       if (linkNum !== null && linkNum !== undefined) {
         let catId = 1;
         if (ov.substitute_staff_id) {
-          const origStaff = await get('SELECT category_id FROM staff WHERE id = ?', [ov.substitute_staff_id]);
+          const origStaff = dataPool?.staffMap ? dataPool.staffMap[ov.substitute_staff_id] : await get('SELECT category_id FROM staff WHERE id = ?', [ov.substitute_staff_id]);
           if (origStaff) catId = origStaff.category_id;
         } else {
-          const me = await get('SELECT category_id FROM staff WHERE id = ?', [staffId]);
+          const me = dataPool?.staffMap ? dataPool.staffMap[staffId] : await get('SELECT category_id FROM staff WHERE id = ?', [staffId]);
           if (me && me.category_id !== 4) catId = me.category_id;
         }
 
-        const lDef = await getActiveLinkDef(catId, linkNum, ov.date);
+        const lDef = dataPool?.getLinkDef ? dataPool.getLinkDef(catId, linkNum, ovDateStr) : await getActiveLinkDef(catId, linkNum, ovDateStr);
         if (lDef) {
           const trainArr = findGntArrivalForLink(catId, linkNum, lDef);
           if (trainArr) {
@@ -1376,7 +1439,7 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
               trainNo: trainArr.trainNo,
               fromStation: trainArr.fromStation,
               toStation: 'GNT',
-              arrivalDate: ov.date,
+              arrivalDate: ovDateStr,
               arrivalTime: trainArr.arrivalTime,
               restHoursRequired: 12,
               source: `SUBSTITUTE_LINK_${linkNum}`,
@@ -10881,18 +10944,166 @@ app.get('/api/reports/what-is-person-working', async (req, res) => {
 // ============================================================================
 app.get('/api/reports/daily-view', async (req, res) => {
   const { date } = req.query;
-  if (!date) return res.status(400).json({ error: 'Date is required' });
+  if (!date || typeof date !== 'string') return res.status(400).json({ error: 'Date is required' });
 
   try {
-    const categories = await all('SELECT * FROM categories');
-    const crBalances = await calculateStaffCrBalances();
+    const toDateKey = (val: any) => {
+      if (!val) return '';
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+      const s = String(val);
+      return s.length >= 10 ? s.substring(0, 10) : s;
+    };
+
+    const targetDateStr = date;
+    const dTarget = new Date(targetDateStr + 'T12:00:00');
+    const dMinus1 = new Date(dTarget);
+    dMinus1.setDate(dMinus1.getDate() - 1);
+    const dMinus1Str = dMinus1.toISOString().split('T')[0];
+
+    const dMinus2 = new Date(dTarget);
+    dMinus2.setDate(dMinus2.getDate() - 2);
+    const dMinus2Str = dMinus2.toISOString().split('T')[0];
+
+    const dMinus3 = new Date(dTarget);
+    dMinus3.setDate(dMinus3.getDate() - 3);
+    const dMinus3Str = dMinus3.toISOString().split('T')[0];
+
+    const dMinus7 = new Date(dTarget);
+    dMinus7.setDate(dMinus7.getDate() - 7);
+    const dMinus7Str = dMinus7.toISOString().split('T')[0];
+
+    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const currentDayName = days[dTarget.getDay()];
+
+    // Bulk prefetch in parallel to avoid hundreds of sequential SQL roundtrips
+    const [
+      categories,
+      allStaff,
+      crBalances,
+      allLinks,
+      overridesList,
+      musterList,
+      lrList,
+      dregList,
+      approvedLeavesList,
+      lrCompletionsList,
+      nonDailyTrains
+    ] = await Promise.all([
+      all('SELECT * FROM categories ORDER BY id ASC'),
+      all('SELECT * FROM staff WHERE (active = 1 OR active IS NULL) ORDER BY row_position ASC'),
+      calculateStaffCrBalances(),
+      all("SELECT * FROM links WHERE (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft')"),
+      all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [dMinus7Str, targetDateStr]),
+      all('SELECT * FROM muster_records WHERE date >= ? AND date <= ?', [dMinus3Str, targetDateStr]),
+      all('SELECT * FROM lr_sheet_records WHERE date = ?', [targetDateStr]),
+      all(`SELECT e.train_out, e.coach_out, e.train_return, e.coach_return, e.duty_label, e.notes, ds.staff_id
+           FROM duty_register_entry e
+           JOIN duty_register_staff ds ON ds.entry_id = e.id
+           WHERE e.date = ?`, [targetDateStr]),
+      all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date IN (?, ?, ?) OR (from_date <= ? AND to_date >= ?))", [targetDateStr, dMinus1Str, dMinus2Str, targetDateStr, dMinus2Str]),
+      all('SELECT * FROM lr_duty_completions WHERE date(arrival_date) <= date(?) ORDER BY date(arrival_date) DESC, arrival_time DESC', [targetDateStr]),
+      all('SELECT * FROM non_daily_trains WHERE UPPER(day_of_week) = ? ORDER BY id', [currentDayName])
+    ]);
+
+    const overridesMap: Record<string, any> = {};
+    for (const ov of overridesList) {
+      overridesMap[`${ov.staff_id}_${toDateKey(ov.date)}`] = ov;
+    }
+
+    const musterMap: Record<string, any> = {};
+    for (const m of musterList) {
+      musterMap[`${m.staff_id}_${toDateKey(m.date)}`] = m;
+    }
+
+    const lrMap = new Map();
+    for (const lr of lrList) {
+      lrMap.set(lr.staff_id, lr);
+    }
+
+    const dregMap = new Map();
+    for (const dr of dregList) {
+      dregMap.set(dr.staff_id, dr);
+    }
+
+    const staffMap: Record<string, any> = {};
+    for (const s of allStaff) {
+      staffMap[s.id] = s;
+    }
+
+    const getLinkDef = (categoryId: any, linkNumber: any, dateStr: string) => {
+      const num = parseInt(linkNumber, 10);
+      const catId = parseInt(categoryId, 10);
+      let matched = null;
+      if (catId && catId !== 4) {
+        matched = allLinks.find((l: any) =>
+          parseInt(l.category_id, 10) === catId &&
+          parseInt(l.link_number, 10) === num &&
+          (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
+          (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
+        );
+      }
+      if (!matched) {
+        matched = allLinks.find((l: any) =>
+          parseInt(l.link_number, 10) === num &&
+          parseInt(l.category_id, 10) !== 4 &&
+          (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
+          (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
+        );
+      }
+      if (matched) {
+        let link = { ...matched };
+        const mNum = parseInt(link.link_number, 10);
+        const mCat = parseInt(link.category_id, 10);
+        if (dateStr < '2026-11-01') {
+          if ((mCat === 1 && mNum === 15) || (mCat === 2 && mNum === 50)) {
+            const is18047 = is18047Day(dateStr);
+            if (mCat === 1) {
+              link.train_numbers = is18047 ? '67230, 18047' : '67230, 17225';
+            } else {
+              link.train_numbers = is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
+            }
+          } else if (mCat === 1 && mNum === 16) {
+            const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+            const dow = d.getDay();
+            const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+            const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+            link.train_numbers = `${inTrain}, ${retTrain}`;
+          } else if (mCat === 1 && mNum === 17) {
+            const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+            link.train_numbers = `${retTrain}, 57201`;
+          } else if (mCat === 2 && mNum === 51) {
+            const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+            const dow = d.getDay();
+            const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
+            const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+            link.train_numbers = `${inTrain}, ${retTrain}`;
+          } else if (mCat === 2 && mNum === 52) {
+            const retTrain = is18048Day(dateStr) ? '18048' : '17226';
+            link.train_numbers = `${retTrain}, PILOT(12703)`;
+          }
+        }
+        return link;
+      }
+      return { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
+    };
+
+    const dataPool = {
+      overridesMap,
+      overrides: overridesList,
+      musterMap,
+      lrMap,
+      dregMap,
+      leaveRequests: approvedLeavesList,
+      lrCompletions: lrCompletionsList,
+      staffMap,
+      getLinkDef
+    };
+
     const result = [];
 
     for (const cat of categories) {
-      const staffMembers = await all(
-        'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position',
-        [cat.id]
-      );
+      const staffMembers = allStaff.filter((s: any) => s.category_id === cat.id);
+
       if (cat.id === 4) {
         // ==========================================
         // LEAVE RESERVE (LR / CATEGORY 4) RESOLUTION
@@ -10900,16 +11111,10 @@ app.get('/api/reports/daily-view', async (req, res) => {
         // ==========================================
         const staffDuties = [];
         for (const staff of staffMembers) {
-          const lrRecord = await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
-          const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
-          const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
-          const dregRecord = await get(`
-            SELECT e.train_out, e.coach_out, e.train_return, e.coach_return, e.duty_label, e.notes
-            FROM duty_register_entry e
-            JOIN duty_register_staff ds ON ds.entry_id = e.id
-            WHERE ds.staff_id = ? AND e.date = ?
-            LIMIT 1
-          `, [staff.id, date]);
+          const lrRecord = lrMap.get(staff.id);
+          const override = overridesMap[`${staff.id}_${targetDateStr}`];
+          const musterRecord = musterMap[`${staff.id}_${targetDateStr}`];
+          const dregRecord = dregMap.get(staff.id);
 
           const effTrainOut = override?.train_out || dregRecord?.train_out || null;
           const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
@@ -10934,9 +11139,8 @@ app.get('/api/reports/daily-view', async (req, res) => {
           let musterCode = musterRecord ? musterRecord.code.toUpperCase() : null;
           let musterRemarks = musterRecord ? musterRecord.remarks || '' : null;
 
-          const dObj = new Date(date + 'T12:00:00');
           const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-          const dayOfWeek = dayNames[dObj.getDay()];
+          const dayOfWeek = dayNames[dTarget.getDay()];
           const isScheduledRestDay = (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) ||
             (staff.name && staff.name.toUpperCase().includes(dayOfWeek + ' REST'));
 
@@ -10946,14 +11150,10 @@ app.get('/api/reports/daily-view', async (req, res) => {
             resolvedTrainNumbers = effTrainRet ? `${effTrainOut} / ${effTrainRet}` : effTrainOut;
             resolvedSetType = 'Train Booking';
             overrideReason = override?.reason || `Train ${effTrainOut}${effTrainRet ? ' / ' + effTrainRet : ''}`;
-            const matchedLink = await get(`
-              SELECT link_number, from_station, to_station, set_type, coaches 
-              FROM links 
-              WHERE category_id IN (1, 2) AND train_numbers LIKE ? 
-                AND (status = 'published' OR status IS NULL OR status = '') 
-                AND (status != 'draft')
-              LIMIT 1
-            `, [`%${effTrainOut}%`]);
+            const matchedLink = allLinks.find((l: any) =>
+              (parseInt(l.category_id, 10) === 1 || parseInt(l.category_id, 10) === 2) &&
+              l.train_numbers && l.train_numbers.includes(effTrainOut)
+            );
             if (matchedLink) {
               activeLink = matchedLink.link_number;
               resolvedFromStation = matchedLink.from_station || 'GNT';
@@ -11025,7 +11225,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
                 targetCategoryId = (override && override.target_category_id)
                   ? parseInt(override.target_category_id, 10)
                   : (isCor ? 1 : 2);
-                const linkDef = await getActiveLinkDef(targetCategoryId, linkNum, date);
+                const linkDef = getLinkDef(targetCategoryId, linkNum, targetDateStr);
                 if (linkDef) {
                   resolvedFromStation = linkDef.from_station || 'GNT';
                   resolvedToStation = linkDef.to_station || '---';
@@ -11063,7 +11263,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             isRest = ['REST', 'AVAILABLE_FOR_BOOKING'].includes(status);
 
             if (activeLink) {
-              const linkDef = await getActiveLinkDef(targetCategoryId || 1, activeLink, date);
+              const linkDef = getLinkDef(targetCategoryId || 1, activeLink, targetDateStr);
               resolvedTrainNumbers = linkDef ? linkDef.train_numbers : `Link #${activeLink}`;
               resolvedFromStation = linkDef?.from_station || 'GNT';
               resolvedToStation = linkDef?.to_station || '---';
@@ -11122,7 +11322,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
           }
 
           const crInfo = crBalances[staff.id] || { count: 0, dates: [], display: null, shortDisplay: '-' };
-          let lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, date);
+          let lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, targetDateStr, null, dataPool);
 
           staffDuties.push({
             staffId: staff.id,
@@ -11181,19 +11381,13 @@ app.get('/api/reports/daily-view', async (req, res) => {
         continue;
       }
 
-      const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, date);
-      const dayOffset = getDayOffset(catAnchorDate, date);
+      const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, targetDateStr);
+      const dayOffset = getDayOffset(catAnchorDate, targetDateStr);
 
       const staffDuties = [];
       for (const staff of staffMembers) {
-        const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
-        const dregRecord = await get(`
-          SELECT e.train_out, e.coach_out, e.train_return, e.coach_return, e.duty_label, e.notes
-          FROM duty_register_entry e
-          JOIN duty_register_staff ds ON ds.entry_id = e.id
-          WHERE ds.staff_id = ? AND e.date = ?
-          LIMIT 1
-        `, [staff.id, date]);
+        const override = overridesMap[`${staff.id}_${targetDateStr}`];
+        const dregRecord = dregMap.get(staff.id);
 
         const effTrainOut = override?.train_out || dregRecord?.train_out || null;
         const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
@@ -11221,14 +11415,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
           targetCategoryId = override?.target_category_id || cat.id;
 
           if (activeLink === null) {
-            const matchedLink = await get(`
-              SELECT link_number, from_station, to_station, set_type, coaches 
-              FROM links 
-              WHERE category_id = ? AND train_numbers LIKE ? 
-                AND (status = 'published' OR status IS NULL OR status = '') 
-                AND (status != 'draft')
-              LIMIT 1
-            `, [targetCategoryId || cat.id, `%${effTrainOut}%`]);
+            const targetCat = targetCategoryId || cat.id;
+            const matchedLink = allLinks.find((l: any) =>
+              parseInt(l.category_id, 10) === targetCat &&
+              l.train_numbers && l.train_numbers.includes(effTrainOut)
+            );
             if (matchedLink) {
               activeLink = matchedLink.link_number;
             }
@@ -11242,20 +11433,19 @@ app.get('/api/reports/daily-view', async (req, res) => {
           overrideReason = override.reason;
           let resolvedTargetCat = override.target_category_id || (override.status === 'SUBSTITUTE' ? 1 : null);
           if (!resolvedTargetCat && activeLink !== null) {
-            const ownLink = await get('SELECT 1 FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [cat.id, activeLink]);
+            const ownLink = allLinks.find((l: any) => parseInt(l.category_id, 10) === cat.id && parseInt(l.link_number, 10) === parseInt(activeLink, 10));
             if (ownLink) {
               resolvedTargetCat = cat.id;
             } else {
-              const anyLink = await get('SELECT category_id FROM links WHERE link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL)) ORDER BY category_id ASC LIMIT 1', [activeLink]);
+              const anyLink = allLinks.find((l: any) => parseInt(l.link_number, 10) === parseInt(activeLink, 10) && parseInt(l.category_id, 10) !== 4);
               resolvedTargetCat = anyLink ? anyLink.category_id : cat.id;
             }
-
           }
           targetCategoryId = resolvedTargetCat || cat.id;
           leaveType = override.leave_type;
         } else {
           activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catCycleLength);
-          const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, cat.id, staff.row_position, catCycleLength, catAnchorDate, date);
+          const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, cat.id, staff.row_position, catCycleLength, catAnchorDate, targetDateStr, dataPool);
           if (multiDayLeaveReturn) {
             isOverridden = true;
             status = 'AVAILABLE_FOR_BOOKING';
@@ -11265,11 +11455,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             activeLink = null;
           } else {
             // Check yesterday for multi-day return leg (2-Day and 3-Day services)
-            const dMinus1 = new Date(date + 'T12:00:00');
-            dMinus1.setDate(dMinus1.getDate() - 1);
-            const dMinus1Str = dMinus1.toISOString().split('T')[0];
-            const prev1Ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dMinus1Str]);
-
+            const prev1Ov = overridesMap[`${staff.id}_${dMinus1Str}`];
             if (prev1Ov && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(prev1Ov.status)) {
               const prev1TrainStr = prev1Ov.extra_train_no || prev1Ov.reason;
               const ndMatch1 = getMultiDayNonDailyMatch(prev1TrainStr);
@@ -11290,11 +11476,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             }
 
             if (!multiDayContinuation) {
-              const dMinus2 = new Date(date + 'T12:00:00');
-              dMinus2.setDate(dMinus2.getDate() - 2);
-              const dMinus2Str = dMinus2.toISOString().split('T')[0];
-              const prev2Ov = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dMinus2Str]);
-
+              const prev2Ov = overridesMap[`${staff.id}_${dMinus2Str}`];
               if (prev2Ov && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(prev2Ov.status)) {
                 const prev2TrainStr = prev2Ov.extra_train_no || prev2Ov.reason;
                 const ndMatch2 = getMultiDayNonDailyMatch(prev2TrainStr);
@@ -11318,7 +11500,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         }
 
         // Check muster roll
-        const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
+        const musterRecord = musterMap[`${staff.id}_${targetDateStr}`];
         let musterCode = null;
         let musterRemarks = null;
         if (musterRecord) {
@@ -11361,9 +11543,8 @@ app.get('/api/reports/daily-view', async (req, res) => {
 
         let isCat4RestDay = false;
         if (!override && !musterRecord && cat.id === 4) {
-          const dObj = new Date(date);
           const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-          const dayNameUpper = days[dObj.getDay()];
+          const dayNameUpper = days[dTarget.getDay()];
           if ((staff.rest_day && staff.rest_day.toUpperCase() === dayNameUpper) ||
             (staff.name && staff.name.toUpperCase().includes(dayNameUpper + ' REST'))) {
             isCat4RestDay = true;
@@ -11373,14 +11554,14 @@ app.get('/api/reports/daily-view', async (req, res) => {
 
         let dutyDetails = null;
         if (activeLink !== null) {
-          dutyDetails = await getActiveLinkDef(targetCategoryId || cat.id, activeLink, date);
+          dutyDetails = getLinkDef(targetCategoryId || cat.id, activeLink, targetDateStr);
         }
 
         const crInfo = crBalances[staff.id] || { count: 0, dates: [], display: null, shortDisplay: '-' };
 
         let lrRestInfo = null;
         if (cat.id === 4 || activeLink === null || status === 'AVAILABLE_FOR_BOOKING') {
-          lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, date);
+          lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, targetDateStr, null, dataPool);
         }
 
         const activeExtraTrain = override?.extra_train_no || (multiDayContinuation?.type === 'RETURN' ? multiDayContinuation.train : null);
@@ -11561,16 +11742,9 @@ app.get('/api/reports/daily-view', async (req, res) => {
       }
     };
 
-    const dObj = new Date(date);
-    const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-    const currentDayName = days[dObj.getDay()];
-    const nonDailyTrains = await all(
-      'SELECT * FROM non_daily_trains WHERE UPPER(day_of_week) = ? ORDER BY id',
-      [currentDayName]
-    );
-
-    res.json({ date, dayOfWeek: currentDayName, categories: result, nonDailyTrains, tally_summary: tallySummary });
-  } catch (err) {
+    res.json({ date: targetDateStr, dayOfWeek: currentDayName, categories: result, nonDailyTrains, tally_summary: tallySummary });
+  } catch (err: any) {
+    console.error('Error fetching daily-view:', err);
     res.status(500).json({ error: err.message });
   }
 });
