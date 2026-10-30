@@ -10887,9 +10887,22 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const lrRecord = await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
           const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
           const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
+          const dregRecord = await get(`
+            SELECT e.train_out, e.coach_out, e.train_return, e.coach_return, e.duty_label, e.notes
+            FROM duty_register_entry e
+            JOIN duty_register_staff ds ON ds.entry_id = e.id
+            WHERE ds.staff_id = ? AND e.date = ?
+            LIMIT 1
+          `, [staff.id, date]);
+
+          const effTrainOut = override?.train_out || dregRecord?.train_out || null;
+          const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
+          const effTrainRet = override?.train_return || dregRecord?.train_return || null;
+          const effCoachRet = override?.coach_return || dregRecord?.coach_return || null;
+          const effDutyLabel = override?.duty_label || dregRecord?.duty_label || null;
 
           let activeLink = null;
-          let isOverridden = Boolean(lrRecord || override || musterRecord);
+          let isOverridden = Boolean(lrRecord || override || musterRecord || effTrainOut);
           let status = 'AVAILABLE_FOR_BOOKING';
           let substituteStaffId = null;
           let substituteName = null;
@@ -10911,7 +10924,27 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const isScheduledRestDay = (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) ||
             (staff.name && staff.name.toUpperCase().includes(dayOfWeek + ' REST'));
 
-          if (lrRecord && lrRecord.duty_code && lrRecord.duty_code.trim() !== '') {
+          if (effTrainOut) {
+            status = (override?.status && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(override.status)) ? override.status : 'DUTY';
+            isRest = false;
+            resolvedTrainNumbers = effTrainRet ? `${effTrainOut} / ${effTrainRet}` : effTrainOut;
+            resolvedSetType = 'Train Booking';
+            overrideReason = override?.reason || `Train ${effTrainOut}${effTrainRet ? ' / ' + effTrainRet : ''}`;
+            const matchedLink = await get(`
+              SELECT link_number, from_station, to_station, set_type, coaches 
+              FROM links 
+              WHERE category_id IN (1, 2) AND train_numbers LIKE ? 
+                AND (status = 'published' OR status IS NULL OR status = '') 
+                AND (status != 'draft')
+              LIMIT 1
+            `, [`%${effTrainOut}%`]);
+            if (matchedLink) {
+              activeLink = matchedLink.link_number;
+              resolvedFromStation = matchedLink.from_station || 'GNT';
+              resolvedToStation = matchedLink.to_station || '---';
+              resolvedSetType = matchedLink.set_type || 'Train Booking';
+            }
+          } else if (lrRecord && lrRecord.duty_code && lrRecord.duty_code.trim() !== '') {
             const code = lrRecord.duty_code.trim();
             const upper = code.toUpperCase();
             const remarks = lrRecord.remarks || '';
@@ -11108,6 +11141,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
             cr_dates: crInfo.dates,
             lr_rest_info: lrRestInfo,
             train_numbers: resolvedTrainNumbers,
+            train_out: effTrainOut,
+            coach_out: effCoachOut,
+            train_return: effTrainRet,
+            coach_return: effCoachRet,
+            duty_label: effDutyLabel,
             from_station: resolvedFromStation,
             to_station: resolvedToStation,
             coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT') ? '-' : (activeExtraTrain ? 'SL / AC' : 'SL'),
@@ -11133,6 +11171,20 @@ app.get('/api/reports/daily-view', async (req, res) => {
       const staffDuties = [];
       for (const staff of staffMembers) {
         const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
+        const dregRecord = await get(`
+          SELECT e.train_out, e.coach_out, e.train_return, e.coach_return, e.duty_label, e.notes
+          FROM duty_register_entry e
+          JOIN duty_register_staff ds ON ds.entry_id = e.id
+          WHERE ds.staff_id = ? AND e.date = ?
+          LIMIT 1
+        `, [staff.id, date]);
+
+        const effTrainOut = override?.train_out || dregRecord?.train_out || null;
+        const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
+        const effTrainRet = override?.train_return || dregRecord?.train_return || null;
+        const effCoachRet = override?.coach_return || dregRecord?.coach_return || null;
+        const effDutyLabel = override?.duty_label || dregRecord?.duty_label || null;
+
         let activeLink = null;
         let isOverridden = false;
         let status = 'DUTY';
@@ -11143,7 +11195,29 @@ app.get('/api/reports/daily-view', async (req, res) => {
         let leaveType = null;
 
         let multiDayContinuation = null;
-        if (override) {
+        if (effTrainOut) {
+          isOverridden = true;
+          status = (override?.status && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(override.status)) ? override.status : 'DUTY';
+          activeLink = override?.overridden_link_number || null;
+          substituteStaffId = override?.substitute_staff_id || null;
+          substituteName = override?.substitute_name || null;
+          overrideReason = override?.reason || `Train ${effTrainOut}${effTrainRet ? ' / ' + effTrainRet : ''}`;
+          targetCategoryId = override?.target_category_id || cat.id;
+
+          if (activeLink === null) {
+            const matchedLink = await get(`
+              SELECT link_number, from_station, to_station, set_type, coaches 
+              FROM links 
+              WHERE category_id = ? AND train_numbers LIKE ? 
+                AND (status = 'published' OR status IS NULL OR status = '') 
+                AND (status != 'draft')
+              LIMIT 1
+            `, [targetCategoryId || cat.id, `%${effTrainOut}%`]);
+            if (matchedLink) {
+              activeLink = matchedLink.link_number;
+            }
+          }
+        } else if (override) {
           activeLink = override.overridden_link_number;
           isOverridden = true;
           status = override.status || (override.overridden_link_number === null ? 'REST' : 'CHANGED_LINK');
@@ -11318,6 +11392,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
           resolvedFromStation = ndMatch?.from || 'GNT';
           resolvedToStation = ndMatch?.via || ndMatch?.to || '---';
           resolvedSetType = 'Non-Daily';
+        } else if (effTrainOut) {
+          resolvedTrainNumbers = effTrainRet ? `${effTrainOut} / ${effTrainRet}` : effTrainOut;
+          resolvedSetType = dutyDetails ? dutyDetails.set_type : 'Train Booking';
+          resolvedFromStation = dutyDetails ? dutyDetails.from_station : 'GNT';
+          resolvedToStation = dutyDetails ? dutyDetails.to_station : '---';
         }
 
         staffDuties.push({
@@ -11331,9 +11410,14 @@ app.get('/api/reports/daily-view', async (req, res) => {
           rest_day: staff.rest_day,
           link_number: activeLink,
           original_link_number: (override && override.original_link_number !== null && override.original_link_number !== undefined) ? override.original_link_number : getBaseLinkNumber(staff.row_position, dayOffset, catCycleLength),
-          isRest: isCat4RestDay || (activeShiftedPlace === 'NON_DAILY_REST') || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE',
+          isRest: isCat4RestDay || (activeShiftedPlace === 'NON_DAILY_REST') || (!effTrainOut && activeLink === null) || (!effTrainOut && dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE',
           isOverridden,
           status,
+          train_out: effTrainOut,
+          coach_out: effCoachOut,
+          train_return: effTrainRet,
+          coach_return: effCoachRet,
+          duty_label: effDutyLabel,
           muster_code: musterCode,
           muster_remarks: musterRemarks,
           substituteStaffId,
@@ -11357,7 +11441,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
           train_numbers: resolvedTrainNumbers,
           from_station: resolvedFromStation,
           to_station: resolvedToStation,
-          coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE' || activeShiftedPlace === 'NON_DAILY_REST') ? '-' : (dutyDetails ? dutyDetails.coaches : 'SL / AC'),
+          coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE' || activeShiftedPlace === 'NON_DAILY_REST') ? '-' : (effCoachOut || (dutyDetails ? dutyDetails.coaches : 'SL / AC')),
           set_type: resolvedSetType
         });
       }

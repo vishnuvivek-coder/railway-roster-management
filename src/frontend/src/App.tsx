@@ -6648,7 +6648,7 @@ export default function App() {
 
                 const resolveSlotDuties = (slotsList) => {
                   const resolvedRows = [];
-                  const targetCat2SetId = (selectedDate && selectedDate >= '2026-10-01') ? 7 : 2;
+                  const targetCat2SetId = (selectedDate && selectedDate >= '2026-11-01') ? 12 : ((selectedDate && selectedDate >= '2026-10-01') ? 7 : 2);
                   const matchesLinkSet = (al) => {
                     if (!al || al.status === 'draft') return false;
                     if (al.link_set_id) {
@@ -6764,10 +6764,38 @@ export default function App() {
                         return false;
                       };
 
-                      // 1. Check if ANY staff with explicit override is assigned to this link (LR, or regular staff shifted to this link)
+                      const matchesTrainBooking = (duty) => {
+                        if (!duty) return false;
+                        const dTrain = duty.train_out ? String(duty.train_out).trim() : null;
+                        const dNums = duty.train_numbers ? String(duty.train_numbers).trim() : null;
+                        const dReason = duty.overrideReason ? String(duty.overrideReason).trim() : null;
+                        const sFirst = String(effectiveFirstTrain || slot.firstTrain || '').trim();
+                        const sLast = String(effectiveLastTrain || slot.lastTrain || '').trim();
+
+                        const trainMatches = (dTrain && (dTrain === sFirst || dTrain === sLast)) ||
+                          (sFirst && dNums && dNums.includes(sFirst)) ||
+                          (sFirst && dReason && dReason.includes(sFirst));
+
+                        if (!trainMatches) return false;
+
+                        const targetCat = duty.target_category_id != null 
+                          ? parseInt(duty.target_category_id, 10) 
+                          : (duty.categoryId === 1 ? 1 : (duty.categoryId === 3 ? 3 : 2));
+                        
+                        const slotCat = parseInt(lDef.categoryId, 10);
+                        if (slotCat === 1) {
+                          return targetCat === 1 || duty.categoryId === 1 || duty.status === 'SUBSTITUTE' || (duty.coach_out && duty.coach_out.toUpperCase().includes('COR'));
+                        } else if (slotCat === 3) {
+                          return targetCat === 3 || duty.categoryId === 3;
+                        } else {
+                          return targetCat === 2 || duty.categoryId === 2 || duty.categoryId === 4;
+                        }
+                      };
+
+                      // 1. Check if ANY staff with explicit override or matching train booking is assigned to this link
                       let overriddenStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
-                        matchesOverrideLink(d) &&
+                        (matchesOverrideLink(d) || matchesTrainBooking(d)) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
@@ -6853,11 +6881,11 @@ export default function App() {
                           slotId: slot.slotId,
                           categoryId: lDef.categoryId,
                           target_category_id: lDef.categoryId,
-                          link_number: lDef.linkNum,
-                          firstTrain: effectiveFirstTrain,
-                          firstCoaches: effectiveFirstCoach,
-                          lastTrain: effectiveLastTrain,
-                          lastCoaches: effectiveLastCoach,
+                          link_number: staffDuty.link_number || lDef.linkNum,
+                          firstTrain: staffDuty.train_out || effectiveFirstTrain,
+                          firstCoaches: staffDuty.coach_out || effectiveFirstCoach,
+                          lastTrain: staffDuty.train_return || effectiveLastTrain,
+                          lastCoaches: staffDuty.coach_return || effectiveLastCoach,
                           isLeave: isApprovedLeave,
                           isUpgraded: isUpgradedStaff,
                           originalStaffName: originalSickOrLeaveDuty ? originalSickOrLeaveDuty.name : null,
@@ -7048,13 +7076,15 @@ export default function App() {
                     // Check for Extra Staff assigned to this train slot (dragged or added down below)
                     const extraStaffDuties = staffDuties.filter(d => 
                       !activeWorkedStaffIds.has(d.staffId) &&
+                      d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' &&
                       (
+                        (d.train_out && (String(d.train_out) === String(slot.firstTrain) || String(d.train_out) === String(slot.lastTrain) || String(d.train_out) === String(effectiveSlotFirstTrain) || String(d.train_out) === String(effectiveSlotLastTrain))) ||
                         (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || String(d.extra_train_no) === String(slot.lastTrain) || String(d.extra_train_no) === String(effectiveSlotFirstTrain) || String(d.extra_train_no) === String(effectiveSlotLastTrain))) ||
                         (!d.extra_train_no && d.overrideReason && (
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${slot.firstTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${slot.lastTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${effectiveSlotFirstTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?)\\s*#?\\s*${effectiveSlotLastTrain}\\b`, 'i').test(d.overrideReason)
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${slot.firstTrain}\\b`, 'i').test(d.overrideReason) ||
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${slot.lastTrain}\\b`, 'i').test(d.overrideReason) ||
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${effectiveSlotFirstTrain}\\b`, 'i').test(d.overrideReason) ||
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${effectiveSlotLastTrain}\\b`, 'i').test(d.overrideReason)
                         ))
                       )
                     );
@@ -7067,10 +7097,10 @@ export default function App() {
                         ...extraStaff,
                         dutyKey: extraDutyKey,
                         slotId: slot.slotId,
-                        firstTrain: (customExtra.firstTrain !== undefined && customExtra.firstTrain !== '') ? customExtra.firstTrain : effectiveSlotFirstTrain,
-                        firstCoaches: (customExtra.firstCoach !== undefined && customExtra.firstCoach !== '') ? customExtra.firstCoach : 'Extra Crew',
-                        lastTrain: (customExtra.lastTrain !== undefined && customExtra.lastTrain !== '') ? customExtra.lastTrain : effectiveSlotLastTrain,
-                        lastCoaches: (customExtra.lastCoach !== undefined && customExtra.lastCoach !== '') ? customExtra.lastCoach : '-',
+                        firstTrain: (customExtra.firstTrain !== undefined && customExtra.firstTrain !== '') ? customExtra.firstTrain : (extraStaff.train_out || effectiveSlotFirstTrain),
+                        firstCoaches: (customExtra.firstCoach !== undefined && customExtra.firstCoach !== '') ? customExtra.firstCoach : (extraStaff.coach_out || 'Extra Crew'),
+                        lastTrain: (customExtra.lastTrain !== undefined && customExtra.lastTrain !== '') ? customExtra.lastTrain : (extraStaff.train_return || effectiveSlotLastTrain),
+                        lastCoaches: (customExtra.lastCoach !== undefined && customExtra.lastCoach !== '') ? customExtra.lastCoach : (extraStaff.coach_return || '-'),
                         isExtraCrew: true,
                         isExtraStaff: true,
                         isRestLink: false
@@ -7109,8 +7139,50 @@ export default function App() {
                 const activeSlotRows = resolveSlotDuties(getMasterDailySlots(selectedDate));
                 const nonDailySlotRows = resolveSlotDuties(getNonDailySlots(selectedDate));
 
+                // Dynamically resolve any staff who worked trains from the register not caught in predefined slots (e.g. 07001, 12755, 08519, etc.)
+                const unplacedTrainStaff = staffDuties.filter(d => 
+                  !activeWorkedStaffIds.has(d.staffId) && 
+                  d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' &&
+                  (d.train_out || (d.status === 'DUTY' && d.train_numbers && !['REST', 'SPARE (HQ)'].includes(d.train_numbers)))
+                );
+
+                const specialSlotRows = [];
+                const groupedSpecial = new Map();
+                unplacedTrainStaff.forEach(s => {
+                  activeWorkedStaffIds.add(s.staffId);
+                  const tOut = s.train_out || (s.train_numbers ? s.train_numbers.split(/[/,]+/)[0].trim() : 'SPECIAL');
+                  const tRet = s.train_return || (s.train_numbers && s.train_numbers.includes('/') ? s.train_numbers.split('/')[1].trim() : '');
+                  const groupKey = `${tOut}_${tRet}`;
+                  if (!groupedSpecial.has(groupKey)) {
+                    groupedSpecial.set(groupKey, {
+                      slotId: `special_${groupKey}`,
+                      page: 174,
+                      firstTrain: tOut,
+                      lastTrain: tRet || tOut,
+                      title: `${tOut}${tRet ? ' / ' + tRet : ''} (Special / Additional Train)`,
+                      isRestLink: false,
+                      duties: []
+                    });
+                  }
+                  const spGroup = groupedSpecial.get(groupKey);
+                  spGroup.duties.push({
+                    ...s,
+                    dutyKey: `special_${groupKey}_${s.staffId}`,
+                    slotId: `special_${groupKey}`,
+                    firstTrain: tOut,
+                    firstCoaches: s.coach_out || s.coaches || 'SL / AC',
+                    lastTrain: tRet || tOut,
+                    lastCoaches: s.coach_return || '-',
+                    isSpecialDuty: true,
+                    isRestLink: false
+                  });
+                });
+                groupedSpecial.forEach(val => specialSlotRows.push(val));
+                activeSlotRows.push(...specialSlotRows);
+
                 // Off duties: staff on REST or SICK / LEAVE / CR or not actively working a train slot
                 const offDuties = staffDuties.filter(d => {
+                  if (activeWorkedStaffIds.has(d.staffId)) return false;
                   const isApprovedLeave = safeLeaveRequests.some(l => 
                     String(l.staff_id) === String(d.staffId) && 
                     l.status === 'APPROVED' &&
@@ -7120,7 +7192,7 @@ export default function App() {
                       : (l.date === selectedDate))
                   );
                   const isSickOrLeave = d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || isApprovedLeave;
-                  const isRest = d.isRest || d.link_number === null;
+                  const isRest = d.isRest || d.link_number === null || d.status === 'REST' || d.status === 'AVAILABLE_FOR_BOOKING';
                   return isSickOrLeave || isRest || !activeWorkedStaffIds.has(d.staffId);
                 }).map(d => ({
                   ...d,
