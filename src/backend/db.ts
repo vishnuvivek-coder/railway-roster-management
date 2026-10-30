@@ -168,7 +168,7 @@ const withTransaction = async (callback) => {
       await run('COMMIT');
       return result;
     } catch (err) {
-      await run('ROLLBACK').catch(() => {});
+      await run('ROLLBACK').catch(() => { });
       throw err;
     } finally {
       releaseLock();
@@ -178,22 +178,38 @@ const withTransaction = async (callback) => {
 
 async function initDbInternal() {
   const dbTypePref = (process.env.DB_TYPE || 'sqlite').toLowerCase();
-  
+
   if (dbTypePref === 'mysql') {
     const host = process.env.MYSQL_HOST || 'localhost';
     const port = parseInt(process.env.MYSQL_PORT, 10) || 3306;
     const user = process.env.MYSQL_USER || 'root';
     const password = process.env.MYSQL_PASSWORD || '';
     const database = process.env.MYSQL_DATABASE || 'railway_roster';
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // Build SSL config from MYSQL_SSL_CA env var (PEM string).
+    // Required for Aiven and other managed cloud MySQL providers that use a
+    // project-specific CA not in the system trust store.
+    // Set rejectUnauthorized: true so the server certificate is always verified.
+    let sslConfig: any = undefined;
+    if (process.env.MYSQL_SSL_CA) {
+      sslConfig = { ca: process.env.MYSQL_SSL_CA, rejectUnauthorized: true };
+    } else if (isProduction) {
+      // No custom CA provided but we are in production: still enforce TLS
+      // using system CAs. This will fail for self-signed / private CAs like
+      // Aiven unless MYSQL_SSL_CA is also set.
+      sslConfig = { rejectUnauthorized: true };
+    }
 
     try {
-      console.log(`[DB Engine] Attempting connection to MySQL server at ${host}:${port} as '${user}'...`);
-      // Step 1: Ensure target database exists
-      const rootConn = await mysql.createConnection({ host, port, user, password });
-      await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-      await rootConn.end();
+      console.log(`[DB Engine] Connecting to MySQL at ${host}:${port} as '${user}', database '${database}'...`);
+      if (sslConfig) {
+        console.log(`[DB Engine] TLS: ${process.env.MYSQL_SSL_CA ? 'Custom CA (rejectUnauthorized: true)' : 'System CAs (rejectUnauthorized: true)'}`);
+      }
 
-      // Step 2: Establish MySQL connection pool
+      // Connect directly to the target database.
+      // Do NOT run CREATE DATABASE — managed providers (Aiven) do not grant that
+      // privilege to application users, and the database already exists.
       mysqlPool = mysql.createPool({
         host,
         port,
@@ -205,7 +221,8 @@ async function initDbInternal() {
         queueLimit: 0,
         multipleStatements: true,
         decimalNumbers: true,
-        dateStrings: true
+        dateStrings: true,
+        ...(sslConfig ? { ssl: sslConfig } : {})
       });
 
       // Verify connection
@@ -213,34 +230,25 @@ async function initDbInternal() {
       activeEngine = 'mysql';
 
       console.log(`\n================================================================`);
-      console.log(`🐬 [DATABASE ENGINE] Dedicated MySQL Active: Database '${database}'`);
+      console.log(`🐬 [DATABASE ENGINE] MySQL Active: Database '${database}'`);
       console.log(`   Host: ${host}:${port} | User: ${user}`);
+      console.log(`   TLS: ${sslConfig ? (process.env.MYSQL_SSL_CA ? 'Custom CA cert' : 'System CAs') : 'disabled'}`);
       console.log(`================================================================\n`);
 
-      // Step 3: Ensure MySQL tables exist
+      // Apply schema — all statements use CREATE TABLE IF NOT EXISTS.
+      // Safe to re-run: never drops or truncates existing tables.
       if (fs.existsSync(schemaSqlPath)) {
         const schemaSql = fs.readFileSync(schemaSqlPath, 'utf8');
         await mysqlPool.query(schemaSql);
+        console.log('[DB Engine] Schema applied (CREATE TABLE IF NOT EXISTS — existing data preserved).');
       }
 
-      // Step 3b: Ensure users.role allows 'Employee' and pin_hash exists on users and staff
-      try {
-        await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'");
-      } catch (alterErr) {
-        // Table may have already been altered or SQLite in-memory fallback
-      }
-      try {
-        await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
-      } catch (pinErr) {
-        // Column may already exist
-      }
-      try {
-        await mysqlPool.query("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL");
-      } catch (pinErr) {
-        // Column may already exist
-      }
+      // Safe column migrations: ALTER TABLE ADD/MODIFY silently fails if already done
+      try { await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
 
-      // Step 4: Ensure Admin 12345 / CLICKME exists
+      // Ensure Admin 12345 / CLICKME exists (upsert — never overwrites other users)
       const clickmeHash = await bcrypt.hash('CLICKME', 10);
       const primaryAdmin = await get("SELECT * FROM users WHERE username = '12345'");
       if (!primaryAdmin) {
@@ -257,20 +265,32 @@ async function initDbInternal() {
         );
       }
 
-      // Step 4b: Ensure each Staff with PF number has an active Employee user account
+      // Sync staff PF accounts (creates missing entries only, never overwrites)
       await syncStaffPfAccounts(run, all, get);
 
-      // Step 5: Check if staff or categories are present
       const staffCount = await get("SELECT COUNT(*) as count FROM staff");
       if (!staffCount || staffCount.count === 0) {
-        console.log(`[DB Engine] ℹ️ MySQL database tables are ready. Existing SQLite data can be migrated anytime via: npm run migrate:mysql`);
+        console.log(`[DB Engine] ℹ️ MySQL tables are ready but no staff data found.`);
+        console.log(`   → Run 'npm run migrate:mysql' to migrate from local SQLite, or seed manually.`);
       }
 
-      return;
+      return; // SUCCESS — do not fall through to SQLite
+
     } catch (mysqlErr) {
+      // In production a MySQL failure is fatal.
+      // We must NOT silently fall back to SQLite: Render's filesystem is ephemeral
+      // so any data written there will be lost on the next deploy or restart.
+      if (isProduction) {
+        console.error(`\n❌ [FATAL] Cannot connect to MySQL in production: ${mysqlErr.message}`);
+        console.error(`   Host: ${host}:${port} | DB: ${database}`);
+        console.error(`   Verify these Render environment variables are set correctly:`);
+        console.error(`     MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_SSL_CA`);
+        process.exit(1);
+      }
+      // Local dev only: warn and fall back to SQLite
       console.warn(`\n⚠️  [DATABASE WARNING] Could not connect to MySQL (${mysqlErr.message}).`);
-      console.warn(`    Falling back to SQLite database at ${dbPath}`);
-      console.warn(`    To use MySQL: Update MYSQL_PASSWORD in .env and run 'npm run migrate:mysql'\n`);
+      console.warn(`   Falling back to SQLite at ${dbPath} (local development only).`);
+      console.warn(`   Set DB_TYPE=sqlite in .env to suppress this warning.\n`);
       activeEngine = 'sqlite';
     }
   }
@@ -382,11 +402,11 @@ async function initDbInternal() {
 
   try {
     await run(`ALTER TABLE links ADD COLUMN link_set_id INTEGER REFERENCES link_sets(id) ON DELETE CASCADE`);
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     await run(`ALTER TABLE links ADD COLUMN status TEXT DEFAULT 'published'`);
-  } catch (e) {}
+  } catch (e) { }
 
   // Auto-seed initial published link sets for categories if empty
   try {
@@ -897,113 +917,113 @@ async function initDbInternal() {
         [link.num, link.trains, link.from, link.to, link.coaches, link.rest, link.set_name, link.set_type]
       );
     }
- 
-        // Seed COR Staff (21 staff members)
+
+    // Seed COR Staff (21 staff members)
     const corStaff = [
       {
-            "pos": 1,
-            "name": "SK SALEEM",
-            "desg": "TTI"
+        "pos": 1,
+        "name": "SK SALEEM",
+        "desg": "TTI"
       },
       {
-            "pos": 2,
-            "name": "BRK REDDY",
-            "desg": "CTI"
+        "pos": 2,
+        "name": "BRK REDDY",
+        "desg": "CTI"
       },
       {
-            "pos": 3,
-            "name": "M KESHAVULU",
-            "desg": "CTI"
+        "pos": 3,
+        "name": "M KESHAVULU",
+        "desg": "CTI"
       },
       {
-            "pos": 4,
-            "name": "S NAGALINGAPPA",
-            "desg": "CTI"
+        "pos": 4,
+        "name": "S NAGALINGAPPA",
+        "desg": "CTI"
       },
       {
-            "pos": 5,
-            "name": "VV PAVAN KUMAR",
-            "desg": "CTI"
+        "pos": 5,
+        "name": "VV PAVAN KUMAR",
+        "desg": "CTI"
       },
       {
-            "pos": 6,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 6,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 7,
-            "name": "BV RAO",
-            "desg": "CTI"
+        "pos": 7,
+        "name": "BV RAO",
+        "desg": "CTI"
       },
       {
-            "pos": 8,
-            "name": "R BANGARAIAH",
-            "desg": "TTI"
+        "pos": 8,
+        "name": "R BANGARAIAH",
+        "desg": "TTI"
       },
       {
-            "pos": 9,
-            "name": "PRM ALI KHAN",
-            "desg": "CTI"
+        "pos": 9,
+        "name": "PRM ALI KHAN",
+        "desg": "CTI"
       },
       {
-            "pos": 10,
-            "name": "VAN REDDY",
-            "desg": "CTI"
+        "pos": 10,
+        "name": "VAN REDDY",
+        "desg": "CTI"
       },
       {
-            "pos": 11,
-            "name": "MN RAO",
-            "desg": "CTI"
+        "pos": 11,
+        "name": "MN RAO",
+        "desg": "CTI"
       },
       {
-            "pos": 12,
-            "name": "KAKI SRINIVASA RAO",
-            "desg": "CTI"
+        "pos": 12,
+        "name": "KAKI SRINIVASA RAO",
+        "desg": "CTI"
       },
       {
-            "pos": 13,
-            "name": "K RAMANAIAH",
-            "desg": "CTI"
+        "pos": 13,
+        "name": "K RAMANAIAH",
+        "desg": "CTI"
       },
       {
-            "pos": 14,
-            "name": "I DASARADHI",
-            "desg": "CTI"
+        "pos": 14,
+        "name": "I DASARADHI",
+        "desg": "CTI"
       },
       {
-            "pos": 15,
-            "name": "BP RAJA KUMAR",
-            "desg": "TTI"
+        "pos": 15,
+        "name": "BP RAJA KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 16,
-            "name": "TRS REDDY",
-            "desg": "CTI"
+        "pos": 16,
+        "name": "TRS REDDY",
+        "desg": "CTI"
       },
       {
-            "pos": 17,
-            "name": "KRM REDDY",
-            "desg": "CTI"
+        "pos": 17,
+        "name": "KRM REDDY",
+        "desg": "CTI"
       },
       {
-            "pos": 18,
-            "name": "CH RAMESH BABU",
-            "desg": "TTI"
+        "pos": 18,
+        "name": "CH RAMESH BABU",
+        "desg": "TTI"
       },
       {
-            "pos": 19,
-            "name": "M SRINIVASULU",
-            "desg": "CTI"
+        "pos": 19,
+        "name": "M SRINIVASULU",
+        "desg": "CTI"
       },
       {
-            "pos": 20,
-            "name": "S PRAKASA RAO",
-            "desg": "CTI"
+        "pos": 20,
+        "name": "S PRAKASA RAO",
+        "desg": "CTI"
       },
       {
-            "pos": 21,
-            "name": "KV RAMANA RAO",
-            "desg": "CTI"
+        "pos": 21,
+        "name": "KV RAMANA RAO",
+        "desg": "CTI"
       }
     ];
 
@@ -1035,322 +1055,322 @@ async function initDbInternal() {
       );
     }
 
-        // Seed TTI/Sleeper Staff (63 staff)
+    // Seed TTI/Sleeper Staff (63 staff)
     const sleeperStaff = [
       {
-            "pos": 1,
-            "name": "P GOPALA RAO",
-            "desg": "SRCCTC"
+        "pos": 1,
+        "name": "P GOPALA RAO",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 2,
-            "name": "K KOTI REDDY",
-            "desg": "TTI"
+        "pos": 2,
+        "name": "K KOTI REDDY",
+        "desg": "TTI"
       },
       {
-            "pos": 3,
-            "name": "PV SUBBA RAO",
-            "desg": "TTI"
+        "pos": 3,
+        "name": "PV SUBBA RAO",
+        "desg": "TTI"
       },
       {
-            "pos": 4,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 4,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 5,
-            "name": "LP KUMAR",
-            "desg": "CTI"
+        "pos": 5,
+        "name": "LP KUMAR",
+        "desg": "CTI"
       },
       {
-            "pos": 6,
-            "name": "K NARESH",
-            "desg": "TTI"
+        "pos": 6,
+        "name": "K NARESH",
+        "desg": "TTI"
       },
       {
-            "pos": 7,
-            "name": "D VANIL KUMAR",
-            "desg": "TTI"
+        "pos": 7,
+        "name": "D VANIL KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 8,
-            "name": "K KUSHWANTH SINGH",
-            "desg": "SRCCTC"
+        "pos": 8,
+        "name": "K KUSHWANTH SINGH",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 9,
-            "name": "N KISHAN KUMAR",
-            "desg": "TTI"
+        "pos": 9,
+        "name": "N KISHAN KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 10,
-            "name": "Y MURALI KRISHNA",
-            "desg": "TTI"
+        "pos": 10,
+        "name": "Y MURALI KRISHNA",
+        "desg": "TTI"
       },
       {
-            "pos": 11,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 11,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 12,
-            "name": "T SRIHARSHA",
-            "desg": "TTI"
+        "pos": 12,
+        "name": "T SRIHARSHA",
+        "desg": "TTI"
       },
       {
-            "pos": 13,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 13,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 14,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 14,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 15,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 15,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 16,
-            "name": "B RAJA KUMAR",
-            "desg": "TTI"
+        "pos": 16,
+        "name": "B RAJA KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 17,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 17,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 18,
-            "name": "K GOPI",
-            "desg": "SRCCTC"
+        "pos": 18,
+        "name": "K GOPI",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 19,
-            "name": "P KRISHNA MOHAN",
-            "desg": "TTI"
+        "pos": 19,
+        "name": "P KRISHNA MOHAN",
+        "desg": "TTI"
       },
       {
-            "pos": 20,
-            "name": "D ANVESH",
-            "desg": "TTI"
+        "pos": 20,
+        "name": "D ANVESH",
+        "desg": "TTI"
       },
       {
-            "pos": 21,
-            "name": "Y KORNEL BABU",
-            "desg": "TTI"
+        "pos": 21,
+        "name": "Y KORNEL BABU",
+        "desg": "TTI"
       },
       {
-            "pos": 22,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 22,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 23,
-            "name": "G VARADARAJULU",
-            "desg": "TTI"
+        "pos": 23,
+        "name": "G VARADARAJULU",
+        "desg": "TTI"
       },
       {
-            "pos": 24,
-            "name": "S SUBRAHMANYAM",
-            "desg": "TTI"
+        "pos": 24,
+        "name": "S SUBRAHMANYAM",
+        "desg": "TTI"
       },
       {
-            "pos": 25,
-            "name": "D KHADER BASH",
-            "desg": "SRTE"
+        "pos": 25,
+        "name": "D KHADER BASH",
+        "desg": "SRTE"
       },
       {
-            "pos": 26,
-            "name": "A VENKI REDDY",
-            "desg": "TTI"
+        "pos": 26,
+        "name": "A VENKI REDDY",
+        "desg": "TTI"
       },
       {
-            "pos": 27,
-            "name": "P RAVI KUMAR",
-            "desg": "TTI"
+        "pos": 27,
+        "name": "P RAVI KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 28,
-            "name": "O ANIL",
-            "desg": "TTI"
+        "pos": 28,
+        "name": "O ANIL",
+        "desg": "TTI"
       },
       {
-            "pos": 29,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 29,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 30,
-            "name": "SK JHA",
-            "desg": "TTI"
+        "pos": 30,
+        "name": "SK JHA",
+        "desg": "TTI"
       },
       {
-            "pos": 31,
-            "name": "SH MADHU BABU",
-            "desg": "TTI"
+        "pos": 31,
+        "name": "SH MADHU BABU",
+        "desg": "TTI"
       },
       {
-            "pos": 32,
-            "name": "K KRANTHI KUMAR",
-            "desg": "TTI"
+        "pos": 32,
+        "name": "K KRANTHI KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 33,
-            "name": "SVSR KRISHNA",
-            "desg": "TTI"
+        "pos": 33,
+        "name": "SVSR KRISHNA",
+        "desg": "TTI"
       },
       {
-            "pos": 34,
-            "name": "J VINAY KUMAR",
-            "desg": "TTI"
+        "pos": 34,
+        "name": "J VINAY KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 35,
-            "name": "BVS REDDY",
-            "desg": "TTI"
+        "pos": 35,
+        "name": "BVS REDDY",
+        "desg": "TTI"
       },
       {
-            "pos": 36,
-            "name": "RNR NAIK",
-            "desg": "SRCCTC"
+        "pos": 36,
+        "name": "RNR NAIK",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 37,
-            "name": "NRC REDDY",
-            "desg": "TTI"
+        "pos": 37,
+        "name": "NRC REDDY",
+        "desg": "TTI"
       },
       {
-            "pos": 38,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 38,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 39,
-            "name": "P BALA KRISHNA",
-            "desg": "TTI"
+        "pos": 39,
+        "name": "P BALA KRISHNA",
+        "desg": "TTI"
       },
       {
-            "pos": 40,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 40,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 41,
-            "name": "SK KHASIM",
-            "desg": "TTI"
+        "pos": 41,
+        "name": "SK KHASIM",
+        "desg": "TTI"
       },
       {
-            "pos": 42,
-            "name": "K DURGA RAO",
-            "desg": "SRTE"
+        "pos": 42,
+        "name": "K DURGA RAO",
+        "desg": "SRTE"
       },
       {
-            "pos": 43,
-            "name": "SK KARIMULLAH",
-            "desg": "TTI"
+        "pos": 43,
+        "name": "SK KARIMULLAH",
+        "desg": "TTI"
       },
       {
-            "pos": 44,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 44,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 45,
-            "name": "KV SURESH",
-            "desg": "TTI"
+        "pos": 45,
+        "name": "KV SURESH",
+        "desg": "TTI"
       },
       {
-            "pos": 46,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 46,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 47,
-            "name": "M NAGARAJU",
-            "desg": "TTI"
+        "pos": 47,
+        "name": "M NAGARAJU",
+        "desg": "TTI"
       },
       {
-            "pos": 48,
-            "name": "U RAMA KRISHNA",
-            "desg": "TTI"
+        "pos": 48,
+        "name": "U RAMA KRISHNA",
+        "desg": "TTI"
       },
       {
-            "pos": 49,
-            "name": "M SURESH",
-            "desg": "TTI"
+        "pos": 49,
+        "name": "M SURESH",
+        "desg": "TTI"
       },
       {
-            "pos": 50,
-            "name": "U BALA JOJI",
-            "desg": "SRCCTC"
+        "pos": 50,
+        "name": "U BALA JOJI",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 51,
-            "name": "B PAVAN KUMAR",
-            "desg": "TTI"
+        "pos": 51,
+        "name": "B PAVAN KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 52,
-            "name": "SUVVADA SRINU",
-            "desg": "SRCCTC"
+        "pos": 52,
+        "name": "SUVVADA SRINU",
+        "desg": "SRCCTC"
       },
       {
-            "pos": 53,
-            "name": "N VENKATESH",
-            "desg": "TTI"
+        "pos": 53,
+        "name": "N VENKATESH",
+        "desg": "TTI"
       },
       {
-            "pos": 54,
-            "name": "T SIVA KUMAR",
-            "desg": "TTI"
+        "pos": 54,
+        "name": "T SIVA KUMAR",
+        "desg": "TTI"
       },
       {
-            "pos": 55,
-            "name": "KVB SANKAR",
-            "desg": "TTI"
+        "pos": 55,
+        "name": "KVB SANKAR",
+        "desg": "TTI"
       },
       {
-            "pos": 56,
-            "name": "M VENKATESWARLU",
-            "desg": "TTI"
+        "pos": 56,
+        "name": "M VENKATESWARLU",
+        "desg": "TTI"
       },
       {
-            "pos": 57,
-            "name": "SK MASTAN BASHA",
-            "desg": "SRTE"
+        "pos": 57,
+        "name": "SK MASTAN BASHA",
+        "desg": "SRTE"
       },
       {
-            "pos": 58,
-            "name": "B SURESH",
-            "desg": "TTI"
+        "pos": 58,
+        "name": "B SURESH",
+        "desg": "TTI"
       },
       {
-            "pos": 59,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 59,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 60,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 60,
+        "name": "VACANT (V)",
+        "desg": ""
       },
       {
-            "pos": 61,
-            "name": "N SWARNA BABU",
-            "desg": "TTI"
+        "pos": 61,
+        "name": "N SWARNA BABU",
+        "desg": "TTI"
       },
       {
-            "pos": 62,
-            "name": "Y SRIKANTH",
-            "desg": "TTI"
+        "pos": 62,
+        "name": "Y SRIKANTH",
+        "desg": "TTI"
       },
       {
-            "pos": 63,
-            "name": "VACANT (V)",
-            "desg": ""
+        "pos": 63,
+        "name": "VACANT (V)",
+        "desg": ""
       }
     ];
 
@@ -1624,19 +1644,19 @@ async function initDbInternal() {
   // Ensure desg_rank, hierarchy_tier, and working_designation columns exist on existing DBs
   try {
     await run('ALTER TABLE seniority_list ADD COLUMN desg_rank INTEGER');
-  } catch (e) {}
+  } catch (e) { }
   try {
     await run('ALTER TABLE seniority_list ADD COLUMN hierarchy_tier INTEGER');
-  } catch (e) {}
+  } catch (e) { }
   try {
     await run("ALTER TABLE seniority_list ADD COLUMN working_designation TEXT");
-  } catch (e) {}
+  } catch (e) { }
 
   // Keep VS Chandrika in TTI list (not in COR list) for working purposes
   try {
     await run("UPDATE seniority_list SET working_designation = 'TTI' WHERE name LIKE '%CHANDRIKA%'");
     await run("UPDATE staff SET designation = 'TTI' WHERE name LIKE '%CHANDRIKA%'");
-  } catch (e) {}
+  } catch (e) { }
 
   const seniorityCount = await get("SELECT COUNT(*) as count FROM seniority_list");
   if (seniorityCount.count === 0) {
@@ -1700,7 +1720,7 @@ async function initDbInternal() {
 
     for (const staff of allStaff) {
       if (!staff.name || staff.name.toUpperCase().includes('VACANT')) continue;
-      
+
       let match = null;
       if (manualMap[staff.name.trim()]) {
         const slNo = manualMap[staff.name.trim()];
@@ -1806,7 +1826,7 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
     try {
       await runFn("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
       await runFn("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
-    } catch (cleanErr) {}
+    } catch (cleanErr) { }
 
     const staffList = await allFn("SELECT id, name, pf_no, designation, pin_hash FROM staff WHERE pf_no IS NOT NULL AND TRIM(pf_no) != '' AND name NOT LIKE '%VACANT%'");
     if (!staffList || staffList.length === 0) return;
@@ -1822,7 +1842,7 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
       let pinRow = null;
       try {
         pinRow = await getFn('SELECT pin_hash FROM staff_pins WHERE pf_no = ? OR staff_id = ?', [cleanPf, s.id]);
-      } catch (e) {}
+      } catch (e) { }
       const effectivePin = (pinRow && pinRow.pin_hash) || (existing && existing.pin_hash) || s.pin_hash || null;
 
       if (!existing) {
@@ -1859,7 +1879,7 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
         } catch (e) {
           try {
             await runFn(`INSERT OR IGNORE INTO staff_pins (pf_no, staff_id, pin_hash, failed_attempts, locked_until) VALUES (?, ?, ?, 0, NULL)`, [cleanPf, s.id, effectivePin]);
-          } catch (err) {}
+          } catch (err) { }
         }
       }
     }

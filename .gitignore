@@ -11,3 +11,6 @@ scratch/
 *.db-wal
 
 *.db
+
+# Aiven CA certificate — never commit, add as Render env var
+src/backend/aiven-ca.pem

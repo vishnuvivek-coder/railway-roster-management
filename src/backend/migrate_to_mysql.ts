@@ -35,33 +35,46 @@ async function migrate() {
   const password = process.env.MYSQL_PASSWORD || '';
   const database = process.env.MYSQL_DATABASE || 'railway_roster';
 
-  console.log(`Connecting to MySQL Server on ${host}:${port} as user '${user}'...`);
+  // Build SSL config from MYSQL_SSL_CA env var (PEM string).
+  // Required for Aiven and other managed MySQL providers that use a private CA.
+  let sslConfig: any = undefined;
+  if (process.env.MYSQL_SSL_CA) {
+    sslConfig = { ca: process.env.MYSQL_SSL_CA, rejectUnauthorized: true };
+    console.log(`TLS: Custom CA cert provided (rejectUnauthorized: true)`);
+  }
+
+  console.log(`Connecting to MySQL at ${host}:${port} as user '${user}', database '${database}'...`);
+  console.log(`⚠️  WARNING: This migration DELETEs all rows from each target table before inserting.`);
+  console.log(`   Only run this once against an empty or disposable MySQL database.`);
+  console.log(`   Do NOT run against a database that already has production data.\n`);
 
   let rootConn;
   try {
+    // Connect directly to the target database — do NOT run CREATE DATABASE.
+    // Managed providers (Aiven) do not grant CREATE DATABASE to application users,
+    // and the database already exists.
     rootConn = await mysql.createConnection({
       host,
       port,
       user,
       password,
-      multipleStatements: true
+      database,
+      multipleStatements: true,
+      ...(sslConfig ? { ssl: sslConfig } : {})
     });
   } catch (err) {
-    console.error('\n❌ Could not connect to MySQL server:', err.message);
-    console.log('\nTip: Make sure MySQL is running and your credentials in .env are correct:');
+    console.error('\n❌ Could not connect to MySQL:', err.message);
+    console.log('\nCheck your .env variables:');
     console.log('  MYSQL_HOST=' + host);
     console.log('  MYSQL_PORT=' + port);
     console.log('  MYSQL_USER=' + user);
     console.log('  MYSQL_PASSWORD=your_password');
     console.log('  MYSQL_DATABASE=' + database);
+    console.log('  MYSQL_SSL_CA=<PEM content of CA cert>  (required for Aiven)');
     process.exit(1);
   }
 
-  console.log(`✓ Connected to MySQL server.`);
-  console.log(`Creating database '${database}' if not exists...`);
-  await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  await rootConn.changeUser({ database });
-  console.log(`✓ Using database '${database}'.`);
+  console.log(`✓ Connected to MySQL. Using database '${database}'.`);
 
   // Execute schema definitions
   console.log(`Applying MySQL schema from mysql_schema.sql...`);
