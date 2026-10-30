@@ -1,5 +1,7 @@
 require('dotenv').config();
-const sqlite3 = require('sqlite3').verbose();
+// sqlite3 is loaded lazily — only when the SQLite code path is actually taken
+// (local development fallback). In production with MySQL it is never imported,
+// so the server starts correctly even if sqlite3 is not installed.
 const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
@@ -8,11 +10,28 @@ const bcrypt = require('bcryptjs');
 const dbPath = path.join(__dirname, 'roster.db');
 const schemaSqlPath = path.join(__dirname, 'mysql_schema.sql');
 
-// Always initialize SQLite database instance for zero-downtime fallback
-const sqliteDb = new sqlite3.Database(dbPath);
-sqliteDb.configure('busyTimeout', 10000);
-sqliteDb.run('PRAGMA journal_mode = WAL');
-sqliteDb.run('PRAGMA busy_timeout = 10000');
+// Lazy SQLite instance — created on first use, never in production MySQL mode.
+let _sqliteDb: any = null;
+function getSqliteDb() {
+  if (_sqliteDb) return _sqliteDb;
+  // Dynamically require sqlite3 so the module can be loaded on production
+  // servers where sqlite3 is not installed (it is an optionalDependency).
+  let sqlite3: any;
+  try {
+    sqlite3 = require('sqlite3').verbose();
+  } catch (e) {
+    throw new Error(
+      '[DB Engine] sqlite3 native module is not available. ' +
+      'In production, set DB_TYPE=mysql and configure MySQL environment variables. ' +
+      'For local development, run: npm install sqlite3'
+    );
+  }
+  _sqliteDb = new sqlite3.Database(dbPath);
+  _sqliteDb.configure('busyTimeout', 10000);
+  _sqliteDb.run('PRAGMA journal_mode = WAL');
+  _sqliteDb.run('PRAGMA busy_timeout = 10000');
+  return _sqliteDb;
+}
 let mysqlPool = null;
 let activeEngine = 'sqlite'; // 'mysql' | 'sqlite'
 let isInitializing = false;
@@ -72,7 +91,7 @@ const run = async (sql: any, params: any = []): Promise<any> => {
   }
 
   return new Promise((resolve, reject) => {
-    sqliteDb.run(sql, params, function (err) {
+    getSqliteDb().run(sql, params, function (err) {
       if (err) reject(err);
       else resolve(this);
     });
@@ -93,7 +112,7 @@ const all = async (sql: any, params: any = []): Promise<any> => {
   }
 
   return new Promise((resolve, reject) => {
-    sqliteDb.all(sql, params, (err, rows) => {
+    getSqliteDb().all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows || []);
     });
@@ -114,7 +133,7 @@ const get = async (sql: any, params: any = []): Promise<any> => {
   }
 
   return new Promise((resolve, reject) => {
-    sqliteDb.get(sql, params, (err, row) => {
+    getSqliteDb().get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row || null);
     });
@@ -1892,7 +1911,7 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
 }
 
 module.exports = {
-  db: sqliteDb,
+  db: getSqliteDb,
   getDbEngine: () => activeEngine,
   getPool: () => mysqlPool,
   initDb,
@@ -1903,7 +1922,7 @@ module.exports = {
 };
 
 export {
-  sqliteDb as db,
+  getSqliteDb as db,
   activeEngine,
   mysqlPool,
   initDb,
