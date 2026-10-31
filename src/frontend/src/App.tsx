@@ -8094,6 +8094,42 @@ export default function App() {
                                                 ✏️ Edit
                                               </button>
                                             )}
+                                            {isAdmin && !isSlotVacant && typeof d.staffId === 'number' && (
+                                              <button
+                                                type="button"
+                                                className="btn no-print"
+                                                onClick={async () => {
+                                                  if (!window.confirm(`Remove ${d.name} from Train ${group.firstTrain} on ${selectedDate}?\n\nThis resets any override and restores the cyclic roster slot.`)) return;
+                                                  try {
+                                                    const res = await fetch(`${API_BASE}/duty/change-status`, {
+                                                      method: 'POST',
+                                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                                                      body: JSON.stringify({ staff_id: d.staffId, date: selectedDate, action: 'RESET' })
+                                                    });
+                                                    const data = await res.json();
+                                                    if (!res.ok) throw new Error(data.error || 'Failed to remove employee');
+                                                    alert(`✅ ${d.name} removed from Train ${group.firstTrain}. Slot restored to cyclic roster.`);
+                                                    fetchDailyDuties();
+                                                  } catch (err) {
+                                                    alert('❌ ' + err.message);
+                                                  }
+                                                }}
+                                                style={{
+                                                  padding: '3px 7px',
+                                                  fontSize: '0.72rem',
+                                                  fontWeight: 700,
+                                                  borderRadius: '6px',
+                                                  background: 'rgba(239, 68, 68, 0.15)',
+                                                  color: '#f87171',
+                                                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                  cursor: 'pointer',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title={`Delete ${d.name} from Train ${group.firstTrain} (resets override, restores cyclic slot)`}
+                                              >
+                                                🗑️ Delete
+                                              </button>
+                                            )}
                                           </div>
                                         </td>
 
