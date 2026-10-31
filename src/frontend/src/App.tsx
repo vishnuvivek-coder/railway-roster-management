@@ -6766,15 +6766,16 @@ export default function App() {
 
                       const matchesTrainBooking = (duty) => {
                         if (!duty) return false;
+                        if (duty.status === 'REST' || duty.status === 'LEAVE' || duty.status === 'SICK' || duty.status === 'CR' || duty.status === 'ABSENT' || duty.status === 'MARK_LATER') {
+                          return false;
+                        }
                         const dTrain = duty.train_out ? String(duty.train_out).trim() : null;
                         const dNums = duty.train_numbers ? String(duty.train_numbers).trim() : null;
-                        const dReason = duty.overrideReason ? String(duty.overrideReason).trim() : null;
                         const sFirst = String(effectiveFirstTrain || slot.firstTrain || '').trim();
                         const sLast = String(effectiveLastTrain || slot.lastTrain || '').trim();
 
-                        const trainMatches = (dTrain && (dTrain === sFirst || dTrain === sLast)) ||
-                          (sFirst && dNums && dNums.includes(sFirst)) ||
-                          (sFirst && dReason && dReason.includes(sFirst));
+                        const trainMatches = (dTrain && (dTrain === sFirst || (sFirst && dTrain.includes(sFirst)))) ||
+                          (sFirst && dNums && (dNums === sFirst || dNums.startsWith(sFirst + ',') || dNums.startsWith(sFirst + ' ') || dNums.startsWith(sFirst + '/')));
 
                         if (!trainMatches) return false;
 
@@ -7139,11 +7140,12 @@ export default function App() {
                 const activeSlotRows = resolveSlotDuties(getMasterDailySlots(selectedDate));
                 const nonDailySlotRows = resolveSlotDuties(getNonDailySlots(selectedDate));
 
-                // Dynamically resolve any staff who worked trains from the register not caught in predefined slots (e.g. 07001, 12755, 08519, etc.)
+                // Dynamically resolve any staff who worked trains from the register not caught in predefined slots (e.g. 07001, 12755, 08519, 18063, etc.)
                 const unplacedTrainStaff = staffDuties.filter(d => 
                   !activeWorkedStaffIds.has(d.staffId) && 
-                  d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' &&
-                  (d.train_out || (d.status === 'DUTY' && d.train_numbers && !['REST', 'SPARE (HQ)'].includes(d.train_numbers)))
+                  d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
+                  (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
+                  (Boolean(d.train_out) || Boolean(d.extra_train_no))
                 );
 
                 const specialSlotRows = [];
@@ -7287,27 +7289,20 @@ export default function App() {
                           if (activeSlotRows.length === 0 && nonDailySlotRows.length === 0 && offDuties.length === 0) return;
                           let csv = 'Employee Name,Designation,Link No,Status,Train Number (Day 1),Coaches (Day 1),Train Number (Last Day),Coaches (Last Day)\n';
                           
-                          // Write active daily duties
+                          // Write active daily duties (excluding vacant/placeholder rows)
                           activeSlotRows.forEach(g => {
                             g.duties.forEach(d => {
-                              csv += `"${d.name}","${d.designation || '-'}","${getLinkDisplayLabel(d.categoryId, d.link_number)}","ACTIVE_DAILY","${g.firstTrain}","${d.firstCoaches}","${d.lastTrain}","${d.lastCoaches}"\n`;
+                              if (!d.name || d.name.includes('VACANT') || d.name.trim() === 'V' || d.isVacant) return;
+                              csv += `"${d.name}","${d.designation || '-'}","${getLinkDisplayLabel(d.categoryId, d.link_number)}","ACTIVE_DAILY","${d.firstTrain || g.firstTrain || '-'}","${d.firstCoaches || '-'}","${d.lastTrain || g.lastTrain || '-'}","${d.lastCoaches || '-'}"\n`;
                             });
                           });
 
-                          // Write non-daily link duties
+                          // Write non-daily link duties (excluding vacant/placeholder rows)
                           nonDailySlotRows.forEach(g => {
                             g.duties.forEach(d => {
-                              csv += `"${d.name}","${d.designation || '-'}","${getLinkDisplayLabel(d.categoryId, d.link_number)}","NON_DAILY_LINK","${g.firstTrain}","${d.firstCoaches}","${g.lastTrain}","${d.lastCoaches}"\n`;
+                              if (!d.name || d.name.includes('VACANT') || d.name.trim() === 'V' || d.isVacant) return;
+                              csv += `"${d.name}","${d.designation || '-'}","${getLinkDisplayLabel(d.categoryId, d.link_number)}","NON_DAILY_LINK","${d.firstTrain || g.firstTrain || '-'}","${d.firstCoaches || '-'}","${d.lastTrain || g.lastTrain || '-'}","${d.lastCoaches || '-'}"\n`;
                             });
-                          });
-
-                          // Write off duties (excluding any already recorded in slots)
-                          const exportedStaffIds = new Set();
-                          activeSlotRows.forEach(g => g.duties.forEach(d => { if (d.staffId) exportedStaffIds.add(d.staffId); }));
-                          nonDailySlotRows.forEach(g => g.duties.forEach(d => { if (d.staffId) exportedStaffIds.add(d.staffId); }));
-
-                          offDuties.filter(d => !exportedStaffIds.has(d.staffId)).forEach(d => {
-                            csv += `"${d.name}","${d.designation || '-'}","${d.isSick ? 'SICK' : d.isLeave ? 'LEAVE' : 'REST'}","${d.isSick ? 'SICK' : d.isLeave ? 'LEAVE' : 'REST'}","-","-","-","-"\n`;
                           });
 
                           const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
