@@ -71,6 +71,10 @@ const normalizeSqlForMysql = (sql) => {
   cleanSql = cleanSql.replace(/\bCAST\s*\(\s*(.*?)\s+AS\s+INTEGER\s*\)/gi, 'CAST($1 AS SIGNED)');
   // Normalize CAST(... AS TEXT) to CAST(... AS CHAR)
   cleanSql = cleanSql.replace(/\bCAST\s*\(\s*(.*?)\s+AS\s+TEXT\s*\)/gi, 'CAST($1 AS CHAR)');
+  cleanSql = cleanSql
+    .replace(/(=\s*)"([^"]*)"/g, "$1'$2'")
+    .replace(/(!=\s*)"([^"]*)"/g, "$1'$2'")
+    .replace(/(<>\s*)"([^"]*)"/g, "$1'$2'");
   return cleanSql;
 };
 

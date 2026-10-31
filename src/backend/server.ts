@@ -3705,7 +3705,7 @@ app.get('/api/link-sets', async (req, res) => {
       sql += ' WHERE ls.category_id = ?';
       params.push(category_id);
     }
-    sql += ' ORDER BY ls.category_id ASC, CASE WHEN ls.status = "published" THEN 0 ELSE 1 END, ls.id DESC';
+    sql += " ORDER BY ls.category_id ASC, CASE WHEN ls.status = 'published' THEN 0 ELSE 1 END, ls.id DESC";
     const linkSets = await all(sql, params);
     res.json(linkSets);
   } catch (err) {
@@ -3781,7 +3781,7 @@ app.post('/api/link-sets/:id/duplicate', requireAdmin, async (req, res) => {
     let origLinks = await all('SELECT * FROM links WHERE link_set_id = ? ORDER BY link_number ASC, id ASC', [origSet.id]);
     if (!origLinks || origLinks.length === 0) {
       origLinks = await all(
-        'SELECT * FROM links WHERE category_id = ? AND (status = "published" OR status IS NULL OR status = "") ORDER BY link_number ASC, id ASC',
+        "SELECT * FROM links WHERE category_id = ? AND (status = 'published' OR status IS NULL OR status = '') ORDER BY link_number ASC, id ASC",
         [origSet.category_id]
       );
     }
@@ -4052,7 +4052,7 @@ app.get('/api/links', async (req, res) => {
         sql += ' AND status = ?';
         params.push(status);
         if (status === 'published') {
-          sql += ' AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = "published" OR status IS NULL))';
+          sql += " AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))";
         }
       } else {
         // Exclude all draft links and any links belonging to draft link sets
@@ -5210,7 +5210,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               await run('UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
             } else {
               // If this staff was sick/leave, remove the substitute's override & reset their muster record
-              await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [existing.substitute_staff_id, dStr]);
+              await run("DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = 'SUBSTITUTE'", [existing.substitute_staff_id, dStr]);
               await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
               // If substitute was an LR employee, clear their LR sheet record
               await run('DELETE FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [existing.substitute_staff_id, dStr]);
@@ -5264,7 +5264,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               const subOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, nextDateStr]);
               if (subOv && subOv.status === 'AVAILABLE_FOR_BOOKING') {
                 if (subOv.substitute_staff_id) {
-                  await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [subOv.substitute_staff_id, nextDateStr]);
+                  await run("DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = 'SUBSTITUTE'", [subOv.substitute_staff_id, nextDateStr]);
                   await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [subOv.substitute_staff_id, nextDateStr]);
                   await syncDocumentsAndEarningsForStaffDate(subOv.substitute_staff_id, nextDateStr, { dutyText: null, isLeaveOrRest: false });
                 }
@@ -8720,7 +8720,7 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
         const { staff_id, staff_name, date, replacement_staff_id, previous_override, previous_muster } = undoData;
         await restoreOverrideAndMuster(staff_id, date, previous_override, previous_muster);
         if (replacement_staff_id) {
-          await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [replacement_staff_id, date]);
+          await run("DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = 'SUBSTITUTE'", [replacement_staff_id, date]);
           await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, date]);
         }
         undoneSuccess = true;
@@ -9035,7 +9035,7 @@ app.post('/api/audit-logs/:id/undo', requireAdmin, async (req, res) => {
         if (s) {
           const ovr = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
           if (ovr && ovr.substitute_staff_id) {
-            await run('DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = "SUBSTITUTE"', [ovr.substitute_staff_id, dStr]);
+            await run("DELETE FROM overrides WHERE staff_id = ? AND date = ? AND status = 'SUBSTITUTE'", [ovr.substitute_staff_id, dStr]);
             await run('DELETE FROM muster_records WHERE staff_id = ? AND date = ?', [ovr.substitute_staff_id, dStr]);
           }
           await run('DELETE FROM overrides WHERE staff_id = ? AND date = ?', [s.id, dStr]);
