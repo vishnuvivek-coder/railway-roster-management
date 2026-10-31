@@ -12,5 +12,14 @@ scratch/
 
 *.db
 
-# Aiven CA certificate — never commit, add as Render env var
+# Aiven CA certificate ï¿½ never commit, add as Render env var
 src/backend/aiven-ca.pem
+
+# Database Backups
+backups/
+*.sql
+*.dump
+
+# Private local environment overrides
+.env.local
+.env.*.local
