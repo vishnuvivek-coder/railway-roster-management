@@ -6646,6 +6646,15 @@ export default function App() {
                 // Helper to resolve duty assignments for a given slot list
                 const activeWorkedStaffIds = new Set();
 
+                // Helper to identify return-leg multi-day duties (not outward departures from HQ)
+                const isReturnDuty = (d) => {
+                  if (!d) return false;
+                  if (d.shifted_place === 'NON_DAILY_RETURN') return true;
+                  if (d.overrideReason && /day\s*2\s*return|return\s+of/i.test(d.overrideReason)) return true;
+                  if (d.reason && /day\s*2\s*return|return\s+of/i.test(d.reason)) return true;
+                  return false;
+                };
+
                 const resolveSlotDuties = (slotsList) => {
                   const resolvedRows = [];
                   const targetCat2SetId = (selectedDate && selectedDate >= '2026-11-01') ? 12 : ((selectedDate && selectedDate >= '2026-10-01') ? 7 : 2);
@@ -6766,9 +6775,10 @@ export default function App() {
 
                       const matchesTrainBooking = (duty) => {
                         if (!duty) return false;
-                        if (duty.status === 'REST' || duty.status === 'LEAVE' || duty.status === 'SICK' || duty.status === 'CR' || duty.status === 'ABSENT' || duty.status === 'MARK_LATER') {
+                        if (duty.status !== 'DUTY' && duty.status !== 'SUBSTITUTE') {
                           return false;
                         }
+                        if (isReturnDuty(duty)) return false;
                         const dTrain = duty.train_out ? String(duty.train_out).trim() : null;
                         const dNums = duty.train_numbers ? String(duty.train_numbers).trim() : null;
                         const sFirst = String(effectiveFirstTrain || slot.firstTrain || '').trim();
@@ -6803,6 +6813,9 @@ export default function App() {
                       // 2. Direct active link assignment (only real human staff, never VACANT)
                       let regularStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
+                        (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
+                        !isReturnDuty(d) &&
+                        (!d.train_out || d.train_out === slot.firstTrain || (slot.altFirstTrains && slot.altFirstTrains.includes(d.train_out)) || (slot.firstTrain && d.train_out.includes(slot.firstTrain))) &&
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) && 
                         parseInt(d.link_number, 10) === parseInt(lDef.linkNum, 10) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
@@ -7077,15 +7090,15 @@ export default function App() {
                     // Check for Extra Staff assigned to this train slot (dragged or added down below)
                     const extraStaffDuties = staffDuties.filter(d => 
                       !activeWorkedStaffIds.has(d.staffId) &&
-                      d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' &&
+                      d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
+                      (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
+                      !isReturnDuty(d) &&
                       (
-                        (d.train_out && (String(d.train_out) === String(slot.firstTrain) || String(d.train_out) === String(slot.lastTrain) || String(d.train_out) === String(effectiveSlotFirstTrain) || String(d.train_out) === String(effectiveSlotLastTrain))) ||
-                        (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || String(d.extra_train_no) === String(slot.lastTrain) || String(d.extra_train_no) === String(effectiveSlotFirstTrain) || String(d.extra_train_no) === String(effectiveSlotLastTrain))) ||
-                        (!d.extra_train_no && d.overrideReason && (
+                        (d.train_out && (String(d.train_out) === String(slot.firstTrain) || (slot.altFirstTrains && slot.altFirstTrains.includes(String(d.train_out))) || String(d.train_out) === String(effectiveSlotFirstTrain))) ||
+                        (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || (slot.altFirstTrains && slot.altFirstTrains.includes(String(d.extra_train_no))) || String(d.extra_train_no) === String(effectiveSlotFirstTrain))) ||
+                        (!d.extra_train_no && !d.train_out && d.overrideReason && (
                           new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${slot.firstTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${slot.lastTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${effectiveSlotFirstTrain}\\b`, 'i').test(d.overrideReason) ||
-                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${effectiveSlotLastTrain}\\b`, 'i').test(d.overrideReason)
+                          new RegExp(`(?:to\\s+train|extra\\s*(?:crew|staff)\\s*(?:on|for)?|train)\\s*#?\\s*${effectiveSlotFirstTrain}\\b`, 'i').test(d.overrideReason)
                         ))
                       )
                     );
@@ -7145,6 +7158,7 @@ export default function App() {
                   !activeWorkedStaffIds.has(d.staffId) && 
                   d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                   (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
+                  !isReturnDuty(d) &&
                   (Boolean(d.train_out) || Boolean(d.extra_train_no))
                 );
 
@@ -8089,7 +8103,7 @@ export default function App() {
                                                 ✏️ Edit
                                               </button>
                                             )}
-                                            {isAdmin && !isSlotVacant && typeof d.staffId === 'number' && (
+                                            {isAdmin && !isSlotVacant && d.staffId && !String(d.staffId).startsWith('vacant-') && !isNaN(Number(d.staffId)) && (
                                               <button
                                                 type="button"
                                                 className="btn no-print"
@@ -8099,7 +8113,7 @@ export default function App() {
                                                     const res = await fetch(`${API_BASE}/duty/change-status`, {
                                                       method: 'POST',
                                                       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-                                                      body: JSON.stringify({ staff_id: d.staffId, date: selectedDate, action: 'RESET' })
+                                                      body: JSON.stringify({ staff_id: Number(d.staffId), date: selectedDate, action: 'RESET' })
                                                     });
                                                     const data = await res.json();
                                                     if (!res.ok) throw new Error(data.error || 'Failed to remove employee');
@@ -8958,6 +8972,43 @@ export default function App() {
                                                   title="Edit Employee Duty / Sick / Leave / Changed Link"
                                                 >
                                                   ✏️ Edit
+                                                </button>
+                                              )}
+                                              {isAdmin && !isSlotVacant && d.staffId && !String(d.staffId).startsWith('vacant-') && !isNaN(Number(d.staffId)) && (
+                                                <button
+                                                  type="button"
+                                                  className="btn no-print"
+                                                  onClick={async () => {
+                                                    if (!window.confirm(`Remove ${d.name} from Train ${group.firstTrain} on ${selectedDate}?\n\nThis resets any override and restores the cyclic roster slot.`)) return;
+                                                    try {
+                                                      const res = await fetch(`${API_BASE}/duty/change-status`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                                                        body: JSON.stringify({ staff_id: Number(d.staffId), date: selectedDate, action: 'RESET' })
+                                                      });
+                                                      const data = await res.json();
+                                                      if (!res.ok) throw new Error(data.error || 'Failed to remove employee');
+                                                      alert(`✅ ${d.name} removed from Train ${group.firstTrain}. Slot restored to cyclic roster.`);
+                                                      fetchDailyDuties();
+                                                    } catch (err) {
+                                                      alert('❌ ' + err.message);
+                                                    }
+                                                  }}
+                                                  style={{
+                                                    padding: '3px 7px',
+                                                    fontSize: '0.72rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                    color: '#f87171',
+                                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap',
+                                                    marginLeft: '4px'
+                                                  }}
+                                                  title={`Delete ${d.name} from Train ${group.firstTrain} (resets override, restores cyclic slot)`}
+                                                >
+                                                  🗑️ Delete
                                                 </button>
                                               )}
                                             </div>
