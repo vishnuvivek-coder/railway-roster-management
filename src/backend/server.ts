@@ -687,72 +687,89 @@ function is18048Day(dStr) {
   return day === 0 || day === 2 || day === 4 || day === 5;
 }
 
-// Helper: Get active link definition for a link number on a given date (strictly published only)
-async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
+let cachedPublishedLinks: any[] | null = null;
+let lastLinksCacheTime = 0;
+const LINKS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function invalidateLinksCache() {
+  cachedPublishedLinks = null;
+  lastLinksCacheTime = 0;
+}
+
+async function getCachedPublishedLinks(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedPublishedLinks && (now - lastLinksCacheTime < LINKS_CACHE_TTL_MS)) {
+    return cachedPublishedLinks;
+  }
+  cachedPublishedLinks = await all(`
+    SELECT * FROM links 
+    WHERE (status = 'published' OR status IS NULL OR status = '')
+      AND (status != 'draft')
+      AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+    ORDER BY date(effective_from) DESC
+  `);
+  lastLinksCacheTime = now;
+  return cachedPublishedLinks;
+}
+
+function resolveLinkFromList(linksList: any[], categoryId: any, linkNumber: any, dateStr: string | null) {
   const catId = parseInt(categoryId, 10);
-  let link = null;
+  const num = parseInt(linkNumber, 10);
+  let link: any = null;
   if (catId && catId !== 4) {
-    link = await get(
-      `SELECT * FROM links 
-       WHERE category_id = ? AND link_number = ? 
-         AND (status = 'published' OR status IS NULL OR status = '')
-         AND (status != 'draft')
-         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-         AND date(effective_from) <= date(?) 
-         AND date(effective_to) >= date(?)
-       ORDER BY date(effective_from) DESC LIMIT 1`,
-      [catId, linkNumber, dateStr, dateStr]
+    link = linksList.find((l: any) =>
+      parseInt(l.category_id, 10) === catId &&
+      parseInt(l.link_number, 10) === num &&
+      (!dateStr || ((!l.effective_from || l.effective_from <= dateStr) && (!l.effective_to || l.effective_to >= dateStr)))
     );
   }
   if (!link) {
-    link = await get(
-      `SELECT * FROM links 
-       WHERE link_number = ? 
-         AND category_id != 4
-         AND (status = 'published' OR status IS NULL OR status = '')
-         AND (status != 'draft')
-         AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-         AND date(effective_from) <= date(?) 
-         AND date(effective_to) >= date(?)
-       ORDER BY date(effective_from) DESC, category_id ASC LIMIT 1`,
-      [linkNumber, dateStr, dateStr]
+    link = linksList.find((l: any) =>
+      parseInt(l.link_number, 10) === num &&
+      parseInt(l.category_id, 10) !== 4 &&
+      (!dateStr || ((!l.effective_from || l.effective_from <= dateStr) && (!l.effective_to || l.effective_to >= dateStr)))
     );
   }
   if (link && dateStr) {
-    // Clone link object so we don't mutate DB cache
     link = { ...link };
-    const num = parseInt(link.link_number, 10);
-    const cat = parseInt(link.category_id, 10);
+    const mNum = parseInt(link.link_number, 10);
+    const mCat = parseInt(link.category_id, 10);
     if (dateStr < '2026-11-01') {
-      if ((cat === 1 && num === 15) || (cat === 2 && num === 50)) {
+      if ((mCat === 1 && mNum === 15) || (mCat === 2 && mNum === 50)) {
         const is18047 = is18047Day(dateStr);
-        if (cat === 1) {
+        if (mCat === 1) {
           link.train_numbers = is18047 ? '67230, 18047' : '67230, 17225';
         } else {
           link.train_numbers = is18047 ? 'PILOT(67230), 18047' : 'PILOT(67230), 17225';
         }
-      } else if (cat === 1 && num === 16) {
+      } else if (mCat === 1 && mNum === 16) {
         const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
         const dow = d.getDay();
         const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
         const retTrain = is18048Day(dateStr) ? '18048' : '17226';
         link.train_numbers = `${inTrain}, ${retTrain}`;
-      } else if (cat === 1 && num === 17) {
+      } else if (mCat === 1 && mNum === 17) {
         const retTrain = is18048Day(dateStr) ? '18048' : '17226';
         link.train_numbers = `${retTrain}, 57201`;
-      } else if (cat === 2 && num === 51) {
+      } else if (mCat === 2 && mNum === 51) {
         const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
         const dow = d.getDay();
         const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
         const retTrain = is18048Day(dateStr) ? '18048' : '17226';
         link.train_numbers = `${inTrain}, ${retTrain}`;
-      } else if (cat === 2 && num === 52) {
+      } else if (mCat === 2 && mNum === 52) {
         const retTrain = is18048Day(dateStr) ? '18048' : '17226';
         link.train_numbers = `${retTrain}, PILOT(12703)`;
       }
     }
   }
-  return link || { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' };
+  return link || (linkNumber !== null && linkNumber !== undefined ? { link_number: linkNumber, is_rest: 1, train_numbers: 'REST', from_station: '', to_station: '', coaches: '' } : null);
+}
+
+// Helper: Get active link definition for a link number on a given date (strictly published only)
+async function getActiveLinkDef(categoryId, linkNumber, dateStr) {
+  const publishedLinks = await getCachedPublishedLinks();
+  return resolveLinkFromList(publishedLinks, categoryId, linkNumber, dateStr);
 }
 
 // Helper: Get category parameters (anchor_date, cycle_length) for a given date
@@ -1508,11 +1525,13 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
 
   // 3. Check non-daily trains
   if (!lastDuty) {
-    const ndTrains = await all(
-      `SELECT * FROM non_daily_trains 
-       WHERE assigned_staff_id = ? AND arrival_station = 'GNT'`,
-      [staffId]
-    );
+    const ndTrains = dataPool?.nonDailyTrains
+      ? dataPool.nonDailyTrains.filter((t: any) => t.assigned_staff_id === staffId && t.arrival_station === 'GNT')
+      : await all(
+          `SELECT * FROM non_daily_trains 
+           WHERE assigned_staff_id = ? AND arrival_station = 'GNT'`,
+          [staffId]
+        );
     if (ndTrains && ndTrains.length > 0) {
       const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
       for (let daysBack = 0; daysBack <= 6; daysBack++) {
@@ -1540,13 +1559,18 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
 
   // 4. Check duty_register_entry
   if (!lastDuty) {
-    const drEntry = await get(
-      `SELECT e.* FROM duty_register_entry e
-       JOIN duty_register_staff s ON e.id = s.entry_id
-       WHERE s.staff_id = ? AND date(e.date) <= date(?)
-       ORDER BY date(e.date) DESC LIMIT 1`,
-      [staffId, targetDateStr]
-    );
+    let drEntry: any = null;
+    if (dataPool?.dutyRegisterEntries) {
+      drEntry = dataPool.dutyRegisterEntries.find((e: any) => e.staff_id === staffId && e.date <= targetDateStr) || null;
+    } else {
+      drEntry = await get(
+        `SELECT e.* FROM duty_register_entry e
+         JOIN duty_register_staff s ON e.id = s.entry_id
+         WHERE s.staff_id = ? AND date(e.date) <= date(?)
+         ORDER BY date(e.date) DESC LIMIT 1`,
+        [staffId, targetDateStr]
+      );
+    }
     if (drEntry && (drEntry.train_return || drEntry.train_out)) {
       const trainNo = drEntry.train_return || drEntry.train_out;
       const arrTime = STANDARD_GNT_ARRIVALS[trainNo] || '23:00';
@@ -1670,10 +1694,23 @@ async function getStaffLastDutyAndRestStatus(staffId: any, targetDateStr: any, c
   };
 }
 
+let cachedCrBalances: any = null;
+let lastCrBalancesCalcTime = 0;
+const CR_CACHE_TTL_MS = 60 * 1000;
+
+function invalidateCrCache() {
+  cachedCrBalances = null;
+  lastCrBalancesCalcTime = 0;
+}
+
 // Helper: Calculate Compensatory Rest (CR) balances for all staff
 // When an employee is booked for duty outside their link duty and forgoes their rest day,
 // they earn 1 CR with the date of the rest they forwent.
-async function calculateStaffCrBalances() {
+async function calculateStaffCrBalances(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedCrBalances && (now - lastCrBalancesCalcTime < CR_CACHE_TTL_MS)) {
+    return cachedCrBalances;
+  }
   const staffMembers = await all('SELECT * FROM staff ORDER BY id');
   const categories = await all('SELECT * FROM categories');
   const catMap = {};
@@ -1846,6 +1883,8 @@ async function calculateStaffCrBalances() {
     }
   }
 
+  cachedCrBalances = crMap;
+  lastCrBalancesCalcTime = Date.now();
   return crMap;
 }
 
@@ -9599,6 +9638,11 @@ app.get('/api/roster', async (req, res) => {
       endDate = temp;
     }
 
+    // Lookback window for multi-day returns (3 days before startDate)
+    const lbDate = new Date(startDate + 'T00:00:00');
+    lbDate.setDate(lbDate.getDate() - 3);
+    const lookbackStartDate = lbDate.toISOString().split('T')[0];
+
     const staffMembers = await getStaffForDate(category_id, startDate);
 
     // Get all overrides and muster records for staff members in this category during this date range
@@ -9621,7 +9665,7 @@ app.get('/api/roster', async (req, res) => {
           AND (l.link_set_id IS NULL OR l.link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
           AND (l.effective_from IS NULL OR l.effective_from <= ?)
           AND (l.effective_to IS NULL OR l.effective_to >= ?)
-      `, [endDate, startDate]);
+      `, [endDate, lookbackStartDate]);
 
 
       // Load direct overrides AND substitute overrides
@@ -9631,21 +9675,21 @@ app.get('/api/roster', async (req, res) => {
          LEFT JOIN staff s1 ON o.staff_id = s1.id
          WHERE (o.staff_id IN (${staffIdsList}) OR o.substitute_staff_id IN (${staffIdsList}))
            AND date(o.date) >= date(?) AND date(o.date) <= date(?)`,
-        [startDate, endDate]
+        [lookbackStartDate, endDate]
       );
 
       musterRecords = await all(
         `SELECT * FROM muster_records 
          WHERE staff_id IN (${staffIdsList}) 
            AND date(date) >= date(?) AND date(date) <= date(?)`,
-        [startDate, endDate]
+        [lookbackStartDate, endDate]
       );
 
       lrRecords = await all(
         `SELECT * FROM lr_sheet_records
          WHERE staff_id IN (${staffIdsList})
            AND date >= ? AND date <= ?`,
-        [startDate, endDate]
+        [lookbackStartDate, endDate]
       );
 
       earningsList = await all(
@@ -9666,6 +9710,7 @@ app.get('/api/roster', async (req, res) => {
 
       nonDailyTrains = await all('SELECT * FROM non_daily_trains');
     }
+    const lrCompletionsList = await all('SELECT * FROM lr_duty_completions ORDER BY date(arrival_date) DESC, arrival_time DESC');
 
     // Index muster records by staff_id + date
     const musterMap = {};
@@ -9703,11 +9748,22 @@ app.get('/api/roster', async (req, res) => {
       dutyRegisterMap[`${d.staff_id}_${d.date}`] = d;
     });
 
-    const leaveRequestsList = await all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? AND date <= ? OR from_date <= ? AND to_date >= ?)", [startDate, endDate, endDate, startDate]);
+    const leaveRequestsList = await all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? AND date <= ? OR from_date <= ? AND to_date >= ?)", [lookbackStartDate, endDate, endDate, lookbackStartDate]);
+    const staffMap: Record<string, any> = {};
+    staffMembers.forEach(s => { staffMap[s.id] = s; });
+
+    const resolveRosterLink = (catId: any, num: any, dStr: string) => resolveLinkFromList(allLinks, catId, num, dStr);
+
     const dataPool = {
       overridesMap: directOverrideMap,
       musterMap: musterMap,
-      leaveRequests: leaveRequestsList
+      leaveRequests: leaveRequestsList,
+      overrides: overrides,
+      staffMap: staffMap,
+      lrCompletions: lrCompletionsList,
+      nonDailyTrains: nonDailyTrains,
+      dutyRegisterEntries: dutyRegisterEntries,
+      getLinkDef: resolveRosterLink
     };
 
     const dates = [];
@@ -10284,7 +10340,7 @@ app.get('/api/roster', async (req, res) => {
                 targetCatId = dutyDetails.category_id;
               }
               if (!dutyDetails) {
-                dutyDetails = await getActiveLinkDef(targetCatId, linkNum, d.dateString);
+                dutyDetails = resolveRosterLink(targetCatId, linkNum, d.dateString);
               }
             } else {
               // linkNum is a train number (e.g. 7227, 12756, 22882)
@@ -10300,7 +10356,7 @@ app.get('/api/roster', async (req, res) => {
 
           let lrRestInfo = null;
           if (status === 'AVAILABLE_FOR_BOOKING') {
-            lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, d.dateString);
+            lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, d.dateString, null, dataPool);
           }
 
           let origIsRest = isScheduledWeeklyRestDay || status === 'REST' || musterCode === 'R' || (directOv && directOv.status === 'REST');
@@ -10562,7 +10618,7 @@ app.get('/api/roster', async (req, res) => {
               (!l.effective_to || l.effective_to >= d.dateString)
             );
             if (!dutyDetails) {
-              dutyDetails = await getActiveLinkDef(targetCatId || currentCatId, linkNum, d.dateString);
+              dutyDetails = resolveRosterLink(targetCatId || currentCatId, linkNum, d.dateString);
             }
           }
 
@@ -10586,7 +10642,7 @@ app.get('/api/roster', async (req, res) => {
               (!l.effective_to || l.effective_to >= d.dateString)
             );
             if (!origDutyDef) {
-              origDutyDef = await getActiveLinkDef(staff.category_id || currentCatId, origBaseLink, d.dateString);
+              origDutyDef = resolveRosterLink(staff.category_id || currentCatId, origBaseLink, d.dateString);
             }
           }
           const origIsRest = !origDutyDef || origDutyDef.is_rest === 1 || isRestString(origDutyDef.train_numbers);
