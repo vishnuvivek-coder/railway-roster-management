@@ -793,6 +793,60 @@ function getCategoryParamsForDate(cat, dateStr) {
   };
 }
 
+// Helper: Retrieve staff list for a given category and date.
+// Uses versioned staff_roster_assignments for the date period.
+// Falls back to staff table if no versioned assignments exist.
+async function getStaffForDate(categoryId: any, dateStr: string | null) {
+  const isAll = (!categoryId || String(categoryId).toUpperCase() === 'ALL');
+
+  if (dateStr) {
+    let sql = `
+      SELECT 
+        sra.id as assignment_id,
+        COALESCE(sra.staff_id, CONCAT('vacant-', sra.row_position)) as id,
+        sra.staff_name as name,
+        COALESCE(sra.designation, s.designation, '') as designation,
+        COALESCE(sra.category_id, s.category_id) as category_id,
+        sra.row_position,
+        COALESCE(sra.rest_day, s.rest_day) as rest_day,
+        COALESCE(sra.pf_no, s.pf_no) as pf_no,
+        sra.is_vacant,
+        COALESCE(s.active, 1) as active,
+        COALESCE(s.seniority_no, sra.row_position) as seniority_no,
+        s.bill_unit,
+        COALESCE(s.pay_amount, 68000) as pay_amount,
+        s.doa,
+        COALESCE(s.hq_station, 'GNT') as hq_station,
+        s.t_code_no,
+        s.hrms_id,
+        s.pin_hash
+      FROM staff_roster_assignments sra
+      LEFT JOIN staff s ON sra.staff_id = s.id
+      WHERE date(sra.effective_from) <= date(?)
+        AND (sra.effective_to IS NULL OR date(sra.effective_to) >= date(?))
+    `;
+    const params: any[] = [dateStr, dateStr];
+    if (!isAll) {
+      sql += ' AND sra.category_id = ?';
+      params.push(categoryId);
+    }
+    sql += ' ORDER BY sra.category_id ASC, sra.row_position ASC';
+    const versioned = await all(sql, params);
+    if (versioned && versioned.length > 0) {
+      return versioned;
+    }
+  }
+
+  let fallbackSql = 'SELECT * FROM staff WHERE (active = 1 OR active IS NULL) AND category_id IS NOT NULL';
+  const fallbackParams: any[] = [];
+  if (!isAll) {
+    fallbackSql += ' AND category_id = ?';
+    fallbackParams.push(categoryId);
+  }
+  fallbackSql += ' ORDER BY category_id ASC, row_position ASC';
+  return await all(fallbackSql, fallbackParams);
+}
+
 
 
 // Link Set definitions for Indian Railways cyclic links
@@ -2787,18 +2841,28 @@ app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
 //   • Auto-Syncs To   : None
 //   • Summary         : Returns all staff members with category, designation, headquarters, basic pay, and PF/HRMS details.
 // ============================================================================
-app.get('/api/staff', async (req, res) => {
-  const { category_id } = req.query;
+
+// ============================================================================
+// [ENDPOINT] GET /api/roster-versions
+// Returns all published roster versions with their effective date periods
+// ============================================================================
+app.get('/api/roster-versions', async (req, res) => {
   try {
-    let sql = 'SELECT * FROM staff WHERE (active = 1 OR active IS NULL)';
-    let params = [];
-    if (category_id && category_id !== 'ALL') {
-      sql += ' AND category_id = ? ORDER BY row_position';
-      params.push(category_id);
-    } else {
-      sql += ' ORDER BY category_id, row_position';
+    const versions = await all('SELECT * FROM roster_versions ORDER BY effective_from DESC');
+    res.json(versions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/staff', async (req, res) => {
+  const { category_id, date, month, year } = req.query;
+  try {
+    let dateStr = (typeof date === 'string' && date.length >= 10) ? date.substring(0, 10) : null;
+    if (!dateStr && year && month) {
+      dateStr = `${year}-${String(month).padStart(2, '0')}-01`;
     }
-    const staff = await all(sql, params);
+    const staff = await getStaffForDate(category_id, dateStr);
     const crBalances = await calculateStaffCrBalances();
     const staffWithCr = staff.map(s => {
       const cr = crBalances[s.id];
@@ -9512,9 +9576,7 @@ app.get('/api/roster', async (req, res) => {
       categoriesList = [category];
     }
 
-    const staffMembers = isAllCategories
-      ? await all('SELECT * FROM staff WHERE (active = 1 OR active IS NULL) AND category_id IS NOT NULL ORDER BY category_id ASC, row_position ASC')
-      : await all('SELECT * FROM staff WHERE category_id = ? AND (active = 1 OR active IS NULL) ORDER BY row_position ASC', [category_id]);
+
 
     const crBalances = await calculateStaffCrBalances();
 
@@ -9537,8 +9599,11 @@ app.get('/api/roster', async (req, res) => {
       endDate = temp;
     }
 
+    const staffMembers = await getStaffForDate(category_id, startDate);
+
     // Get all overrides and muster records for staff members in this category during this date range
-    const staffIdsList = staffMembers.map(s => s.id).join(',');
+    const numericStaffIds = staffMembers.map(s => s.id).filter(id => typeof id === 'number' || (typeof id === 'string' && /^\\d+$/.test(id)));
+    const staffIdsList = numericStaffIds.length > 0 ? numericStaffIds.join(',') : '0';
 
     let overrides = [];
     let musterRecords = [];
@@ -11041,7 +11106,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
       nonDailyTrains
     ] = await Promise.all([
       all('SELECT * FROM categories ORDER BY id ASC'),
-      all('SELECT * FROM staff WHERE (active = 1 OR active IS NULL) ORDER BY row_position ASC'),
+      getStaffForDate('ALL', targetDateStr),
       calculateStaffCrBalances(),
       all("SELECT * FROM links WHERE (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft')"),
       all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [dMinus7Str, targetDateStr]),

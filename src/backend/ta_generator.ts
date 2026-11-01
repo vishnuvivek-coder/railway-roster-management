@@ -1894,15 +1894,39 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const { get, all, run } = db;
   const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
 
-  let staffQuery = 'SELECT * FROM staff';
-  const params = [];
-  if (staffId) {
-    staffQuery += ' WHERE id = ?';
-    params.push(staffId);
-  } else {
-    staffQuery += ' ORDER BY category_id ASC, row_position ASC';
+  const monthFirstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+  let allStaff = await all(`
+    SELECT 
+      COALESCE(sra.staff_id, s.id) as id,
+      sra.staff_name as name,
+      COALESCE(sra.designation, s.designation, '') as designation,
+      COALESCE(sra.category_id, s.category_id) as category_id,
+      sra.row_position,
+      COALESCE(sra.rest_day, s.rest_day) as rest_day,
+      COALESCE(sra.pf_no, s.pf_no) as pf_no,
+      sra.is_vacant,
+      COALESCE(s.active, 1) as active,
+      COALESCE(s.pay_amount, 68000) as pay_amount,
+      s.hq_station
+    FROM staff_roster_assignments sra
+    LEFT JOIN staff s ON sra.staff_id = s.id
+    WHERE date(sra.effective_from) <= date(?)
+      AND (sra.effective_to IS NULL OR date(sra.effective_to) >= date(?))
+      ${staffId ? 'AND (sra.staff_id = ? OR s.id = ?)' : ''}
+    ORDER BY sra.category_id ASC, sra.row_position ASC
+  `, staffId ? [monthFirstDay, monthFirstDay, staffId, staffId] : [monthFirstDay, monthFirstDay]);
+
+  if (!allStaff || allStaff.length === 0) {
+    let staffQuery = 'SELECT * FROM staff';
+    const params = [];
+    if (staffId) {
+      staffQuery += ' WHERE id = ?';
+      params.push(staffId);
+    } else {
+      staffQuery += ' ORDER BY category_id ASC, row_position ASC';
+    }
+    allStaff = await all(staffQuery, params);
   }
-  const allStaff = await all(staffQuery, params);
 
   const categories = await all('SELECT * FROM categories');
   const catMap = {};
@@ -2118,12 +2142,18 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
             });
           }
         } else {
-          const curAnchor = category.id === 2
-            ? (dateStrIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
-            : category.anchor_date;
-          const curCycle = category.id === 2
-            ? (dateStrIso < '2026-10-01' ? 63 : 56)
-            : category.cycle_length;
+          let curAnchor = category.anchor_date;
+          let curCycle = category.cycle_length;
+          if (category.id === 1) {
+            curAnchor = dateStrIso < '2026-11-01' ? '2026-10-01' : '2026-11-01';
+            curCycle = 21;
+          } else if (category.id === 2) {
+            curAnchor = dateStrIso < '2026-10-01' ? '2026-08-01' : (dateStrIso < '2026-11-01' ? '2026-10-01' : '2026-11-01');
+            curCycle = dateStrIso < '2026-10-01' ? 63 : 56;
+          } else if (category.id === 3) {
+            curAnchor = dateStrIso < '2026-11-01' ? '2026-10-01' : '2026-11-01';
+            curCycle = 7;
+          }
           const offset = getDayOffset(curAnchor, dateStrIso);
           origLinkNum = getBaseLinkNumber(staff.row_position, offset, curCycle);
           const origLink = linkMap[`${category.id}_${origLinkNum}`] || linkMap[origLinkNum];
@@ -2384,8 +2414,8 @@ function getMonthsBetween(startDate, endDate) {
  */
 async function generateStaffTaJournal(db, staffId, year, month, startDate, endDate) {
   const { get, all } = db;
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) {
+  const rawStaff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  if (!rawStaff) {
     return {
       notFound: true,
       employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
@@ -2395,6 +2425,23 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       month
     };
   }
+
+  const monthFirstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+  const assignment = await get(`
+    SELECT * FROM staff_roster_assignments
+    WHERE staff_id = ?
+      AND date(effective_from) <= date(?)
+      AND (effective_to IS NULL OR date(effective_to) >= date(?))
+    LIMIT 1
+  `, [staffId, monthFirstDay, monthFirstDay]);
+
+  const staff = assignment ? {
+    ...rawStaff,
+    row_position: assignment.row_position,
+    category_id: assignment.category_id || rawStaff.category_id,
+    designation: assignment.designation || rawStaff.designation,
+    rest_day: assignment.rest_day || rawStaff.rest_day
+  } : rawStaff;
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) {
@@ -2613,7 +2660,19 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       if (dIso) {
         const ov = staffOverrideMap[dIso];
         const isStandby = ov && (ov.status === 'AVAILABLE_FOR_BOOKING' || (ov.reason && (ov.reason.toLowerCase().includes('available for booking') || ov.reason.toLowerCase().includes('available for other duty') || ov.reason.toLowerCase().includes('removed from link') || ov.reason.toLowerCase().includes('relieved to hq'))));
-        const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, category.id, staff.row_position, category.cycle_length, category.anchor_date, dIso, musterMap, staffOverrideMap);
+        let journalAnchor = category.anchor_date;
+        let journalCycle = category.cycle_length;
+        if (category.id === 1) {
+          journalAnchor = dIso < '2026-11-01' ? '2026-10-01' : '2026-11-01';
+          journalCycle = 21;
+        } else if (category.id === 2) {
+          journalAnchor = dIso < '2026-10-01' ? '2026-08-01' : (dIso < '2026-11-01' ? '2026-10-01' : '2026-11-01');
+          journalCycle = dIso < '2026-10-01' ? 63 : 56;
+        } else if (category.id === 3) {
+          journalAnchor = dIso < '2026-11-01' ? '2026-10-01' : '2026-11-01';
+          journalCycle = 7;
+        }
+        const isMultiDayReturn = checkMultiDayLeaveReturnSync(staff.id, staff.category_id, staff.row_position, journalCycle, journalAnchor, dIso, musterMap, staffOverrideMap);
         const hasDutyOverride = ov && (ov.status === 'CHANGED_LINK' || ov.status === 'SUBSTITUTE' || ov.status === 'EXTRA_CREW' || ov.status === 'UTILISED_ADVANCE');
 
         // If staff is on leave or standby at HQ on this date, or if row has no train, discard

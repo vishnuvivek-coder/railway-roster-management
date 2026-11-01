@@ -2113,7 +2113,7 @@ export default function App() {
   // Automatically sync staff list for dropdowns
   useEffect(() => {
     if (selectedCatId) fetchStaff();
-  }, [selectedCatId]);
+  }, [selectedCatId, month, year, selectedDate]);
 
   const fetchDailyDuties = () => {
     setLoadingDaily(true);
@@ -2222,7 +2222,8 @@ export default function App() {
   };
 
   const fetchStaff = () => {
-    fetch(`${API_BASE}/staff?category_id=${selectedCatId}`)
+    const periodDate = selectedDate || `${year}-${String(month).padStart(2, '0')}-01`;
+    fetch(`${API_BASE}/staff?category_id=${selectedCatId}&date=${periodDate}`)
       .then(res => res.json())
       .then(data => {
         setStaffList(data);
