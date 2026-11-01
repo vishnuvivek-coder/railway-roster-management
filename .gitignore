@@ -20,6 +20,9 @@ backups/
 *.sql
 *.dump
 
+# Generated export documents
+*.pdf
+
 # Private local environment overrides
 .env.local
 .env.*.local
