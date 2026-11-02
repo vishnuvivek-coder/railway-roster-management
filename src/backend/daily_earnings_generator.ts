@@ -71,11 +71,24 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     );
   }
 
-  // 2. Fetch saved daily earnings entries for this date
-  const savedEntries = await all(
-    'SELECT * FROM daily_earnings_entries WHERE date = ? ORDER BY row_order ASC, id ASC',
-    [dateStr]
-  );
+  // 2. Fetch saved entries, overrides, muster, lr_sheet, and links in parallel
+  const dPrev = new Date(dObj);
+  dPrev.setDate(dPrev.getDate() - 1);
+  const prevDateStr = dPrev.toISOString().split('T')[0];
+
+  const [savedEntries, dateOverrides, dateMuster, dateLr, allPublishedLinks] = await Promise.all([
+    all(
+      'SELECT * FROM daily_earnings_entries WHERE date = ? ORDER BY row_order ASC, id ASC',
+      [dateStr]
+    ),
+    all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [prevDateStr, dateStr]),
+    all('SELECT * FROM muster_records WHERE date = ?', [dateStr]),
+    all('SELECT * FROM lr_sheet_records WHERE date = ?', [dateStr]),
+    all(`SELECT * FROM links 
+         WHERE (status = 'published' OR status IS NULL OR status = '') 
+           AND (status != 'draft')
+           AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))`)
+  ]);
 
   const savedMap = new Map();
   if (Array.isArray(savedEntries)) {
@@ -84,7 +97,27 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     });
   }
 
-  // 3. Assemble all rows with roster duties
+  // Pre-index overrides, muster, and LR sheet for O(1) in-memory lookups
+  const directOvMap = new Map();
+  const subOvMap = new Map();
+  if (Array.isArray(dateOverrides)) {
+    dateOverrides.forEach(ov => {
+      if (ov.staff_id) directOvMap.set(`${ov.staff_id}_${ov.date}`, ov);
+      if (ov.substitute_staff_id) subOvMap.set(`${ov.substitute_staff_id}_${ov.date}`, ov);
+    });
+  }
+
+  const musterMap = new Map();
+  if (Array.isArray(dateMuster)) {
+    dateMuster.forEach(m => musterMap.set(m.staff_id, m));
+  }
+
+  const lrMap = new Map();
+  if (Array.isArray(dateLr)) {
+    dateLr.forEach(l => lrMap.set(l.staff_id, l));
+  }
+
+  // 3. Assemble all rows with roster duties (ZERO in-loop DB queries)
   const rows = [];
   let rowIdx = 1;
 
@@ -92,10 +125,10 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     // Determine roster duty for this staff member on dateStr using date-aware cycle parameters
     const catParams = getCategoryParamsForDate(staff.category_id, dateStr);
     const dayOffset = getDayOffset(catParams.anchor_date, dateStr);
-    const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
-    const subOverride = await get('SELECT * FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff.id, dateStr]);
-    const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
-    const lrRecord = staff.category_id === 4 ? await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]) : null;
+    const override = directOvMap.get(`${staff.id}_${dateStr}`);
+    const subOverride = subOvMap.get(`${staff.id}_${dateStr}`);
+    const musterRecord = musterMap.get(staff.id);
+    const lrRecord = staff.category_id === 4 ? lrMap.get(staff.id) : null;
 
     let activeLink = null;
     let isOverridden = false;
@@ -132,10 +165,7 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
       dutyText = 'SPARE (HQ)';
     } else {
       activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
-      const d1 = new Date(dateStr);
-      d1.setDate(d1.getDate() - 1);
-      const prevDateStr = d1.toISOString().split('T')[0];
-      const prevOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, prevDateStr]);
+      const prevOverride = directOvMap.get(`${staff.id}_${prevDateStr}`);
       if (prevOverride && (prevOverride.status === 'LEAVE' || prevOverride.status === 'SICK' || prevOverride.status === 'CR')) {
         const prevCatParams = getCategoryParamsForDate(staff.category_id, prevDateStr);
         const prevDayOffset = getDayOffset(prevCatParams.anchor_date, prevDateStr);
@@ -152,28 +182,25 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     let toStation = '';
 
     if (activeLink !== null) {
-      let linkDef = await get(
-        `SELECT * FROM links 
-         WHERE category_id = ? AND link_number = ? AND date(effective_from) <= date(?) AND date(effective_to) >= date(?)
-         LIMIT 1`,
-        [staff.category_id, activeLink, dateStr, dateStr]
+      let linkDef = allPublishedLinks.find(l =>
+        parseInt(l.category_id, 10) === staff.category_id &&
+        parseInt(l.link_number, 10) === activeLink &&
+        (!l.effective_from || l.effective_from <= dateStr) &&
+        (!l.effective_to || l.effective_to >= dateStr)
       );
       if (!linkDef) {
-        linkDef = await get(
-          `SELECT * FROM links 
-           WHERE category_id = ? AND link_number = ? 
-           ORDER BY effective_from ASC LIMIT 1`,
-          [staff.category_id, activeLink]
+        linkDef = allPublishedLinks.find(l =>
+          parseInt(l.category_id, 10) === staff.category_id &&
+          parseInt(l.link_number, 10) === activeLink
         );
       }
       if (!linkDef) {
-        linkDef = await get(
-          `SELECT * FROM links 
-           WHERE link_number = ? 
-           ORDER BY effective_from ASC LIMIT 1`,
-          [activeLink]
+        linkDef = allPublishedLinks.find(l =>
+          parseInt(l.link_number, 10) === activeLink &&
+          parseInt(l.category_id, 10) !== 4
         );
       }
+
       if (linkDef) {
         fromStation = linkDef.from_station || '';
         toStation = linkDef.to_station || '';
@@ -185,92 +212,47 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
       } else {
         dutyText = `Link #${activeLink}`;
       }
-    } else if (!dutyText) {
-      dutyText = 'REST';
     }
 
+    if (!dutyText) {
+      dutyText = 'SPARE (HQ)';
+    }
+
+    // Merge saved data or fallback to defaults
     const saved = savedMap.get(staff.id);
 
-    const twt_nc = saved ? (parseInt(saved.twt_nc, 10) || 0) : 0;
-    const twt_fare = saved ? (parseFloat(saved.twt_fare) || 0) : 0;
-    const twt_penalty = saved ? (parseFloat(saved.twt_penalty) || 0) : 0;
-
-    const ir_nc = saved ? (parseInt(saved.ir_nc, 10) || 0) : 0;
-    const ir_fare = saved ? (parseFloat(saved.ir_fare) || 0) : 0;
-    const ir_penalty = saved ? (parseFloat(saved.ir_penalty) || 0) : 0;
-
-    const ubl_nc = saved ? (parseInt(saved.ubl_nc, 10) || 0) : 0;
-    const ubl_amt = saved ? (parseFloat(saved.ubl_amt) || 0) : 0;
-
-    const gst = saved ? (parseFloat(saved.gst) || 0) : 0;
-
-    const z652_nc = saved ? (parseInt(saved.z652_nc, 10) || 0) : 0;
-    const z652_amt = saved ? (parseFloat(saved.z652_amt) || 0) : 0;
-
-    const oc_nc = saved ? (parseInt(saved.oc_nc, 10) || 0) : 0;
-    const oc_amt = saved ? (parseFloat(saved.oc_amt) || 0) : 0;
-
-    const duty = saved && saved.duty !== undefined && saved.duty !== null && saved.duty !== ''
-      ? saved.duty
-      : dutyText;
-
-    const depot_title = saved && saved.depot_title ? saved.depot_title : 'GNT ATY-1D2';
-
-    // Computed columns
-    const nc_eff_nc = twt_nc + ir_nc + ubl_nc;
-    const nc_eff_amt = twt_fare + twt_penalty + ir_fare + ir_penalty + ubl_amt;
-
-    const nc_gtot_nc = nc_eff_nc + z652_nc + oc_nc;
-    const nc_gtot_amt = nc_eff_amt + gst + z652_amt + oc_amt;
-
-    const fromStnUpper = (fromStation || '').trim().toUpperCase();
-    const isRest = duty === 'REST' || staff.name.includes('VACANT');
-    const isBookedToDuty = !isRest && (fromStnUpper.includes('GNT') || fromStnUpper === 'HQ' || staff.category_id === 4 || fromStnUpper === '');
-    const isOutStation = !isRest && !isBookedToDuty;
-    const statusType = isBookedToDuty ? 'BOOKED_TO_DUTY' : (isOutStation ? 'OUT_STATION' : 'REST');
-
     rows.push({
-      id: saved ? saved.id : `temp_${staff.id}`,
-      staff_id: staff.id,
-      category_id: staff.category_id,
-      category_code: staff.cat_code,
+      id: staff.id,
+      row_order: saved?.row_order || rowIdx++,
+      name: staff.name,
+      designation: staff.designation,
       category_name: staff.cat_name,
-      staff_name: staff.name,
-      designation: staff.designation || 'TTI',
-      date: dateStr,
-      date_formatted: formattedDate,
-      day_of_week: dayOfWeek,
-      depot_title,
-      from_station: fromStation,
-      to_station: toStation,
-      is_booked_to_duty: isBookedToDuty,
-      is_out_station: isOutStation,
-      is_rest: isRest,
-      status_type: statusType,
-      twt_nc,
-      twt_fare,
-      twt_penalty,
-      ir_nc,
-      ir_fare,
-      ir_penalty,
-      ubl_nc,
-      ubl_amt,
-      nc_eff_nc,
-      nc_eff_amt,
-      gst,
-      z652_nc,
-      z652_amt,
-      oc_nc,
-      oc_amt,
-      nc_gtot_nc,
-      nc_gtot_amt,
-      duty,
-      remarks: saved ? (saved.remarks || '') : '',
-      row_order: rowIdx++
+      category_code: staff.cat_code,
+      duty: saved?.duty || dutyText,
+      from_station: saved?.from_station || fromStation,
+      to_station: saved?.to_station || toStation,
+      twt_nc: saved ? saved.twt_nc : 0,
+      twt_fare: saved ? saved.twt_fare : 0,
+      twt_penalty: saved ? saved.twt_penalty : 0,
+      ir_nc: saved ? saved.ir_nc : 0,
+      ir_fare: saved ? saved.ir_fare : 0,
+      ir_penalty: saved ? saved.ir_penalty : 0,
+      ubl_nc: saved ? saved.ubl_nc : 0,
+      ubl_amt: saved ? saved.ubl_amt : 0,
+      nc_eff_nc: saved ? saved.nc_eff_nc : 0,
+      nc_eff_amt: saved ? saved.nc_eff_amt : 0,
+      gst: saved ? saved.gst : 0,
+      z652_nc: saved ? saved.z652_nc : 0,
+      z652_amt: saved ? saved.z652_amt : 0,
+      oc_nc: saved ? saved.oc_nc : 0,
+      oc_amt: saved ? saved.oc_amt : 0,
+      nc_gtot_nc: saved ? saved.nc_gtot_nc : 0,
+      nc_gtot_amt: saved ? saved.nc_gtot_amt : 0,
+      remarks: saved ? saved.remarks : '',
+      is_modified: false
     });
   }
 
-  // 4. Calculate Column Totals for Bottom Summary Row
   const totals = {
     twt_nc: rows.reduce((s, r) => s + r.twt_nc, 0),
     twt_fare: rows.reduce((s, r) => s + r.twt_fare, 0),
@@ -406,22 +388,41 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
     };
   }
 
-  // Fetch all saved earnings entries for this staff in this month
+  // Fetch saved earnings entries, overrides, and links concurrently
   const startDateStr = `${y}-${monthStr}-01`;
   const endDateStr = `${y}-${monthStr}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
 
-  const savedEntries = await all(
-    `SELECT * FROM daily_earnings_entries 
-     WHERE staff_id = ? AND date >= ? AND date <= ? 
-     ORDER BY date ASC`,
-    [staffId, startDateStr, endDateStr]
-  );
+  const dPrevMonth = new Date(y, m - 1, 1);
+  dPrevMonth.setDate(dPrevMonth.getDate() - 1);
+  const lookbackStartStr = dPrevMonth.toISOString().split('T')[0];
+
+  const [savedEntries, staffOverrides, allPublishedLinks] = await Promise.all([
+    all(
+      `SELECT * FROM daily_earnings_entries 
+       WHERE staff_id = ? AND date >= ? AND date <= ? 
+       ORDER BY date ASC`,
+      [staffId, startDateStr, endDateStr]
+    ),
+    all(
+      'SELECT * FROM overrides WHERE staff_id = ? AND date >= ? AND date <= ?',
+      [staffId, lookbackStartStr, endDateStr]
+    ),
+    all(`SELECT * FROM links 
+         WHERE (status = 'published' OR status IS NULL OR status = '') 
+           AND (status != 'draft')
+           AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))`)
+  ]);
 
   const savedMap = new Map();
   if (Array.isArray(savedEntries)) {
     savedEntries.forEach(item => {
       savedMap.set(item.date, item);
     });
+  }
+
+  const ovMap = new Map();
+  if (Array.isArray(staffOverrides)) {
+    staffOverrides.forEach(ov => ovMap.set(ov.date, ov));
   }
 
   const days = [];
@@ -432,10 +433,10 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
     const dObj = new Date(y, m - 1, dayNum);
     const dayOfWeek = daysOfWeek[dObj.getDay()];
 
-    // Determine planned roster duty for this day
+    // Determine planned roster duty for this day (ZERO in-loop DB queries)
     const catParams = getCategoryParamsForDate(category, dateIso);
     const dayOffset = getDayOffset(catParams.anchor_date, dateIso);
-    const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dateIso]);
+    const override = ovMap.get(dateIso);
 
     let activeLink = null;
     let isOverridden = false;
@@ -452,7 +453,7 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
       const d1 = new Date(dateIso);
       d1.setDate(d1.getDate() - 1);
       const prevDateStr = d1.toISOString().split('T')[0];
-      const prevOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, prevDateStr]);
+      const prevOverride = ovMap.get(prevDateStr);
       if (prevOverride && (prevOverride.status === 'LEAVE' || prevOverride.status === 'SICK' || prevOverride.status === 'CR')) {
         const prevCatParams = getCategoryParamsForDate(category, prevDateStr);
         const prevDayOffset = getDayOffset(prevCatParams.anchor_date, prevDateStr);
@@ -465,30 +466,32 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
       }
     }
 
+    let fromStation = '';
+    let toStation = '';
+
     if (activeLink !== null) {
-      let linkDef = await get(
-        `SELECT * FROM links 
-         WHERE category_id = ? AND link_number = ? AND date(effective_from) <= date(?) AND date(effective_to) >= date(?)
-         LIMIT 1`,
-        [category.id, activeLink, dateIso, dateIso]
+      let linkDef = allPublishedLinks.find(l =>
+        parseInt(l.category_id, 10) === staff.category_id &&
+        parseInt(l.link_number, 10) === activeLink &&
+        (!l.effective_from || l.effective_from <= dateIso) &&
+        (!l.effective_to || l.effective_to >= dateIso)
       );
       if (!linkDef) {
-        linkDef = await get(
-          `SELECT * FROM links 
-           WHERE category_id = ? AND link_number = ? 
-           ORDER BY effective_from ASC LIMIT 1`,
-          [category.id, activeLink]
+        linkDef = allPublishedLinks.find(l =>
+          parseInt(l.category_id, 10) === staff.category_id &&
+          parseInt(l.link_number, 10) === activeLink
         );
       }
       if (!linkDef) {
-        linkDef = await get(
-          `SELECT * FROM links 
-           WHERE link_number = ? 
-           ORDER BY effective_from ASC LIMIT 1`,
-          [activeLink]
+        linkDef = allPublishedLinks.find(l =>
+          parseInt(l.link_number, 10) === activeLink &&
+          parseInt(l.category_id, 10) !== 4
         );
       }
+
       if (linkDef) {
+        fromStation = linkDef.from_station || '';
+        toStation = linkDef.to_station || '';
         if (linkDef.is_rest === 1) {
           dutyText = 'REST';
         } else {
@@ -497,78 +500,44 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
       } else {
         dutyText = `Link #${activeLink}`;
       }
-    } else if (!dutyText) {
-      dutyText = 'REST';
+    }
+
+    if (!dutyText) {
+      dutyText = 'SPARE (HQ)';
     }
 
     const saved = savedMap.get(dateIso);
 
-    const twt_nc = saved ? (parseInt(saved.twt_nc, 10) || 0) : 0;
-    const twt_fare = saved ? (parseFloat(saved.twt_fare) || 0) : 0;
-    const twt_penalty = saved ? (parseFloat(saved.twt_penalty) || 0) : 0;
-
-    const ir_nc = saved ? (parseInt(saved.ir_nc, 10) || 0) : 0;
-    const ir_fare = saved ? (parseFloat(saved.ir_fare) || 0) : 0;
-    const ir_penalty = saved ? (parseFloat(saved.ir_penalty) || 0) : 0;
-
-    const ubl_nc = saved ? (parseInt(saved.ubl_nc, 10) || 0) : 0;
-    const ubl_amt = saved ? (parseFloat(saved.ubl_amt) || 0) : 0;
-
-    const gst = saved ? (parseFloat(saved.gst) || 0) : 0;
-
-    const z652_nc = saved ? (parseInt(saved.z652_nc, 10) || 0) : 0;
-    const z652_amt = saved ? (parseFloat(saved.z652_amt) || 0) : 0;
-
-    const oc_nc = saved ? (parseInt(saved.oc_nc, 10) || 0) : 0;
-    const oc_amt = saved ? (parseFloat(saved.oc_amt) || 0) : 0;
-
-    const duty = saved && saved.duty !== undefined && saved.duty !== null && saved.duty !== ''
-      ? saved.duty
-      : dutyText;
-
-    // Computed columns
-    const nc_eff_nc = twt_nc + ir_nc + ubl_nc;
-    const nc_eff_amt = twt_fare + twt_penalty + ir_fare + ir_penalty + ubl_amt;
-
-    const nc_gtot_nc = nc_eff_nc + z652_nc + oc_nc;
-    const nc_gtot_amt = nc_eff_amt + gst + z652_amt + oc_amt;
-
     days.push({
-      id: saved ? saved.id : `temp_${staff.id}_${dateIso}`,
-      staff_id: staff.id,
-      category_id: staff.category_id,
-      staff_name: staff.name,
-      designation: staff.designation || 'TTI',
       date: dateIso,
       date_formatted: dateFormatted,
-      day_number: dayNum,
       day_of_week: dayOfWeek,
-      depot_title: saved?.depot_title || 'GNT ATY-1D2',
-      twt_nc,
-      twt_fare,
-      twt_penalty,
-      ir_nc,
-      ir_fare,
-      ir_penalty,
-      ubl_nc,
-      ubl_amt,
-      nc_eff_nc,
-      nc_eff_amt,
-      gst,
-      z652_nc,
-      z652_amt,
-      oc_nc,
-      oc_amt,
-      nc_gtot_nc,
-      nc_gtot_amt,
-      duty,
-      remarks: saved ? (saved.remarks || '') : '',
-      is_rest: duty === 'REST',
-      has_earnings: nc_gtot_amt > 0 || nc_gtot_nc > 0
+      duty: saved?.duty || dutyText,
+      from_station: saved?.from_station || fromStation,
+      to_station: saved?.to_station || toStation,
+      twt_nc: saved ? saved.twt_nc : 0,
+      twt_fare: saved ? saved.twt_fare : 0,
+      twt_penalty: saved ? saved.twt_penalty : 0,
+      ir_nc: saved ? saved.ir_nc : 0,
+      ir_fare: saved ? saved.ir_fare : 0,
+      ir_penalty: saved ? saved.ir_penalty : 0,
+      ubl_nc: saved ? saved.ubl_nc : 0,
+      ubl_amt: saved ? saved.ubl_amt : 0,
+      nc_eff_nc: saved ? saved.nc_eff_nc : 0,
+      nc_eff_amt: saved ? saved.nc_eff_amt : 0,
+      gst: saved ? saved.gst : 0,
+      z652_nc: saved ? saved.z652_nc : 0,
+      z652_amt: saved ? saved.z652_amt : 0,
+      oc_nc: saved ? saved.oc_nc : 0,
+      oc_amt: saved ? saved.oc_amt : 0,
+      nc_gtot_nc: saved ? saved.nc_gtot_nc : 0,
+      nc_gtot_amt: saved ? saved.nc_gtot_amt : 0,
+      remarks: saved ? saved.remarks : '',
+      is_rest: dutyText === 'REST' || (saved && saved.duty === 'REST'),
+      has_earnings: saved ? (saved.nc_gtot_amt > 0 || saved.nc_gtot_nc > 0) : false
     });
   }
 
-  // Monthly totals
   const totals = {
     twt_nc: days.reduce((s, r) => s + r.twt_nc, 0),
     twt_fare: days.reduce((s, r) => s + r.twt_fare, 0),

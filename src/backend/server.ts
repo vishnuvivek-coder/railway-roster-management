@@ -1706,78 +1706,128 @@ function invalidateCrCache() {
 // Helper: Calculate Compensatory Rest (CR) balances for all staff
 // When an employee is booked for duty outside their link duty and forgoes their rest day,
 // they earn 1 CR with the date of the rest they forwent.
-async function calculateStaffCrBalances(forceRefresh = false) {
+async function calculateStaffCrBalances(forceRefresh = false, preloadedData: any = null) {
   const now = Date.now();
   if (!forceRefresh && cachedCrBalances && (now - lastCrBalancesCalcTime < CR_CACHE_TTL_MS)) {
     return cachedCrBalances;
   }
-  const staffMembers = await all('SELECT * FROM staff ORDER BY id');
-  const categories = await all('SELECT * FROM categories');
-  const catMap = {};
-  categories.forEach(c => catMap[c.id] = c);
 
-  const links = await all(`
-    SELECT * FROM links 
-    WHERE (status = 'published' OR status IS NULL OR status = '') 
-      AND (status != 'draft')
-      AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-  `);
-  const linkRestMap = {};
-  links.forEach(l => {
+  let staffMembers: any[], categories: any[], links: any[], allOverrides: any[], allMuster: any[], allLrSheet: any[], allAssignments: any[];
+
+  if (preloadedData) {
+    staffMembers = preloadedData.staffMembers || [];
+    categories = preloadedData.categories || [];
+    links = preloadedData.links || [];
+    allOverrides = preloadedData.allOverrides || [];
+    allMuster = preloadedData.allMuster || [];
+    allLrSheet = preloadedData.allLrSheet || [];
+    allAssignments = preloadedData.allAssignments || [];
+  } else {
+    [staffMembers, categories, links, allOverrides, allMuster, allLrSheet, allAssignments] = await Promise.all([
+      all('SELECT * FROM staff ORDER BY id'),
+      all('SELECT * FROM categories'),
+      all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+      `),
+      all('SELECT * FROM overrides ORDER BY date ASC'),
+      all('SELECT * FROM muster_records ORDER BY date ASC'),
+      all('SELECT * FROM lr_sheet_records ORDER BY date ASC'),
+      all('SELECT * FROM staff_roster_assignments ORDER BY effective_from ASC')
+    ]);
+  }
+
+  const catMap: Record<number, any> = {};
+  categories.forEach((c: any) => catMap[c.id] = c);
+
+  const linkRestMap: Record<string, any> = {};
+  links.forEach((l: any) => {
     linkRestMap[l.category_id + '_' + l.link_number] = l.is_rest;
   });
 
-  const allOverrides = await all('SELECT * FROM overrides ORDER BY date ASC');
-  const allMuster = await all("SELECT * FROM muster_records ORDER BY date ASC");
-  const musterMap = {};
-  allMuster.forEach(m => {
-    musterMap[`${m.staff_id}_${m.date}`] = m;
-  });
-  const allLrSheet = await all("SELECT * FROM lr_sheet_records ORDER BY date ASC");
-  const lrSheetMap = {};
-  allLrSheet.forEach(l => {
-    lrSheetMap[`${l.staff_id}_${l.date}`] = l;
-  });
+  // Pre-index collections by staff_id and (staff_id, date) to avoid repeated array scans
+  const staffOverridesMap = new Map<number, any[]>();
+  const overrideKeyMap = new Map<string, any>();
+  for (const o of allOverrides) {
+    if (o.staff_id) {
+      let list = staffOverridesMap.get(o.staff_id);
+      if (!list) {
+        list = [];
+        staffOverridesMap.set(o.staff_id, list);
+      }
+      list.push(o);
+      overrideKeyMap.set(`${o.staff_id}_${o.date}`, o);
+    }
+  }
 
-  function formatDateDisplay(iso) {
+  const staffMusterMap = new Map<number, any[]>();
+  const musterMap = new Map<string, any>();
+  for (const m of allMuster) {
+    if (m.staff_id) {
+      let list = staffMusterMap.get(m.staff_id);
+      if (!list) {
+        list = [];
+        staffMusterMap.set(m.staff_id, list);
+      }
+      list.push(m);
+      musterMap.set(`${m.staff_id}_${m.date}`, m);
+    }
+  }
+
+  const staffLrMap = new Map<number, any[]>();
+  const lrSheetMap = new Map<string, any>();
+  for (const l of allLrSheet) {
+    if (l.staff_id) {
+      let list = staffLrMap.get(l.staff_id);
+      if (!list) {
+        list = [];
+        staffLrMap.set(l.staff_id, list);
+      }
+      list.push(l);
+      lrSheetMap.set(`${l.staff_id}_${l.date}`, l);
+    }
+  }
+
+  function formatDateDisplay(iso: string) {
     if (!iso) return '';
     const parts = iso.split('-');
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return iso;
   }
 
-  const allAssignments = await all('SELECT * FROM staff_roster_assignments ORDER BY effective_from ASC');
-  const assignmentMap = {};
-  allAssignments.forEach(a => {
+  const assignmentMap: Record<number, any[]> = {};
+  allAssignments.forEach((a: any) => {
     if (a.staff_id) {
       if (!assignmentMap[a.staff_id]) assignmentMap[a.staff_id] = [];
       assignmentMap[a.staff_id].push(a);
     }
   });
 
-  const crMap = {};
+  const crMap: Record<number, any> = {};
 
   for (const staff of staffMembers) {
     const staffAssigns = assignmentMap[staff.id] || [];
     if (!staff.category_id && staffAssigns.length === 0) continue;
 
-    const staffOverrides = allOverrides.filter(o => o.staff_id === staff.id);
-    const staffMuster = allMuster.filter(m => m.staff_id === staff.id);
-    const staffLr = allLrSheet.filter(l => l.staff_id === staff.id);
+    const staffOverrides = staffOverridesMap.get(staff.id) || [];
+    const staffMuster = staffMusterMap.get(staff.id) || [];
+    const staffLr = staffLrMap.get(staff.id) || [];
     const restForgoneRecords = [];
     const crRedeemedDates = [];
 
     // Collect all unique dates with overrides, muster records, or LR sheet for this staff
-    const relevantDates = new Set();
-    staffOverrides.forEach(o => relevantDates.add(o.date));
-    staffMuster.forEach(m => relevantDates.add(m.date));
-    staffLr.forEach(l => relevantDates.add(l.date));
+    const relevantDates = new Set<string>();
+    for (const o of staffOverrides) relevantDates.add(o.date);
+    for (const m of staffMuster) relevantDates.add(m.date);
+    for (const l of staffLr) relevantDates.add(l.date);
     const sortedDates = Array.from(relevantDates).sort();
 
     for (const dStr of sortedDates) {
-      const o = staffOverrides.find(ov => ov.date === dStr);
-      const m = musterMap[`${staff.id}_${dStr}`];
-      const lr = lrSheetMap[`${staff.id}_${dStr}`];
+      const o = overrideKeyMap.get(`${staff.id}_${dStr}`);
+      const m = musterMap.get(`${staff.id}_${dStr}`);
+      const lr = lrSheetMap.get(`${staff.id}_${dStr}`);
 
       // Check if CR was redeemed / availed on this date
       if ((o && (o.status === 'CR' || o.leave_type === 'CR')) || (m && m.code === 'CR') || (lr && lr.duty_code === 'CR')) {
@@ -9620,25 +9670,7 @@ app.get('/api/roster', async (req, res) => {
   }
 
   try {
-    const isAllCategories = (!category_id || String(category_id).toUpperCase() === 'ALL');
-    let category = null;
-    let categoriesList = [];
-    if (isAllCategories) {
-      categoriesList = await all('SELECT * FROM categories ORDER BY id ASC');
-      category = { id: 'ALL', name: 'All Categories', anchor_date: '2020-01-01', cycle_length: 21 };
-    } else {
-      category = await get('SELECT * FROM categories WHERE id = ?', [category_id]);
-      if (!category) {
-        return res.status(404).json({ error: 'Category not found' });
-      }
-      categoriesList = [category];
-    }
-
-
-
-    const crBalances = await calculateStaffCrBalances();
-
-    // Determine start and end dates
+    // Determine start and end dates first
     let startDate = start_date;
     let endDate = end_date;
 
@@ -9662,10 +9694,29 @@ app.get('/api/roster', async (req, res) => {
     lbDate.setDate(lbDate.getDate() - 3);
     const lookbackStartDate = lbDate.toISOString().split('T')[0];
 
-    const staffMembers = await getStaffForDate(category_id, startDate);
+    const isAllCategories = (!category_id || String(category_id).toUpperCase() === 'ALL');
+
+    // Parallelize category, staff, and CR balances fetching
+    const [categoriesList, staffMembers, crBalances] = await Promise.all([
+      isAllCategories
+        ? all('SELECT * FROM categories ORDER BY id ASC')
+        : all('SELECT * FROM categories WHERE id = ?', [category_id]),
+      getStaffForDate(category_id, startDate),
+      calculateStaffCrBalances()
+    ]);
+
+    let category = null;
+    if (isAllCategories) {
+      category = { id: 'ALL', name: 'All Categories', anchor_date: '2020-01-01', cycle_length: 21 };
+    } else {
+      category = categoriesList[0];
+      if (!category) {
+        return res.status(404).json({ error: 'Category not found' });
+      }
+    }
 
     // Get all overrides and muster records for staff members in this category during this date range
-    const numericStaffIds = staffMembers.map(s => s.id).filter(id => typeof id === 'number' || (typeof id === 'string' && /^\\d+$/.test(id)));
+    const numericStaffIds = staffMembers.map(s => s.id).filter(id => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id)));
     const staffIdsList = numericStaffIds.length > 0 ? numericStaffIds.join(',') : '0';
 
     let overrides = [];
@@ -9675,61 +9726,73 @@ app.get('/api/roster', async (req, res) => {
     let dutyRegisterEntries = [];
     let nonDailyTrains = [];
     let allLinks = [];
+    let lrCompletionsList = [];
+    let leaveRequestsList = [];
 
     if (staffMembers.length > 0) {
-      allLinks = await all(`
-        SELECT l.* FROM links l
-        WHERE (l.status = 'published' OR l.status IS NULL OR l.status = '') 
-          AND (l.status != 'draft')
-          AND (l.link_set_id IS NULL OR l.link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-          AND (l.effective_from IS NULL OR l.effective_from <= ?)
-          AND (l.effective_to IS NULL OR l.effective_to >= ?)
-      `, [endDate, lookbackStartDate]);
-
-
-      // Load direct overrides AND substitute overrides
-      overrides = await all(
-        `SELECT o.*, s1.name as regular_staff_name, s1.category_id as regular_staff_category
-         FROM overrides o
-         LEFT JOIN staff s1 ON o.staff_id = s1.id
-         WHERE (o.staff_id IN (${staffIdsList}) OR o.substitute_staff_id IN (${staffIdsList}))
-           AND date(o.date) >= date(?) AND date(o.date) <= date(?)`,
-        [lookbackStartDate, endDate]
-      );
-
-      musterRecords = await all(
-        `SELECT * FROM muster_records 
-         WHERE staff_id IN (${staffIdsList}) 
-           AND date(date) >= date(?) AND date(date) <= date(?)`,
-        [lookbackStartDate, endDate]
-      );
-
-      lrRecords = await all(
-        `SELECT * FROM lr_sheet_records
-         WHERE staff_id IN (${staffIdsList})
-           AND date >= ? AND date <= ?`,
-        [lookbackStartDate, endDate]
-      );
-
-      earningsList = await all(
-        `SELECT * FROM daily_earnings_entries
-         WHERE staff_id IN (${staffIdsList})
-           AND date >= ? AND date <= ?`,
-        [startDate, endDate]
-      );
-
-      dutyRegisterEntries = await all(
-        `SELECT dre.*, drs.staff_id
-         FROM duty_register_entry dre
-         JOIN duty_register_staff drs ON dre.id = drs.entry_id
-         WHERE drs.staff_id IN (${staffIdsList})
-           AND dre.date >= ? AND dre.date <= ?`,
-        [startDate, endDate]
-      );
-
-      nonDailyTrains = await all('SELECT * FROM non_daily_trains');
+      [
+        allLinks,
+        overrides,
+        musterRecords,
+        lrRecords,
+        earningsList,
+        dutyRegisterEntries,
+        nonDailyTrains,
+        lrCompletionsList,
+        leaveRequestsList
+      ] = await Promise.all([
+        all(`
+          SELECT l.* FROM links l
+          WHERE (l.status = 'published' OR l.status IS NULL OR l.status = '') 
+            AND (l.status != 'draft')
+            AND (l.link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+            AND (l.effective_from IS NULL OR l.effective_from <= ?)
+            AND (l.effective_to IS NULL OR l.effective_to >= ?)
+        `, [endDate, lookbackStartDate]),
+        all(
+          `SELECT o.*, s1.name as regular_staff_name, s1.category_id as regular_staff_category
+           FROM overrides o
+           LEFT JOIN staff s1 ON o.staff_id = s1.id
+           WHERE (o.staff_id IN (${staffIdsList}) OR o.substitute_staff_id IN (${staffIdsList}))
+             AND o.date >= ? AND o.date <= ?`,
+          [lookbackStartDate, endDate]
+        ),
+        all(
+          `SELECT * FROM muster_records 
+           WHERE staff_id IN (${staffIdsList}) 
+             AND date >= ? AND date <= ?`,
+          [lookbackStartDate, endDate]
+        ),
+        all(
+          `SELECT * FROM lr_sheet_records
+           WHERE staff_id IN (${staffIdsList})
+             AND date >= ? AND date <= ?`,
+          [lookbackStartDate, endDate]
+        ),
+        all(
+          `SELECT * FROM daily_earnings_entries
+           WHERE staff_id IN (${staffIdsList})
+             AND date >= ? AND date <= ?`,
+          [startDate, endDate]
+        ),
+        all(
+          `SELECT dre.*, drs.staff_id
+           FROM duty_register_entry dre
+           JOIN duty_register_staff drs ON dre.id = drs.entry_id
+           WHERE drs.staff_id IN (${staffIdsList})
+             AND dre.date >= ? AND dre.date <= ?`,
+          [startDate, endDate]
+        ),
+        all('SELECT * FROM non_daily_trains'),
+        all('SELECT * FROM lr_duty_completions ORDER BY arrival_date DESC, arrival_time DESC'),
+        all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? AND date <= ? OR from_date <= ? AND to_date >= ?)", [lookbackStartDate, endDate, endDate, lookbackStartDate])
+      ]);
+    } else {
+      [lrCompletionsList, leaveRequestsList] = await Promise.all([
+        all('SELECT * FROM lr_duty_completions ORDER BY arrival_date DESC, arrival_time DESC'),
+        all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? AND date <= ? OR from_date <= ? AND to_date >= ?)", [lookbackStartDate, endDate, endDate, lookbackStartDate])
+      ]);
     }
-    const lrCompletionsList = await all('SELECT * FROM lr_duty_completions ORDER BY date(arrival_date) DESC, arrival_time DESC');
 
     // Index muster records by staff_id + date
     const musterMap = {};
@@ -9767,7 +9830,7 @@ app.get('/api/roster', async (req, res) => {
       dutyRegisterMap[`${d.staff_id}_${d.date}`] = d;
     });
 
-    const leaveRequestsList = await all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? AND date <= ? OR from_date <= ? AND to_date >= ?)", [lookbackStartDate, endDate, endDate, lookbackStartDate]);
+    // leaveRequestsList pre-fetched in Promise.all above
     const staffMap: Record<string, any> = {};
     staffMembers.forEach(s => { staffMap[s.id] = s; });
 
@@ -11178,7 +11241,8 @@ app.get('/api/reports/daily-view', async (req, res) => {
       dregList,
       approvedLeavesList,
       lrCompletionsList,
-      nonDailyTrains
+      allNonDailyTrains,
+      dregEntries7d
     ] = await Promise.all([
       all('SELECT * FROM categories ORDER BY id ASC'),
       getStaffForDate('ALL', targetDateStr),
@@ -11192,9 +11256,16 @@ app.get('/api/reports/daily-view', async (req, res) => {
            JOIN duty_register_staff ds ON ds.entry_id = e.id
            WHERE e.date = ?`, [targetDateStr]),
       all("SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date IN (?, ?, ?) OR (from_date <= ? AND to_date >= ?))", [targetDateStr, dMinus1Str, dMinus2Str, targetDateStr, dMinus2Str]),
-      all('SELECT * FROM lr_duty_completions WHERE date(arrival_date) <= date(?) ORDER BY date(arrival_date) DESC, arrival_time DESC', [targetDateStr]),
-      all('SELECT * FROM non_daily_trains WHERE UPPER(day_of_week) = ? ORDER BY id', [currentDayName])
+      all('SELECT * FROM lr_duty_completions WHERE arrival_date <= ? ORDER BY arrival_date DESC, arrival_time DESC', [targetDateStr]),
+      all('SELECT * FROM non_daily_trains ORDER BY id'),
+      all(`SELECT e.*, ds.staff_id
+           FROM duty_register_entry e
+           JOIN duty_register_staff ds ON ds.entry_id = e.id
+           WHERE e.date >= ? AND e.date <= ?
+           ORDER BY e.date DESC`, [dMinus7Str, targetDateStr])
     ]);
+
+    const nonDailyTrains = allNonDailyTrains.filter((t: any) => (t.day_of_week || '').toUpperCase() === currentDayName);
 
     const overridesMap: Record<string, any> = {};
     for (const ov of overridesList) {
@@ -11287,7 +11358,9 @@ app.get('/api/reports/daily-view', async (req, res) => {
       leaveRequests: approvedLeavesList,
       lrCompletions: lrCompletionsList,
       staffMap,
-      getLinkDef
+      getLinkDef,
+      nonDailyTrains: allNonDailyTrains,
+      dutyRegisterEntries: dregEntries7d
     };
 
     const result = [];
@@ -15030,38 +15103,45 @@ app.get('/api/muster', async (req, res) => {
         s.category_id, 
         s.row_position
     `;
-    const staffMembers = await all(staffSql, staffParams);
+    const [
+      staffMembers,
+      links,
+      overrides,
+      musterRecords,
+      cycleAssignments,
+      crBalances
+    ] = await Promise.all([
+      all(staffSql, staffParams),
+      all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+      `),
+      all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [cycle.startDateStr, cycle.endDateStr]),
+      all('SELECT * FROM muster_records WHERE date >= ? AND date <= ?', [cycle.startDateStr, cycle.endDateStr]),
+      all(
+        'SELECT * FROM staff_roster_assignments WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?)',
+        [cycle.endDateStr, cycle.startDateStr]
+      ),
+      calculateStaffCrBalances()
+    ]);
 
-    const links = await all(`
-      SELECT * FROM links 
-      WHERE (status = 'published' OR status IS NULL OR status = '') 
-        AND (status != 'draft')
-        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-    `);
-
-    const linkMap = {};
-    links.forEach(l => {
+    const linkMap: Record<string, any> = {};
+    links.forEach((l: any) => {
       linkMap[`${l.category_id}_${l.link_number}`] = l;
     });
 
-    const overrides = await all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [cycle.startDateStr, cycle.endDateStr]);
-    const overrideMap = {};
-    overrides.forEach(o => {
+    const overrideMap: Record<string, any> = {};
+    overrides.forEach((o: any) => {
       overrideMap[`${o.staff_id}_${o.date}`] = o;
     });
 
-    const musterRecords = await all('SELECT * FROM muster_records WHERE date >= ? AND date <= ?', [cycle.startDateStr, cycle.endDateStr]);
-    const musterMap = {};
-    musterRecords.forEach(m => {
+    const musterMap: Record<string, any> = {};
+    musterRecords.forEach((m: any) => {
       musterMap[`${m.staff_id}_${m.date}`] = m;
     });
 
-    const cycleAssignments = await all(
-      'SELECT * FROM staff_roster_assignments WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?)',
-      [cycle.endDateStr, cycle.startDateStr]
-    );
-
-    const crBalances = await calculateStaffCrBalances();
     const grandTotals = { P: 0, R: 0, O: 0, E: 0, CR: 0, CL: 0, CCL: 0, SCL: 0, LAP: 0, LHAP: 0, SICK: 0, OD: 0, NH: 0, totalLeaves: 0 };
     const staffRows = [];
 
@@ -16427,14 +16507,62 @@ app.get('/api/lr-sheet', async (req, res) => {
     const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-    const allCat4Staff = await getStaffForDate(4, startDateStr);
+    const [
+      allCat4Staff,
+      records,
+      monthOverrides,
+      linksList,
+      nonDailyList,
+      dutyRegisterEntries,
+      musterList,
+      earningsList,
+      lrCompletions,
+      allStaff
+    ] = await Promise.all([
+      getStaffForDate(4, startDateStr),
+      all('SELECT * FROM lr_sheet_records WHERE date >= ? AND date <= ?', [startDateStr, endDateStr]),
+      all(`
+        SELECT o.*, s1.name as staff_name, s1.category_id as staff_cat
+        FROM overrides o
+        JOIN staff s1 ON o.staff_id = s1.id
+        WHERE o.date >= ? AND o.date <= ?
+      `, [startDateStr, endDateStr]),
+      all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+      `),
+      all('SELECT * FROM non_daily_trains'),
+      all(`
+        SELECT dre.*, drs.staff_id
+        FROM duty_register_entry dre
+        JOIN duty_register_staff drs ON dre.id = drs.entry_id
+        WHERE dre.date >= ? AND dre.date <= ?
+      `, [startDateStr, endDateStr]),
+      all(`
+        SELECT mr.*
+        FROM muster_records mr
+        JOIN staff s ON mr.staff_id = s.id
+        WHERE s.category_id = 4 AND mr.date >= ? AND mr.date <= ?
+      `, [startDateStr, endDateStr]),
+      all(`
+        SELECT * FROM daily_earnings_entries
+        WHERE date >= ? AND date <= ?
+      `, [startDateStr, endDateStr]),
+      all(`
+        SELECT * FROM lr_duty_completions
+        WHERE arrival_date >= ? AND arrival_date <= ?
+      `, [startDateStr, endDateStr]),
+      all('SELECT id, category_id FROM staff')
+    ]);
 
     // Separate active and relieved staff (relieved kept at bottom)
-    const activeStaff = allCat4Staff.filter(s => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
-    const relievedStaff = allCat4Staff.filter(s => s.name === 'K NAGA NAIK' || s.id === 115 || s.is_relieved);
+    const activeStaff = allCat4Staff.filter((s: any) => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
+    const relievedStaff = allCat4Staff.filter((s: any) => s.name === 'K NAGA NAIK' || s.id === 115 || s.is_relieved);
     const sortedCat4Staff = [...activeStaff, ...relievedStaff];
 
-    const staffList = sortedCat4Staff.map((s, idx) => {
+    const staffList = sortedCat4Staff.map((s: any, idx: number) => {
       const isRelieved = s.name === 'K NAGA NAIK' || s.id === 115 || !!s.is_relieved;
       return {
         slNo: idx + 1,
@@ -16449,13 +16577,8 @@ app.get('/api/lr-sheet', async (req, res) => {
       };
     });
 
-    const records = await all(
-      'SELECT * FROM lr_sheet_records WHERE date >= ? AND date <= ?',
-      [startDateStr, endDateStr]
-    );
-
-    const recordsMap = {};
-    records.forEach(r => {
+    const recordsMap: Record<string, any> = {};
+    records.forEach((r: any) => {
       recordsMap[`${r.staff_id}_${r.date}`] = {
         id: r.id,
         dutyCode: r.duty_code,
@@ -16464,43 +16587,6 @@ app.get('/api/lr-sheet', async (req, res) => {
       };
     });
 
-    // Real-time synchronization pool: overrides, links, non-daily, duty-register, muster, and daily earnings
-    const monthOverrides = await all(`
-      SELECT o.*, s1.name as staff_name, s1.category_id as staff_cat
-      FROM overrides o
-      JOIN staff s1 ON o.staff_id = s1.id
-      WHERE o.date >= ? AND o.date <= ?
-    `, [startDateStr, endDateStr]);
-    const linksList = await all(`
-      SELECT * FROM links 
-      WHERE (status = 'published' OR status IS NULL OR status = '') 
-        AND (status != 'draft')
-        AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
-    `);
-    const nonDailyList = await all('SELECT * FROM non_daily_trains');
-    const dutyRegisterEntries = await all(`
-      SELECT dre.*, drs.staff_id
-      FROM duty_register_entry dre
-      JOIN duty_register_staff drs ON dre.id = drs.entry_id
-      WHERE dre.date >= ? AND dre.date <= ?
-    `, [startDateStr, endDateStr]);
-    const musterList = await all(`
-      SELECT mr.*
-      FROM muster_records mr
-      JOIN staff s ON mr.staff_id = s.id
-      WHERE s.category_id = 4 AND mr.date >= ? AND mr.date <= ?
-    `, [startDateStr, endDateStr]);
-    const earningsList = await all(`
-      SELECT * FROM daily_earnings_entries
-      WHERE date >= ? AND date <= ?
-    `, [startDateStr, endDateStr]);
-
-    const lrCompletions = await all(`
-      SELECT * FROM lr_duty_completions
-      WHERE date(arrival_date) >= ? AND date(arrival_date) <= ?
-    `, [startDateStr, endDateStr]);
-
-    const allStaff = await all('SELECT id, category_id FROM staff');
     const staffMap: any = {};
     allStaff.forEach((s: any) => staffMap[s.id] = s);
 

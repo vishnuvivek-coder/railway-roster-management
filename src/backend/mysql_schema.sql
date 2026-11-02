@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS overrides (
   shifted_from_train VARCHAR(100) DEFAULT NULL,
   UNIQUE KEY uq_overrides_staff_date (staff_id, date),
   INDEX idx_overrides_date (date),
+  INDEX idx_overrides_sub_date (substitute_staff_id, date),
   CONSTRAINT fk_overrides_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -398,6 +399,7 @@ CREATE TABLE IF NOT EXISTS lr_duty_completions (
   updated_by VARCHAR(100) DEFAULT 'Admin',
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_lr_completion (staff_id, arrival_date),
+  INDEX idx_lrdc_arrival (arrival_date, arrival_time),
   CONSTRAINT fk_lr_completion_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -490,6 +492,7 @@ CREATE TABLE IF NOT EXISTS ta_approvals (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_ta_app_staff_month (staff_id, month_year),
   INDEX idx_ta_app_status (status),
+  INDEX idx_ta_approvals_staff_date (staff_id, duty_date),
   CONSTRAINT fk_ta_approvals_staff FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
