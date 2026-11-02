@@ -328,8 +328,22 @@ export default function DutyEditModal({
     return 'CL';
   });
 
+  // Resolve slot staff ID robustly from staffId, id, or staff name
+  const slotStaffId = useMemo(() => {
+    let idVal = dutyModal.staffId || dutyModal.id;
+    if (typeof idVal === 'string' && /^\d+$/.test(idVal.trim())) {
+      idVal = parseInt(idVal.trim(), 10);
+    }
+    if ((!idVal || isNaN(idVal as number)) && !isSlotVacant && dutyModal.name && allStaffList && allStaffList.length > 0) {
+      const targetName = (dutyModal.name || '').trim().toUpperCase();
+      const found = allStaffList.find(s => s.name?.trim().toUpperCase() === targetName);
+      if (found) idVal = found.id;
+    }
+    return (typeof idVal === 'number' && !isNaN(idVal)) ? idVal : null;
+  }, [dutyModal.staffId, dutyModal.id, dutyModal.name, isSlotVacant, allStaffList]);
+
   // Compensatory Rest (CR) tracking & due dates for the employee being relieved/edited
-  const currentStaffId = dutyModal.staffId || dutyModal.originalStaffId;
+  const currentStaffId = slotStaffId || dutyModal.originalStaffId;
   const initialStaffObj = allStaffList?.find(s => String(s.id) === String(currentStaffId));
 
   const [staffCrDetails, setStaffCrDetails] = useState(() => {
@@ -1519,7 +1533,7 @@ export default function DutyEditModal({
       // "name of the employe should only change there is no any change in link"
       // ----------------------------------------------------
       if (activeMode === 'DELETE') {
-        const staffId = dutyModal.staffId;
+        const staffId = slotStaffId || dutyModal.staffId;
         if (!staffId && !isSlotVacant) {
           throw new Error('Employee ID missing for this slot.');
         }

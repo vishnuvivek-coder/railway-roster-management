@@ -2994,17 +2994,28 @@ export default function App() {
       (staffDuty.name && staffDuty.name.toUpperCase().includes('VACANT'))
     );
     let staffId = null;
-    if (typeof rawStaffId === 'string') {
+    if (typeof rawStaffId === 'number' && !isNaN(rawStaffId)) {
+      staffId = rawStaffId;
+    } else if (typeof rawStaffId === 'string') {
       if (rawStaffId.startsWith('vacant-slot-')) {
         staffId = null;
       } else {
         const match = rawStaffId.match(/^vacant-(?:upgrade-|shifted-|advance-|avl-|mark-later-)?(\d+)$/);
         if (match) {
           staffId = parseInt(match[1], 10);
+        } else if (/^\d+$/.test(rawStaffId.trim())) {
+          staffId = parseInt(rawStaffId.trim(), 10);
         }
       }
-    } else if (typeof rawStaffId === 'number') {
-      staffId = rawStaffId;
+    }
+
+    // Fallback: If staffId is still null, try finding by name in allStaffList
+    if (!staffId && !isVacant && (staffDuty.name || staffDuty.staffName) && allStaffList && allStaffList.length > 0) {
+      const targetName = (staffDuty.name || staffDuty.staffName || '').trim().toUpperCase();
+      const matched = allStaffList.find(s => s.name?.trim().toUpperCase() === targetName);
+      if (matched) {
+        staffId = matched.id;
+      }
     }
     const staffObj = typeof staffId === 'number' ? allStaffList.find(s => s.id === staffId) : null;
     const staffName = isVacant ? (staffDuty.name || (staffObj ? staffObj.name : 'Vacant Slot')) : (staffDuty.name || staffDuty.staffName);
