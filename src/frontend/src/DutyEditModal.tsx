@@ -266,6 +266,22 @@ export default function DutyEditModal({
   onClose,
   onSuccess
 }: DutyEditModalProps) {
+  const effectiveAuthToken = useMemo(() => {
+    return authToken || (typeof window !== 'undefined' ? (localStorage.getItem('railway_auth_token') || localStorage.getItem('token')) : '') || '';
+  }, [authToken]);
+
+  const effectiveIsAdmin = useMemo(() => {
+    if (isAdmin !== undefined) return isAdmin;
+    try {
+      const saved = localStorage.getItem('railway_user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        return (u?.role || '').toLowerCase() === 'admin';
+      }
+    } catch (e) {}
+    return true;
+  }, [isAdmin]);
+
   const [selectedDate, setSelectedDate] = useState(dutyModal.date || new Date().toISOString().split('T')[0]);
   const safeLinksList = useMemo(() => Array.isArray(allLinksList) ? allLinksList : [], [allLinksList]);
 
@@ -333,7 +349,7 @@ export default function DutyEditModal({
     if (!currentStaffId) return;
     if (leaveType === 'CR' || deleteReason === 'LEAVE') {
       fetch(`/api/staff/${currentStaffId}/cr-details`, {
-        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+        headers: effectiveAuthToken ? { 'Authorization': `Bearer ${effectiveAuthToken}` } : {}
       })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
@@ -343,7 +359,7 @@ export default function DutyEditModal({
         })
         .catch(() => {});
     }
-  }, [currentStaffId, leaveType, deleteReason, authToken]);
+  }, [currentStaffId, leaveType, deleteReason, effectiveAuthToken]);
 
   const crCount = staffCrDetails?.count ?? (initialStaffObj?.cr_count || 0);
   const dueDates = staffCrDetails?.due_dates || initialStaffObj?.cr_due_dates || [];
@@ -469,7 +485,7 @@ export default function DutyEditModal({
         try {
           setLoadingCorLinks(true);
           const headers = {};
-          if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+          if (effectiveAuthToken) headers['Authorization'] = `Bearer ${effectiveAuthToken}`;
           const res = await fetch('/api/staff/cor-links-summary', { headers });
           if (res.ok) {
             const data = await res.json();
@@ -1242,7 +1258,7 @@ export default function DutyEditModal({
     try {
       const res = await fetch('/api/duty/change-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
         body: JSON.stringify({
           staff_id: dutyModal.staffId,
           date: selectedDate,
@@ -1250,7 +1266,10 @@ export default function DutyEditModal({
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to reset duty');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to reset duty (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be expired — please re-login as Admin.` : errMsg);
+      }
       onSuccess(data.message || 'Duty override cleared and restored to regular cyclic roster!');
       onClose();
     } catch (err) {
@@ -1268,7 +1287,7 @@ export default function DutyEditModal({
     try {
       const res = await fetch('/api/duty/change-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
         body: JSON.stringify({
           staff_id: dutyModal.staffId,
           date: selectedDate,
@@ -1276,7 +1295,10 @@ export default function DutyEditModal({
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to cancel leave');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to cancel leave (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be expired — please re-login as Admin.` : errMsg);
+      }
       onSuccess(`Leave cancelled! ${staffName} restored to ${linkDesc}.`);
       onClose();
     } catch (err) {
@@ -1293,7 +1315,7 @@ export default function DutyEditModal({
     try {
       const res = await fetch('/api/duty/change-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
         body: JSON.stringify({
           staff_id: dutyModal.staffId || dutyModal.originalStaffId,
           date: selectedDate,
@@ -1302,7 +1324,10 @@ export default function DutyEditModal({
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to report fit');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to report fit (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be expired — please re-login as Admin.` : errMsg);
+      }
       onSuccess(`Reported Fit! ${staffName} is now marked Available for Booking at HQ GNT.`);
       onClose();
     } catch (err) {
@@ -1320,7 +1345,7 @@ export default function DutyEditModal({
     try {
       const res = await fetch('/api/duty/change-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
         body: JSON.stringify({
           staff_id: staffId,
           date: selectedDate,
@@ -1328,7 +1353,10 @@ export default function DutyEditModal({
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to undo advance duty');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to undo advance duty (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be expired — please re-login as Admin.` : errMsg);
+      }
       onSuccess(`Advance duty undone! ${staffName} returned to regular cyclic link.`);
       onClose();
     } catch (err) {
@@ -1346,7 +1374,7 @@ export default function DutyEditModal({
     try {
       const res = await fetch('/api/duty/change-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
         body: JSON.stringify({
           staff_id: staffId,
           date: selectedDate,
@@ -1354,7 +1382,10 @@ export default function DutyEditModal({
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to undo shift');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to undo shift (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be expired — please re-login as Admin.` : errMsg);
+      }
       onSuccess(data.message || `Shift undone! ${staffName} restored to Link #${targetLink || 'Duty'}.`);
       onClose();
     } catch (err) {
@@ -1371,12 +1402,15 @@ export default function DutyEditModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${effectiveAuthToken}`
         },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update duty status');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to update duty status (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be invalid or expired — please re-login as Admin.` : errMsg);
+      }
 
       onSuccess(data.message || (deleteReason === 'MARK_LATER' ? `Deleted name of ${dutyModal.name || 'employee'} from Link #${targetLink || 'Duty'}: reason marked later and muster kept blank.` : `Duty updated: ${dutyModal.name} marked ${deleteReason} on ${selectedDate}!`));
       onClose();
@@ -1412,18 +1446,21 @@ export default function DutyEditModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${effectiveAuthToken}`
         },
         body: JSON.stringify(assignPayload)
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to assign employee to duty link');
+      if (!res.ok) {
+        const errMsg = data.error || `Failed to assign employee to duty link (HTTP ${res.status})`;
+        throw new Error((res.status === 401 || res.status === 403) ? `${errMsg}. Administrator session may be invalid or expired — please re-login as Admin.` : errMsg);
+      }
 
       // If the slot had an original employee on leave/sick/CR/mark_later, link them as replacement
       if (origId && origId !== assignedStaffObj.id && ['LEAVE', 'SICK', 'CR', 'MARK_LATER'].includes(dutyModal.status)) {
         await fetch('/api/duty/change-status', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
           body: JSON.stringify({
             staff_id: origId,
             date: selectedDate,
@@ -1452,7 +1489,7 @@ export default function DutyEditModal({
         };
         await fetch('/api/duty/change-status', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveAuthToken}` },
           body: JSON.stringify(relievePayload)
         });
       }
@@ -1469,8 +1506,8 @@ export default function DutyEditModal({
   // Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isAdmin) {
-      alert('Only administrators can modify employee duties.');
+    if (!effectiveIsAdmin) {
+      setErrorMsg('Permission denied: Administrator privileges required to modify employee duties. Please log in as Admin.');
       return;
     }
     setErrorMsg('');
@@ -1591,7 +1628,7 @@ export default function DutyEditModal({
               new_rest_day: corNewRestDay || getCorRest(targetCorLink)
             };
             const headers = { 'Content-Type': 'application/json' };
-            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            if (effectiveAuthToken) headers['Authorization'] = `Bearer ${effectiveAuthToken}`;
             const permRes = await fetch('/api/staff/upgrade-to-cor', {
               method: 'POST',
               headers,
@@ -4566,12 +4603,55 @@ export default function DutyEditModal({
             flexShrink: 0,
             padding: '16px 24px',
             borderTop: '1px solid var(--border-glass)',
-            background: 'rgba(12, 12, 16, 0.95)',
+            background: 'rgba(12, 12, 16, 0.98)',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: 'column',
             gap: '12px'
           }}>
+            {errorMsg && (
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.18)',
+                border: '1.5px solid #ef4444',
+                color: '#fca5a5',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                  <span>{errorMsg}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setErrorMsg('')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#fca5a5',
+                    cursor: 'pointer',
+                    fontSize: '1.2rem',
+                    lineHeight: 1,
+                    padding: '0 4px'
+                  }}
+                  title="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               {dutyModal.isOverridden && (
                 <button
@@ -4649,7 +4729,8 @@ export default function DutyEditModal({
               </button>
             </div>
           </div>
-        </form>
+        </div>
+      </form>
 
         {/* Shift Confirmation Pop-up Modal */}
         {shiftConfirmDialog && (

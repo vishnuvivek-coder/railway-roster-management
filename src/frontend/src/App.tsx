@@ -3080,7 +3080,8 @@ export default function App() {
   };
 
   const onDutyEditSuccess = (msg) => {
-    alert(msg);
+    setGlobalSaveNotice(msg);
+    setTimeout(() => setGlobalSaveNotice(null), 6000);
     fetchAllStaff();
     fetchDailyDuties();
     fetchNonDailyTrains(nonDailySelectedDay);
