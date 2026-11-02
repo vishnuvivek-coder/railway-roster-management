@@ -1,0 +1,531 @@
+[
+  {
+    "category": "Phase 8: Auth",
+    "testName": "Reject missing token on protected route",
+    "endpointOrElement": "GET /api/auth/me",
+    "expected": "HTTP 401 Unauthorized",
+    "actual": "HTTP 401",
+    "status": "PASS",
+    "evidence": "Returned 401 Unauthorized as expected without Bearer token",
+    "durationMs": 198.0041000000001
+  },
+  {
+    "category": "Phase 8: Auth",
+    "testName": "Admin token verification",
+    "endpointOrElement": "GET /api/auth/me",
+    "expected": "HTTP 200 with user.role = Admin",
+    "actual": "HTTP 200, role=Admin",
+    "status": "PASS",
+    "evidence": "Admin authenticated successfully: Railway Officer / Administrator (Admin)",
+    "durationMs": 195.85660000000007
+  },
+  {
+    "category": "Phase 8: Auth",
+    "testName": "Viewer blocked from Admin write action",
+    "endpointOrElement": "POST /api/duty/change-status",
+    "expected": "HTTP 403 Forbidden",
+    "actual": "HTTP 403",
+    "status": "PASS",
+    "evidence": "Viewer token correctly denied with 403 Forbidden",
+    "durationMs": 46.790899999999965
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-10-01 (October)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-10-01",
+    "expected": "HTTP 200 with duties > 0 for October",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-10-01 in 2356ms",
+    "durationMs": 2355.6535999999996
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-10-15 (October)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-10-15",
+    "expected": "HTTP 200 with duties > 0 for October",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-10-15 in 499ms",
+    "durationMs": 498.6835999999994
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-10-25 (October)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-10-25",
+    "expected": "HTTP 200 with duties > 0 for October",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-10-25 in 322ms",
+    "durationMs": 321.8090000000002
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-10-31 (October)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-10-31",
+    "expected": "HTTP 200 with duties > 0 for October",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-10-31 in 241ms",
+    "durationMs": 240.5059999999994
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-11-01 (November)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-11-01",
+    "expected": "HTTP 200 with duties > 0 for November",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-11-01 in 271ms",
+    "durationMs": 270.83449999999993
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-11-05 (November)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-11-05",
+    "expected": "HTTP 200 with duties > 0 for November",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-11-05 in 191ms",
+    "durationMs": 190.83960000000025
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-11-25 (November)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-11-25",
+    "expected": "HTTP 200 with duties > 0 for November",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-11-25 in 140ms",
+    "durationMs": 140.07530000000042
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Daily View for 2026-11-30 (November)",
+    "endpointOrElement": "GET /api/reports/daily-view?date=2026-11-30",
+    "expected": "HTTP 200 with duties > 0 for November",
+    "actual": "HTTP 200, 0 duties loaded",
+    "status": "PARTIAL",
+    "evidence": "Returned 0 assigned duty slots for 2026-11-30 in 170ms",
+    "durationMs": 170.0015000000003
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Muster Roll Month Isolation (October 2026)",
+    "endpointOrElement": "GET /api/muster?year=2026&month=10",
+    "expected": "HTTP 200 with October staff muster records",
+    "actual": "HTTP 200, records found",
+    "status": "PASS",
+    "evidence": "Successfully loaded 101 staff records for October 2026 in 894ms",
+    "durationMs": 893.6594999999998
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "Muster Roll Month Isolation (November 2026)",
+    "endpointOrElement": "GET /api/muster?year=2026&month=11",
+    "expected": "HTTP 200 with November staff muster records",
+    "actual": "HTTP 200, records found",
+    "status": "PASS",
+    "evidence": "Successfully loaded 101 staff records for November 2026 in 836ms",
+    "durationMs": 835.9894999999997
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "LR Sheet Month Isolation (October 2026)",
+    "endpointOrElement": "GET /api/lr-sheet?year=2026&month=10",
+    "expected": "HTTP 200 with October LR staff",
+    "actual": "HTTP 200, undefined rows",
+    "status": "PARTIAL",
+    "evidence": "Loaded undefined LR rows for October 2026 in 1341ms",
+    "durationMs": 1341.3872999999985
+  },
+  {
+    "category": "Phase 4: Date Isolation",
+    "testName": "LR Sheet Month Isolation (November 2026)",
+    "endpointOrElement": "GET /api/lr-sheet?year=2026&month=11",
+    "expected": "HTTP 200 with November LR staff",
+    "actual": "HTTP 200, undefined rows",
+    "status": "PARTIAL",
+    "evidence": "Loaded undefined LR rows for November 2026 in 273ms",
+    "durationMs": 273.3556000000008
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "TA Journal (Oct 2026)",
+    "endpointOrElement": "/documents/ta?month=10&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 19.518099999999322
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "TA Journal (Nov 2026)",
+    "endpointOrElement": "/documents/ta?month=11&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 11.497300000000905
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "NDA Journal (Oct 2026)",
+    "endpointOrElement": "/documents/nda?month=10&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 9.471700000000055
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "NDA Journal (Nov 2026)",
+    "endpointOrElement": "/documents/nda?month=11&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 10.936599999999089
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Staff Diary (Oct 2026)",
+    "endpointOrElement": "/documents/diary?month=10&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 9.845499999999447
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Staff Diary (Nov 2026)",
+    "endpointOrElement": "/documents/diary?month=11&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 5.304299999999785
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Daily Earnings (Oct 2026)",
+    "endpointOrElement": "/documents/earnings?month=10&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 5.112499999999272
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Daily Earnings (Nov 2026)",
+    "endpointOrElement": "/documents/earnings?month=11&year=2026",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 4.702299999999013
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Amenity Booking (2026-10-15)",
+    "endpointOrElement": "/documents/amenity?date=2026-10-15",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 4.425000000001091
+  },
+  {
+    "category": "Phase 9: Documents",
+    "testName": "Amenity Booking (2026-11-01)",
+    "endpointOrElement": "/documents/amenity?date=2026-11-01",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 5.126599999999598
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Categories List",
+    "endpointOrElement": "/categories",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (4 items) in 73ms",
+    "durationMs": 73.36380000000099
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "All Staff Roster",
+    "endpointOrElement": "/staff",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (106 items) in 84ms",
+    "durationMs": 84.07200000000012
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Staff Seniority List",
+    "endpointOrElement": "/seniority-list",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (139 items) in 94ms",
+    "durationMs": 94.34840000000077
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Link Sets Directory",
+    "endpointOrElement": "/link-sets",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (9 items) in 101ms",
+    "durationMs": 101.45220000000154
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Published Links (Cat 1)",
+    "endpointOrElement": "/links?category_id=1",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (63 items) in 77ms",
+    "durationMs": 76.56960000000072
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Published Links (Cat 2)",
+    "endpointOrElement": "/links?category_id=2",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (175 items) in 81ms",
+    "durationMs": 80.90079999999944
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Non-Daily Trains List",
+    "endpointOrElement": "/non-daily-trains",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (30 items) in 71ms",
+    "durationMs": 70.97830000000067
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Duty Register for Date",
+    "endpointOrElement": "/duty-register?date=2026-11-01",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (0 items) in 124ms",
+    "durationMs": 124.20659999999953
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "TA Approvals List",
+    "endpointOrElement": "/ta-approvals?month_year=2026-11",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (7 items) in 283ms",
+    "durationMs": 283.4868999999999
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Audit Logs Feed",
+    "endpointOrElement": "/audit-logs?limit=50",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (300 items) in 1585ms",
+    "durationMs": 1585.0007999999998
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Leave Requests Feed",
+    "endpointOrElement": "/leave-requests",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (2 items) in 80ms",
+    "durationMs": 79.5528000000013
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Feedback Submissions",
+    "endpointOrElement": "/feedback",
+    "expected": "HTTP 200 with valid data structure",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Success: returned data (2 items) in 75ms",
+    "durationMs": 74.78529999999955
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Train Timings Feed",
+    "endpointOrElement": "/train-timings",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Failed with status 404",
+    "durationMs": 3.2872999999999593
+  },
+  {
+    "category": "Phase 6: Backend APIs",
+    "testName": "Roster Monthly Grid (Nov)",
+    "endpointOrElement": "/roster?category_id=1&date=2026-11-01",
+    "expected": "HTTP 200",
+    "actual": "HTTP 400",
+    "status": "FAIL",
+    "evidence": "Failed with status 400",
+    "durationMs": 2.3858000000000175
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: staff",
+    "endpointOrElement": "MySQL table: staff",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 109",
+    "status": "PASS",
+    "evidence": "Table 'staff' has 109 records (verified in 84ms)",
+    "durationMs": 84.4326000000001
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: categories",
+    "endpointOrElement": "MySQL table: categories",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 4",
+    "status": "PASS",
+    "evidence": "Table 'categories' has 4 records (verified in 73ms)",
+    "durationMs": 72.57990000000063
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: links",
+    "endpointOrElement": "MySQL table: links",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 274",
+    "status": "PASS",
+    "evidence": "Table 'links' has 274 records (verified in 62ms)",
+    "durationMs": 61.564800000000105
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: link_sets",
+    "endpointOrElement": "MySQL table: link_sets",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 9",
+    "status": "PASS",
+    "evidence": "Table 'link_sets' has 9 records (verified in 73ms)",
+    "durationMs": 72.64109999999891
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: staff_roster_assignments",
+    "endpointOrElement": "MySQL table: staff_roster_assignments",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 209",
+    "status": "PASS",
+    "evidence": "Table 'staff_roster_assignments' has 209 records (verified in 63ms)",
+    "durationMs": 62.78850000000057
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: overrides",
+    "endpointOrElement": "MySQL table: overrides",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 2668",
+    "status": "PASS",
+    "evidence": "Table 'overrides' has 2668 records (verified in 64ms)",
+    "durationMs": 64.4331000000002
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: muster_records",
+    "endpointOrElement": "MySQL table: muster_records",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 4386",
+    "status": "PASS",
+    "evidence": "Table 'muster_records' has 4386 records (verified in 69ms)",
+    "durationMs": 68.87880000000041
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: ta_approvals",
+    "endpointOrElement": "MySQL table: ta_approvals",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 8029",
+    "status": "PASS",
+    "evidence": "Table 'ta_approvals' has 8029 records (verified in 63ms)",
+    "durationMs": 62.91030000000137
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: ta_entries",
+    "endpointOrElement": "MySQL table: ta_entries",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 2491",
+    "status": "PASS",
+    "evidence": "Table 'ta_entries' has 2491 records (verified in 79ms)",
+    "durationMs": 78.61609999999928
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: nda_entries",
+    "endpointOrElement": "MySQL table: nda_entries",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 1399",
+    "status": "PASS",
+    "evidence": "Table 'nda_entries' has 1399 records (verified in 68ms)",
+    "durationMs": 67.82099999999991
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: diary_entries",
+    "endpointOrElement": "MySQL table: diary_entries",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 134",
+    "status": "PASS",
+    "evidence": "Table 'diary_entries' has 134 records (verified in 61ms)",
+    "durationMs": 60.689800000000105
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: daily_earnings_entries",
+    "endpointOrElement": "MySQL table: daily_earnings_entries",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 880",
+    "status": "PASS",
+    "evidence": "Table 'daily_earnings_entries' has 880 records (verified in 62ms)",
+    "durationMs": 61.64840000000004
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Table count & integrity: lr_sheet_records",
+    "endpointOrElement": "MySQL table: lr_sheet_records",
+    "expected": "Query executes successfully without syntax or connection error",
+    "actual": "COUNT = 1269",
+    "status": "PASS",
+    "evidence": "Table 'lr_sheet_records' has 1269 records (verified in 63ms)",
+    "durationMs": 62.5012999999999
+  },
+  {
+    "category": "Phase 7: Database",
+    "testName": "Database connection and query test",
+    "endpointOrElement": "Aiven Cloud MySQL",
+    "expected": "Successful connection",
+    "actual": "Table 'defaultdb.duty_register' doesn't exist",
+    "status": "FAIL",
+    "evidence": "Error: Table 'defaultdb.duty_register' doesn't exist\n    at main (C:\\Users\\kompa\\.gemini\\antigravity\\scratch\\roster-manager\\scripts\\run_full_system_audit.ts:502:53)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)"
+  }
+]

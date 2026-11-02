@@ -1,0 +1,621 @@
+[
+  {
+    "module": "Authentication",
+    "elementOrFunction": "Unauthorized Access Guard (GET /api/auth/me)",
+    "expected": "HTTP 401 Unauthorized",
+    "actual": "HTTP 401",
+    "status": "PASS",
+    "evidence": "Correctly rejected request lacking Bearer token with HTTP 401",
+    "durationMs": 184.3628000000001
+  },
+  {
+    "module": "Authentication",
+    "elementOrFunction": "Admin Session Resolution (GET /api/auth/me)",
+    "expected": "HTTP 200 with role=Admin",
+    "actual": "HTTP 200, role=Admin",
+    "status": "PASS",
+    "evidence": "Admin identity resolved: Railway Officer / Administrator (Role: Admin) in 133ms",
+    "durationMs": 133.10259999999994
+  },
+  {
+    "module": "Authentication",
+    "elementOrFunction": "Role Authorization Check (POST /api/duty/change-status)",
+    "expected": "HTTP 403 Forbidden for non-admin",
+    "actual": "HTTP 403",
+    "status": "PASS",
+    "evidence": "Viewer correctly blocked with 403 Forbidden from mutating duty assignments",
+    "durationMs": 14.527199999999993
+  },
+  {
+    "module": "Authentication",
+    "elementOrFunction": "Login with Invalid Credentials (POST /api/auth/login)",
+    "expected": "HTTP 401 or 400 rejection",
+    "actual": "HTTP 401",
+    "status": "PASS",
+    "evidence": "Correctly rejected invalid login attempt with HTTP 401",
+    "durationMs": 183.5021999999999
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-10-01 - October)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 106 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 106 duty assignments across 4 categories in 1479ms",
+    "durationMs": 1478.7939999999999
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-10-15 - October)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 106 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 106 duty assignments across 4 categories in 372ms",
+    "durationMs": 371.5412000000001
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-10-25 - October)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 106 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 106 duty assignments across 4 categories in 209ms",
+    "durationMs": 209.3173999999999
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-10-31 - October)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 106 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 106 duty assignments across 4 categories in 233ms",
+    "durationMs": 233.17630000000008
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-11-01 - November)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 103 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 103 duty assignments across 4 categories in 239ms",
+    "durationMs": 238.5689999999995
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-11-05 - November)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 103 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 103 duty assignments across 4 categories in 197ms",
+    "durationMs": 196.69970000000012
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-11-25 - November)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 103 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 103 duty assignments across 4 categories in 141ms",
+    "durationMs": 141.20669999999973
+  },
+  {
+    "module": "Daily Summary",
+    "elementOrFunction": "Daily Summary View (2026-11-30 - November)",
+    "expected": "HTTP 200 with populated duty slots (>0)",
+    "actual": "HTTP 200, 103 total duty slots",
+    "status": "PASS",
+    "evidence": "Resolved 103 duty assignments across 4 categories in 193ms",
+    "durationMs": 193.41570000000047
+  },
+  {
+    "module": "Muster Roll",
+    "elementOrFunction": "Muster Roll Monthly Data (October 2026)",
+    "expected": "HTTP 200 with October muster records",
+    "actual": "HTTP 200, 101 staff members",
+    "status": "PASS",
+    "evidence": "Loaded 101 staff attendance records for October 2026 in 636ms",
+    "durationMs": 635.8153000000002
+  },
+  {
+    "module": "Muster Roll",
+    "elementOrFunction": "Muster Roll Monthly Data (November 2026)",
+    "expected": "HTTP 200 with November muster records",
+    "actual": "HTTP 200, 101 staff members",
+    "status": "PASS",
+    "evidence": "Loaded 101 staff attendance records for November 2026 in 528ms",
+    "durationMs": 528.4309000000003
+  },
+  {
+    "module": "LR Sheet",
+    "elementOrFunction": "LR Sheet Monthly Data (October 2026)",
+    "expected": "HTTP 200 with October LR staff & day records",
+    "actual": "HTTP 200, 21 LR staff, 639 date records",
+    "status": "PASS",
+    "evidence": "Loaded 21 LR personnel and 639 day duty cells for October 2026 in 1300ms",
+    "durationMs": 1299.6558999999997
+  },
+  {
+    "module": "LR Sheet",
+    "elementOrFunction": "LR Sheet Monthly Data (November 2026)",
+    "expected": "HTTP 200 with November LR staff & day records",
+    "actual": "HTTP 200, 19 LR staff, 519 date records",
+    "status": "PASS",
+    "evidence": "Loaded 19 LR personnel and 519 day duty cells for November 2026 in 299ms",
+    "durationMs": 299.23029999999926
+  },
+  {
+    "module": "Train Roster Grid",
+    "elementOrFunction": "Monthly Roster Grid Generation (October 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 400",
+    "status": "FAIL",
+    "evidence": "Status 400",
+    "durationMs": 3.9127000000007683
+  },
+  {
+    "module": "Train Roster Grid",
+    "elementOrFunction": "Monthly Roster Grid Generation (November 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 400",
+    "status": "FAIL",
+    "evidence": "Status 400",
+    "durationMs": 2.8725000000004
+  },
+  {
+    "module": "TA Journal",
+    "elementOrFunction": "TA Journal (Oct 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.313299999999799
+  },
+  {
+    "module": "TA Journal",
+    "elementOrFunction": "TA Journal (Nov 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 12.384000000000015
+  },
+  {
+    "module": "NDA Journal",
+    "elementOrFunction": "NDA Journal (Oct 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 4.785499999999956
+  },
+  {
+    "module": "NDA Journal",
+    "elementOrFunction": "NDA Journal (Nov 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.65769999999975
+  },
+  {
+    "module": "Staff Diary",
+    "elementOrFunction": "Staff Diary (Oct 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.134799999999814
+  },
+  {
+    "module": "Staff Diary",
+    "elementOrFunction": "Staff Diary (Nov 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 6.449399999999514
+  },
+  {
+    "module": "Daily Earnings",
+    "elementOrFunction": "Daily Earnings (Oct 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.244999999999891
+  },
+  {
+    "module": "Daily Earnings",
+    "elementOrFunction": "Daily Earnings (Nov 2026)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.691199999999299
+  },
+  {
+    "module": "Daily Booking Chart",
+    "elementOrFunction": "Amenity Booking Chart (2026-10-15)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 6.291900000000169
+  },
+  {
+    "module": "Daily Booking Chart",
+    "elementOrFunction": "Amenity Booking Chart (2026-11-01)",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.512399999999616
+  },
+  {
+    "module": "Individual Muster",
+    "elementOrFunction": "Individual Muster Document",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 4.5888999999997395
+  },
+  {
+    "module": "Dashboard",
+    "elementOrFunction": "System Status",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 4.6784999999999854
+  },
+  {
+    "module": "Staff Management",
+    "elementOrFunction": "Categories List",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 4 elements in 71ms",
+    "durationMs": 71.39750000000004
+  },
+  {
+    "module": "Seniority List",
+    "elementOrFunction": "Staff Seniority List",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 139 elements in 126ms",
+    "durationMs": 125.9406999999992
+  },
+  {
+    "module": "Staff Management",
+    "elementOrFunction": "All Staff Roster",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 106 elements in 79ms",
+    "durationMs": 78.80099999999948
+  },
+  {
+    "module": "Train Roster",
+    "elementOrFunction": "Published Link Sets",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 9 elements in 65ms",
+    "durationMs": 65.35100000000057
+  },
+  {
+    "module": "Train Roster",
+    "elementOrFunction": "Category 1 Published Links",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 63 elements in 66ms",
+    "durationMs": 65.82209999999941
+  },
+  {
+    "module": "Train Roster",
+    "elementOrFunction": "Category 2 Published Links",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 175 elements in 75ms",
+    "durationMs": 74.6953999999987
+  },
+  {
+    "module": "Train Roster",
+    "elementOrFunction": "Category 3 Published Links",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 14 elements in 66ms",
+    "durationMs": 66.17059999999947
+  },
+  {
+    "module": "Non-Daily Trains",
+    "elementOrFunction": "Non-Daily Trains Feed",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 30 elements in 66ms",
+    "durationMs": 66.39190000000053
+  },
+  {
+    "module": "Duty Register",
+    "elementOrFunction": "Duty Register Entries (2026-11-01)",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 0 elements in 63ms",
+    "durationMs": 62.817699999999604
+  },
+  {
+    "module": "Duty Register",
+    "elementOrFunction": "Duty Register Reconciliation",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 3 elements in 8799ms",
+    "durationMs": 8798.8208
+  },
+  {
+    "module": "TA Approvals",
+    "elementOrFunction": "TA Approvals (2026-11)",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 7 elements in 228ms",
+    "durationMs": 227.85450000000128
+  },
+  {
+    "module": "Train Roster",
+    "elementOrFunction": "Train Timings Feed",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 6.956999999998516
+  },
+  {
+    "module": "Audit Logs",
+    "elementOrFunction": "Audit Logs Feed",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 300 elements in 1301ms",
+    "durationMs": 1301.0462000000007
+  },
+  {
+    "module": "Leave / Swap",
+    "elementOrFunction": "Leave Requests Feed",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 2 elements in 65ms",
+    "durationMs": 64.67529999999897
+  },
+  {
+    "module": "User Feedback",
+    "elementOrFunction": "Feedback Submissions Feed",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 2 elements in 61ms",
+    "durationMs": 61.00879999999961
+  },
+  {
+    "module": "TA / NDA Rules",
+    "elementOrFunction": "Train TA & NDA Rules",
+    "expected": "HTTP 200",
+    "actual": "HTTP 404",
+    "status": "FAIL",
+    "evidence": "Status 404",
+    "durationMs": 5.258700000002136
+  },
+  {
+    "module": "CR Balance",
+    "elementOrFunction": "Staff CR Balances",
+    "expected": "HTTP 200 with valid schema",
+    "actual": "HTTP 200",
+    "status": "PASS",
+    "evidence": "Returned 106 elements in 8ms",
+    "durationMs": 7.7062000000005355
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: staff",
+    "expected": "Table exists and returns row count",
+    "actual": "109 records",
+    "status": "PASS",
+    "evidence": "Verified 109 records in 78ms",
+    "durationMs": 77.86830000000191
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: categories",
+    "expected": "Table exists and returns row count",
+    "actual": "4 records",
+    "status": "PASS",
+    "evidence": "Verified 4 records in 123ms",
+    "durationMs": 123.05810000000201
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: links",
+    "expected": "Table exists and returns row count",
+    "actual": "274 records",
+    "status": "PASS",
+    "evidence": "Verified 274 records in 149ms",
+    "durationMs": 149.21600000000035
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: link_sets",
+    "expected": "Table exists and returns row count",
+    "actual": "9 records",
+    "status": "PASS",
+    "evidence": "Verified 9 records in 113ms",
+    "durationMs": 112.6030000000028
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: staff_roster_assignments",
+    "expected": "Table exists and returns row count",
+    "actual": "209 records",
+    "status": "PASS",
+    "evidence": "Verified 209 records in 315ms",
+    "durationMs": 314.9524999999994
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: overrides",
+    "expected": "Table exists and returns row count",
+    "actual": "2668 records",
+    "status": "PASS",
+    "evidence": "Verified 2668 records in 195ms",
+    "durationMs": 194.61759999999776
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: muster_records",
+    "expected": "Table exists and returns row count",
+    "actual": "4386 records",
+    "status": "PASS",
+    "evidence": "Verified 4386 records in 188ms",
+    "durationMs": 187.97590000000127
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: ta_approvals",
+    "expected": "Table exists and returns row count",
+    "actual": "8029 records",
+    "status": "PASS",
+    "evidence": "Verified 8029 records in 107ms",
+    "durationMs": 107.06820000000153
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: ta_entries",
+    "expected": "Table exists and returns row count",
+    "actual": "2491 records",
+    "status": "PASS",
+    "evidence": "Verified 2491 records in 74ms",
+    "durationMs": 74.30879999999888
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: nda_entries",
+    "expected": "Table exists and returns row count",
+    "actual": "1399 records",
+    "status": "PASS",
+    "evidence": "Verified 1399 records in 83ms",
+    "durationMs": 82.82730000000083
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: diary_entries",
+    "expected": "Table exists and returns row count",
+    "actual": "134 records",
+    "status": "PASS",
+    "evidence": "Verified 134 records in 110ms",
+    "durationMs": 109.73289999999906
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: daily_earnings_entries",
+    "expected": "Table exists and returns row count",
+    "actual": "880 records",
+    "status": "PASS",
+    "evidence": "Verified 880 records in 107ms",
+    "durationMs": 107.43609999999899
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: lr_sheet_records",
+    "expected": "Table exists and returns row count",
+    "actual": "1269 records",
+    "status": "PASS",
+    "evidence": "Verified 1269 records in 117ms",
+    "durationMs": 117.34820000000036
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: duty_register_entry",
+    "expected": "Table exists and returns row count",
+    "actual": "1043 records",
+    "status": "PASS",
+    "evidence": "Verified 1043 records in 148ms",
+    "durationMs": 148.18439999999828
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: duty_register_staff",
+    "expected": "Table exists and returns row count",
+    "actual": "1140 records",
+    "status": "PASS",
+    "evidence": "Verified 1140 records in 137ms",
+    "durationMs": 136.66370000000097
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: audit_logs",
+    "expected": "Table exists and returns row count",
+    "actual": "2018 records",
+    "status": "PASS",
+    "evidence": "Verified 2018 records in 119ms",
+    "durationMs": 118.61609999999928
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: leave_requests",
+    "expected": "Table exists and returns row count",
+    "actual": "2 records",
+    "status": "PASS",
+    "evidence": "Verified 2 records in 135ms",
+    "durationMs": 135.00780000000304
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: feedbacks",
+    "expected": "Table exists and returns row count",
+    "actual": "0 records",
+    "status": "PASS",
+    "evidence": "Verified 0 records in 116ms",
+    "durationMs": 115.78109999999651
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: seniority_list",
+    "expected": "Table exists and returns row count",
+    "actual": "139 records",
+    "status": "PASS",
+    "evidence": "Verified 139 records in 93ms",
+    "durationMs": 92.61579999999958
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Table integrity: non_daily_trains",
+    "expected": "Table exists and returns row count",
+    "actual": "30 records",
+    "status": "PASS",
+    "evidence": "Verified 30 records in 99ms",
+    "durationMs": 98.77600000000166
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Date-Versioned Staff Isolation (staff_roster_assignments)",
+    "expected": "Independent versioned records for Oct and Nov 2026",
+    "actual": "Oct: 106, Nov: 103",
+    "status": "PASS",
+    "evidence": "October has 106 assignments; November has 103 assignments"
+  },
+  {
+    "module": "Database",
+    "elementOrFunction": "Foreign Key Integrity (overrides.staff_id -> staff.id)",
+    "expected": "0 orphaned overrides",
+    "actual": "7 orphaned records",
+    "status": "FAIL",
+    "evidence": "Found 7 orphaned overrides"
+  }
+]
