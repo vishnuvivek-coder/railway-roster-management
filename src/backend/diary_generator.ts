@@ -1,4 +1,4 @@
-const { getDayOffset, getBaseLinkNumber } = require('./rotation');
+const { getDayOffset, getBaseLinkNumber, getCategoryParamsForDate } = require('./rotation');
 const { getDutyRowsForLinkNumber } = require('./ta_generator');
 const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
 
@@ -8,8 +8,8 @@ const { compareDutyAndResolve, isRestString } = require('./duty_comparator');
  */
 async function generateStaffDiary(db, staffId, year, month, startDate = null, endDate = null) {
   const { get, all } = db;
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) {
+  const rawStaff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  if (!rawStaff) {
     return {
       notFound: true,
       employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
@@ -19,6 +19,27 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
       month
     };
   }
+
+  // Determine effective date for roster versioning
+  const dateForAssignment = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate))
+    ? startDate
+    : `${parseInt(year, 10) || new Date().getFullYear()}-${String(parseInt(month, 10) || (new Date().getMonth() + 1)).padStart(2, '0')}-01`;
+
+  const assignment = await get(`
+    SELECT * FROM staff_roster_assignments
+    WHERE staff_id = ?
+      AND date(effective_from) <= date(?)
+      AND (effective_to IS NULL OR date(effective_to) >= date(?))
+    LIMIT 1
+  `, [staffId, dateForAssignment, dateForAssignment]);
+
+  const staff = assignment ? {
+    ...rawStaff,
+    row_position: assignment.row_position,
+    category_id: assignment.category_id || rawStaff.category_id,
+    designation: assignment.designation || rawStaff.designation,
+    rest_day: assignment.rest_day || rawStaff.rest_day
+  } : rawStaff;
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) {
@@ -114,14 +135,9 @@ async function generateStaffDiary(db, staffId, year, month, startDate = null, en
   });
 
   const getLinkNumForDate = (dateIso) => {
-    const curAnchor = category.id === 2
-      ? (dateIso < '2026-10-01' ? '2026-08-01' : '2026-10-01')
-      : category.anchor_date;
-    const curCycle = category.id === 2
-      ? (dateIso < '2026-10-01' ? 63 : 56)
-      : category.cycle_length;
-    const offset = getDayOffset(curAnchor, dateIso);
-    return getBaseLinkNumber(staff.row_position, offset, curCycle);
+    const catParams = getCategoryParamsForDate(category, dateIso);
+    const offset = getDayOffset(catParams.anchor_date, dateIso);
+    return getBaseLinkNumber(staff.row_position, offset, catParams.cycle_length);
   };
 
   function resolveDutyDateIso(r) {

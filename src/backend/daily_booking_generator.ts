@@ -1,5 +1,5 @@
 const defaultDb = require('./db');
-const { getDayOffset, getBaseLinkNumber } = require('./rotation');
+const { getDayOffset, getBaseLinkNumber, getCategoryParamsForDate } = require('./rotation');
 
 /**
  * Standard known train metadata (departure times, standard route display, return train pairs)
@@ -145,11 +145,34 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
   const allStaffDuties = [];
 
   for (const cat of categories) {
-    const staffMembers = await all(
-      'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position ASC',
-      [cat.id]
-    );
-    const dayOffset = getDayOffset(cat.anchor_date, dateStr);
+    let staffMembers = await all(`
+      SELECT 
+        COALESCE(sra.staff_id, s.id) as id,
+        sra.staff_name as name,
+        COALESCE(sra.designation, s.designation, '') as designation,
+        COALESCE(sra.category_id, s.category_id) as category_id,
+        sra.row_position,
+        COALESCE(sra.rest_day, s.rest_day) as rest_day,
+        COALESCE(sra.pf_no, s.pf_no) as pf_no,
+        COALESCE(s.active, 1) as active,
+        s.hq_station
+      FROM staff_roster_assignments sra
+      LEFT JOIN staff s ON sra.staff_id = s.id
+      WHERE sra.category_id = ?
+        AND date(sra.effective_from) <= date(?)
+        AND (sra.effective_to IS NULL OR date(sra.effective_to) >= date(?))
+      ORDER BY sra.row_position ASC
+    `, [cat.id, dateStr, dateStr]);
+
+    if (!staffMembers || staffMembers.length === 0) {
+      staffMembers = await all(
+        'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position ASC',
+        [cat.id]
+      );
+    }
+
+    const catParams = getCategoryParamsForDate(cat, dateStr);
+    const dayOffset = getDayOffset(catParams.anchor_date, dateStr);
 
     for (const staff of staffMembers) {
       if (!staff.name || staff.name.toUpperCase().includes('VACANT') || staff.name.trim() === 'V' || staff.name.trim() === '(V)') continue;
@@ -214,7 +237,7 @@ async function generateDailyBookingChart(dbHelper, dateStr, categoryId = null) {
         targetCategoryId = override.target_category_id || (override.status === 'SUBSTITUTE' ? 1 : cat.id);
         leaveType = override.leave_type;
       } else if (!isLeaveMuster) {
-        activeLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
+        activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
       }
 
       // Handle Extra Train / Non-Daily overrides directly

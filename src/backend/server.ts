@@ -1746,11 +1746,20 @@ async function calculateStaffCrBalances(forceRefresh = false) {
     return iso;
   }
 
+  const allAssignments = await all('SELECT * FROM staff_roster_assignments ORDER BY effective_from ASC');
+  const assignmentMap = {};
+  allAssignments.forEach(a => {
+    if (a.staff_id) {
+      if (!assignmentMap[a.staff_id]) assignmentMap[a.staff_id] = [];
+      assignmentMap[a.staff_id].push(a);
+    }
+  });
+
   const crMap = {};
 
   for (const staff of staffMembers) {
-    const cat = catMap[staff.category_id];
-    if (!cat) continue;
+    const staffAssigns = assignmentMap[staff.id] || [];
+    if (!staff.category_id && staffAssigns.length === 0) continue;
 
     const staffOverrides = allOverrides.filter(o => o.staff_id === staff.id);
     const staffMuster = allMuster.filter(m => m.staff_id === staff.id);
@@ -1780,10 +1789,20 @@ async function calculateStaffCrBalances(forceRefresh = false) {
         continue;
       }
 
-      // Check if original scheduled duty for this staff on this date was REST
-      const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, dStr);
+      // Check if original scheduled duty for this staff on this date was REST (versioned)
+      const sra = staffAssigns.find(a =>
+        a.effective_from <= dStr &&
+        (!a.effective_to || a.effective_to >= dStr)
+      );
+      const curCatId = sra ? sra.category_id : staff.category_id;
+      const curRowPos = sra ? sra.row_position : staff.row_position;
+      const curRestDay = sra ? (sra.rest_day || staff.rest_day) : staff.rest_day;
+      const curCat = catMap[curCatId];
+      if (!curCat) continue;
+
+      const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(curCat, dStr);
       const dayOffset = getDayOffset(catAnchorDate, dStr);
-      const origLink = getBaseLinkNumber(staff.row_position, dayOffset, catCycleLength);
+      const origLink = getBaseLinkNumber(curRowPos, dayOffset, catCycleLength);
 
       let isOrigRest = false;
       const dObj = new Date(dStr + 'T12:00:00');
@@ -1793,16 +1812,16 @@ async function calculateStaffCrBalances(forceRefresh = false) {
       const dayLong = dayNamesLong[dObj.getDay()];
 
       let restTypeDesc = '';
-      if (staff.category_id === 4) {
-        if (staff.name.toUpperCase().includes(dayName + ' REST') || (staff.rest_day && staff.rest_day.toUpperCase() === dayName)) {
+      if (curCatId === 4) {
+        if (staff.name.toUpperCase().includes(dayName + ' REST') || (curRestDay && curRestDay.toUpperCase() === dayName)) {
           isOrigRest = true;
           restTypeDesc = `Weekly Rest (${dayName})`;
         }
       } else {
-        if (origLink === null || linkRestMap[cat.id + '_' + origLink] === 1) {
+        if (origLink === null || linkRestMap[curCat.id + '_' + origLink] === 1) {
           isOrigRest = true;
           restTypeDesc = origLink ? `Cyclic Rest (Link #${origLink})` : `Cyclic Rest`;
-        } else if (staff.rest_day && staff.rest_day.toUpperCase() === dayName) {
+        } else if (curRestDay && curRestDay.toUpperCase() === dayName) {
           isOrigRest = true;
           restTypeDesc = `Weekly Rest (${dayName})`;
         }
@@ -15037,6 +15056,11 @@ app.get('/api/muster', async (req, res) => {
       musterMap[`${m.staff_id}_${m.date}`] = m;
     });
 
+    const cycleAssignments = await all(
+      'SELECT * FROM staff_roster_assignments WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?)',
+      [cycle.endDateStr, cycle.startDateStr]
+    );
+
     const crBalances = await calculateStaffCrBalances();
     const grandTotals = { P: 0, R: 0, O: 0, E: 0, CR: 0, CL: 0, CCL: 0, SCL: 0, LAP: 0, LHAP: 0, SICK: 0, OD: 0, NH: 0, totalLeaves: 0 };
     const staffRows = [];
@@ -15069,19 +15093,27 @@ app.get('/api/muster', async (req, res) => {
         } else {
           // Cyclic baseline
           let isRest = false;
-          if (staff.category_id && staff.row_position) {
-            const catParams = (staff.category_id === 2 || staff.category_code === 'TTI_SLEEPER')
-              ? getCategoryParamsForDate(staff, d.dateStr)
-              : { anchor_date: staff.anchor_date, cycle_length: staff.cycle_length };
-            const dayOffset = getDayOffset(catParams.anchor_date, d.dateStr);
-            const linkNum = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+          const dayAssign = cycleAssignments.find(a =>
+            a.staff_id === staff.id &&
+            a.effective_from <= d.dateStr &&
+            (!a.effective_to || a.effective_to >= d.dateStr)
+          );
+          const curCatId = dayAssign ? dayAssign.category_id : staff.category_id;
+          const curRowPos = dayAssign ? dayAssign.row_position : staff.row_position;
+          const curRestDay = dayAssign ? (dayAssign.rest_day || staff.rest_day) : staff.rest_day;
 
-            if (staff.category_id === 4) {
-              if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) isRest = true;
+          if (curCatId && curRowPos) {
+            const cat = { id: curCatId, anchor_date: staff.anchor_date, cycle_length: staff.cycle_length };
+            const catParams = getCategoryParamsForDate(cat, d.dateStr);
+            const dayOffset = getDayOffset(catParams.anchor_date, d.dateStr);
+            const linkNum = getBaseLinkNumber(curRowPos, dayOffset, catParams.cycle_length);
+
+            if (curCatId === 4) {
+              if (curRestDay && curRestDay.toUpperCase() === d.dayOfWeek) isRest = true;
               else if (staff.name.toUpperCase().includes(`${d.dayOfWeek} REST`)) isRest = true;
             } else {
               const lDef = linkNum !== null ? links.find(l =>
-                l.category_id === staff.category_id &&
+                l.category_id === curCatId &&
                 l.link_number === linkNum &&
                 (!l.effective_from || l.effective_from <= d.dateStr) &&
                 (!l.effective_to || l.effective_to >= d.dateStr)
@@ -15090,7 +15122,7 @@ app.get('/api/muster', async (req, res) => {
             }
           } else {
             // Staff without roster grid baseline (e.g. MV PRASAD, P PRATHAP)
-            if (staff.rest_day && staff.rest_day.toUpperCase() === d.dayOfWeek) {
+            if (curRestDay && curRestDay.toUpperCase() === d.dayOfWeek) {
               isRest = true;
             } else if (d.dayOfWeek === 'SUN') {
               isRest = true;
@@ -16222,7 +16254,7 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
     const endDateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-    const cat4Staff = await all('SELECT * FROM staff WHERE category_id = 4 ORDER BY row_position ASC');
+    const cat4Staff = await getStaffForDate(4, startDateStr);
     const monthOverrides = await all(`
       SELECT o.*, s1.name as staff_name, s1.category_id as staff_cat
       FROM overrides o
@@ -16253,13 +16285,27 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
       WHERE date >= ? AND date <= ?
     `, [startDateStr, endDateStr]);
 
+    const lrCompletions = await all(`
+      SELECT * FROM lr_duty_completions
+      WHERE date(arrival_date) >= ? AND date(arrival_date) <= ?
+    `, [startDateStr, endDateStr]);
+
+    const allStaff = await all('SELECT id, category_id FROM staff');
+    const staffMap: any = {};
+    allStaff.forEach((s: any) => staffMap[s.id] = s);
+
     const dataPool = {
       overrides: monthOverrides,
       links: linksList,
       nonDaily: nonDailyList,
+      nonDailyTrains: nonDailyList,
       dutyRegister: dutyRegisterEntries,
+      dutyRegisterEntries: dutyRegisterEntries,
       muster: musterList,
-      dailyEarnings: earningsList
+      dailyEarnings: earningsList,
+      lrCompletions: lrCompletions,
+      staffMap: staffMap,
+      getLinkDef: (catId: any, linkNum: any, dateStr: string) => resolveLinkFromList(linksList, catId, linkNum, dateStr)
     };
 
     let syncedCount = 0;
@@ -16378,7 +16424,10 @@ app.get('/api/lr-sheet', async (req, res) => {
       });
     }
 
-    const allCat4Staff = await all('SELECT * FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
+    const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const allCat4Staff = await getStaffForDate(4, startDateStr);
 
     // Separate active and relieved staff (relieved kept at bottom)
     const activeStaff = allCat4Staff.filter(s => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
@@ -16399,9 +16448,6 @@ app.get('/api/lr-sheet', async (req, res) => {
         relievedNote: isRelieved ? (s.relieved_note || 'RELIEVED TO ZRTI / MLY') : ''
       };
     });
-
-    const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
     const records = await all(
       'SELECT * FROM lr_sheet_records WHERE date >= ? AND date <= ?',
@@ -16449,13 +16495,27 @@ app.get('/api/lr-sheet', async (req, res) => {
       WHERE date >= ? AND date <= ?
     `, [startDateStr, endDateStr]);
 
+    const lrCompletions = await all(`
+      SELECT * FROM lr_duty_completions
+      WHERE date(arrival_date) >= ? AND date(arrival_date) <= ?
+    `, [startDateStr, endDateStr]);
+
+    const allStaff = await all('SELECT id, category_id FROM staff');
+    const staffMap: any = {};
+    allStaff.forEach((s: any) => staffMap[s.id] = s);
+
     const dataPool = {
       overrides: monthOverrides,
       links: linksList,
       nonDaily: nonDailyList,
+      nonDailyTrains: nonDailyList,
       dutyRegister: dutyRegisterEntries,
+      dutyRegisterEntries: dutyRegisterEntries,
       muster: musterList,
-      dailyEarnings: earningsList
+      dailyEarnings: earningsList,
+      lrCompletions: lrCompletions,
+      staffMap: staffMap,
+      getLinkDef: (catId: any, linkNum: any, dateStr: string) => resolveLinkFromList(linksList, catId, linkNum, dateStr)
     };
 
     // Dynamically overlay live daily duty allotments for LR staff
@@ -16498,7 +16558,7 @@ app.get('/api/lr-sheet', async (req, res) => {
         const hasDutyOrLeave = curEntry && curEntry.dutyCode && curEntry.dutyCode !== 'SPARE' && curEntry.dutyCode !== 'AVL' && curEntry.dutyCode !== 'REST_HQ';
 
         if (!hasDutyOrLeave && !isRestDay) {
-          const restInfo = await getStaffLastDutyAndRestStatus(staff.staffId, day.dateStr);
+          const restInfo = await getStaffLastDutyAndRestStatus(staff.staffId, day.dateStr, null, dataPool);
           if (restInfo && restInfo.hasLastDuty) {
             if (restInfo.restStatus === 'IN_HQ_REST') {
               recordsMap[key] = {

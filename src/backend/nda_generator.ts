@@ -209,8 +209,8 @@ function buildNdaMovementsFromTaRows(taRows) {
  */
 async function generateStaffNdaJournal(db, staffId, year, month, startDate = null, endDate = null) {
   const { get, all } = db;
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) {
+  const rawStaff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  if (!rawStaff) {
     return {
       notFound: true,
       employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
@@ -220,6 +220,27 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
       month
     };
   }
+
+  // Determine effective date for roster versioning (respecting requested period)
+  const monthFirstDay = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate))
+    ? startDate
+    : `${year}-${String(month).padStart(2, '0')}-01`;
+
+  const assignment = await get(`
+    SELECT * FROM staff_roster_assignments
+    WHERE staff_id = ?
+      AND date(effective_from) <= date(?)
+      AND (effective_to IS NULL OR date(effective_to) >= date(?))
+    LIMIT 1
+  `, [staffId, monthFirstDay, monthFirstDay]);
+
+  const staff = assignment ? {
+    ...rawStaff,
+    row_position: assignment.row_position,
+    category_id: assignment.category_id || rawStaff.category_id,
+    designation: assignment.designation || rawStaff.designation,
+    rest_day: assignment.rest_day || rawStaff.rest_day
+  } : rawStaff;
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) {

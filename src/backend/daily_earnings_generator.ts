@@ -1,4 +1,4 @@
-const { getDayOffset, getBaseLinkNumber } = require('./rotation');
+const { getDayOffset, getBaseLinkNumber, getCategoryParamsForDate } = require('./rotation');
 
 /**
  * Clean helper to parse train numbers
@@ -28,7 +28,7 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
   const dayOfWeek = daysOfWeek[dObj.getDay()];
   const formattedDate = `${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}-${y}`;
 
-  // 1. Fetch categories
+  // 1. Fetch staff members with date-aware versioned assignments
   let categoryFilter = '';
   const params = [];
   if (categoryId && categoryId !== 'all') {
@@ -36,14 +36,40 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
     params.push(categoryId);
   }
 
-  const staffMembers = await all(
-    `SELECT s.*, c.code as cat_code, c.name as cat_name, c.anchor_date, c.cycle_length 
-     FROM staff s 
-     JOIN categories c ON s.category_id = c.id 
-     ${categoryFilter}
-     ORDER BY s.category_id ASC, s.row_position ASC`,
-    params
+  let staffMembers = await all(
+    `SELECT 
+       sra.id as assignment_id,
+       COALESCE(sra.staff_id, s.id) as id,
+       sra.staff_name as name,
+       COALESCE(sra.designation, s.designation, '') as designation,
+       COALESCE(sra.category_id, s.category_id) as category_id,
+       sra.row_position,
+       COALESCE(sra.rest_day, s.rest_day) as rest_day,
+       COALESCE(sra.pf_no, s.pf_no) as pf_no,
+       COALESCE(s.active, 1) as active,
+       s.hq_station,
+       c.code as cat_code,
+       c.name as cat_name
+     FROM staff_roster_assignments sra
+     LEFT JOIN staff s ON sra.staff_id = s.id
+     JOIN categories c ON COALESCE(sra.category_id, s.category_id) = c.id
+     WHERE date(sra.effective_from) <= date(?)
+       AND (sra.effective_to IS NULL OR date(sra.effective_to) >= date(?))
+       ${categoryId && categoryId !== 'all' ? 'AND sra.category_id = ?' : ''}
+     ORDER BY sra.category_id ASC, sra.row_position ASC`,
+    categoryId && categoryId !== 'all' ? [dateStr, dateStr, categoryId] : [dateStr, dateStr]
   );
+
+  if (!staffMembers || staffMembers.length === 0) {
+    staffMembers = await all(
+      `SELECT s.*, c.code as cat_code, c.name as cat_name, c.anchor_date, c.cycle_length 
+       FROM staff s 
+       JOIN categories c ON s.category_id = c.id 
+       ${categoryFilter}
+       ORDER BY s.category_id ASC, s.row_position ASC`,
+      params
+    );
+  }
 
   // 2. Fetch saved daily earnings entries for this date
   const savedEntries = await all(
@@ -63,8 +89,9 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
   let rowIdx = 1;
 
   for (const staff of staffMembers) {
-    // Determine roster duty for this staff member on dateStr
-    const dayOffset = getDayOffset(staff.anchor_date, dateStr);
+    // Determine roster duty for this staff member on dateStr using date-aware cycle parameters
+    const catParams = getCategoryParamsForDate(staff.category_id, dateStr);
+    const dayOffset = getDayOffset(catParams.anchor_date, dateStr);
     const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
     const subOverride = await get('SELECT * FROM overrides WHERE substitute_staff_id = ? AND date = ?', [staff.id, dateStr]);
     const musterRecord = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
@@ -104,14 +131,15 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
       activeLink = null;
       dutyText = 'SPARE (HQ)';
     } else {
-      activeLink = getBaseLinkNumber(staff.row_position, dayOffset, staff.cycle_length);
+      activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
       const d1 = new Date(dateStr);
       d1.setDate(d1.getDate() - 1);
       const prevDateStr = d1.toISOString().split('T')[0];
       const prevOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, prevDateStr]);
       if (prevOverride && (prevOverride.status === 'LEAVE' || prevOverride.status === 'SICK' || prevOverride.status === 'CR')) {
-        const prevDayOffset = getDayOffset(staff.anchor_date, prevDateStr);
-        const prevLinkNum = getBaseLinkNumber(staff.row_position, prevDayOffset, staff.cycle_length);
+        const prevCatParams = getCategoryParamsForDate(staff.category_id, prevDateStr);
+        const prevDayOffset = getDayOffset(prevCatParams.anchor_date, prevDateStr);
+        const prevLinkNum = getBaseLinkNumber(staff.row_position, prevDayOffset, prevCatParams.cycle_length);
         if (activeLink === prevLinkNum + 1 || activeLink === prevLinkNum + 2) {
           activeLink = null;
           isOverridden = true;
@@ -280,8 +308,8 @@ async function generateDailyEarnings(db, dateStr, categoryId = null) {
  */
 async function generateStaffMonthlyEarnings(db, staffId, year, month) {
   const { get, all } = db;
-  const staff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
-  if (!staff) {
+  const rawStaff = await get('SELECT * FROM staff WHERE id = ?', [staffId]);
+  if (!rawStaff) {
     return {
       notFound: true,
       employee: { id: staffId, name: 'Staff Member Removed', designation: '' },
@@ -290,6 +318,26 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
       month
     };
   }
+
+  const y = parseInt(year, 10) || new Date().getFullYear();
+  const m = parseInt(month, 10) || (new Date().getMonth() + 1);
+  const monthFirstDay = `${y}-${String(m).padStart(2, '0')}-01`;
+
+  const assignment = await get(`
+    SELECT * FROM staff_roster_assignments
+    WHERE staff_id = ?
+      AND date(effective_from) <= date(?)
+      AND (effective_to IS NULL OR date(effective_to) >= date(?))
+    LIMIT 1
+  `, [staffId, monthFirstDay, monthFirstDay]);
+
+  const staff = assignment ? {
+    ...rawStaff,
+    row_position: assignment.row_position,
+    category_id: assignment.category_id || rawStaff.category_id,
+    designation: assignment.designation || rawStaff.designation,
+    rest_day: assignment.rest_day || rawStaff.rest_day
+  } : rawStaff;
 
   const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
   if (!category) {
@@ -307,9 +355,7 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
   const currentMonth = now.getMonth() + 1;
   const currentDay = now.getDate();
 
-  const y = parseInt(year, 10) || currentYear;
-  const m = parseInt(month, 10) || currentMonth;
-  const daysInMonth = new Date(y, m, 0).getDate();
+    const daysInMonth = new Date(y, m, 0).getDate();
   const daysOfWeek = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
   const monthStr = String(m).padStart(2, '0');
   const monthName = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' });
@@ -387,7 +433,8 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
     const dayOfWeek = daysOfWeek[dObj.getDay()];
 
     // Determine planned roster duty for this day
-    const dayOffset = getDayOffset(category.anchor_date, dateIso);
+    const catParams = getCategoryParamsForDate(category, dateIso);
+    const dayOffset = getDayOffset(catParams.anchor_date, dateIso);
     const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, dateIso]);
 
     let activeLink = null;
@@ -401,14 +448,15 @@ async function generateStaffMonthlyEarnings(db, staffId, year, month) {
         dutyText = override.status;
       }
     } else {
-      activeLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+      activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
       const d1 = new Date(dateIso);
       d1.setDate(d1.getDate() - 1);
       const prevDateStr = d1.toISOString().split('T')[0];
       const prevOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, prevDateStr]);
       if (prevOverride && (prevOverride.status === 'LEAVE' || prevOverride.status === 'SICK' || prevOverride.status === 'CR')) {
-        const prevDayOffset = getDayOffset(category.anchor_date, prevDateStr);
-        const prevLinkNum = getBaseLinkNumber(staff.row_position, prevDayOffset, category.cycle_length);
+        const prevCatParams = getCategoryParamsForDate(category, prevDateStr);
+        const prevDayOffset = getDayOffset(prevCatParams.anchor_date, prevDateStr);
+        const prevLinkNum = getBaseLinkNumber(staff.row_position, prevDayOffset, prevCatParams.cycle_length);
         if (activeLink === prevLinkNum + 1 || activeLink === prevLinkNum + 2) {
           activeLink = null;
           isOverridden = true;
