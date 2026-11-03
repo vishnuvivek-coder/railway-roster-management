@@ -1745,6 +1745,10 @@ export default function DutyEditModal({
         const payload = {
           staff_id: staffId,
           staff_b_id: isMutualMode && mutualStaffId ? parseInt(mutualStaffId, 10) : null,
+          staff_a_link_number: parseInt(String(targetLink || dutyModal.link_number || staffADutyInfo?.linkNum || 0), 10) || null,
+          staff_b_link_number: staffBDutyInfo?.linkNum ? parseInt(String(staffBDutyInfo.linkNum), 10) : null,
+          staff_a_category_id: parseInt(String(targetCategoryId || dutyModal.categoryId || 2), 10),
+          staff_b_category_id: selectedMutualStaffObj?.category_id || parseInt(String(dutyModal.categoryId || 2), 10),
           date: selectedDate,
           to_date: effectiveToDate,
           action: actionCode,

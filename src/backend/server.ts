@@ -7144,6 +7144,11 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           datesToProcess.push(`${y}-${m}-${d}`);
         }
 
+        const explicitLinkA = req.body.staff_a_link_number || req.body.target_link || req.body.link_number;
+        const explicitLinkB = req.body.staff_b_link_number;
+        const explicitCatA = req.body.staff_a_category_id || req.body.target_category_id || staffA.category_id;
+        const explicitCatB = req.body.staff_b_category_id || staffB.category_id;
+
         for (const dStr of datesToProcess) {
           const existingOverrideA = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffA.id, dStr]);
           const existingOverrideB = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staffB.id, dStr]);
@@ -7171,101 +7176,74 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             LIMIT 1
           `, [staffB.id, dStr]);
 
-          // Extract Staff A's current duty profile on dStr
-          let dutyProfileA = {
-            linkNum: null,
-            catId: staffA.category_id,
-            shiftedPlace: null,
-            extraTrainNo: null,
-            isExtra: 0,
-            status: 'CHANGED_LINK',
-            isRest: false,
-            desc: '',
-            trainOut: existingOverrideA?.train_out || dregA?.train_out || null,
-            coachOut: existingOverrideA?.coach_out || dregA?.coach_out || null,
-            trainReturn: existingOverrideA?.train_return || dregA?.train_return || null,
-            coachReturn: existingOverrideA?.coach_return || dregA?.coach_return || null,
-            dutyLabel: existingOverrideA?.duty_label || dregA?.duty_label || null
-          };
+          // Determine accurate current link and category for Staff A
+          const linkA = explicitLinkA
+            ? parseInt(explicitLinkA, 10)
+            : (existingOverrideA?.overridden_link_number || existingOverrideA?.original_link_number || origLinkA);
+          const catIdA = explicitCatA
+            ? parseInt(explicitCatA, 10)
+            : (existingOverrideA?.target_category_id || staffA.category_id);
 
-          if (existingOverrideA) {
-            dutyProfileA.linkNum = existingOverrideA.overridden_link_number;
-            dutyProfileA.catId = existingOverrideA.target_category_id || staffA.category_id;
-            dutyProfileA.shiftedPlace = existingOverrideA.shifted_place;
-            dutyProfileA.extraTrainNo = existingOverrideA.extra_train_no;
-            dutyProfileA.isExtra = existingOverrideA.is_extra || 0;
-            dutyProfileA.status = existingOverrideA.status;
-            if (existingOverrideA.status === 'REST' || existingOverrideA.leave_type === 'REST') {
-              dutyProfileA.isRest = true;
-            }
-            dutyProfileA.desc = dutyProfileA.linkNum ? `Link #${dutyProfileA.linkNum}` : (dutyProfileA.extraTrainNo ? `Train ${dutyProfileA.extraTrainNo}` : (dutyProfileA.shiftedPlace || (dutyProfileA.isRest ? 'REST' : (dutyProfileA.trainOut ? `Train ${dutyProfileA.trainOut}` : 'Duty'))));
-          } else {
-            const linkDefA = await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffA.category_id, origLinkA]);
-            if (staffA.category_id === 4) {
-              dutyProfileA.desc = dutyProfileA.trainOut ? `Train ${dutyProfileA.trainOut}` : 'LR Standby Pool';
-              dutyProfileA.status = dutyProfileA.trainOut ? 'DUTY' : 'AVAILABLE_FOR_BOOKING';
-            } else if (!linkDefA || linkDefA.is_rest) {
-              dutyProfileA.isRest = true;
-              dutyProfileA.status = 'REST';
-              dutyProfileA.desc = 'Weekly REST';
-            } else {
-              dutyProfileA.linkNum = origLinkA;
-              dutyProfileA.catId = staffA.category_id;
-              dutyProfileA.status = 'CHANGED_LINK';
-              dutyProfileA.desc = `Link #${origLinkA}${linkDefA.train_numbers ? ` (Tr ${linkDefA.train_numbers})` : ''}`;
-            }
+          // Determine accurate current link and category for Staff B
+          const linkB = explicitLinkB
+            ? parseInt(explicitLinkB, 10)
+            : (existingOverrideB?.overridden_link_number || existingOverrideB?.original_link_number || origLinkB);
+          const catIdB = explicitCatB
+            ? parseInt(explicitCatB, 10)
+            : (existingOverrideB?.target_category_id || staffB.category_id);
+
+          // Look up link definitions for both links to get train & coach details
+          let linkDefA = linkA ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\')', [catIdA, linkA]) : null;
+          if (!linkDefA && linkA) {
+            linkDefA = await get('SELECT * FROM links WHERE link_number = ? AND category_id != 4 AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\')', [linkA]);
           }
 
-          // Extract Staff B's current duty profile on dStr
-          let dutyProfileB = {
-            linkNum: null,
-            catId: staffB.category_id,
-            shiftedPlace: null,
-            extraTrainNo: null,
-            isExtra: 0,
-            status: 'CHANGED_LINK',
-            isRest: false,
-            desc: '',
-            trainOut: existingOverrideB?.train_out || dregB?.train_out || null,
-            coachOut: existingOverrideB?.coach_out || dregB?.coach_out || null,
-            trainReturn: existingOverrideB?.train_return || dregB?.train_return || null,
-            coachReturn: existingOverrideB?.coach_return || dregB?.coach_return || null,
-            dutyLabel: existingOverrideB?.duty_label || dregB?.duty_label || null
-          };
-
-          if (existingOverrideB) {
-            dutyProfileB.linkNum = existingOverrideB.overridden_link_number;
-            dutyProfileB.catId = existingOverrideB.target_category_id || staffB.category_id;
-            dutyProfileB.shiftedPlace = existingOverrideB.shifted_place;
-            dutyProfileB.extraTrainNo = existingOverrideB.extra_train_no;
-            dutyProfileB.isExtra = existingOverrideB.is_extra || 0;
-            dutyProfileB.status = existingOverrideB.status;
-            if (existingOverrideB.status === 'REST' || existingOverrideB.leave_type === 'REST') {
-              dutyProfileB.isRest = true;
-            }
-            dutyProfileB.desc = dutyProfileB.linkNum ? `Link #${dutyProfileB.linkNum}` : (dutyProfileB.extraTrainNo ? `Train ${dutyProfileB.extraTrainNo}` : (dutyProfileB.shiftedPlace || (dutyProfileB.isRest ? 'REST' : (dutyProfileB.trainOut ? `Train ${dutyProfileB.trainOut}` : 'Duty'))));
-          } else {
-            const linkDefB = catB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = \'published\' OR status IS NULL))', [staffB.category_id, origLinkB]) : null;
-
-            if (staffB.category_id === 4) {
-              dutyProfileB.desc = dutyProfileB.trainOut ? `Train ${dutyProfileB.trainOut}` : 'LR Standby Pool';
-              dutyProfileB.status = dutyProfileB.trainOut ? 'DUTY' : 'AVAILABLE_FOR_BOOKING';
-            } else if (!linkDefB || linkDefB.is_rest) {
-              dutyProfileB.isRest = true;
-              dutyProfileB.status = 'REST';
-              dutyProfileB.desc = 'Weekly REST';
-            } else {
-              dutyProfileB.linkNum = origLinkB;
-              dutyProfileB.catId = staffB.category_id;
-              dutyProfileB.status = 'CHANGED_LINK';
-              dutyProfileB.desc = `Link #${origLinkB}${linkDefB.train_numbers ? ` (Tr ${linkDefB.train_numbers})` : ''}`;
-            }
+          let linkDefB = linkB ? await get('SELECT * FROM links WHERE category_id = ? AND link_number = ? AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\')', [catIdB, linkB]) : null;
+          if (!linkDefB && linkB) {
+            linkDefB = await get('SELECT * FROM links WHERE link_number = ? AND category_id != 4 AND (status = \'published\' OR status IS NULL OR status = \'\') AND (status != \'draft\')', [linkB]);
           }
+
+          // Resolve Staff A's current duty details
+          let tOutA = existingOverrideA?.train_out || dregA?.train_out || null;
+          let cOutA = existingOverrideA?.coach_out || dregA?.coach_out || null;
+          let tRetA = existingOverrideA?.train_return || dregA?.train_return || null;
+          let cRetA = existingOverrideA?.coach_return || dregA?.coach_return || null;
+          let dLabelA = existingOverrideA?.duty_label || dregA?.duty_label || null;
+
+          if (!tOutA && linkDefA && linkDefA.train_numbers && linkDefA.train_numbers.toUpperCase() !== 'REST') {
+            const parts = linkDefA.train_numbers.split(/[/,]+/).map((s: string) => s.trim()).filter(Boolean);
+            if (parts.length > 0) tOutA = parts[0];
+            if (parts.length > 1) tRetA = parts[parts.length - 1];
+            if (!cOutA && linkDefA.coaches) cOutA = linkDefA.coaches;
+          }
+          if (!dLabelA) {
+            dLabelA = tOutA ? (tRetA ? `${tOutA} / ${tRetA}` : tOutA) : (linkA ? `Link #${linkA}` : 'Duty');
+          }
+
+          // Resolve Staff B's current duty details
+          let tOutB = existingOverrideB?.train_out || dregB?.train_out || null;
+          let cOutB = existingOverrideB?.coach_out || dregB?.coach_out || null;
+          let tRetB = existingOverrideB?.train_return || dregB?.train_return || null;
+          let cRetB = existingOverrideB?.coach_return || dregB?.coach_return || null;
+          let dLabelB = existingOverrideB?.duty_label || dregB?.duty_label || null;
+
+          if (!tOutB && linkDefB && linkDefB.train_numbers && linkDefB.train_numbers.toUpperCase() !== 'REST') {
+            const parts = linkDefB.train_numbers.split(/[/,]+/).map((s: string) => s.trim()).filter(Boolean);
+            if (parts.length > 0) tOutB = parts[0];
+            if (parts.length > 1) tRetB = parts[parts.length - 1];
+            if (!cOutB && linkDefB.coaches) cOutB = linkDefB.coaches;
+          }
+          if (!dLabelB) {
+            dLabelB = tOutB ? (tRetB ? `${tOutB} / ${tRetB}` : tOutB) : (linkB ? `Link #${linkB}` : 'Duty');
+          }
+
+          const isRestA = (existingOverrideA && (existingOverrideA.status === 'REST' || existingOverrideA.leave_type === 'REST')) || (linkDefA && linkDefA.is_rest === 1);
+          const isRestB = (existingOverrideB && (existingOverrideB.status === 'REST' || existingOverrideB.leave_type === 'REST')) || (linkDefB && linkDefB.is_rest === 1);
 
           // SWAP:
-          // Staff A gets Duty Profile B
-          const statusForA = dutyProfileB.isRest ? 'REST' : (dutyProfileB.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileB.shiftedPlace ? 'SHIFTED' : (dutyProfileB.trainOut ? 'DUTY' : (dutyProfileB.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING'))));
-          const reasonForA = reason ? `Mutual link exchange with ${staffB.name}: ${reason}` : `Mutual link exchange with ${staffB.name} (${dutyProfileB.desc})`;
+          // Staff A gets Staff B's Place / Link / Duty
+          const statusForA = isRestB ? 'REST' : (tOutB ? 'DUTY' : 'CHANGED_LINK');
+          const reasonForA = reason ? `Mutual link exchange with ${staffB.name}: ${reason}` : `Mutual link exchange with ${staffB.name} (Takes Link #${linkB || 'Duty'})`;
           const effectiveOrigA = existingOverrideA?.original_link_number || origLinkA;
 
           await run(
@@ -7296,26 +7274,26 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               staffA.id,
               dStr,
               effectiveOrigA,
-              dutyProfileB.linkNum,
+              linkB,
               statusForA,
               reasonForA,
-              dutyProfileB.catId,
-              dutyProfileB.shiftedPlace,
-              dutyProfileB.extraTrainNo,
-              dutyProfileB.isExtra,
-              origLinkA || null,
+              catIdB,
+              linkB ? `Link #${linkB}` : (tOutB ? `Train ${tOutB}` : 'Exchange'),
               null,
-              dutyProfileB.trainOut,
-              dutyProfileB.coachOut,
-              dutyProfileB.trainReturn,
-              dutyProfileB.coachReturn,
-              dutyProfileB.dutyLabel
+              0,
+              linkA || origLinkA || null,
+              null,
+              tOutB,
+              cOutB,
+              tRetB,
+              cRetB,
+              dLabelB
             ]
           );
 
-          // Staff B gets Duty Profile A
-          const statusForB = dutyProfileA.isRest ? 'REST' : (dutyProfileA.extraTrainNo ? 'EXTRA_CREW' : (dutyProfileA.shiftedPlace ? 'SHIFTED' : (dutyProfileA.trainOut ? 'DUTY' : (dutyProfileA.linkNum ? 'CHANGED_LINK' : 'AVAILABLE_FOR_BOOKING'))));
-          const reasonForB = reason ? `Mutual link exchange with ${staffA.name}: ${reason}` : `Mutual link exchange with ${staffA.name} (${dutyProfileA.desc})`;
+          // Staff B gets Staff A's Place / Link / Duty
+          const statusForB = isRestA ? 'REST' : (tOutA ? 'DUTY' : 'CHANGED_LINK');
+          const reasonForB = reason ? `Mutual link exchange with ${staffA.name}: ${reason}` : `Mutual link exchange with ${staffA.name} (Takes Link #${linkA || 'Duty'})`;
           const effectiveOrigB = existingOverrideB?.original_link_number || origLinkB;
 
           await run(
@@ -7346,36 +7324,53 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               staffB.id,
               dStr,
               effectiveOrigB,
-              dutyProfileA.linkNum,
+              linkA,
               statusForB,
               reasonForB,
-              dutyProfileA.catId,
-              dutyProfileA.shiftedPlace,
-              dutyProfileA.extraTrainNo,
-              dutyProfileA.isExtra,
-              origLinkB || null,
+              catIdA,
+              linkA ? `Link #${linkA}` : (tOutA ? `Train ${tOutA}` : 'Exchange'),
               null,
-              dutyProfileA.trainOut,
-              dutyProfileA.coachOut,
-              dutyProfileA.trainReturn,
-              dutyProfileA.coachReturn,
-              dutyProfileA.dutyLabel
+              0,
+              linkB || origLinkB || null,
+              null,
+              tOutA,
+              cOutA,
+              tRetA,
+              cRetA,
+              dLabelA
             ]
           );
 
-          // Update duty_register_staff if either or both have an entry
+          // Update duty_register_staff cleanly so register views sync immediately
           if (dregA && dregB) {
-            await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = ?', [staffB.id, dregA.entry_id, staffA.id]);
-            await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = ?', [staffA.id, dregB.entry_id, staffB.id]);
+            if (dregA.entry_id !== dregB.entry_id) {
+              await run('UPDATE duty_register_staff SET staff_id = -999 WHERE entry_id = ? AND staff_id = ?', [dregA.entry_id, staffA.id]);
+              await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = ?', [staffA.id, dregB.entry_id, staffB.id]);
+              await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = -999', [staffB.id, dregA.entry_id]);
+            }
           } else if (dregA && !dregB) {
             await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = ?', [staffB.id, dregA.entry_id, staffA.id]);
           } else if (!dregA && dregB) {
             await run('UPDATE duty_register_staff SET staff_id = ? WHERE entry_id = ? AND staff_id = ?', [staffA.id, dregB.entry_id, staffB.id]);
           }
 
+          // If register entries exist for the swapped trains, ensure staff are linked
+          if (tOutB) {
+            const entryForA = await get('SELECT id FROM duty_register_entry WHERE date = ? AND train_out = ? LIMIT 1', [dStr, tOutB]);
+            if (entryForA) {
+              await run('INSERT OR IGNORE INTO duty_register_staff (entry_id, staff_id) VALUES (?, ?)', [entryForA.id, staffA.id]);
+            }
+          }
+          if (tOutA) {
+            const entryForB = await get('SELECT id FROM duty_register_entry WHERE date = ? AND train_out = ? LIMIT 1', [dStr, tOutA]);
+            if (entryForB) {
+              await run('INSERT OR IGNORE INTO duty_register_staff (entry_id, staff_id) VALUES (?, ?)', [entryForB.id, staffB.id]);
+            }
+          }
+
           // Muster updates: 'R' if REST, otherwise 'P'
-          const musterCodeA = dutyProfileB.isRest ? 'R' : 'P';
-          const musterCodeB = dutyProfileA.isRest ? 'R' : 'P';
+          const musterCodeA = isRestB ? 'R' : 'P';
+          const musterCodeB = isRestA ? 'R' : 'P';
 
           await run(
             `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)

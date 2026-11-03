@@ -8304,9 +8304,18 @@ export default function App() {
                                                   ⭐ Upgraded (COR{d.originalStaffName ? ` - Sub for ${d.originalStaffName}` : ''})
                                                 </span>
                                               )}
-                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && d.originalStaffName && (
-                                                <span className="badge no-print" style={{ background: 'rgba(212, 161, 92, 0.15)', color: 'var(--primary)', border: '1px solid var(--border-gold)', fontSize: '0.68rem', padding: '1px 6px' }}>
-                                                  {d.isVacant ? 'Vacated by' : 'Sub for'} {d.originalStaffName} ({d.originalStaffStatus || 'LEAVE'})
+                                              {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && !d.isUpgraded && (d.originalStaffName || (d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason))) && (
+                                                <span className="badge no-print" style={{
+                                                  background: (d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason)) ? 'rgba(56, 189, 248, 0.18)' : 'rgba(212, 161, 92, 0.15)',
+                                                  color: (d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason)) ? '#38bdf8' : 'var(--primary)',
+                                                  border: (d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason)) ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid var(--border-gold)',
+                                                  fontSize: '0.68rem',
+                                                  padding: '1px 6px',
+                                                  fontWeight: (d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason)) ? 700 : 400
+                                                }}>
+                                                  {(d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason))
+                                                    ? `🔄 Exchanged with ${d.originalStaffName || d.overrideReason.match(/exchange with ([^:(]+)/i)?.[1]?.trim() || 'Staff'}`
+                                                    : `${d.isVacant ? 'Vacated by' : 'Sub for'} ${d.originalStaffName} (${d.originalStaffStatus || 'LEAVE'})`}
                                                 </span>
                                               )}
                                               {d.muster_code && (
