@@ -3390,8 +3390,8 @@ export default function App() {
       shiftStaffId = parseInt(rawStaffId.replace('vacant-shifted-', ''), 10);
     } else if (d.originalSickOrLeaveDuty) {
       shiftStaffId = d.originalSickOrLeaveDuty.staffId;
-    } else if (typeof rawStaffId === 'number') {
-      shiftStaffId = rawStaffId;
+    } else if (rawStaffId && !isNaN(Number(rawStaffId)) && !String(rawStaffId).startsWith('vacant-')) {
+      shiftStaffId = Number(rawStaffId);
     }
     if (!shiftStaffId) {
       alert('Could not determine shifted employee ID.');
@@ -3964,8 +3964,8 @@ export default function App() {
       advStaffId = parseInt(rawStaffId.replace('vacant-advance-', ''), 10);
     } else if (d.originalSickOrLeaveDuty) {
       advStaffId = d.originalSickOrLeaveDuty.staffId;
-    } else if (typeof rawStaffId === 'number') {
-      advStaffId = rawStaffId;
+    } else if (rawStaffId && !isNaN(Number(rawStaffId)) && !String(rawStaffId).startsWith('vacant-')) {
+      advStaffId = Number(rawStaffId);
     }
     if (!advStaffId) {
       alert('Could not determine employee ID for advance duty.');
@@ -4005,8 +4005,8 @@ export default function App() {
       upStaffId = parseInt(rawStaffId.replace('vacant-upgrade-', ''), 10);
     } else if (d.originalSickOrLeaveDuty) {
       upStaffId = d.originalSickOrLeaveDuty.staffId;
-    } else if (typeof rawStaffId === 'number') {
-      upStaffId = rawStaffId;
+    } else if (rawStaffId && !isNaN(Number(rawStaffId)) && !String(rawStaffId).startsWith('vacant-')) {
+      upStaffId = Number(rawStaffId);
     }
     if (!upStaffId) {
       alert('Could not determine upgraded employee ID.');
@@ -7056,10 +7056,14 @@ export default function App() {
                         }
                       };
 
-                      // 1. Check if ANY staff with explicit override or matching train booking is assigned to this link
+                      // 1. Check if ANY staff with explicit override link is assigned to this link
                       let overriddenStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
-                        (matchesOverrideLink(d) || matchesTrainBooking(d)) &&
+                        matchesOverrideLink(d) &&
+                        d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
+                      ) || staffDuties.find(d => 
+                        !activeWorkedStaffIds.has(d.staffId) &&
+                        matchesTrainBooking(d) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
@@ -7988,7 +7992,7 @@ export default function App() {
                                     const isCr = d.status === 'CR' || d.isCr;
                                     const hasSub = d.originalStaffName || d.substituteName;
                                     const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacantMarkLater || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
-                                    const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
+                                    const isStaffDraggable = isAdmin && !isSlotVacant && Boolean(d.staffId && !String(d.staffId).startsWith('vacant-') && !isNaN(Number(d.staffId)));
                                     const isVacantOver = dragOverSlotId === `${group.slotId}-vacant-${dIdx}`;
                                     const isStaffOver = dragOverStaffDutyKey === `${group.slotId}-${d.staffId || dIdx}`;
                                     const isLastDuty = dIdx === duties.length - 1;
@@ -8942,7 +8946,7 @@ export default function App() {
                                           const isRest = d.isRest || d.isRestLink;
                                           const hasSub = d.originalStaffName || d.substituteName;
                                           const isSlotVacant = d.isVacant || d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
-                                          const isStaffDraggable = isAdmin && !isSlotVacant && typeof d.staffId === 'number';
+                                          const isStaffDraggable = isAdmin && !isSlotVacant && Boolean(d.staffId && !String(d.staffId).startsWith('vacant-') && !isNaN(Number(d.staffId)));
                                           const isVacantOver = dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-vacant-${dIdx}`;
                                           const isStaffOver = dragOverStaffDutyKey === `${group.slotId || `nd-${groupIndex}`}-${d.staffId || dIdx}`;
                                           
@@ -9790,7 +9794,7 @@ export default function App() {
 
                         const isBusy = isVacant || isReturnLeg || isHqRestLeg || isShiftedOther || isAssignedExtra || isLeave || isSick || isCr || isRestCycle || isOutstation;
                         const isAvailable = !isBusy;
-                        const canDrag = isAdmin && isAvailable && typeof duty.staffId === 'number';
+                        const canDrag = isAdmin && isAvailable && Boolean(duty.staffId && !String(duty.staffId).startsWith('vacant-') && !isNaN(Number(duty.staffId)));
 
                         return {
                           linkNum,

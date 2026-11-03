@@ -2276,10 +2276,10 @@ export default function DutyEditModal({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     
-                    <span>Add or Assign Duty</span>
+                    <span>Assign / Replace Staff</span>
                   </div>
                   <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>
-                    Allot employee to this fixed link
+                    Replace employee or allot to this fixed link
                   </span>
                 </button>
               </div>
@@ -2318,7 +2318,7 @@ export default function DutyEditModal({
                     { id: 'SHIFTED', label: '5. Shifted Place', icon: '', desc: 'Shifted to place / link' },
                     { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '', desc: 'Remove mistaken allotment' },
                     { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
-                    { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '', desc: 'Reassign link / swap staff' },
+                    { id: 'REASSIGN_STAFF', label: '8. Reassign / Replace', icon: '🔀', desc: 'Replace with another employee' },
                     { id: 'EXCHANGE_LINK', label: '9. Exchange Link', icon: '🔄', desc: 'Mutual link / duty swap' },
                     { id: 'MARK_LATER', label: '10. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' }
                   ].map(r => {
