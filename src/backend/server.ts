@@ -5342,7 +5342,15 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
     const category = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
 
-    return await withTransaction(async () => {
+    const pendingTaTasks = new Map<string, { year: number; month: number; staffId: number }>();
+    const queueTaRecalc = (y: number, m: number, sId: any) => {
+      const numId = parseInt(sId, 10);
+      if (y && m && !isNaN(numId)) {
+        pendingTaTasks.set(`${y}_${m}_${numId}`, { year: y, month: m, staffId: numId });
+      }
+    };
+
+    const txResult = await withTransaction(async () => {
       // Determine dates array to update (supports single date or date range)
       const datesToProcess = [];
       const startDate = new Date(date + 'T12:00:00');
@@ -5406,10 +5414,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             await restoreMusterTaApprovalsAndEntries(existing.substitute_staff_id, dStr, altDateStr);
             await syncDocumentsAndEarningsForStaffDate(existing.substitute_staff_id, dStr, { dutyText: null, isLeaveOrRest: false });
           }
-          try {
-            const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-            await generatePendingTaClaimsForMonth({ run, get, all }, parseInt(dateParts[0], 10), parseInt(dateParts[1], 10), staff_id);
-          } catch (err) { }
+          queueTaRecalc(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10), staff_id);
 
           // Automatically cancel any approved leave_requests for this staff on this date
           await run(
@@ -5474,14 +5479,12 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const subAction = req.body.wrong_allotment_action || (replacement_staff_id ? 'REPLACE' : (replacement_type === 'RESET' ? 'RESET' : 'VACANT'));
 
         for (const dStr of datesToProcess) {
-          const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
-          let existingSubOverride = null;
-          let existingSubMuster = null;
-          if (replacement_staff_id) {
-            existingSubOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-            existingSubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]);
-          }
+          const [existingOverride, existingMuster, existingSubOverride, existingSubMuster] = await Promise.all([
+            get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]),
+            get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]),
+            replacement_staff_id ? get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]) : Promise.resolve(null),
+            replacement_staff_id ? get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, dStr]) : Promise.resolve(null)
+          ]);
           undoSnapshots.push({
             date: dStr,
             override: existingOverride || null,
@@ -5693,23 +5696,25 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           const dateParts = dStr.split('-');
           const altDateStr = dateParts.length === 3 ? `${parseInt(dateParts[2], 10)}/${parseInt(dateParts[1], 10)}/${dateParts[0].slice(-2)}` : dStr;
           const disallowRemark = `Disallowed: Deleted from duty slot (Reason to be marked later)`;
-          await run(
-            `UPDATE ta_approvals 
-           SET status = 'REJECTED', 
-               claim_amount = 0, 
-               ta_percentage = NULL, 
-               remarks = ?
-           WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-            [disallowRemark, staff.id, dStr, dStr, altDateStr]
-          );
-          await run(
-            `UPDATE ta_entries 
-           SET ta_b1 = '', 
-               days_claiming_ta = NULL, 
-               remarks = ?
-           WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
-            [disallowRemark, staff.id, dStr, dStr, altDateStr]
-          );
+          await Promise.all([
+            run(
+              `UPDATE ta_approvals 
+             SET status = 'REJECTED', 
+                 claim_amount = 0, 
+                 ta_percentage = NULL, 
+                 remarks = ?
+             WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+              [disallowRemark, staff.id, dStr, dStr, altDateStr]
+            ),
+            run(
+              `UPDATE ta_entries 
+             SET ta_b1 = '', 
+                 days_claiming_ta = NULL, 
+                 remarks = ?
+             WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ?)`,
+              [disallowRemark, staff.id, dStr, dStr, altDateStr]
+            )
+          ]);
           await syncDocumentsAndEarningsForStaffDate(staff.id, dStr, { dutyText: '', isLeaveOrRest: true, remarks: effectiveReason });
 
           // 3. If replacement staff selected, assign them to originalLink
@@ -5779,10 +5784,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               );
               const subY = parseInt(dateParts[0], 10);
               const subM = parseInt(dateParts[1], 10);
-              try {
-                const { generatePendingTaClaimsForMonth } = require('./ta_generator');
-                await generatePendingTaClaimsForMonth({ run, get, all }, subY, subM, subStaff.id);
-              } catch (err) { }
+              queueTaRecalc(subY, subM, subStaff.id);
 
               if (subStaff.category_id === 4) {
                 const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -6066,55 +6068,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                   await syncLRSheetRecord(subStaff.id, dStr, resolvedSubDuty.code, subReason);
                 }
 
-                // If original link is part of a multi-day link set, automatically book LR substitute for the entire link!
-                if (datesToProcess.length === 1) {
-                  const subLinkSet = getLinkSetDetails(staff.category_id, originalLink);
-                  if (subLinkSet && subLinkSet.remainingLinks && subLinkSet.remainingLinks.length > 0) {
-                    for (let k = 0; k < subLinkSet.remainingLinks.length; k++) {
-                      const remLinkNum = subLinkSet.remainingLinks[k];
-                      const nextDate = new Date(dStr + 'T12:00:00');
-                      nextDate.setDate(nextDate.getDate() + k + 1);
-                      const y = nextDate.getFullYear();
-                      const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-                      const d = String(nextDate.getDate()).padStart(2, '0');
-                      const nextDateStr = `${y}-${m}-${d}`;
-
-                      const subLegReason = `Substitute for ${staff.name} on Link #${remLinkNum} (Day ${subLinkSet.dayIndexInSet + k + 1} of ${subLinkSet.setLength}-day link set)`;
-
-                      await run(
-                        `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-                       VALUES (?, ?, NULL, ?, 'SUBSTITUTE', ?, ?, ?, ?)
-                       ON CONFLICT(staff_id, date) DO UPDATE SET
-                         overridden_link_number = excluded.overridden_link_number,
-                         status = excluded.status,
-                         substitute_staff_id = excluded.substitute_staff_id,
-                         substitute_name = excluded.substitute_name,
-                         reason = excluded.reason,
-                         target_category_id = excluded.target_category_id`,
-                        [subStaff.id, nextDateStr, remLinkNum, staff.id, staff.name, subLegReason, target_category_id || staff.category_id]
-                      );
-
-                      await run(
-                        `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
-                       VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
-                       ON CONFLICT(staff_id, date) DO UPDATE SET
-                         code = 'P',
-                         remarks = excluded.remarks,
-                         updated_by = excluded.updated_by,
-                         updated_at = CURRENT_TIMESTAMP`,
-                        [subStaff.id, nextDateStr, `Working as substitute for ${staff.name} on Link #${remLinkNum}`]
-                      );
-
-                      const nextDObj = new Date(nextDateStr + 'T12:00:00');
-                      const nextDayOfWeek = dayNames[nextDObj.getDay()];
-                      const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, nextDateStr, nextDayOfWeek, subStaff.rest_day);
-                      if (resolvedNextDuty && resolvedNextDuty.code) {
-                        await syncLRSheetRecord(subStaff.id, nextDateStr, resolvedNextDuty.code, subLegReason);
-                      }
-                      await syncDocumentsAndEarningsForStaffDate(subStaff.id, nextDateStr, { dutyText: `L-${remLinkNum}`, isLeaveOrRest: false, remarks: subLegReason });
-                    }
-                  }
-                }
+                // Note: Multi-day return leg overrides & muster records are handled in the unified multi-day block below to avoid duplicate writes.
               }
             }
           }
@@ -6152,15 +6106,13 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 const d = String(nextDate.getDate()).padStart(2, '0');
                 const remDateStr = `${y}-${m}-${d}`;
 
-                // Record snapshot for undo
-                const existingSubDayOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-                const existingSubDayMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]);
-                let existingSubDaySubOv = null;
-                let existingSubDaySubMuster = null;
-                if (replacement_staff_id) {
-                  existingSubDaySubOv = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-                  existingSubDaySubMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]);
-                }
+                // Record snapshot for undo (batched concurrently)
+                const [existingSubDayOv, existingSubDayMuster, existingSubDaySubOv, existingSubDaySubMuster] = await Promise.all([
+                  get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]),
+                  get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, remDateStr]),
+                  replacement_staff_id ? get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]) : Promise.resolve(null),
+                  replacement_staff_id ? get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [replacement_staff_id, remDateStr]) : Promise.resolve(null)
+                ]);
                 undoSnapshots.push({
                   date: remDateStr,
                   override: existingSubDayOv || null,
@@ -6248,6 +6200,16 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                        updated_at = CURRENT_TIMESTAMP`,
                       [subStaff.id, remDateStr, `Working as substitute for ${staff.name} on Link #${remLink}`]
                     );
+                    // If substitute is in Category 4 (LR), sync LR sheet for return leg
+                    if (subStaff.category_id === 4) {
+                      const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                      const nextDObj = new Date(remDateStr + 'T12:00:00');
+                      const nextDayOfWeek = dayNames[nextDObj.getDay()];
+                      const resolvedNextDuty = await resolveDutyCodeForLRStaff(subStaff.id, remDateStr, nextDayOfWeek, subStaff.rest_day);
+                      if (resolvedNextDuty && resolvedNextDuty.code) {
+                        await syncLRSheetRecord(subStaff.id, remDateStr, resolvedNextDuty.code, subReason);
+                      }
+                    }
                     await syncDocumentsAndEarningsForStaffDate(subStaff.id, remDateStr, { dutyText: `L-${remLink}`, isLeaveOrRest: false, remarks: subReason });
                   }
                 }
@@ -7604,6 +7566,26 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
       return res.status(400).json({ error: 'Invalid action specified' });
     });
+
+    // Transaction committed successfully! Dispatch queued TA recalculation tasks in background
+    if (pendingTaTasks.size > 0) {
+      setImmediate(async () => {
+        try {
+          const { generatePendingTaClaimsForMonth } = require('./ta_generator');
+          for (const task of pendingTaTasks.values()) {
+            try {
+              await generatePendingTaClaimsForMonth({ run, get, all }, task.year, task.month, task.staffId);
+            } catch (err: any) {
+              console.error(`Background TA recalculation failed for staff ${task.staffId}:`, err?.message || err);
+            }
+          }
+        } catch (e: any) {
+          console.error('Background TA task runner error:', e?.message || e);
+        }
+      });
+    }
+
+    return txResult;
   } catch (err) {
     console.error('Error changing duty status:', err);
     res.status(500).json({ error: err.message });
@@ -7870,26 +7852,30 @@ async function syncDocumentsAndEarningsForStaffDate(staffId: any, dateStr: any, 
 
     const { dutyText, isLeaveOrRest, remarks, preserveCustomTa } = options;
 
-    // 1. Clear stale custom saved rows for this specific date in nda_entries and diary_entries so per-date merge regenerates them cleanly
-    await run(
-      `DELETE FROM nda_entries 
-       WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
-      [staffId, monthYear, dateStr, altShort, altPadded, altFull]
-    );
-
-    await run(
-      `DELETE FROM diary_entries 
-       WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
-      [staffId, monthYear, dateStr, altShort, altPadded, altFull]
-    );
+    // 1. Clear stale custom saved rows for this specific date concurrently in parallel
+    const deleteQueries = [
+      run(
+        `DELETE FROM nda_entries 
+         WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+        [staffId, monthYear, dateStr, altShort, altPadded, altFull]
+      ),
+      run(
+        `DELETE FROM diary_entries 
+         WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+        [staffId, monthYear, dateStr, altShort, altPadded, altFull]
+      )
+    ];
 
     if (!preserveCustomTa && !isLeaveOrRest) {
-      await run(
-        `DELETE FROM ta_entries 
-         WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
-        [staffId, dateStr, dateStr, altShort, altPadded, altFull]
+      deleteQueries.push(
+        run(
+          `DELETE FROM ta_entries 
+           WHERE staff_id = ? AND (duty_date = ? OR date_str = ? OR date_str = ? OR date_str = ? OR date_str = ?)`,
+          [staffId, dateStr, dateStr, altShort, altPadded, altFull]
+        )
       );
     }
+    await Promise.all(deleteQueries);
 
     // 2. If a saved Daily Earnings entry exists for this staff & date, update its duty and remarks
     if (dutyText !== undefined && dutyText !== null) {
@@ -11265,6 +11251,19 @@ app.get('/api/reports/daily-view', async (req, res) => {
            ORDER BY e.date DESC`, [dMinus7Str, targetDateStr])
     ]);
 
+    // Ensure any staff in dregList is included in allStaff if not already present
+    for (const dr of dregList) {
+      if (!allStaff.some((s: any) => String(s.id) === String(dr.staff_id))) {
+        const [extraStaff] = await all('SELECT * FROM staff WHERE id = ?', [dr.staff_id]);
+        if (extraStaff) {
+          allStaff.push({
+            ...extraStaff,
+            row_position: extraStaff.row_position || 999
+          });
+        }
+      }
+    }
+
     const nonDailyTrains = allNonDailyTrains.filter((t: any) => (t.day_of_week || '').toUpperCase() === currentDayName);
 
     const overridesMap: Record<string, any> = {};
@@ -11279,12 +11278,14 @@ app.get('/api/reports/daily-view', async (req, res) => {
 
     const lrMap = new Map();
     for (const lr of lrList) {
-      lrMap.set(lr.staff_id, lr);
+      lrMap.set(String(lr.staff_id), lr);
+      lrMap.set(Number(lr.staff_id), lr);
     }
 
     const dregMap = new Map();
     for (const dr of dregList) {
-      dregMap.set(dr.staff_id, dr);
+      dregMap.set(String(dr.staff_id), dr);
+      dregMap.set(Number(dr.staff_id), dr);
     }
 
     const staffMap: Record<string, any> = {};
@@ -11375,10 +11376,10 @@ app.get('/api/reports/daily-view', async (req, res) => {
         // ==========================================
         const staffDuties = [];
         for (const staff of staffMembers) {
-          const lrRecord = lrMap.get(staff.id);
+          const lrRecord = lrMap.get(String(staff.id)) || lrMap.get(Number(staff.id));
           const override = overridesMap[`${staff.id}_${targetDateStr}`];
           const musterRecord = musterMap[`${staff.id}_${targetDateStr}`];
-          const dregRecord = dregMap.get(staff.id);
+          const dregRecord = dregMap.get(String(staff.id)) || dregMap.get(Number(staff.id));
 
           const effTrainOut = override?.train_out || dregRecord?.train_out || null;
           const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
@@ -11628,7 +11629,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
             duty_label: effDutyLabel,
             from_station: resolvedFromStation,
             to_station: resolvedToStation,
-            coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT') ? '-' : (activeExtraTrain ? 'SL / AC' : 'SL'),
+            coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT') ? '-' : (effCoachOut || (activeExtraTrain ? 'SL / AC' : 'SL')),
             set_type: resolvedSetType
           });
         }
@@ -11651,7 +11652,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
       const staffDuties = [];
       for (const staff of staffMembers) {
         const override = overridesMap[`${staff.id}_${targetDateStr}`];
-        const dregRecord = dregMap.get(staff.id);
+        const dregRecord = dregMap.get(String(staff.id)) || dregMap.get(Number(staff.id));
 
         const effTrainOut = override?.train_out || dregRecord?.train_out || null;
         const effCoachOut = override?.coach_out || dregRecord?.coach_out || null;
@@ -12780,44 +12781,63 @@ app.get('/api/duty-register/reconciliation', async (req, res) => {
   if (!date) return res.status(400).json({ error: 'Date is required' });
 
   try {
-    const categories = await all('SELECT * FROM categories');
+    // Optimized: Fetch all categories, staff, overrides, entries, and crew concurrently in parallel
+    const [categories, allStaff, overrides, entries, crewRows] = await Promise.all([
+      all('SELECT * FROM categories ORDER BY id ASC'),
+      all('SELECT * FROM staff WHERE (active = 1 OR active IS NULL) AND category_id IS NOT NULL ORDER BY category_id ASC, row_position ASC'),
+      all('SELECT * FROM overrides WHERE date = ?', [date]),
+      all(`
+        SELECT e.*, s.id as staff_id, s.category_id as staff_category_id 
+        FROM duty_register_entry e
+        JOIN duty_register_staff drs ON e.id = drs.entry_id
+        JOIN staff s ON drs.staff_id = s.id
+        WHERE e.date = ?
+      `, [date]),
+      all(`
+        SELECT drs.entry_id, s.name
+        FROM duty_register_staff drs
+        JOIN staff s ON drs.staff_id = s.id
+        JOIN duty_register_entry e ON drs.entry_id = e.id
+        WHERE e.date = ?
+      `, [date])
+    ]);
+
+    // Build In-Memory Indexed Maps for O(1) lookups
+    const overrideMap = new Map();
+    for (const o of overrides) {
+      overrideMap.set(o.staff_id, o);
+    }
+
+    const entryCrewMap = {};
+    for (const c of crewRows) {
+      if (!entryCrewMap[c.entry_id]) {
+        entryCrewMap[c.entry_id] = [];
+      }
+      entryCrewMap[c.entry_id].push(c.name);
+    }
+
+    const actualEntryMap = new Map();
+    for (const e of entries) {
+      actualEntryMap.set(e.staff_id, e);
+    }
+
+    const staffByCat = new Map();
+    for (const s of allStaff) {
+      const list = staffByCat.get(s.category_id) || [];
+      list.push(s);
+      staffByCat.set(s.category_id, list);
+    }
+
     const result = [];
 
     for (const cat of categories) {
-      const staffMembers = await all(
-        'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position',
-        [cat.id]
-      );
+      const staffMembers = staffByCat.get(cat.id) || [];
       const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, date);
       const dayOffset = getDayOffset(catAnchorDate, date);
 
-      // Fetch all entries joined with staff for this category on this date
-      const entries = await all(
-        `SELECT e.*, s.id as staff_id 
-         FROM duty_register_entry e
-         JOIN duty_register_staff drs ON e.id = drs.entry_id
-         JOIN staff s ON drs.staff_id = s.id
-         WHERE e.date = ? AND s.category_id = ?`,
-        [date, cat.id]
-      );
-
-      // Map entry crew members
-      const entryCrewMap = {};
-      for (const e of entries) {
-        if (!entryCrewMap[e.id]) {
-          const crew = await all(
-            `SELECT s.name FROM staff s
-             JOIN duty_register_staff drs ON s.id = drs.staff_id
-             WHERE drs.entry_id = ?`,
-            [e.id]
-          );
-          entryCrewMap[e.id] = crew.map(c => c.name);
-        }
-      }
-
       const list = [];
       for (const staff of staffMembers) {
-        const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
+        const override = overrideMap.get(staff.id);
         let activeLink = null;
         let isOverridden = false;
 
@@ -12844,7 +12864,7 @@ app.get('/api/duty-register/reconciliation', async (req, res) => {
           set_type: dutyDetails ? dutyDetails.set_type : 'Other / REST'
         };
 
-        const actualEntry = entries.find(e => e.staff_id === staff.id);
+        const actualEntry = actualEntryMap.get(staff.id);
         const actual = actualEntry ? {
           entryId: actualEntry.id,
           train_out: actualEntry.train_out,
@@ -13065,9 +13085,18 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
     const staffMember = await get('SELECT id, category_id FROM staff WHERE id = ?', [staffId]);
     const defaultObjText = (staffMember && staffMember.category_id === 1) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES';
 
-    // Save all current rows & propagate timings
+    // Save all current rows & propagate timings (deduplicating identical entries)
+    const seenSaveKeys = new Set();
+    let savedRowOrder = 0;
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i];
+      const dutyDate = item.date_iso || item.duty_date || null;
+      const dedupeKey = `${dutyDate}_${String(item.train_no || '').trim()}_${String(item.from_station || '').trim()}_${String(item.to_station || '').trim()}`;
+      if (dutyDate && item.train_no && seenSaveKeys.has(dedupeKey)) {
+        continue;
+      }
+      seenSaveKeys.add(dedupeKey);
+      savedRowOrder++;
       let daysClaiming = item.days_claiming_ta !== null && item.days_claiming_ta !== undefined && item.days_claiming_ta !== ''
         ? parseFloat(item.days_claiming_ta)
         : null;
@@ -13077,7 +13106,6 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
         daysClaiming = null;
       }
 
-      const dutyDate = item.date_iso || item.duty_date || null;
       const rowMonthYear = item.month_year || month_year || (dutyDate ? dutyDate.slice(0, 7) : '2026-09');
 
       await run(
@@ -13099,7 +13127,7 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
           daysClaiming,
           item.object_of_journey || defaultObjText,
           item.remarks || '',
-          i + 1
+          savedRowOrder
         ]
       );
 

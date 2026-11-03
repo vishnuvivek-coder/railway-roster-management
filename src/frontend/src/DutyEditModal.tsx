@@ -330,17 +330,27 @@ export default function DutyEditModal({
 
   // Resolve slot staff ID robustly from staffId, id, or staff name
   const slotStaffId = useMemo(() => {
-    let idVal = dutyModal.staffId || dutyModal.id;
-    if (typeof idVal === 'string' && /^\d+$/.test(idVal.trim())) {
-      idVal = parseInt(idVal.trim(), 10);
+    let idVal = dutyModal.staffId || dutyModal.id || dutyModal.staff_id || dutyModal.originalStaffId || dutyModal.shiftedStaffId || dutyModal.advanceStaffId;
+    if (typeof idVal === 'string') {
+      const match = idVal.match(/(\d+)$/);
+      if (match) idVal = parseInt(match[1], 10);
+      else if (/^\d+$/.test(idVal.trim())) idVal = parseInt(idVal.trim(), 10);
     }
-    if ((!idVal || isNaN(idVal as number)) && !isSlotVacant && dutyModal.name && allStaffList && allStaffList.length > 0) {
-      const targetName = (dutyModal.name || '').trim().toUpperCase();
-      const found = allStaffList.find(s => s.name?.trim().toUpperCase() === targetName);
-      if (found) idVal = found.id;
+    if ((!idVal || isNaN(idVal as number)) && allStaffList && allStaffList.length > 0) {
+      const candidateNames = [dutyModal.name, dutyModal.staffName, dutyModal.originalStaffName].filter(Boolean);
+      for (const rawName of candidateNames) {
+        const clean = String(rawName).replace(/\s*\([^)]*\)/g, '').trim().toUpperCase();
+        if (clean && !clean.includes('VACANT') && clean !== 'V') {
+          const found = allStaffList.find(s => s.name?.replace(/\s*\([^)]*\)/g, '').trim().toUpperCase() === clean);
+          if (found) {
+            idVal = found.id;
+            break;
+          }
+        }
+      }
     }
     return (typeof idVal === 'number' && !isNaN(idVal)) ? idVal : null;
-  }, [dutyModal.staffId, dutyModal.id, dutyModal.name, isSlotVacant, allStaffList]);
+  }, [dutyModal.staffId, dutyModal.id, dutyModal.staff_id, dutyModal.originalStaffId, dutyModal.shiftedStaffId, dutyModal.advanceStaffId, dutyModal.name, dutyModal.staffName, dutyModal.originalStaffName, allStaffList]);
 
   // Compensatory Rest (CR) tracking & due dates for the employee being relieved/edited
   const currentStaffId = slotStaffId || dutyModal.originalStaffId;
@@ -1533,14 +1543,32 @@ export default function DutyEditModal({
       // "name of the employe should only change there is no any change in link"
       // ----------------------------------------------------
       if (activeMode === 'DELETE') {
-        const staffId = slotStaffId || dutyModal.staffId;
-        if (!staffId && !isSlotVacant) {
+        const effectiveToDate = leaveToDate && leaveToDate >= selectedDate ? leaveToDate : selectedDate;
+        const hasReplacementAction = deleteSlotAction === 'REPLACE' || deleteSlotAction === 'UPGRADE_SLEEPER' || deleteReason === 'REASSIGN_STAFF';
+        const repStaffIdNum = (hasReplacementAction && (replacementStaffId || reassignStaffId)) ? parseInt(replacementStaffId || reassignStaffId, 10) : null;
+
+        let staffId = slotStaffId || dutyModal.staffId || dutyModal.id || dutyModal.staff_id || dutyModal.originalStaffId;
+        if (typeof staffId === 'string') {
+          const match = staffId.match(/(\d+)$/);
+          if (match) staffId = parseInt(match[1], 10);
+          else if (/^\d+$/.test(staffId.trim())) staffId = parseInt(staffId.trim(), 10);
+        }
+        if (!staffId && allStaffList && allStaffList.length > 0) {
+          const candidateNames = [dutyModal.name, dutyModal.staffName, dutyModal.originalStaffName].filter(Boolean);
+          for (const rawName of candidateNames) {
+            const clean = String(rawName).replace(/\s*\([^)]*\)/g, '').trim().toUpperCase();
+            if (clean && !clean.includes('VACANT') && clean !== 'V') {
+              const found = allStaffList.find(s => s.name?.replace(/\s*\([^)]*\)/g, '').trim().toUpperCase() === clean);
+              if (found) {
+                staffId = found.id;
+                break;
+              }
+            }
+          }
+        }
+        if (!staffId && !isSlotVacant && !repStaffIdNum) {
           throw new Error('Employee ID missing for this slot.');
         }
-
-        const effectiveToDate = leaveToDate && leaveToDate >= selectedDate ? leaveToDate : selectedDate;
-        const hasReplacementAction = deleteSlotAction === 'REPLACE' || deleteSlotAction === 'UPGRADE_SLEEPER';
-        const repStaffIdNum = (hasReplacementAction && replacementStaffId) ? parseInt(replacementStaffId, 10) : null;
         const repStaffName = hasReplacementAction ? (selectedReplacementStaffObj?.name || replacementName || null) : null;
 
         let actionCode = deleteReason;

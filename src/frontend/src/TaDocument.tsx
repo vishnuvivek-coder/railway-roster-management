@@ -1558,7 +1558,9 @@ export default function TaDocument({
             margin: 0 auto !important;
             overflow: visible !important;
           }
-          .ta-page-sheet:last-child {
+          .ta-page-sheet:last-child,
+          .ta-page-sheet:last-of-type,
+          .ta-page-sheet.single-sheet {
             page-break-after: auto !important;
             break-after: auto !important;
           }
@@ -1593,7 +1595,7 @@ export default function TaDocument({
           {/* ====================================================
              PAGE 1 OF 2 (EXACT REPLICA OF EXCEL SHEET 1)
              ==================================================== */}
-          <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
+          <div className={`ta-page-sheet ta-document-paper printable-document-sheet ${page2Rows.length === 0 ? 'single-sheet' : ''}`} style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1992,6 +1994,7 @@ export default function TaDocument({
           {/* ====================================================
              PAGE 2 OF 2 (EXACT REPLICA OF EXCEL SHEET 2)
              ==================================================== */}
+          {page2Rows.length > 0 && (
           <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
@@ -2326,6 +2329,7 @@ export default function TaDocument({
             </div>
 
           </div>
+          )}
 
         </div>
       ) : (

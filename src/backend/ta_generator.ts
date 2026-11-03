@@ -2654,6 +2654,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   // Seamlessly merge savedEntries with approvedClaims for any dates not present in savedEntries
   const sourceRows = [];
   const savedDateSet = new Set();
+  const seenDutyKeys = new Set();
   if (savedEntries && savedEntries.length > 0) {
     savedEntries.forEach(r => {
       const dIso = resolveDutyDateIso(r);
@@ -2680,6 +2681,12 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
           return;
         }
 
+        const dutyKey = `${dIso}_${String(r.train_no || '').trim()}_${String(r.from_station || '').trim()}_${String(r.to_station || '').trim()}`;
+        if (seenDutyKeys.has(dutyKey)) {
+          return;
+        }
+        seenDutyKeys.add(dutyKey);
+
         savedDateSet.add(dIso);
         sourceRows.push({ ...r, _isSaved: true });
       }
@@ -2688,7 +2695,9 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   if (approvedClaims && approvedClaims.length > 0) {
     approvedClaims.forEach(claim => {
       const dIso = claim.duty_date;
-      if (!savedDateSet.has(dIso)) {
+      const dutyKey = `${dIso}_${String(claim.train_no || '').trim()}_${String(claim.from_station || '').trim()}_${String(claim.to_station || '').trim()}`;
+      if (!savedDateSet.has(dIso) && !seenDutyKeys.has(dutyKey)) {
+        seenDutyKeys.add(dutyKey);
         sourceRows.push({ ...claim, _isSaved: false });
       }
     });

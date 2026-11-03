@@ -169,13 +169,17 @@ export const printElement = (elementOrId?: HTMLElement | string | null, options:
     doc.close();
 
     // Trigger printing once loaded
+    let printInitiated = false;
     setTimeout(() => {
       try {
         printFrame.contentWindow?.focus();
+        printInitiated = true;
         printFrame.contentWindow?.print();
       } catch (e) {
-        // Fallback to top-level window.print
-        window.print();
+        // Fallback to top-level window.print only if iframe print was never initiated
+        if (!printInitiated) {
+          window.print();
+        }
       } finally {
         setTimeout(() => {
           try {
