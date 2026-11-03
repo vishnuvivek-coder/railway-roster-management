@@ -308,8 +308,9 @@ export default function DutyEditModal({
   // Shift confirmation modal state: { staffName, currentTrainDesc, targetDesc, onConfirm }
   const [shiftConfirmDialog, setShiftConfirmDialog] = useState(null);
 
-  // SUB-OPTIONS UNDER DELETE: 'LEAVE', 'SICK', 'ADVANCE_BOOKED', 'ABSENT', 'SHIFTED', 'WRONG_ALLOTMENT', 'UPGRADE_COR', 'REASSIGN_STAFF', 'MARK_LATER'
+  // SUB-OPTIONS UNDER DELETE: 'LEAVE', 'SICK', 'ADVANCE_BOOKED', 'ABSENT', 'SHIFTED', 'WRONG_ALLOTMENT', 'UPGRADE_COR', 'REASSIGN_STAFF', 'EXCHANGE_LINK', 'MARK_LATER'
   const [deleteReason, setDeleteReason] = useState(() => {
+    if (dutyModal.initialMode === 'EXCHANGE_STAFF' || dutyModal.initialMode === 'EXCHANGE_LINK') return 'EXCHANGE_LINK';
     if (dutyModal.status === 'MARK_LATER' || dutyModal.isMarkLater) return 'MARK_LATER';
     if (dutyModal.isVacantShifted || dutyModal.status === 'SHIFTED') return 'SHIFTED';
     if (dutyModal.status === 'SICK') return 'SICK';
@@ -1624,19 +1625,20 @@ export default function DutyEditModal({
         } else if (deleteReason === 'ABSENT') {
           actionCode = 'ABSENT';
           if (!finalReason) finalReason = 'Unauthorized Absence [O]';
+        } else if (deleteReason === 'EXCHANGE_LINK' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')) {
+          actionCode = 'MUTUAL_SHIFT';
+          if (!mutualStaffId) {
+            throw new Error('Please select an employee (Staff B) to perform the mutual link exchange with.');
+          }
+          const bName = selectedMutualStaffObj?.name || 'Staff B';
+          const aName = dutyModal.name || initialStaffObj?.name || 'Staff A';
+          placeDesc = `Mutual Link Exchange with ${bName} (${staffBDutyInfo?.label || 'Duty'})`;
+          if (!finalReason) {
+            finalReason = mutualReason.trim() || `Mutual link exchange between ${aName} and ${bName}`;
+          }
         } else if (deleteReason === 'SHIFTED') {
-          actionCode = shiftedMode === 'MUTUAL' ? 'MUTUAL_SHIFT' : 'SHIFTED';
-          if (shiftedMode === 'MUTUAL') {
-            if (!mutualStaffId) {
-              throw new Error('Please select an employee (Staff B) to perform the mutual shift of places with.');
-            }
-            const bName = selectedMutualStaffObj?.name || 'Staff B';
-            const aName = dutyModal.name || initialStaffObj?.name || 'Staff A';
-            placeDesc = `Mutual Shift with ${bName} (${staffBDutyInfo?.label || 'Duty'})`;
-            if (!finalReason) {
-              finalReason = mutualReason.trim() || `Mutual shift between ${aName} and ${bName}`;
-            }
-          } else if (shiftedMode === 'CUSTOM') {
+          actionCode = 'SHIFTED';
+          if (shiftedMode === 'CUSTOM') {
             placeDesc = shiftedPlace.trim();
           } else if (shiftedMode === 'LINK') {
             placeDesc = shiftedLinkNum ? `Link #${shiftedLinkNum}` : '';
@@ -1733,7 +1735,8 @@ export default function DutyEditModal({
           finalReason = `Upgraded ${effectiveRepNameVal || 'Sleeper TTI'} to COR Link #${targetLink || 'Duty'}`;
         }
 
-        const repType = shiftedMode === 'MUTUAL' ? 'NONE' : (
+        const isMutualMode = deleteReason === 'EXCHANGE_LINK' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL');
+        const repType = isMutualMode ? 'NONE' : (
           isUpgradingToCor 
             ? 'UPGRADE_SLEEPER' 
             : ((hasReplacementAction || deleteReason === 'REASSIGN_STAFF') ? 'OTHER_COLUMN' : (deleteSlotAction === 'RESET' ? 'RESET' : 'NONE'))
@@ -1741,7 +1744,7 @@ export default function DutyEditModal({
 
         const payload = {
           staff_id: staffId,
-          staff_b_id: shiftedMode === 'MUTUAL' && mutualStaffId ? parseInt(mutualStaffId, 10) : null,
+          staff_b_id: isMutualMode && mutualStaffId ? parseInt(mutualStaffId, 10) : null,
           date: selectedDate,
           to_date: effectiveToDate,
           action: actionCode,
@@ -1751,8 +1754,8 @@ export default function DutyEditModal({
           vacate_next_link: advanceVacateNext,
           target_cor_link: targetCorLink ? parseInt(targetCorLink, 10) : (isUpgradingToCor && targetLink ? parseInt(targetLink, 10) : 1),
           original_staff_action: reassignOriginalStaffAction,
-          shifted_mode: shiftedMode,
-          shifted_place: shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : (shiftedMode === 'MUTUAL' ? placeDesc : null)),
+          shifted_mode: deleteReason === 'EXCHANGE_LINK' ? 'MUTUAL' : shiftedMode,
+          shifted_place: isMutualMode ? placeDesc : (shiftedMode === 'CUSTOM' ? shiftedPlace.trim() : (shiftedMode === 'NON_DAILY' ? (placeDesc || 'NON_DAILY_TRAIN') : null)),
           shifted_link_number: shiftedMode === 'LINK' && shiftedLinkNum ? parseInt(shiftedLinkNum, 10) : null,
           shifted_category_id: shiftedMode === 'LINK' && shiftedCatId ? parseInt(shiftedCatId, 10) : null,
           shifted_non_daily_id: shiftedMode === 'NON_DAILY' && shiftedNonDailyId ? parseInt(shiftedNonDailyId, 10) : null,
@@ -1764,13 +1767,13 @@ export default function DutyEditModal({
           reason: finalReason,
           new_link_number: deleteReason === 'UPGRADE_COR' ? parseInt(targetCorLink, 10) : (isUpgradingToCor && targetLink ? parseInt(targetLink, 10) : null),
           replacement_type: repType,
-          replacement_staff_id: shiftedMode === 'MUTUAL' ? null : (effectiveRepIdVal ? parseInt(effectiveRepIdVal, 10) : null),
-          replacement_name: shiftedMode === 'MUTUAL' ? null : effectiveRepNameVal,
+          replacement_staff_id: isMutualMode ? null : (effectiveRepIdVal ? parseInt(effectiveRepIdVal, 10) : null),
+          replacement_name: isMutualMode ? null : effectiveRepNameVal,
           wrong_allotment_action: deleteSlotAction
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
-        if (shiftedMode !== 'MUTUAL' && (hasReplacementAction || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
+        if (!isMutualMode && (hasReplacementAction || deleteReason === 'REASSIGN_STAFF') && chosenRepObj) {
           const repStatus = getStaffAssignmentStatus(chosenRepObj, selectedDate);
           if (repStatus.isUnavailable && !isUpgradingToCor && (deleteReason === 'REASSIGN_STAFF' ? reassignCatFilter : replacementCatId) !== 'ENTIRE_ROSTER') {
             if (!window.confirm(`${chosenRepObj.name} is currently marked on ${repStatus.unavailableReason || 'Rest / Leave'} on ${selectedDate}. Assigning them will mark them as reported fit / on duty. Proceed?`)) {
@@ -2301,7 +2304,7 @@ export default function DutyEditModal({
                   </span>
                 </div>
 
-                {/* 9 Reasons for Delete / Roster Adjustment Buttons */}
+                {/* 10 Reasons for Delete / Roster Adjustment Buttons */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {[
                     { id: 'LEAVE', label: '1. Leave', icon: '', desc: 'CL, LAP, LHAP, etc.' },
@@ -2312,44 +2315,70 @@ export default function DutyEditModal({
                     { id: 'WRONG_ALLOTMENT', label: '6. Wrong Allotment', icon: '', desc: 'Remove mistaken allotment' },
                     { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
                     { id: 'REASSIGN_STAFF', label: '8. Reassign Staff', icon: '', desc: 'Reassign link / swap staff' },
-                    { id: 'MARK_LATER', label: '9. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' }
-                  ].map(r => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => {
-                        setDeleteReason(r.id);
-                        if (r.id === 'MARK_LATER') {
-                          setDeleteSlotAction('VACANT');
-                        } else if (r.id === 'WRONG_ALLOTMENT') {
-                          if (dutyModal.isOverridden) {
-                            setDeleteSlotAction('RESET');
-                          } else {
+                    { id: 'EXCHANGE_LINK', label: '9. Exchange Link', icon: '🔄', desc: 'Mutual link / duty swap' },
+                    { id: 'MARK_LATER', label: '10. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' }
+                  ].map(r => {
+                    const isSelected = deleteReason === r.id;
+                    const isExchange = r.id === 'EXCHANGE_LINK';
+                    const isUpgrade = r.id === 'UPGRADE_COR';
+                    const isReassign = r.id === 'REASSIGN_STAFF';
+
+                    let activeBorder = '#ef4444';
+                    let activeBg = 'rgba(239, 68, 68, 0.2)';
+                    let activeColor = '#ffffff';
+
+                    if (isExchange) {
+                      activeBorder = '#38bdf8';
+                      activeBg = 'rgba(56, 189, 248, 0.22)';
+                      activeColor = '#38bdf8';
+                    } else if (isUpgrade) {
+                      activeBorder = '#f59e0b';
+                      activeBg = 'rgba(245, 158, 11, 0.22)';
+                      activeColor = '#fde68a';
+                    } else if (isReassign) {
+                      activeBorder = '#3b82f6';
+                      activeBg = 'rgba(59, 130, 246, 0.22)';
+                      activeColor = '#93c5fd';
+                    }
+
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setDeleteReason(r.id);
+                          if (r.id === 'MARK_LATER') {
+                            setDeleteSlotAction('VACANT');
+                          } else if (r.id === 'WRONG_ALLOTMENT') {
+                            if (dutyModal.isOverridden) {
+                              setDeleteSlotAction('RESET');
+                            } else {
+                              setDeleteSlotAction('REPLACE');
+                            }
+                          } else if (deleteSlotAction === 'RESET') {
                             setDeleteSlotAction('REPLACE');
                           }
-                        } else if (deleteSlotAction === 'RESET') {
-                          setDeleteSlotAction('REPLACE');
-                        }
-                      }}
-                      style={{
-                        padding: '10px 6px',
-                        borderRadius: '8px',
-                        border: deleteReason === r.id ? '2px solid #ef4444' : '1px solid var(--border-glass)',
-                        background: deleteReason === r.id ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
-                        color: deleteReason === r.id ? '#ffffff' : 'var(--color-text-secondary)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <span style={{ fontSize: '1.1rem' }}>{r.icon}</span>
-                      <span style={{ fontWeight: 700, fontSize: '0.82rem', textAlign: 'center' }}>{r.label}</span>
-                      <span style={{ fontSize: '0.64rem', opacity: 0.75, textAlign: 'center' }}>{r.desc}</span>
-                    </button>
-                  ))}
+                        }}
+                        style={{
+                          padding: '10px 6px',
+                          borderRadius: '8px',
+                          border: isSelected ? `2px solid ${activeBorder}` : (isExchange ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid var(--border-glass)'),
+                          background: isSelected ? activeBg : (isExchange ? 'rgba(56, 189, 248, 0.05)' : 'rgba(255,255,255,0.02)'),
+                          color: isSelected ? activeColor : (isExchange ? '#38bdf8' : 'var(--color-text-secondary)'),
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '2px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <span style={{ fontSize: '1.1rem' }}>{r.icon}</span>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem', textAlign: 'center' }}>{r.label}</span>
+                        <span style={{ fontSize: '0.64rem', opacity: 0.75, textAlign: 'center' }}>{r.desc}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* SUB-OPTION 1: LEAVE (all 9 types: CL, LAP, LHAP, SCL, OD, CCL, CR, NH, REST) */}
@@ -3930,7 +3959,243 @@ export default function DutyEditModal({
                   </div>
                 )}
 
-                {/* SUB-OPTION 9: MARK REASON LATER */}
+                {/* SUB-OPTION 9: EXCHANGE LINK (MUTUAL DUTY / LINK SWAP) */}
+                {deleteReason === 'EXCHANGE_LINK' && (
+                  <div style={{
+                    background: 'rgba(2, 132, 199, 0.06)',
+                    border: '1.5px solid rgba(2, 132, 199, 0.35)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🔄 Option 9: Exchange Link (Mutual Duty Swap)</span>
+                      </div>
+                      <span className="badge" style={{ background: 'rgba(2, 132, 199, 0.2)', color: '#38bdf8', fontSize: '0.74rem', border: '1px solid rgba(2, 132, 199, 0.4)', fontWeight: 700 }}>
+                        Link #{targetLink || 'Duty'} ⇄ Mutual Swap
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+                      Select another working employee (<strong>Staff B</strong>) to mutually exchange their allotted train/link duty with <strong>{dutyModal.name || initialStaffObj?.name || 'Staff A'}</strong> on <strong>{selectedDate}</strong>.
+                    </div>
+
+                    {/* Category Filter Pills for Staff B */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '6px', color: '#93c5fd', fontWeight: 700 }}>
+                        Filter Staff B by Category:
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {[
+                          { id: 'ENTIRE_ROSTER', label: 'All Employees (Entire Roster)' },
+                          { id: '2', label: 'Sleeper / TTI' },
+                          { id: '1', label: 'Conductors (COR)' },
+                          { id: '3', label: 'Ladies / TTE' },
+                          { id: '4', label: 'LR Pool' },
+                          { id: 'NON_DAILY', label: (!selectedDate || selectedDate >= '2026-10-01') ? 'Non-Daily (53, 54, 55)' : 'Non-Daily (60, 61, 62)' }
+                        ].map(c => {
+                          const isSelected = mutualCatFilter === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setMutualCatFilter(c.id);
+                                setMutualStaffId('');
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                border: isSelected ? '1px solid #38bdf8' : '1px solid var(--border-glass)',
+                                background: isSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255,255,255,0.02)',
+                                color: isSelected ? '#38bdf8' : 'var(--color-text-secondary)',
+                                fontSize: '0.76rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {c.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Search & Select Staff B Dropdown */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', margin: 0 }}>
+                          Select Staff B to Exchange Links With ({eligibleMutualStaff.length} Available):
+                        </label>
+                      </div>
+                      <div style={{ zIndex: 30, position: 'relative' }}>
+                        <SearchableStaffSelect
+                          staffList={eligibleMutualStaff}
+                          value={mutualStaffId}
+                          onChange={(val) => setMutualStaffId(val)}
+                          placeholder={`-- Choose Employee to Exchange Links (${eligibleMutualStaff.length}) --`}
+                          formatLabel={(s) => {
+                            const dInfo = getStaffDutyInfo(s, selectedDate);
+                            const catName = categories?.find(c => c.id === s.category_id)?.name?.split(' ')[0] || `Cat ${s.category_id}`;
+                            return `${s.name} (${catName}) ➔ ${dInfo.label || 'Duty'}`;
+                          }}
+                          customStyles={{
+                            control: (base, state) => ({
+                              ...base,
+                              minHeight: '38px',
+                              fontSize: '0.86rem',
+                              fontWeight: 600,
+                              borderRadius: '8px',
+                              borderColor: state.isFocused ? '#38bdf8' : 'rgba(56, 189, 248, 0.4)',
+                              background: 'rgba(15, 23, 42, 0.85)',
+                              boxShadow: state.isFocused ? '0 0 0 2px rgba(56, 189, 248, 0.25)' : 'none'
+                            }),
+                            menu: (base) => ({
+                              ...base,
+                              background: '#0f172a',
+                              border: '1px solid rgba(56, 189, 248, 0.4)',
+                              zIndex: 9999
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Mutual Exchange Preview Card */}
+                    {selectedMutualStaffObj ? (
+                      <div style={{
+                        background: 'rgba(2, 132, 199, 0.12)',
+                        border: '1.5px solid rgba(56, 189, 248, 0.45)',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>Live Link Exchange Preview:</span>
+                          <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{selectedDate}</span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '10px', alignItems: 'center' }}>
+                          {/* Staff A */}
+                          <div style={{
+                            background: 'rgba(15, 23, 42, 0.75)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '0.78rem'
+                          }}>
+                            <div style={{ fontWeight: 800, color: '#fbbf24', fontSize: '0.84rem' }}>
+                              {dutyModal.name || initialStaffObj?.name || 'Staff A'}
+                            </div>
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: '2px' }}>
+                              Current: <strong style={{ color: '#ffffff' }}>{staffADutyInfo.label}</strong>
+                            </div>
+                            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(255,255,255,0.15)', color: '#38bdf8', fontWeight: 700 }}>
+                              ⇄ Will take: <strong style={{ color: '#38bdf8' }}>{staffBDutyInfo?.label || 'Duty'}</strong>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '1.5rem', color: '#38bdf8', fontWeight: 800, textAlign: 'center', userSelect: 'none' }}>
+                            ⇄
+                          </div>
+
+                          {/* Staff B */}
+                          <div style={{
+                            background: 'rgba(15, 23, 42, 0.75)',
+                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '0.78rem'
+                          }}>
+                            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.84rem' }}>
+                              {selectedMutualStaffObj.name}
+                            </div>
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: '2px' }}>
+                              Current: <strong style={{ color: '#ffffff' }}>{staffBDutyInfo?.label || 'Duty'}</strong>
+                            </div>
+                            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(255,255,255,0.15)', color: '#fbbf24', fontWeight: 700 }}>
+                              ⇄ Will take: <strong style={{ color: '#fbbf24' }}>{staffADutyInfo.label}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px dashed rgba(56, 189, 248, 0.3)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        fontSize: '0.78rem',
+                        color: 'var(--color-text-muted)',
+                        textAlign: 'center'
+                      }}>
+                        👆 Choose Staff B from the dropdown above to view the live link exchange preview.
+                      </div>
+                    )}
+
+                    {/* Optional Multi-day Date Range */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>From Date:</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={selectedDate}
+                          onChange={(e) => setSelectedDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.76rem' }}>To Date (Optional for multi-day trip):</label>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={leaveToDate}
+                          min={selectedDate}
+                          onChange={(e) => setLeaveToDate(e.target.value)}
+                          style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Exchange Reason / Remarks */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)' }}>
+                        Exchange Link Reason / Remarks:
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={selectedMutualStaffObj ? `Mutual link exchange between ${dutyModal.name || 'Staff A'} and ${selectedMutualStaffObj.name}` : "e.g. Mutual consent / Link exchange"}
+                        value={mutualReason}
+                        onChange={(e) => setMutualReason(e.target.value)}
+                        style={{ fontSize: '0.84rem' }}
+                      />
+                    </div>
+
+                    <div style={{
+                      fontSize: '0.76rem',
+                      color: '#38bdf8',
+                      background: 'rgba(56, 189, 248, 0.08)',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>ℹ️</span>
+                      <span><strong>Link Exchange:</strong> Mutually exchanges the assigned links and trains between both employees for the selected date(s). Attendance remains <strong>[P] (Present)</strong> for both on the Muster Roll.</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* SUB-OPTION 10: MARK REASON LATER */}
                 {deleteReason === 'MARK_LATER' && (
                   <div style={{
                     background: 'rgba(245, 158, 11, 0.05)',
@@ -4004,7 +4269,7 @@ export default function DutyEditModal({
                 )}
 
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
-                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && (
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'EXCHANGE_LINK' && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && (
                   <div style={{
                     background: 'rgba(255, 255, 255, 0.02)',
                     border: '1px solid var(--border-glass)',
@@ -4391,7 +4656,7 @@ export default function DutyEditModal({
                 )}
 
                 {/* Remarks */}
-                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && (
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'EXCHANGE_LINK' && (
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.78rem' }}>Remarks / Reason:</label>
                     <input
@@ -4735,10 +5000,10 @@ export default function DutyEditModal({
                         ? 'linear-gradient(135deg, #d97706, #b45309)'
                         : (deleteReason === 'REASSIGN_STAFF'
                             ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
-                            : (deleteReason === 'MARK_LATER'
-                                ? 'linear-gradient(135deg, #d97706, #b45309)'
-                                : ((deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
-                                    ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                            : (deleteReason === 'EXCHANGE_LINK' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL')
+                                ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
+                                : (deleteReason === 'MARK_LATER'
+                                    ? 'linear-gradient(135deg, #d97706, #b45309)'
                                     : 'linear-gradient(135deg, #ef4444, #dc2626)'))))
                     : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#ffffff',
@@ -4746,8 +5011,8 @@ export default function DutyEditModal({
                   fontWeight: 700,
                   padding: '8px 20px',
                   minWidth: '160px',
-                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteSlotAction === 'UPGRADE_SLEEPER' || deleteReason === 'REASSIGN_STAFF' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') || deleteReason === 'MARK_LATER'))
-                    ? '0 0 16px rgba(212, 161, 92, 0.45)'
+                  boxShadow: (activeMode === 'DELETE' && (deleteReason === 'UPGRADE_COR' || deleteSlotAction === 'UPGRADE_SLEEPER' || deleteReason === 'REASSIGN_STAFF' || deleteReason === 'EXCHANGE_LINK' || (deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') || deleteReason === 'MARK_LATER'))
+                    ? '0 0 16px rgba(2, 132, 199, 0.45)'
                     : 'none'
                 }}
               >
@@ -4757,15 +5022,17 @@ export default function DutyEditModal({
                      ? (upgradeMode === 'PERMANENT' ? 'Save & Upgrade to COR (Cadre)' : `Save & Upgrade to COR Link #${targetCorLink || '1'}`)
                      : (deleteSlotAction === 'UPGRADE_SLEEPER'
                          ? `⭐ Save & Upgrade Sleeper TTI to COR Link #${targetLink || 'Duty'}`
-                         : (deleteReason === 'REASSIGN_STAFF'
-                             ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
-                             : (deleteReason === 'MARK_LATER'
-                                 ? 'Delete Name & Mark Reason Later'
-                                 : (deleteReason === 'WRONG_ALLOTMENT'
-                                     ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
-                                     : (deleteReason === 'SHIFTED' 
-                                         ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
-                                         : `Save Status Change`)))))
+                         : (deleteReason === 'EXCHANGE_LINK'
+                             ? '🔄 Save & Exchange Links'
+                             : (deleteReason === 'REASSIGN_STAFF'
+                                 ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
+                                 : (deleteReason === 'MARK_LATER'
+                                     ? 'Delete Name & Mark Reason Later'
+                                     : (deleteReason === 'WRONG_ALLOTMENT'
+                                         ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
+                                         : (deleteReason === 'SHIFTED' 
+                                             ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
+                                             : `Save Status Change`))))))
                  ) :
                  `Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>
