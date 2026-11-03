@@ -7501,7 +7501,12 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           });
 
           const dayOffset = getDayOffset(category.anchor_date, dStr);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+          const cyclicLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+          const originalLink = (req.body.link_number !== undefined && req.body.link_number !== null && req.body.link_number !== '')
+            ? parseInt(req.body.link_number, 10)
+            : (req.body.original_link_number
+                ? parseInt(req.body.original_link_number, 10)
+                : (existingOverride?.original_link_number || cyclicLink));
 
           const newStatus = shiftedLinkNum !== null ? 'CHANGED_LINK' : (isNonDaily ? 'EXTRA_CREW' : 'SHIFTED');
 
@@ -8140,7 +8145,10 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
 
     const cat = await get('SELECT * FROM categories WHERE id = ?', [staff.category_id]);
     const dayOffset = getDayOffset(cat.anchor_date, date);
-    const origLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
+    const cyclicLink = getBaseLinkNumber(staff.row_position, dayOffset, cat.cycle_length);
+    const origLink = (source_link !== undefined && source_link !== null && source_link !== '')
+      ? parseInt(source_link, 10)
+      : (existingOverride?.original_link_number || cyclicLink);
 
     const isExtraCrew = is_extra === 1 || !target_link;
     const status = isExtraCrew ? 'EXTRA_CREW' : 'CHANGED_LINK';
@@ -11852,37 +11860,43 @@ app.get('/api/reports/daily-view', async (req, res) => {
         if (musterRecord) {
           musterCode = musterRecord.code.toUpperCase();
           musterRemarks = musterRecord.remarks || '';
-          if (['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(musterCode)) {
-            status = 'LEAVE';
-            activeLink = null;
-            isOverridden = true;
-            leaveType = musterCode;
-            overrideReason = `Muster: ${musterCode === 'OD' ? 'OD (On Duty)' : musterCode}${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'SICK') {
-            status = 'SICK';
-            activeLink = null;
-            isOverridden = true;
-            overrideReason = `Muster: SICK${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'CR') {
-            status = 'CR';
-            activeLink = null;
-            isOverridden = true;
-            overrideReason = `Muster: Compensatory Rest (CR)${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'R') {
-            status = 'REST';
-            activeLink = null;
-            isOverridden = true;
-            overrideReason = `Muster: Weekly Rest (R)${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'O') {
-            status = 'ABSENT';
-            activeLink = null;
-            isOverridden = true;
-            overrideReason = `Muster: Absent (O)${musterRemarks ? ` (${musterRemarks})` : ''}`;
-          } else if (musterCode === 'P' || musterCode === 'E') {
-            status = 'DUTY';
-            if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
-              status = 'AVAILABLE_FOR_BOOKING';
-              overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+          const hasExplicitDutyOverride = override && ['SHIFTED', 'CHANGED_LINK', 'EXTRA_CREW', 'SUBSTITUTE', 'UTILISED_ADVANCE', 'AVAILABLE_FOR_BOOKING'].includes(override.status);
+          if (!hasExplicitDutyOverride) {
+            if (['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'OD', 'NH'].includes(musterCode)) {
+              status = 'LEAVE';
+              activeLink = null;
+              isOverridden = true;
+              leaveType = musterCode;
+              overrideReason = `Muster: ${musterCode === 'OD' ? 'OD (On Duty)' : musterCode}${musterRemarks ? ` (${musterRemarks})` : ''}`;
+            } else if (musterCode === 'SICK') {
+              status = 'SICK';
+              activeLink = null;
+              isOverridden = true;
+              overrideReason = `Muster: SICK${musterRemarks ? ` (${musterRemarks})` : ''}`;
+            } else if (musterCode === 'CR') {
+              status = 'CR';
+              activeLink = null;
+              isOverridden = true;
+              overrideReason = `Muster: Compensatory Rest (CR)${musterRemarks ? ` (${musterRemarks})` : ''}`;
+            } else if (musterCode === 'R') {
+              status = 'REST';
+              activeLink = null;
+              isOverridden = true;
+              overrideReason = `Muster: Weekly Rest (R)${musterRemarks ? ` (${musterRemarks})` : ''}`;
+            } else if (musterCode === 'O') {
+              status = 'ABSENT';
+              activeLink = null;
+              isOverridden = true;
+              overrideReason = `Muster: Absent (O)${musterRemarks ? ` (${musterRemarks})` : ''}`;
+            } else if (musterCode === 'P' || musterCode === 'E') {
+              if (override && ['LEAVE', 'SICK', 'CR', 'ABSENT', 'MARK_LATER'].includes(override.status)) {
+                status = 'AVAILABLE_FOR_BOOKING';
+                overrideReason = 'Reported fit / Available at HQ (Muster: P)';
+              } else if (override && override.status) {
+                status = override.status;
+              } else {
+                status = 'DUTY';
+              }
             }
           }
         }

@@ -2057,6 +2057,7 @@ export default function App() {
   const [dragOverSlotId, setDragOverSlotId] = useState(null);
   const [dragOverStaffDutyKey, setDragOverStaffDutyKey] = useState(null);
   const [staffDropActionModal, setStaffDropActionModal] = useState(null); // { incomingStaff, targetDuty, targetGroup }
+  const [dropActionChoice, setDropActionChoice] = useState('REPLACE');
   const [activeMovingStaff, setActiveMovingStaff] = useState(null); // Quick move / Touch mode
   const [showAvailablePool, setShowAvailablePool] = useState(true);
   const [availablePoolFilter, setAvailablePoolFilter] = useState('ALL'); // 'ALL' | 'LR' | 'HQ_AVAILABLE'
@@ -3618,6 +3619,7 @@ export default function App() {
       return;
     }
 
+    setDropActionChoice('REPLACE');
     setStaffDropActionModal({
       incomingStaff: dragData,
       targetDuty,
@@ -16150,11 +16152,13 @@ export default function App() {
               </div>
 
               {/* Action Choices */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '22px' }}>
                 {/* 1. Swap Duties */}
-                <button
-                  type="button"
-                  onClick={() => {
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDropActionChoice('SWAP')}
+                  onDoubleClick={() => {
                     handleExchangeStaffDuties(
                       incomingStaff.staffId,
                       incomingName,
@@ -16168,95 +16172,213 @@ export default function App() {
                   }}
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'flex-start',
+                    gap: '14px',
                     padding: '14px 18px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(6, 182, 212, 0.4)',
-                    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15))',
+                    borderRadius: '12px',
+                    border: dropActionChoice === 'SWAP' ? '2px solid #38bdf8' : '1px solid rgba(6, 182, 212, 0.3)',
+                    background: dropActionChoice === 'SWAP'
+                      ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(59, 130, 246, 0.25))'
+                      : 'rgba(255, 255, 255, 0.03)',
+                    boxShadow: dropActionChoice === 'SWAP' ? '0 0 16px rgba(56, 189, 248, 0.35)' : 'none',
                     color: '#f8fafc',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    userSelect: 'none'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.98rem', fontWeight: 800, color: '#38bdf8' }}>
-                    <span>🔁</span> Swap Duties ({incomingName} ⇄ {targetName})
+                  <div style={{ fontSize: '1.25rem', marginTop: '2px', color: dropActionChoice === 'SWAP' ? '#38bdf8' : 'var(--color-text-muted)' }}>
+                    {dropActionChoice === 'SWAP' ? '🔘' : '⚪'}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-                    Both employees swap their duties for this date. <strong>{incomingName}</strong> takes Train {targetTrain} (Link #{targetLink}), and <strong>{targetName}</strong> takes {incomingName}'s previous duty ({currentDutyDesc}).
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🔁</span> Swap Duties ({incomingName} ⇄ {targetName})
+                      </div>
+                      {dropActionChoice === 'SWAP' && (
+                        <span className="badge" style={{ background: '#38bdf8', color: '#000', fontWeight: 800, fontSize: '0.7rem' }}>
+                          ✓ SELECTED
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.45 }}>
+                      Both employees swap their duties for this date. <strong>{incomingName}</strong> takes Train {targetTrain} (Link #{targetLink}), and <strong>{targetName}</strong> takes {incomingName}'s previous duty ({currentDutyDesc}).
+                    </div>
                   </div>
-                </button>
+                </div>
 
                 {/* 2. Replace Staff & Relieve to Available at HQ */}
-                <button
-                  type="button"
-                  onClick={() => {
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDropActionChoice('REPLACE')}
+                  onDoubleClick={() => {
                     setStaffDropActionModal(null);
                     doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, false, targetDuty, incomingStaff, targetDuty.staffId);
                   }}
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'flex-start',
+                    gap: '14px',
                     padding: '14px 18px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(16, 185, 129, 0.4)',
-                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.15))',
+                    borderRadius: '12px',
+                    border: dropActionChoice === 'REPLACE' ? '2px solid #10b981' : '1px solid rgba(16, 185, 129, 0.3)',
+                    background: dropActionChoice === 'REPLACE'
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25))'
+                      : 'rgba(255, 255, 255, 0.03)',
+                    boxShadow: dropActionChoice === 'REPLACE' ? '0 0 16px rgba(16, 185, 129, 0.35)' : 'none',
                     color: '#f8fafc',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    userSelect: 'none'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.98rem', fontWeight: 800, color: '#34d399' }}>
-                    <span>🔀</span> Replace Staff ({incomingName} takes Link #{targetLink})
+                  <div style={{ fontSize: '1.25rem', marginTop: '2px', color: dropActionChoice === 'REPLACE' ? '#10b981' : 'var(--color-text-muted)' }}>
+                    {dropActionChoice === 'REPLACE' ? '🔘' : '⚪'}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-                    Assigns <strong>{incomingName}</strong> to Train {targetTrain} (Link #{targetLink}). <strong>{targetName}</strong> is relieved and marked "Available for Booking at HQ".
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🔀</span> Replace Staff ({incomingName} takes Link #{targetLink})
+                      </div>
+                      {dropActionChoice === 'REPLACE' && (
+                        <span className="badge" style={{ background: '#10b981', color: '#000', fontWeight: 800, fontSize: '0.7rem' }}>
+                          ✓ SELECTED
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.45 }}>
+                      Assigns <strong>{incomingName}</strong> to Train {targetTrain} (Link #{targetLink}). <strong>{targetName}</strong> is relieved and marked "Available for Booking at HQ".
+                    </div>
                   </div>
-                </button>
+                </div>
 
                 {/* 3. Add as Extra Crew */}
-                <button
-                  type="button"
-                  onClick={() => {
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDropActionChoice('EXTRA')}
+                  onDoubleClick={() => {
                     setStaffDropActionModal(null);
                     doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, true, null, incomingStaff);
                   }}
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'flex-start',
+                    gap: '14px',
                     padding: '14px 18px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(245, 158, 11, 0.4)',
-                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.12))',
+                    borderRadius: '12px',
+                    border: dropActionChoice === 'EXTRA' ? '2px solid #f59e0b' : '1px solid rgba(245, 158, 11, 0.3)',
+                    background: dropActionChoice === 'EXTRA'
+                      ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.22))'
+                      : 'rgba(255, 255, 255, 0.03)',
+                    boxShadow: dropActionChoice === 'EXTRA' ? '0 0 16px rgba(245, 158, 11, 0.35)' : 'none',
                     color: '#f8fafc',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    userSelect: 'none'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.98rem', fontWeight: 800, color: '#fbbf24' }}>
-                    <span>➕</span> Add as Extra Crew (Keep {targetName} on Duty)
+                  <div style={{ fontSize: '1.25rem', marginTop: '2px', color: dropActionChoice === 'EXTRA' ? '#f59e0b' : 'var(--color-text-muted)' }}>
+                    {dropActionChoice === 'EXTRA' ? '🔘' : '⚪'}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.4 }}>
-                    <strong>{targetName}</strong> remains on Train {targetTrain} (Link #{targetLink}). <strong>{incomingName}</strong> is attached as Extra Crew down below on Train {targetTrain}.
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>➕</span> Add as Extra Crew (Keep {targetName} on Duty)
+                      </div>
+                      {dropActionChoice === 'EXTRA' && (
+                        <span className="badge" style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: '0.7rem' }}>
+                          ✓ SELECTED
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '4px', lineHeight: 1.45 }}>
+                      <strong>{targetName}</strong> remains on Train {targetTrain} (Link #{targetLink}). <strong>{incomingName}</strong> is attached as Extra Crew down below on Train {targetTrain}.
+                    </div>
                   </div>
-                </button>
+                </div>
               </div>
 
-              {/* Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-glass)', paddingTop: '14px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setStaffDropActionModal(null)}
-                  style={{ padding: '8px 20px', fontWeight: 600, fontSize: '0.88rem' }}
-                >
-                  Cancel
-                </button>
+              {/* Footer with SAVE & CANCEL buttons */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                borderTop: '1px solid var(--border-glass)',
+                paddingTop: '16px'
+              }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                  Selected: <strong style={{ color: dropActionChoice === 'SWAP' ? '#38bdf8' : (dropActionChoice === 'REPLACE' ? '#34d399' : '#fbbf24') }}>
+                    {dropActionChoice === 'SWAP' ? 'Swap Duties' : (dropActionChoice === 'REPLACE' ? 'Replace Staff' : 'Add as Extra Crew')}
+                  </strong>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setStaffDropActionModal(null)}
+                    style={{ padding: '9px 20px', fontWeight: 600, fontSize: '0.88rem' }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      if (dropActionChoice === 'SWAP') {
+                        handleExchangeStaffDuties(
+                          incomingStaff.staffId,
+                          incomingName,
+                          targetDuty.staffId,
+                          targetName,
+                          incomingStaff.sourceLink,
+                          targetDuty.link_number,
+                          incomingStaff.sourceCategoryId,
+                          targetDuty.categoryId
+                        );
+                      } else if (dropActionChoice === 'REPLACE') {
+                        setStaffDropActionModal(null);
+                        doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, false, targetDuty, incomingStaff, targetDuty.staffId);
+                      } else if (dropActionChoice === 'EXTRA') {
+                        setStaffDropActionModal(null);
+                        doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, true, null, incomingStaff);
+                      }
+                    }}
+                    style={{
+                      padding: '9px 24px',
+                      fontWeight: 800,
+                      fontSize: '0.92rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: '#ffffff',
+                      background: dropActionChoice === 'SWAP'
+                        ? 'linear-gradient(135deg, #0284c7, #2563eb)'
+                        : (dropActionChoice === 'REPLACE'
+                            ? 'linear-gradient(135deg, #059669, #10b981)'
+                            : 'linear-gradient(135deg, #d97706, #b45309)'),
+                      boxShadow: dropActionChoice === 'SWAP'
+                        ? '0 0 16px rgba(2, 132, 199, 0.45)'
+                        : (dropActionChoice === 'REPLACE'
+                            ? '0 0 16px rgba(16, 185, 129, 0.45)'
+                            : '0 0 16px rgba(245, 158, 11, 0.45)'),
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>💾</span> Save & {dropActionChoice === 'SWAP' ? 'Swap Duties' : (dropActionChoice === 'REPLACE' ? 'Replace Staff' : 'Add Extra Crew')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
