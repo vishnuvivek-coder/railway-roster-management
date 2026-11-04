@@ -2059,6 +2059,31 @@ export default function App() {
   const [staffDropActionModal, setStaffDropActionModal] = useState(null); // { incomingStaff, targetDuty, targetGroup }
   const [dropActionChoice, setDropActionChoice] = useState('REPLACE');
   const [activeMovingStaff, setActiveMovingStaff] = useState(null); // Quick move / Touch mode
+
+  // High-performance drag & drop cleanup
+  const clearAllDragHighlights = () => {
+    setDraggedStaff(null);
+    setDragOverSlotId(null);
+    setDragOverStaffDutyKey(null);
+    setDragOverNonDailyId(null);
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.drag-slot-over, .drag-staff-over, .drag-vacant-over, .drag-extra-over, .drag-nondaily-over').forEach(el => {
+        el.classList.remove('drag-slot-over', 'drag-staff-over', 'drag-vacant-over', 'drag-extra-over', 'drag-nondaily-over');
+      });
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      clearAllDragHighlights();
+    };
+    window.addEventListener('dragend', handleGlobalDragEnd);
+    window.addEventListener('drop', handleGlobalDragEnd);
+    return () => {
+      window.removeEventListener('dragend', handleGlobalDragEnd);
+      window.removeEventListener('drop', handleGlobalDragEnd);
+    };
+  }, []);
   const [showAvailablePool, setShowAvailablePool] = useState(true);
   const [availablePoolFilter, setAvailablePoolFilter] = useState('ALL'); // 'ALL' | 'LR' | 'HQ_AVAILABLE'
   const [availablePoolSearch, setAvailablePoolSearch] = useState('');
@@ -3566,10 +3591,12 @@ export default function App() {
       setTimeout(() => setDragNotice(null), 8000);
 
       setActiveMovingStaff(null);
+      clearAllDragHighlights();
       fetchDailyDuties();
       fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
+      clearAllDragHighlights();
       alert(err.message);
     }
   };
@@ -3601,10 +3628,12 @@ export default function App() {
 
       setStaffDropActionModal(null);
       setActiveMovingStaff(null);
+      clearAllDragHighlights();
       fetchDailyDuties();
       fetchRoster();
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
+      clearAllDragHighlights();
       alert(err.message);
     }
   };
@@ -3616,9 +3645,11 @@ export default function App() {
     const targetStaffId = typeof targetDuty.staffId === 'number' ? targetDuty.staffId : parseInt(targetDuty.staffId, 10);
 
     if (incomingStaffId === targetStaffId) {
+      clearAllDragHighlights();
       return;
     }
 
+    clearAllDragHighlights();
     setDropActionChoice('REPLACE');
     setStaffDropActionModal({
       incomingStaff: dragData,
@@ -3730,11 +3761,13 @@ export default function App() {
       setDragNotice(`Assigned ${staffName} to Non-Daily Train ${trainNo}!`);
       setTimeout(() => setDragNotice(null), 8000);
 
+      clearAllDragHighlights();
       fetchDailyDuties();
       fetchRoster();
       fetchNonDailyTrains('ALL');
       if (activeTab === 'audit') fetchAuditLogs();
     } catch (err) {
+      clearAllDragHighlights();
       alert(err.message);
     }
   };
@@ -7842,7 +7875,7 @@ export default function App() {
                                           e.dataTransfer.effectAllowed = 'move';
                                           setDraggedStaff(payload);
                                         }}
-                                        onDragEnd={() => setDraggedStaff(null)}
+                                        onDragEnd={() => clearAllDragHighlights()}
                                         style={{
                                           display: 'inline-flex',
                                           alignItems: 'center',
@@ -8082,26 +8115,91 @@ export default function App() {
                                                     e.dataTransfer.effectAllowed = 'move';
                                                     setDraggedStaff(payload);
                                                   }}
-                                                  onDragEnd={() => setDraggedStaff(null)}
-                                                  onDragOver={(e) => {
-                                                    if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                    onDragEnd={() => clearAllDragHighlights()}
+                                                    onDragOver={(e) => {
+                                                      if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        e.dataTransfer.dropEffect = 'move';
+                                                        if (!e.currentTarget.classList.contains('drag-staff-over')) {
+                                                          e.currentTarget.classList.add('drag-staff-over');
+                                                        }
+                                                      }
+                                                    }}
+                                                    onDragLeave={(e) => {
+                                                      if (e.currentTarget.contains(e.relatedTarget)) return;
+                                                      e.currentTarget.classList.remove('drag-staff-over');
+                                                    }}
+                                                    onDrop={(e) => {
+                                                      e.currentTarget.classList.remove('drag-staff-over');
+                                                      if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        clearAllDragHighlights();
+                                                        let dragData = null;
+                                                        try {
+                                                          const raw = e.dataTransfer.getData('text/plain');
+                                                          if (raw) dragData = JSON.parse(raw);
+                                                        } catch (err) {}
+                                                        if (!dragData && draggedStaff) dragData = draggedStaff;
+                                                        if (!dragData) return;
+                                                        handleDropOnOccupiedStaff(dragData, d, group);
+                                                      }
+                                                    }}
+                                                    style={{
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: '6px',
+                                                      cursor: 'grab',
+                                                      userSelect: 'none',
+                                                      padding: '4px 10px',
+                                                      borderRadius: '6px',
+                                                      background: 'rgba(255,255,255,0.06)',
+                                                      border: '1px solid rgba(255,255,255,0.12)',
+                                                      opacity: (draggedStaff && draggedStaff.staffId === d.staffId) ? 0.4 : 1,
+                                                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                                      transition: 'all 0.15s ease'
+                                                    }}
+                                                    title={draggedStaff && draggedStaff.staffId !== d.staffId ? `Drop here to Swap duties with ${d.name} or Replace` : `Drag ${d.name} to reassign to another train`}
+                                                  >
+                                                    <span
+                                                      style={{
+                                                        fontSize: '1.15rem',
+                                                        color: 'var(--primary)',
+                                                        lineHeight: 1,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center'
+                                                      }}
+                                                      className="no-print"
+                                                    >
+                                                      ⠿
+                                                    </span>
+                                                    <strong style={{ 
+                                                      color: hasSub ? 'var(--primary)' : 'inherit',
+                                                      fontStyle: 'normal'
+                                                    }}>
+                                                      {d.name}
+                                                    </strong>
+                                                  </div>
+                                              ) : isSlotVacant ? (
+                                                  <div
+                                                    onDragOver={(e) => {
                                                       e.preventDefault();
                                                       e.stopPropagation();
                                                       e.dataTransfer.dropEffect = 'move';
-                                                      const key = `${group.slotId}-${d.staffId || dIdx}`;
-                                                      if (dragOverStaffDutyKey !== key) setDragOverStaffDutyKey(key);
-                                                    }
-                                                  }}
-                                                  onDragLeave={(e) => {
-                                                    if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                    const key = `${group.slotId}-${d.staffId || dIdx}`;
-                                                    if (dragOverStaffDutyKey === key) setDragOverStaffDutyKey(null);
-                                                  }}
-                                                  onDrop={(e) => {
-                                                    if (draggedStaff && draggedStaff.staffId !== d.staffId) {
+                                                      if (!e.currentTarget.classList.contains('drag-vacant-over')) {
+                                                        e.currentTarget.classList.add('drag-vacant-over');
+                                                      }
+                                                    }}
+                                                    onDragLeave={(e) => {
+                                                      if (e.currentTarget.contains(e.relatedTarget)) return;
+                                                      e.currentTarget.classList.remove('drag-vacant-over');
+                                                    }}
+                                                    onDrop={(e) => {
                                                       e.preventDefault();
                                                       e.stopPropagation();
-                                                      setDragOverStaffDutyKey(null);
+                                                      e.currentTarget.classList.remove('drag-vacant-over');
+                                                      clearAllDragHighlights();
                                                       let dragData = null;
                                                       try {
                                                         const raw = e.dataTransfer.getData('text/plain');
@@ -8109,102 +8207,31 @@ export default function App() {
                                                       } catch (err) {}
                                                       if (!dragData && draggedStaff) dragData = draggedStaff;
                                                       if (!dragData) return;
-                                                      handleDropOnOccupiedStaff(dragData, d, group);
-                                                    }
-                                                  }}
-                                                  style={{
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    cursor: 'grab',
-                                                    userSelect: 'none',
-                                                    padding: '4px 10px',
-                                                    borderRadius: '6px',
-                                                    background: isStaffOver ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.06)',
-                                                    border: isStaffOver ? '2px dashed #06b6d4' : (draggedStaff && draggedStaff.staffId !== d.staffId ? '1.5px dashed rgba(6, 182, 212, 0.45)' : '1px solid rgba(255,255,255,0.12)'),
-                                                    opacity: (draggedStaff && draggedStaff.staffId === d.staffId) ? 0.4 : 1,
-                                                    boxShadow: isStaffOver ? '0 0 12px rgba(6, 182, 212, 0.5)' : '0 1px 3px rgba(0,0,0,0.15)',
-                                                    transition: 'all 0.15s ease'
-                                                  }}
-                                                  title={draggedStaff && draggedStaff.staffId !== d.staffId ? `Drop here to Swap duties with ${d.name} or Replace` : `Drag ${d.name} to reassign to another train`}
-                                                >
-                                                  <span
-                                                    style={{
-                                                      fontSize: '1.15rem',
-                                                      color: 'var(--primary)',
-                                                      lineHeight: 1,
-                                                      display: 'inline-flex',
-                                                      alignItems: 'center'
+                                                      handleDragDropOnTrain(dragData, group, d, false);
                                                     }}
-                                                    className="no-print"
+                                                    style={{
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: '6px',
+                                                      padding: '4px 10px',
+                                                      borderRadius: '6px',
+                                                      background: 'rgba(239, 68, 68, 0.08)',
+                                                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                      boxShadow: 'none',
+                                                      transition: 'all 0.15s ease',
+                                                      cursor: draggedStaff ? 'copy' : 'default'
+                                                    }}
+                                                    title={draggedStaff ? `Drop here to assign ${draggedStaff.staffName} to fill Link #${d.link_number}` : ''}
                                                   >
-                                                    ⠿
-                                                  </span>
-                                                  <strong style={{ 
-                                                    color: hasSub ? 'var(--primary)' : 'inherit',
-                                                    fontStyle: 'normal'
-                                                  }}>
-                                                    {d.name}
-                                                  </strong>
-                                                  {isStaffOver && (
-                                                    <span className="badge no-print" style={{ background: '#06b6d4', color: '#000', fontSize: '0.68rem', fontWeight: 800 }}>
-                                                      🔀 Release to Swap / Replace
-                                                    </span>
-                                                  )}
-                                                  {draggedStaff && draggedStaff.staffId !== d.staffId && !isStaffOver && (
-                                                    <span className="badge no-print" style={{ background: 'rgba(6, 182, 212, 0.18)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.35)', fontSize: '0.66rem', fontWeight: 600 }}>
-                                                      🔀 Drop to Swap
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              ) : isSlotVacant ? (
-                                                <div
-                                                  onDragOver={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    e.dataTransfer.dropEffect = 'move';
-                                                    if (dragOverSlotId !== `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(`${group.slotId}-vacant-${dIdx}`);
-                                                  }}
-                                                  onDragLeave={(e) => {
-                                                    if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                    if (dragOverSlotId === `${group.slotId}-vacant-${dIdx}`) setDragOverSlotId(null);
-                                                  }}
-                                                  onDrop={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setDragOverSlotId(null);
-                                                    let dragData = null;
-                                                    try {
-                                                      const raw = e.dataTransfer.getData('text/plain');
-                                                      if (raw) dragData = JSON.parse(raw);
-                                                    } catch (err) {}
-                                                    if (!dragData && draggedStaff) dragData = draggedStaff;
-                                                    if (!dragData) return;
-                                                    handleDragDropOnTrain(dragData, group, d, false);
-                                                  }}
-                                                  style={{
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    padding: '4px 10px',
-                                                    borderRadius: '6px',
-                                                    background: isVacantOver ? 'rgba(16, 185, 129, 0.3)' : (draggedStaff ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.08)'),
-                                                    border: isVacantOver ? '2px dashed #10b981' : (draggedStaff ? '2px dashed #10b981' : '1px dashed rgba(239, 68, 68, 0.3)'),
-                                                    boxShadow: isVacantOver ? '0 0 12px rgba(16, 185, 129, 0.5)' : (draggedStaff ? '0 0 8px rgba(16, 185, 129, 0.25)' : 'none'),
-                                                    transition: 'all 0.15s ease',
-                                                    cursor: draggedStaff ? 'copy' : 'default'
-                                                  }}
-                                                  title={draggedStaff ? `Drop here to assign ${draggedStaff.staffName} to fill Link #${d.link_number}` : ''}
-                                                >
-                                                  <strong style={{ color: isVacantOver ? '#10b981' : '#ef4444', fontStyle: 'italic' }}>
-                                                    {d.name}
-                                                  </strong>
-                                                  {draggedStaff && (
-                                                    <span className="badge no-print" style={{ background: '#10b981', color: '#000', fontSize: '0.7rem', fontWeight: 800 }}>
-                                                      📥 Drop to fill Link #{d.link_number}
-                                                    </span>
-                                                  )}
-                                                </div>
+                                                    <strong style={{ color: '#ef4444', fontStyle: 'italic' }}>
+                                                      {d.name}
+                                                    </strong>
+                                                    {draggedStaff && (
+                                                      <span className="badge no-print" style={{ background: '#10b981', color: '#000', fontSize: '0.7rem', fontWeight: 800 }}>
+                                                        📥 Drop to fill Link #${d.link_number}
+                                                      </span>
+                                                    )}
+                                                  </div>
                                               ) : (
                                                 <strong style={{ 
                                                   color: hasSub ? 'var(--primary)' : 'inherit',
@@ -8727,49 +8754,51 @@ export default function App() {
                                         colSpan={isAdmin ? 8 : 7}
                                         style={{ padding: '6px 12px' }}
                                       >
-                                        <div
-                                          onDragOver={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            e.dataTransfer.dropEffect = 'move';
-                                            if (dragOverSlotId !== `${group.slotId}-extra`) setDragOverSlotId(`${group.slotId}-extra`);
-                                          }}
-                                          onDragLeave={(e) => {
-                                            if (e.currentTarget.contains(e.relatedTarget)) return;
-                                            if (dragOverSlotId === `${group.slotId}-extra`) setDragOverSlotId(null);
-                                          }}
-                                          onDrop={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            setDragOverSlotId(null);
-                                            let dragData = null;
-                                            try {
-                                              const raw = e.dataTransfer.getData('text/plain');
-                                              if (raw) dragData = JSON.parse(raw);
-                                            } catch (err) {}
-                                            if (!dragData && draggedStaff) dragData = draggedStaff;
-                                            if (!dragData) return;
-                                            handleDragDropOnTrain(dragData, group, null, true);
-                                          }}
-                                          style={{
-                                            padding: '6px 12px',
-                                            border: dragOverSlotId === `${group.slotId}-extra` ? '2px dashed #10b981' : (draggedStaff ? '1.5px dashed rgba(59, 130, 246, 0.6)' : '1px dashed rgba(255,255,255,0.12)'),
-                                            borderRadius: '6px',
-                                            textAlign: 'center',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            color: dragOverSlotId === `${group.slotId}-extra` ? '#10b981' : (draggedStaff ? '#60a5fa' : 'var(--color-text-secondary)'),
-                                            background: dragOverSlotId === `${group.slotId}-extra` ? 'rgba(16, 185, 129, 0.18)' : (draggedStaff ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.02)'),
-                                            cursor: draggedStaff ? 'copy' : 'default',
-                                            transition: 'all 0.15s ease'
-                                          }}
-                                        >
-                                          {dragOverSlotId === `${group.slotId}-extra`
-                                            ? '🟢 Release to add down below as Extra Crew!'
-                                            : (draggedStaff
-                                              ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
-                                              : `➕ Drag & drop employee here (adds down below as extra crew for Train ${group.firstTrain})`)}
-                                          {isAdmin && (
+                                         <div
+                                           onDragOver={(e) => {
+                                             e.preventDefault();
+                                             e.stopPropagation();
+                                             e.dataTransfer.dropEffect = 'move';
+                                             if (!e.currentTarget.classList.contains('drag-extra-over')) {
+                                               e.currentTarget.classList.add('drag-extra-over');
+                                             }
+                                           }}
+                                           onDragLeave={(e) => {
+                                             if (e.currentTarget.contains(e.relatedTarget)) return;
+                                             e.currentTarget.classList.remove('drag-extra-over');
+                                           }}
+                                           onDrop={(e) => {
+                                             e.preventDefault();
+                                             e.stopPropagation();
+                                             e.currentTarget.classList.remove('drag-extra-over');
+                                             clearAllDragHighlights();
+                                             let dragData = null;
+                                             try {
+                                               const raw = e.dataTransfer.getData('text/plain');
+                                               if (raw) dragData = JSON.parse(raw);
+                                             } catch (err) {}
+                                             if (!dragData && draggedStaff) dragData = draggedStaff;
+                                             if (!dragData) return;
+                                             handleDragDropOnTrain(dragData, group, null, true);
+                                           }}
+                                           style={{
+                                             padding: '6px 12px',
+                                             border: '1px dashed rgba(255,255,255,0.14)',
+                                             borderRadius: '6px',
+                                             textAlign: 'center',
+                                             fontSize: '0.75rem',
+                                             fontWeight: 600,
+                                             color: 'var(--color-text-secondary)',
+                                             background: 'rgba(255, 255, 255, 0.02)',
+                                             cursor: draggedStaff ? 'copy' : 'default',
+                                             outline: 'none',
+                                             transition: 'all 0.15s ease'
+                                           }}
+                                         >
+                                           {draggedStaff
+                                             ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
+                                             : `➕ Drag & drop employee here (adds down below as extra crew for Train ${group.firstTrain})`}
+                                           {isAdmin && (
                                             <button
                                               type="button"
                                               className="btn btn-primary no-print"
@@ -8898,45 +8927,40 @@ export default function App() {
                               <tbody>
                                 {filteredNonDailySlotRows.map((group, groupIndex) => {
                                   return (
-                                    <tr 
-                                      key={group.slotId || groupIndex} 
-                                      onDragEnter={(e) => {
-                                        e.preventDefault();
-                                        setDragOverSlotId(group.slotId || `nd-${groupIndex}`);
-                                      }}
-                                      onDragOver={(e) => {
-                                        e.preventDefault();
-                                        e.dataTransfer.dropEffect = 'move';
-                                        if (dragOverSlotId !== (group.slotId || `nd-${groupIndex}`) && !String(dragOverSlotId).startsWith(`${group.slotId || `nd-${groupIndex}`}-`)) {
-                                          setDragOverSlotId(group.slotId || `nd-${groupIndex}`);
-                                        }
-                                      }}
-                                      onDragLeave={(e) => {
-                                        if (e.currentTarget.contains(e.relatedTarget)) return;
-                                        if (dragOverSlotId === (group.slotId || `nd-${groupIndex}`) || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId || `nd-${groupIndex}`}-`))) {
-                                          setDragOverSlotId(null);
-                                        }
-                                      }}
-                                      onDrop={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setDragOverSlotId(null);
-                                        let dragData = null;
-                                        try {
-                                          const raw = e.dataTransfer.getData('text/plain');
-                                          if (raw) dragData = JSON.parse(raw);
-                                        } catch (err) {}
-                                        if (!dragData && draggedStaff) dragData = draggedStaff;
-                                        if (!dragData) return;
-                                        handleDragDropOnTrain(dragData, group);
-                                      }}
-                                      style={{ 
-                                        borderBottom: '2px solid var(--border-glass)',
-                                        backgroundColor: (dragOverSlotId === (group.slotId || `nd-${groupIndex}`) || (dragOverSlotId && String(dragOverSlotId).startsWith(`${group.slotId || `nd-${groupIndex}`}-`))) ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
-                                        outline: dragOverSlotId === (group.slotId || `nd-${groupIndex}`) ? '2px dashed #10b981' : (draggedStaff ? '1px dashed rgba(16, 185, 129, 0.35)' : 'none'),
-                                        transition: 'all 0.15s ease'
-                                      }}
-                                    >
+                                     <tr 
+                                       key={group.slotId || groupIndex} 
+                                       onDragOver={(e) => {
+                                         e.preventDefault();
+                                         e.dataTransfer.dropEffect = 'move';
+                                         if (!e.currentTarget.classList.contains('drag-slot-over')) {
+                                           e.currentTarget.classList.add('drag-slot-over');
+                                         }
+                                       }}
+                                       onDragLeave={(e) => {
+                                         if (e.currentTarget.contains(e.relatedTarget)) return;
+                                         e.currentTarget.classList.remove('drag-slot-over');
+                                       }}
+                                       onDrop={(e) => {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         e.currentTarget.classList.remove('drag-slot-over');
+                                         clearAllDragHighlights();
+                                         let dragData = null;
+                                         try {
+                                           const raw = e.dataTransfer.getData('text/plain');
+                                           if (raw) dragData = JSON.parse(raw);
+                                         } catch (err) {}
+                                         if (!dragData && draggedStaff) dragData = draggedStaff;
+                                         if (!dragData) return;
+                                         handleDragDropOnTrain(dragData, group);
+                                       }}
+                                       style={{ 
+                                         borderBottom: '2px solid var(--border-glass)',
+                                         backgroundColor: 'transparent',
+                                         outline: 'none',
+                                         transition: 'background-color 0.15s ease'
+                                       }}
+                                     >
                                       <td style={{ textAlign: 'center', verticalAlign: 'middle', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                                         {groupIndex + 1}
                                       </td>
@@ -8978,26 +9002,27 @@ export default function App() {
                                                       e.dataTransfer.effectAllowed = 'move';
                                                       setDraggedStaff(payload);
                                                     }}
-                                                    onDragEnd={() => setDraggedStaff(null)}
+                                                    onDragEnd={() => clearAllDragHighlights()}
                                                     onDragOver={(e) => {
                                                       if (draggedStaff && draggedStaff.staffId !== d.staffId) {
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         e.dataTransfer.dropEffect = 'move';
-                                                        const key = `${group.slotId || `nd-${groupIndex}`}-${d.staffId || dIdx}`;
-                                                        if (dragOverStaffDutyKey !== key) setDragOverStaffDutyKey(key);
+                                                        if (!e.currentTarget.classList.contains('drag-staff-over')) {
+                                                          e.currentTarget.classList.add('drag-staff-over');
+                                                        }
                                                       }
                                                     }}
                                                     onDragLeave={(e) => {
                                                       if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                      const key = `${group.slotId || `nd-${groupIndex}`}-${d.staffId || dIdx}`;
-                                                      if (dragOverStaffDutyKey === key) setDragOverStaffDutyKey(null);
+                                                      e.currentTarget.classList.remove('drag-staff-over');
                                                     }}
                                                     onDrop={(e) => {
+                                                      e.currentTarget.classList.remove('drag-staff-over');
                                                       if (draggedStaff && draggedStaff.staffId !== d.staffId) {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        setDragOverStaffDutyKey(null);
+                                                        clearAllDragHighlights();
                                                         let dragData = null;
                                                         try {
                                                           const raw = e.dataTransfer.getData('text/plain');
@@ -9016,10 +9041,10 @@ export default function App() {
                                                       userSelect: 'none',
                                                       padding: '4px 10px',
                                                       borderRadius: '6px',
-                                                      background: isStaffOver ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.06)',
-                                                      border: isStaffOver ? '2px dashed #06b6d4' : (draggedStaff && draggedStaff.staffId !== d.staffId ? '1.5px dashed rgba(6, 182, 212, 0.45)' : '1px solid rgba(255,255,255,0.12)'),
+                                                      background: 'rgba(255,255,255,0.06)',
+                                                      border: '1px solid rgba(255,255,255,0.12)',
                                                       opacity: (draggedStaff && draggedStaff.staffId === d.staffId) ? 0.4 : 1,
-                                                      boxShadow: isStaffOver ? '0 0 12px rgba(6, 182, 212, 0.5)' : '0 1px 3px rgba(0,0,0,0.15)',
+                                                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                                                       transition: 'all 0.15s ease'
                                                     }}
                                                     title={draggedStaff && draggedStaff.staffId !== d.staffId ? `Drop here to Swap duties with ${d.name} or Replace` : `Drag ${d.name} to reassign to another train`}
@@ -9042,16 +9067,6 @@ export default function App() {
                                                     }}>
                                                       {d.name}
                                                     </strong>
-                                                    {isStaffOver && (
-                                                      <span className="badge no-print" style={{ background: '#06b6d4', color: '#000', fontSize: '0.68rem', fontWeight: 800 }}>
-                                                        🔀 Release to Swap / Replace
-                                                      </span>
-                                                    )}
-                                                    {draggedStaff && draggedStaff.staffId !== d.staffId && !isStaffOver && (
-                                                      <span className="badge no-print" style={{ background: 'rgba(6, 182, 212, 0.18)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.35)', fontSize: '0.66rem', fontWeight: 600 }}>
-                                                        🔀 Drop to Swap
-                                                      </span>
-                                                    )}
                                                   </div>
                                                 ) : isSlotVacant ? (
                                                   <div
@@ -9059,16 +9074,19 @@ export default function App() {
                                                       e.preventDefault();
                                                       e.stopPropagation();
                                                       e.dataTransfer.dropEffect = 'move';
-                                                      if (dragOverSlotId !== `${group.slotId || `nd-${groupIndex}`}-vacant-${dIdx}`) setDragOverSlotId(`${group.slotId || `nd-${groupIndex}`}-vacant-${dIdx}`);
+                                                      if (!e.currentTarget.classList.contains('drag-vacant-over')) {
+                                                        e.currentTarget.classList.add('drag-vacant-over');
+                                                      }
                                                     }}
                                                     onDragLeave={(e) => {
                                                       if (e.currentTarget.contains(e.relatedTarget)) return;
-                                                      if (dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-vacant-${dIdx}`) setDragOverSlotId(null);
+                                                      e.currentTarget.classList.remove('drag-vacant-over');
                                                     }}
                                                     onDrop={(e) => {
                                                       e.preventDefault();
                                                       e.stopPropagation();
-                                                      setDragOverSlotId(null);
+                                                      e.currentTarget.classList.remove('drag-vacant-over');
+                                                      clearAllDragHighlights();
                                                       let dragData = null;
                                                       try {
                                                         const raw = e.dataTransfer.getData('text/plain');
@@ -9084,20 +9102,20 @@ export default function App() {
                                                       gap: '6px',
                                                       padding: '4px 10px',
                                                       borderRadius: '6px',
-                                                      background: isVacantOver ? 'rgba(16, 185, 129, 0.3)' : (draggedStaff ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.08)'),
-                                                      border: isVacantOver ? '2px dashed #10b981' : (draggedStaff ? '2px dashed #10b981' : '1px dashed rgba(239, 68, 68, 0.3)'),
-                                                      boxShadow: isVacantOver ? '0 0 12px rgba(16, 185, 129, 0.5)' : (draggedStaff ? '0 0 8px rgba(16, 185, 129, 0.25)' : 'none'),
+                                                      background: 'rgba(239, 68, 68, 0.08)',
+                                                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                      boxShadow: 'none',
                                                       transition: 'all 0.15s ease',
                                                       cursor: draggedStaff ? 'copy' : 'default'
                                                     }}
                                                     title={draggedStaff ? `Drop here to assign ${draggedStaff.staffName} to fill Link #${d.link_number}` : ''}
                                                   >
-                                                    <strong style={{ color: isVacantOver ? '#10b981' : '#ef4444', fontStyle: 'italic' }}>
+                                                    <strong style={{ color: '#ef4444', fontStyle: 'italic' }}>
                                                       {d.name}
                                                     </strong>
                                                     {draggedStaff && (
                                                       <span className="badge no-print" style={{ background: '#10b981', color: '#000', fontSize: '0.7rem', fontWeight: 800 }}>
-                                                        📥 Drop to fill Link #{d.link_number}
+                                                        📥 Drop to fill Link #${d.link_number}
                                                       </span>
                                                     )}
                                                   </div>
@@ -9289,16 +9307,19 @@ export default function App() {
                                               e.preventDefault();
                                               e.stopPropagation();
                                               e.dataTransfer.dropEffect = 'move';
-                                              if (dragOverSlotId !== `${group.slotId || `nd-${groupIndex}`}-extra`) setDragOverSlotId(`${group.slotId || `nd-${groupIndex}`}-extra`);
+                                              if (!e.currentTarget.classList.contains('drag-extra-over')) {
+                                                e.currentTarget.classList.add('drag-extra-over');
+                                              }
                                             }}
                                             onDragLeave={(e) => {
                                               if (e.currentTarget.contains(e.relatedTarget)) return;
-                                              if (dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-extra`) setDragOverSlotId(null);
+                                              e.currentTarget.classList.remove('drag-extra-over');
                                             }}
                                             onDrop={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
-                                              setDragOverSlotId(null);
+                                              e.currentTarget.classList.remove('drag-extra-over');
+                                              clearAllDragHighlights();
                                               let dragData = null;
                                               try {
                                                 const raw = e.dataTransfer.getData('text/plain');
@@ -9311,22 +9332,21 @@ export default function App() {
                                             style={{
                                               padding: '5px 10px',
                                               margin: '6px 10px 6px 10px',
-                                              border: dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-extra` ? '2px dashed #10b981' : (draggedStaff ? '1.5px dashed rgba(59, 130, 246, 0.6)' : '1px dashed rgba(255,255,255,0.12)'),
+                                              border: '1px dashed rgba(255,255,255,0.14)',
                                               borderRadius: '6px',
                                               textAlign: 'center',
                                               fontSize: '0.73rem',
                                               fontWeight: 600,
-                                              color: dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-extra` ? '#10b981' : (draggedStaff ? '#60a5fa' : 'var(--color-text-secondary)'),
-                                              background: dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-extra` ? 'rgba(16, 185, 129, 0.18)' : (draggedStaff ? 'rgba(59, 130, 246, 0.08)' : 'transparent'),
+                                              color: 'var(--color-text-secondary)',
+                                              background: 'transparent',
                                               cursor: draggedStaff ? 'copy' : 'default',
+                                              outline: 'none',
                                               transition: 'all 0.15s ease'
                                             }}
                                           >
-                                            {dragOverSlotId === `${group.slotId || `nd-${groupIndex}`}-extra`
-                                              ? '🟢 Release to add down below as Extra Crew!'
-                                              : (draggedStaff
-                                                ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
-                                                : '➕ Drag & drop employee here (adds down below as extra crew)')}
+                                            {draggedStaff
+                                              ? `➕ Drop here to add ${draggedStaff.staffName} down below as Extra Crew for Train ${group.firstTrain}`
+                                              : '➕ Drag & drop employee here (adds down below as extra crew)'}
                                             {isAdmin && (
                                               <button
                                                 type="button"
@@ -10141,7 +10161,7 @@ export default function App() {
                                               e.dataTransfer.effectAllowed = 'move';
                                               setDraggedStaff(payload);
                                             }}
-                                            onDragEnd={() => setDraggedStaff(null)}
+                                            onDragEnd={() => clearAllDragHighlights()}
                                             style={{
                                               display: 'flex',
                                               alignItems: 'center',
@@ -10424,16 +10444,19 @@ export default function App() {
                                         onDragOver={(e) => {
                                           e.preventDefault();
                                           e.dataTransfer.dropEffect = 'move';
-                                          if (dragOverNonDailyId !== item.id) setDragOverNonDailyId(item.id);
+                                          if (!e.currentTarget.classList.contains('drag-nondaily-over')) {
+                                            e.currentTarget.classList.add('drag-nondaily-over');
+                                          }
                                         }}
                                         onDragLeave={(e) => {
                                           if (e.currentTarget.contains(e.relatedTarget)) return;
-                                          if (dragOverNonDailyId === item.id) setDragOverNonDailyId(null);
+                                          e.currentTarget.classList.remove('drag-nondaily-over');
                                         }}
                                         onDrop={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          setDragOverNonDailyId(null);
+                                          e.currentTarget.classList.remove('drag-nondaily-over');
+                                          clearAllDragHighlights();
                                           let dragData = null;
                                           try {
                                             const raw = e.dataTransfer.getData('text/plain');
@@ -10444,9 +10467,9 @@ export default function App() {
                                           handleAssignStaffToNonDailyTrain(dragData, item);
                                         }}
                                         style={{
-                                          backgroundColor: isRowOver ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
-                                          outline: isRowOver ? '2px dashed #10b981' : (draggedStaff ? '1px dashed rgba(16, 185, 129, 0.35)' : 'none'),
-                                          transition: 'all 0.15s ease'
+                                          backgroundColor: 'transparent',
+                                          outline: 'none',
+                                          transition: 'background-color 0.15s ease'
                                         }}
                                       >
                                         <td style={{ verticalAlign: 'middle' }}>
@@ -16072,7 +16095,7 @@ export default function App() {
               zIndex: 99999,
               padding: '20px'
             }}
-            onClick={() => setStaffDropActionModal(null)}
+            onClick={() => { setStaffDropActionModal(null); clearAllDragHighlights(); }}
           >
             <div
               className="card"
@@ -16100,7 +16123,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setStaffDropActionModal(null)}
+                  onClick={() => { setStaffDropActionModal(null); clearAllDragHighlights(); }}
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -16215,6 +16238,7 @@ export default function App() {
                   onClick={() => setDropActionChoice('REPLACE')}
                   onDoubleClick={() => {
                     setStaffDropActionModal(null);
+                    clearAllDragHighlights();
                     doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, false, targetDuty, incomingStaff, targetDuty.staffId);
                   }}
                   style={{
@@ -16262,6 +16286,7 @@ export default function App() {
                   onClick={() => setDropActionChoice('EXTRA')}
                   onDoubleClick={() => {
                     setStaffDropActionModal(null);
+                    clearAllDragHighlights();
                     doActualDropStaff(incomingStaff.staffId, incomingName, targetGroup, true, null, incomingStaff);
                   }}
                   style={{
@@ -16323,7 +16348,7 @@ export default function App() {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => setStaffDropActionModal(null)}
+                    onClick={() => { setStaffDropActionModal(null); clearAllDragHighlights(); }}
                     style={{ padding: '9px 20px', fontWeight: 600, fontSize: '0.88rem' }}
                   >
                     Cancel
