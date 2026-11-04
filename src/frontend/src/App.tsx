@@ -4115,7 +4115,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token')}`
         }
       });
       const data = await res.json();
