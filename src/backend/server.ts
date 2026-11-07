@@ -12499,18 +12499,104 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
   const targetDate = req.query.date || formatLocalDate(new Date());
 
   try {
-    const categories = await all('SELECT * FROM categories ORDER BY id');
-    const crBalances = await calculateStaffCrBalances();
+    const toDateKey = (val: any) => {
+      if (!val) return '';
+      if (val instanceof Date) {
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      const s = String(val).trim();
+      return s.length >= 10 ? s.substring(0, 10) : s;
+    };
 
-    const isVacant = (name) => {
+    const dTarget = new Date(targetDate + 'T12:00:00');
+    const dMinus7 = new Date(dTarget);
+    dMinus7.setDate(dMinus7.getDate() - 7);
+    const dMinus7Str = dMinus7.toISOString().split('T')[0];
+
+    const dMinus3 = new Date(dTarget);
+    dMinus3.setDate(dMinus3.getDate() - 3);
+    const dMinus3Str = dMinus3.toISOString().split('T')[0];
+
+    const [
+      categories,
+      allStaff,
+      crBalances,
+      allLinks,
+      overridesList,
+      musterList,
+      approvedLeavesList,
+      lrCompletionsList,
+      allNonDailyTrains,
+      dregEntries7d
+    ] = await Promise.all([
+      all('SELECT * FROM categories ORDER BY id ASC'),
+      getStaffForDate('ALL', targetDate),
+      calculateStaffCrBalances(),
+      all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+        ORDER BY date(effective_from) DESC
+      `),
+      all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [dMinus7Str, targetDate]),
+      all('SELECT * FROM muster_records WHERE date >= ? AND date <= ?', [dMinus3Str, targetDate]),
+      all(`SELECT * FROM leave_requests WHERE status = 'APPROVED' AND (date >= ? OR to_date >= ?)`, [dMinus7Str, dMinus7Str]),
+      all(`SELECT * FROM lr_duty_completions WHERE date(arrival_date) <= date(?) ORDER BY date(arrival_date) DESC, arrival_time DESC`, [targetDate]),
+      all('SELECT * FROM non_daily_trains'),
+      all(`SELECT e.*, ds.staff_id
+           FROM duty_register_entry e
+           JOIN duty_register_staff ds ON e.id = ds.entry_id
+           WHERE e.date >= ? AND e.date <= ?`, [dMinus7Str, targetDate])
+    ]);
+
+    const overridesMap: Record<string, any> = {};
+    overridesList.forEach((o: any) => {
+      const dKey = toDateKey(o.date);
+      overridesMap[`${o.staff_id}_${dKey}`] = o;
+    });
+
+    const musterMap: Record<string, any> = {};
+    musterList.forEach((m: any) => {
+      const dKey = toDateKey(m.date);
+      musterMap[`${m.staff_id}_${dKey}`] = m;
+    });
+
+    const staffMap: any = {};
+    allStaff.forEach((s: any) => {
+      staffMap[s.id] = s;
+      staffMap[String(s.id)] = s;
+    });
+
+    const getLinkDef = (catId: any, linkNumber: any, dateStr: string) => {
+      if (linkNumber === null || linkNumber === undefined) return null;
+      return resolveLinkFromList(allLinks, catId, linkNumber, dateStr);
+    };
+
+    const dataPool = {
+      overridesMap,
+      overrides: overridesList,
+      musterMap,
+      staffMap,
+      leaveRequests: approvedLeavesList,
+      lrCompletions: lrCompletionsList,
+      dutyRegisterEntries: dregEntries7d,
+      getLinkDef,
+      links: allLinks,
+      nonDailyTrains: allNonDailyTrains
+    };
+
+    const isVacant = (name: any) => {
       if (!name) return true;
       const n = String(name).trim().toUpperCase();
       return n.includes('VACANT') || n === 'V' || n === '(V)';
     };
 
-    const dObj = new Date(targetDate);
     const weekdayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
-    const currentDayName = weekdayNames[dObj.getDay()];
+    const currentDayName = weekdayNames[dTarget.getDay()];
 
     const categoryData = [];
     let grandTotalStaff = 0;
@@ -12532,10 +12618,9 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
     };
 
     for (const cat of categories) {
-      const staffMembers = await all(
-        'SELECT * FROM staff WHERE category_id = ? ORDER BY row_position',
-        [cat.id]
-      );
+      const staffMembers = allStaff.filter((s: any) => s.category_id === cat.id);
+      staffMembers.sort((a: any, b: any) => (a.row_position || 0) - (b.row_position || 0));
+
       const { anchor_date: catAnchorDate, cycle_length: catCycleLength } = getCategoryParamsForDate(cat, targetDate);
       const dayOffset = getDayOffset(catAnchorDate, targetDate);
 
@@ -12562,8 +12647,8 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
       for (const staff of staffMembers) {
         const vacant = isVacant(staff.name);
 
-        // Check override
-        const override = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, targetDate]);
+        // Check override using dataPool / overridesMap
+        const override = overridesMap[`${staff.id}_${targetDate}`] || null;
         let activeLink = null;
         let isOverridden = false;
         let status = 'DUTY';
@@ -12578,13 +12663,13 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           status = override.status || (override.overridden_link_number === null ? 'REST' : 'CHANGED_LINK');
           substituteStaffId = override.substitute_staff_id;
           substituteName = override.substitute_name;
-          overrideReason = override.reason;
+          overrideReason = override.reason || '';
           if (override.status === 'AVAILABLE_FOR_BOOKING' && (/sick/i.test(override.reason || '') || override.leave_type === 'SICK')) {
             isSickReturn = true;
           }
         } else {
           activeLink = getBaseLinkNumber(staff.row_position, dayOffset, catCycleLength);
-          const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, cat.id, staff.row_position, catCycleLength, catAnchorDate, targetDate);
+          const multiDayLeaveReturn = await checkMultiDayLeaveReturn(staff.id, cat.id, staff.row_position, catCycleLength, catAnchorDate, targetDate, dataPool);
           if (multiDayLeaveReturn) {
             isOverridden = true;
             status = 'AVAILABLE_FOR_BOOKING';
@@ -12610,33 +12695,27 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
         let dutyDetails = null;
         if (activeLink !== null) {
           const targetCatId = override?.target_category_id || cat.id;
-          dutyDetails = await getActiveLinkDef(targetCatId, activeLink, targetDate);
-          if (!dutyDetails) {
-            dutyDetails = await get("SELECT * FROM links WHERE link_number = ? AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))", [activeLink]);
-          }
-
+          dutyDetails = getLinkDef(targetCatId, activeLink, targetDate) ||
+            allLinks.find((l: any) => l.link_number === activeLink && (l.status === 'published' || !l.status) && l.status !== 'draft') || null;
         }
 
         const isRest = isCat4RestDay || activeLink === null || (dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING';
 
-        // Check leave requests or muster records for leave
-        const approvedLeave = await get(
-          "SELECT * FROM leave_requests WHERE staff_id = ? AND status = 'APPROVED' AND type = 'LEAVE' AND (date = ? OR (from_date <= ? AND to_date >= ?))",
-          [staff.id, targetDate, targetDate, targetDate]
+        // Check approved leave requests in memory
+        const approvedLeave = approvedLeavesList.find((l: any) =>
+          l.staff_id === staff.id && l.status === 'APPROVED' && (l.type === 'LEAVE' || !l.type) &&
+          (l.date === targetDate || (l.from_date <= targetDate && l.to_date >= targetDate))
         );
         if (approvedLeave) {
           status = 'LEAVE';
         }
 
-        // Check muster roll
-        const musterRecord = await get(
-          "SELECT * FROM muster_records WHERE staff_id = ? AND date = ?",
-          [staff.id, targetDate]
-        );
+        // Check muster roll in memory
+        const musterRecord = musterMap[`${staff.id}_${targetDate}`];
         let musterCode = null;
         let musterRemarks = null;
         if (musterRecord) {
-          musterCode = musterRecord.code.toUpperCase();
+          musterCode = musterRecord.code?.toUpperCase();
           musterRemarks = musterRecord.remarks || '';
           if (['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH'].includes(musterCode)) {
             status = 'LEAVE';
@@ -12672,10 +12751,10 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           }
         }
 
-        // LR rest calculation
+        // LR rest calculation in memory via dataPool
         let lrRestInfo = null;
         if (cat.id === 4 || activeLink === null || status === 'AVAILABLE_FOR_BOOKING') {
-          lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, targetDate);
+          lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, targetDate, null, dataPool);
         }
 
         const crInfo = crBalances[staff.id] || { count: 0, dates: [], display: null, shortDisplay: '-' };
