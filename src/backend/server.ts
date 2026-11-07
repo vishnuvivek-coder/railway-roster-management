@@ -8375,6 +8375,9 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
           targetLink: null,
           isLeave: false
         });
+        if (parseInt(replacedStaff.category_id, 10) === 4) {
+          await syncLRSheetRecord(replacedStaff.id, date, 'AVL', relievedReason, 'Universal Sync');
+        }
 
         await run(
           `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
@@ -8408,6 +8411,10 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
       targetLink: effectiveLink,
       isLeave: false
     });
+    if (parseInt(staff.category_id, 10) === 4) {
+      const effectiveDutyCode = target_train || (effectiveLink ? `Link ${effectiveLink}` : 'DUTY');
+      await syncLRSheetRecord(staff.id, date, String(effectiveDutyCode), musterRemark, 'Universal Sync');
+    }
 
     await run(
       `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
@@ -8479,6 +8486,11 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
             targetLink: remLinkNum,
             isLeave: false
           });
+          if (parseInt(staff.category_id, 10) === 4) {
+            const remLinkDef = await getActiveLinkDef(effectiveTargetCat, remLinkNum, nextDateStr);
+            const remTrainCode = remLinkDef?.train_numbers ? formatTrainString(remLinkDef.train_numbers) : `Link #${remLinkNum}`;
+            await syncLRSheetRecord(staff.id, nextDateStr, String(remTrainCode), nextReason, 'Universal Sync');
+          }
         }
       }
     }
@@ -8622,6 +8634,9 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
       targetTrain: finalTrainNo,
       isLeave: false
     });
+    if (parseInt(staff.category_id, 10) === 4) {
+      await syncLRSheetRecord(staff.id, date, String(finalTrainNo), reason, 'Universal Sync');
+    }
 
     // Multi-Day Continuation for Non-Daily Services (2-Day or 3-Day services)
     const ndMatch = NON_DAILY_PAIRS_MAP[String(finalTrainNo).trim()] || getMultiDayNonDailyMatch(finalTrainNo);
@@ -8686,6 +8701,9 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
         targetTrain: returnTrain,
         isLeave: false
       });
+      if (parseInt(staff.category_id, 10) === 4) {
+        await syncLRSheetRecord(staff.id, d2Str, String(returnTrain), d2Reason, 'Universal Sync');
+      }
     }
 
     if (totalDays === 3) {
@@ -8742,6 +8760,9 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
         targetTrain: null,
         isLeave: false
       });
+      if (parseInt(staff.category_id, 10) === 4) {
+        await syncLRSheetRecord(staff.id, d3Str, 'AVL', d3Reason, 'Universal Sync');
+      }
     }
 
     const undoData = {
@@ -8801,6 +8822,10 @@ app.post('/api/duty/unassign-non-daily-train', requireAdmin, async (req, res) =>
         targetTrain: null,
         isLeave: false
       });
+      const staffObj = await get('SELECT id, category_id FROM staff WHERE id = ?', [resolvedStaffId]);
+      if (staffObj && parseInt(staffObj.category_id, 10) === 4) {
+        await syncLRSheetRecord(resolvedStaffId, date, 'AVL', 'Unassigned from Non-Daily Train', 'Universal Sync');
+      }
 
       // Also clean up Day 2 and Day 3 continuation overrides if present
       const d2Obj = new Date(date + 'T12:00:00');
@@ -11813,6 +11838,12 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const isScheduledRestDay = (staff.rest_day && staff.rest_day.toUpperCase() === dayOfWeek) ||
             (staff.name && staff.name.toUpperCase().includes(dayOfWeek + ' REST'));
 
+          const hasActiveOverrideBooking = override && (
+            Boolean(override.extra_train_no) ||
+            (override.overridden_link_number !== null && override.overridden_link_number !== undefined) ||
+            ['EXTRA_CREW', 'CHANGED_LINK', 'DUTY'].includes(override.status)
+          );
+
           if (effTrainOut) {
             status = (override?.status && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(override.status)) ? override.status : 'DUTY';
             isRest = false;
@@ -11828,6 +11859,27 @@ app.get('/api/reports/daily-view', async (req, res) => {
               resolvedFromStation = matchedLink.from_station || 'GNT';
               resolvedToStation = matchedLink.to_station || '---';
               resolvedSetType = matchedLink.set_type || 'Train Booking';
+            }
+          } else if (hasActiveOverrideBooking) {
+            activeLink = override.overridden_link_number;
+            status = override.status || 'EXTRA_CREW';
+            substituteStaffId = override.substitute_staff_id;
+            substituteName = override.substitute_name;
+            overrideReason = override.reason || '';
+            targetCategoryId = override.target_category_id || (activeLink ? (activeLink > 21 ? 2 : (staff.category_id === 1 ? 1 : 2)) : null);
+            leaveType = override.leave_type;
+            activeExtraTrain = override.extra_train_no;
+            isRest = false;
+
+            if (activeLink) {
+              const linkDef = getLinkDef(targetCategoryId || 1, activeLink, targetDateStr);
+              resolvedTrainNumbers = linkDef ? linkDef.train_numbers : `Link #${activeLink}`;
+              resolvedFromStation = linkDef?.from_station || 'GNT';
+              resolvedToStation = linkDef?.to_station || '---';
+              resolvedSetType = linkDef?.set_type || `Link #${activeLink}`;
+            } else if (activeExtraTrain) {
+              resolvedTrainNumbers = activeExtraTrain;
+              resolvedSetType = 'Extra Crew';
             }
           } else if (lrRecord && lrRecord.duty_code && lrRecord.duty_code.trim() !== '') {
             const code = lrRecord.duty_code.trim();
@@ -16542,6 +16594,11 @@ async function resolveDutyCodeForLRStaff(staffId, dateStr, dayOfWeek, staffRestD
       return { code: formatTrainString(ov.extra_train_no), remarks: ov.reason || '' };
     }
 
+    if (ov.train_out) {
+      const trainCode = ov.train_out + (ov.train_return ? ` / ${ov.train_return}` : '');
+      return { code: formatTrainString(trainCode), remarks: ov.reason || '' };
+    }
+
     // Try extract train numbers from reason
     const fromReason = extractTrainsFromText(ov.reason);
     if (fromReason) {
@@ -16855,9 +16912,10 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
           if (resolved && resolved.code) {
             const existing = await get('SELECT * FROM lr_sheet_records WHERE staff_id = ? AND date = ?', [staff.id, dateStr]);
             // Never overwrite explicit manual Admin entries in LR Sheet unless it was just a non-daily placeholder
-            const isNonDailyPlaceholder = existing && String(existing.dutyCode || existing.code || '').toUpperCase().startsWith('NON DAILY');
-            const isAdminSaved = existing && existing.updated_by === 'Admin' && !isNonDailyPlaceholder;
-            if (!isAdminSaved && (!existing || isNonDailyPlaceholder || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv || hasPrevOv)) {
+            const isNonDailyPlaceholder = existing && String(existing.duty_code || existing.dutyCode || existing.code || '').toUpperCase().startsWith('NON DAILY');
+            const isExistingAvailable = existing && ['AVL', 'SPARE', 'REST_HQ', 'STANDBY', 'AVAILABLE', 'P'].includes(String(existing.duty_code || existing.dutyCode || existing.code || '').toUpperCase().trim());
+            const isAdminSaved = existing && existing.updated_by === 'Admin' && !isNonDailyPlaceholder && !isExistingAvailable;
+            if (!isAdminSaved && (!existing || isNonDailyPlaceholder || isExistingAvailable || existing.updated_by !== 'Admin' || hasDirectOv || hasSubOv || hasPrevOv)) {
               await syncLRSheetRecord(staff.id, dateStr, resolved.code, resolved.remarks, 'Daily Duty Management');
               syncedCount++;
             }
@@ -17063,8 +17121,9 @@ app.get('/api/lr-sheet', async (req, res) => {
 
         // If an override, duty register, daily earnings, or muster record exists:
         const isNonDailyPlaceholder = existing && String(existing.dutyCode).toUpperCase().startsWith('NON DAILY');
-        const isAdminSaved = existing && existing.updatedBy === 'Admin' && !isNonDailyPlaceholder;
-        if (!isAdminSaved && (hasDirectOv || hasSubOv || hasDutyReg || hasEarn || hasPrevOv || isNonDailyPlaceholder || (!existing && hasMuster))) {
+        const isExistingAvailable = existing && ['AVL', 'SPARE', 'REST_HQ', 'STANDBY', 'AVAILABLE', 'P'].includes(String(existing.dutyCode || '').toUpperCase().trim());
+        const isAdminSaved = existing && existing.updatedBy === 'Admin' && !isNonDailyPlaceholder && !isExistingAvailable;
+        if (!isAdminSaved && (hasDirectOv || hasSubOv || hasDutyReg || hasEarn || hasPrevOv || isNonDailyPlaceholder || isExistingAvailable || (!existing && hasMuster))) {
           const resolved = await resolveDutyCodeForLRStaff(staff.staffId, day.dateStr, day.dayOfWeek, staff.restDay, dataPool);
           if (resolved && resolved.code) {
             recordsMap[key] = {

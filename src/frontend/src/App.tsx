@@ -3462,7 +3462,7 @@ export default function App() {
         if (d.shifted_place === 'NON_DAILY_RETURN' || /return/i.test(d.overrideReason || '')) {
           return `Train ${d.extra_train_no} (Day 2 Return)`;
         }
-        return `Train ${d.extra_train_no} (Non-Daily / Extra)`;
+        return `Train ${d.extra_train_no}`;
       }
 
       // 1.5 Multi-day rest leg
@@ -3470,60 +3470,64 @@ export default function App() {
         return null; // In statutory HQ Rest
       }
 
-      // 2. Substitute assignment on another staff's duty
-      const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
-      if (subDuty) {
-        const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
-        return `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`;
+      // 2. Train out from duty register or override
+      if (d.train_out && !['REST', 'AVL', 'SPARE', 'CR', 'SICK', 'LEAVE', 'P', 'R', 'S'].includes(String(d.train_out).toUpperCase())) {
+        return `Train ${d.train_out}${d.train_return ? ' / ' + d.train_return : ''}`;
       }
 
-      // 3. Status checks: REST, SICK, LEAVE, CR, ABSENT, AVAILABLE_FOR_BOOKING are NOT busy on a train
+      // 3. Substitute assignment on another staff's duty
+      const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
+      if (subDuty) {
+        const tr = subDuty.extra_train_no || subDuty.train_out || subDuty.train_numbers || (subDuty.link_number ? `Link #${subDuty.link_number}` : '');
+        return `Substitute on ${tr ? `Train ${tr}` : 'Duty'} for ${subDuty.name}`;
+      }
+
+      // 4. Status checks: REST, SICK, LEAVE, CR, ABSENT, MARK_LATER are NOT busy on a train
       if (
         d.isRest ||
-        ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'AVAILABLE_FOR_BOOKING'].includes(d.status) ||
+        ['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'MARK_LATER'].includes(d.status) ||
         d.train_numbers === 'REST' ||
         d.leave_type
       ) {
         return null;
       }
 
-      // 4. Category 4 (LR Pool): Available unless explicitly assigned to an outward journey link
+      // 5. Category 4 (LR Pool): If assigned to any train or link, they are busy!
       if (d.categoryId === 4) {
-        if (d.isOverridden && d.status !== 'REST' && d.status !== 'AVAILABLE_FOR_BOOKING') {
-          const lNum = d.link_number ? parseInt(d.link_number, 10) : null;
-          const isHqArr = isHqArrivalDuty(lNum, d.train_numbers, d.to_station || d.to);
-          if (isHqArr) {
-            return null; // Arrived at HQ in morning -> Available for booking!
-          }
+        if (d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'SPARE (HQ)', 'SPARE', 'AVL', 'P', 'R', 'S'].includes(String(d.train_numbers).trim().toUpperCase()) && !String(d.train_numbers).toUpperCase().includes('LEAVE')) {
+          return `Train ${d.train_numbers}`;
+        }
+        if (d.link_number) {
           const tr = d.train_numbers ? ` (Tr ${d.train_numbers})` : '';
           return `Link #${d.link_number}${tr}`;
         }
-        return null; // LR Standby Pool is AVAILABLE!
+        if (d.status === 'AVAILABLE_FOR_BOOKING') {
+          return null;
+        }
       }
 
-      // 5. Working cyclic train link
+      // 6. Working cyclic train link (Categories 1, 2, 3)
       if (d.link_number !== null && d.link_number !== undefined) {
-        // If it's a spare non-daily pool link (53, 54, 55 from Oct 2026; 60, 61, 62 before Oct 2026) and no extra train is assigned, staff is available at HQ!
         const nonDailyLinksForDate = (!selectedDate || selectedDate >= '2026-10-01') ? [53, 54, 55] : [60, 61, 62];
         if ((nonDailyLinksForDate.includes(parseInt(d.link_number, 10)) || (d.train_numbers && String(d.train_numbers).toUpperCase().includes('NON DAILY'))) && !d.extra_train_no && d.shifted_place !== 'NON_DAILY_RETURN') {
           return null; // Spare in Non-Daily Pool!
         }
-        const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(d.train_numbers)
+        const tr = d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'SPARE', 'AVL'].includes(String(d.train_numbers).trim().toUpperCase())
           ? ` (Tr ${d.train_numbers})`
           : '';
         return `Link #${d.link_number}${tr}`;
+      }
+
+      // 7. Fallback: check if train_numbers has any train assigned
+      if (d.train_numbers && !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT', 'SPARE (HQ)', 'SPARE', 'AVL', 'P', 'R', 'S'].includes(String(d.train_numbers).trim().toUpperCase()) && !String(d.train_numbers).toUpperCase().includes('LEAVE')) {
+        return `Train ${d.train_numbers}`;
       }
     }
 
     const subDuty = flatDuties.find(s => s.substituteStaffId === staffId);
     if (subDuty) {
-      const lNum = subDuty.link_number ? parseInt(subDuty.link_number, 10) : null;
-      const isHqArr = isHqArrivalDuty(lNum, subDuty.train_numbers, subDuty.to_station || subDuty.to);
-      if (isHqArr) {
-        return null; // Arrived at HQ in morning -> Available for booking!
-      }
-      const tr = subDuty.train_numbers ? ` (Tr ${subDuty.train_numbers})` : '';
-      return `Substitute on Link #${subDuty.link_number}${tr} for ${subDuty.name}`;
+      const tr = subDuty.extra_train_no || subDuty.train_out || subDuty.train_numbers || (subDuty.link_number ? `Link #${subDuty.link_number}` : '');
+      return `Substitute on ${tr ? `Train ${tr}` : 'Duty'} for ${subDuty.name}`;
     }
     return null;
   };
@@ -7599,16 +7603,22 @@ export default function App() {
                       if (!s.staffId || seenIds.has(s.staffId)) return;
                       // Exclude depot incharges who supervise depot and do not work train duties
                       if (['MV PRASAD', 'P PRATHAP'].includes((s.name || '').trim().toUpperCase())) return;
-                      // Exclude staff already working active slots
+                      // Exclude staff already working active slots or currently booked to a train
                       if (activeWorkedStaffIds.has(s.staffId)) return;
+                      const busyTrain = getStaffCurrentWorkingTrain(s.staffId);
+                      if (busyTrain) return;
 
                       const isSickOrLeave = s.status === 'SICK' || s.status === 'LEAVE' || s.status === 'CR' || s.status === 'ABSENT' || s.status === 'MARK_LATER' || s.leave_type;
                       if (isSickOrLeave) return;
 
                       if (cat.categoryId === 4) {
-                        // Category 4 (LR Pool): Available unless explicitly assigned to an outward journey link
-                        const isAssigned = s.isOverridden && s.status !== 'REST' && s.status !== 'AVAILABLE_FOR_BOOKING';
-                        if (!isAssigned) {
+                        // Category 4 (LR Pool): Available ONLY if NOT booked to any train and not on leave/rest
+                        const isBooked = (s.isOverridden && s.status !== 'REST' && s.status !== 'AVAILABLE_FOR_BOOKING') ||
+                          Boolean(s.extra_train_no) ||
+                          Boolean(s.train_out && !['REST', 'AVL', 'SPARE'].includes(String(s.train_out).toUpperCase())) ||
+                          Boolean(s.train_numbers && !['REST', 'SPARE (HQ)', 'SPARE', 'AVL', 'P', 'R'].includes(String(s.train_numbers).trim().toUpperCase()));
+
+                        if (!isBooked) {
                           seenIds.add(s.staffId);
                           list.push({
                             ...s,
