@@ -11651,7 +11651,8 @@ app.get('/api/reports/daily-view', async (req, res) => {
       approvedLeavesList,
       lrCompletionsList,
       allNonDailyTrains,
-      dregEntries7d
+      dregEntries7d,
+      publishedSets
     ] = await Promise.all([
       all('SELECT * FROM categories ORDER BY id ASC'),
       getStaffForDate('ALL', targetDateStr),
@@ -11677,8 +11678,22 @@ app.get('/api/reports/daily-view', async (req, res) => {
            FROM duty_register_entry e
            JOIN duty_register_staff ds ON ds.entry_id = e.id
            WHERE e.date >= ? AND e.date <= ?
-           ORDER BY e.date DESC`, [dMinus7Str, targetDateStr])
+           ORDER BY e.date DESC`, [dMinus7Str, targetDateStr]),
+      all(`
+        SELECT * FROM link_sets 
+        WHERE status = 'published' 
+          AND (effective_from IS NULL OR date(effective_from) <= date(?)) 
+          AND (effective_to IS NULL OR date(effective_to) >= date(?))
+        ORDER BY date(effective_from) DESC, id DESC
+      `, [targetDateStr, targetDateStr])
     ]);
+
+    const activeSetByCat: Record<number, number> = {};
+    for (const s of (publishedSets || [])) {
+      if (s.category_id && !activeSetByCat[s.category_id]) {
+        activeSetByCat[s.category_id] = s.id;
+      }
+    }
 
     // Ensure any staff in dregList is included in allStaff if not already present
     for (const dr of dregList) {
@@ -11725,11 +11740,13 @@ app.get('/api/reports/daily-view', async (req, res) => {
     const getLinkDef = (categoryId: any, linkNumber: any, dateStr: string) => {
       const num = parseInt(linkNumber, 10);
       const catId = parseInt(categoryId, 10);
+      const activeSetId = activeSetByCat[catId];
       let matched = null;
       if (catId && catId !== 4) {
         matched = allLinks.find((l: any) =>
           parseInt(l.category_id, 10) === catId &&
           parseInt(l.link_number, 10) === num &&
+          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(activeSetId, 10)) &&
           (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
           (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
         );
@@ -11738,6 +11755,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         matched = allLinks.find((l: any) =>
           parseInt(l.link_number, 10) === num &&
           parseInt(l.category_id, 10) !== 4 &&
+          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(activeSetId, 10)) &&
           (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
           (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
         );
@@ -12045,6 +12063,15 @@ app.get('/api/reports/daily-view', async (req, res) => {
           const crInfo = crBalances[staff.id] || { count: 0, dates: [], display: null, shortDisplay: '-' };
           let lrRestInfo = await getStaffLastDutyAndRestStatus(staff.id, targetDateStr, null, dataPool);
 
+          const isDutyRest = isRest || status === 'AVAILABLE_FOR_BOOKING' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT';
+          const taCalc = isDutyRest ? { ta_percentage: 0, absence_hours: 0 } : calculateAbsenceAndTa(
+            null,
+            null,
+            resolvedFromStation,
+            resolvedToStation,
+            resolvedTrainNumbers
+          );
+
           staffDuties.push({
             staffId: staff.id,
             name: staff.name,
@@ -12086,7 +12113,9 @@ app.get('/api/reports/daily-view', async (req, res) => {
             from_station: resolvedFromStation,
             to_station: resolvedToStation,
             coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT') ? '-' : (effCoachOut || (activeExtraTrain ? 'SL / AC' : 'SL')),
-            set_type: resolvedSetType
+            set_type: resolvedSetType,
+            ta_percentage: (isDutyRest || taCalc.ta_percentage === null || taCalc.ta_percentage === undefined) ? 0 : taCalc.ta_percentage,
+            absence_hours: isDutyRest ? 0 : (taCalc.absence_hours || 0)
           });
         }
 
@@ -12323,6 +12352,15 @@ app.get('/api/reports/daily-view', async (req, res) => {
           resolvedToStation = dutyDetails ? dutyDetails.to_station : '---';
         }
 
+        const isDutyRest = isCat4RestDay || (activeShiftedPlace === 'NON_DAILY_REST') || (!effTrainOut && activeLink === null) || (!effTrainOut && dutyDetails && dutyDetails.is_rest === 1) || status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE' || status === 'REST' || status === 'LEAVE' || status === 'SICK' || status === 'CR' || status === 'ABSENT';
+        const taCalc = isDutyRest ? { ta_percentage: 0, absence_hours: 0 } : calculateAbsenceAndTa(
+          effTrainOut ? null : (dutyDetails?.dep_time || null),
+          effTrainRet ? null : (dutyDetails?.arr_time || null),
+          resolvedFromStation,
+          resolvedToStation,
+          resolvedTrainNumbers
+        );
+
         staffDuties.push({
           staffId: staff.id,
           name: staff.name,
@@ -12366,7 +12404,9 @@ app.get('/api/reports/daily-view', async (req, res) => {
           from_station: resolvedFromStation,
           to_station: resolvedToStation,
           coaches: (status === 'AVAILABLE_FOR_BOOKING' || status === 'UTILISED_ADVANCE' || activeShiftedPlace === 'NON_DAILY_REST') ? '-' : (effCoachOut || (dutyDetails ? dutyDetails.coaches : 'SL / AC')),
-          set_type: resolvedSetType
+          set_type: resolvedSetType,
+          ta_percentage: (isDutyRest || taCalc.ta_percentage === null || taCalc.ta_percentage === undefined) ? 0 : taCalc.ta_percentage,
+          absence_hours: isDutyRest ? 0 : (taCalc.absence_hours || 0)
         });
       }
 

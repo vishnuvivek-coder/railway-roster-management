@@ -81,6 +81,7 @@ import {
   evaluateNtesTaRule,
   isReturnTrainReachingHq,
   calculateReturnTrainHqTa,
+  calculateDynamicTaFromTimings,
   DEFAULT_DA_RATE,
   DEFAULT_NDA_HOURLY_RATE
 } from './trainTaNdaCalculator';
@@ -7023,16 +7024,44 @@ export default function App() {
 
                 const resolveSlotDuties = (slotsList) => {
                   const resolvedRows = [];
-                  const targetCat2SetId = (selectedDate && selectedDate >= '2026-11-01') ? 12 : ((selectedDate && selectedDate >= '2026-10-01') ? 7 : 2);
+                  // Map each category to its single active published link set for selectedDate
+                  const activePublishedSetByCat = {};
+                  (categories || []).forEach(cat => {
+                    const validSets = (linkSetsList || [])
+                      .filter(s => {
+                        if (String(s.category_id) !== String(cat.id)) return false;
+                        if (s.status !== 'published') return false;
+                        const f = (s.effective_from || '').slice(0, 10);
+                        const t = (s.effective_to || '9999-12-31').slice(0, 10);
+                        if (f && f > selectedDate) return false;
+                        if (t && t < selectedDate) return false;
+                        return true;
+                      })
+                      .sort((a, b) => {
+                        const fa = (a.effective_from || '').slice(0, 10);
+                        const fb = (b.effective_from || '').slice(0, 10);
+                        if (fa !== fb) return fb.localeCompare(fa);
+                        return (b.id || 0) - (a.id || 0);
+                      });
+                    if (validSets.length > 0) {
+                      activePublishedSetByCat[cat.id] = validSets[0].id;
+                    }
+                  });
+
                   const matchesLinkSet = (al) => {
                     if (!al || al.status === 'draft') return false;
                     if (al.link_set_id) {
-                      const parentSet = linkSetsList.find(s => String(s.id) === String(al.link_set_id));
+                      const parentSet = (linkSetsList || []).find(s => String(s.id) === String(al.link_set_id));
                       if (parentSet && parentSet.status === 'draft') return false;
-                      if (parseInt(al.category_id, 10) === 2 && parseInt(al.link_set_id, 10) !== targetCat2SetId) {
+                      const catActiveSetId = activePublishedSetByCat[al.category_id];
+                      if (catActiveSetId && String(al.link_set_id) !== String(catActiveSetId)) {
                         return false;
                       }
                     }
+                    const effFrom = (al.effective_from || '').slice(0, 10);
+                    const effTo = (al.effective_to || '9999-12-31').slice(0, 10);
+                    if (effFrom && effFrom > selectedDate) return false;
+                    if (effTo && effTo < selectedDate) return false;
                     return true;
                   };
 
@@ -7058,8 +7087,9 @@ export default function App() {
                       }
                     }
 
-                    const baselineSlotFirst = slot.firstTrain || dynamicSlotFirst;
-                    const baselineSlotLast = slot.lastTrain || dynamicSlotLast;
+                    // Active Train Roster takes top priority for slot train numbers
+                    const baselineSlotFirst = dynamicSlotFirst || slot.firstTrain;
+                    const baselineSlotLast = dynamicSlotLast || slot.lastTrain;
 
                     const effectiveSlotFirstTrain = (customSlot.firstTrain !== undefined && customSlot.firstTrain !== '') ? customSlot.firstTrain : baselineSlotFirst;
                     const effectiveSlotLastTrain = (customSlot.lastTrain !== undefined && customSlot.lastTrain !== '') ? customSlot.lastTrain : baselineSlotLast;
@@ -7114,10 +7144,11 @@ export default function App() {
                         linkCoach = matchedLink.coaches.trim();
                       }
 
-                      const baselineFirstTrain = isDynamicAmaravatiSlot ? linkFirstTrain : (lDef.firstTrain || slot.firstTrain || linkFirstTrain || effectiveSlotFirstTrain);
-                      const baselineLastTrain = isDynamicAmaravatiSlot ? linkLastTrain : (lDef.lastTrain || slot.lastTrain || effectiveSlotLastTrain || linkLastTrain);
-                      const baselineFirstCoach = lDef.firstCoach || linkCoach || slot.firstCoach;
-                      const baselineLastCoach = lDef.lastCoach || slot.lastCoach || linkCoach || '-';
+                      // Active Train Roster takes top priority for all train information
+                      const baselineFirstTrain = isDynamicAmaravatiSlot ? linkFirstTrain : (linkFirstTrain || lDef.firstTrain || slot.firstTrain || effectiveSlotFirstTrain);
+                      const baselineLastTrain = isDynamicAmaravatiSlot ? linkLastTrain : (linkLastTrain || lDef.lastTrain || slot.lastTrain || effectiveSlotLastTrain);
+                      const baselineFirstCoach = linkCoach || lDef.firstCoach || slot.firstCoach || '-';
+                      const baselineLastCoach = linkCoach || lDef.lastCoach || slot.lastCoach || '-';
 
                       const effectiveFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : baselineFirstTrain;
                       const effectiveFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : baselineFirstCoach;
@@ -7259,6 +7290,49 @@ export default function App() {
 
                         const isUpgradedStaff = (parseInt(lDef.categoryId, 10) === 1 && parseInt(staffDuty.categoryId, 10) !== 1) || (staffDuty.status === 'SUBSTITUTE' && parseInt(lDef.categoryId, 10) === 1);
 
+                        // Take train information from staff's assigned link in the Train Roster
+                        const assignedLinkNum = staffDuty.link_number || lDef.linkNum;
+                        const assignedCatId = staffDuty.target_category_id != null ? staffDuty.target_category_id : (staffDuty.categoryId || lDef.categoryId);
+
+                        const staffAssignedLink = safeLinksList.find(al =>
+                          matchesLinkSet(al) &&
+                          parseInt(al.category_id, 10) === parseInt(assignedCatId, 10) &&
+                          parseInt(al.link_number, 10) === parseInt(assignedLinkNum, 10)
+                        );
+
+                        let staffFirstTrain = '';
+                        let staffLastTrain = '';
+                        let staffFirstCoach = '';
+                        let staffLastCoach = '';
+
+                        if (staffAssignedLink) {
+                          if (staffAssignedLink.train_numbers && staffAssignedLink.train_numbers.trim() && staffAssignedLink.train_numbers.toUpperCase() !== 'REST') {
+                            const parts = staffAssignedLink.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                            if (parts.length > 0) staffFirstTrain = parts[0];
+                            if (parts.length > 1) staffLastTrain = parts[parts.length - 1];
+                          }
+                          if (staffAssignedLink.coaches && staffAssignedLink.coaches.trim()) {
+                            staffFirstCoach = staffAssignedLink.coaches.trim();
+                            staffLastCoach = staffAssignedLink.coaches.trim();
+                          }
+                        }
+
+                        const rowFirstTrain = staffDuty.train_out || (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '' ? customDuty.firstTrain : (staffFirstTrain || effectiveFirstTrain));
+                        const rowFirstCoach = (staffDuty.train_out && staffDuty.coach_out) ? staffDuty.coach_out : ((customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : (staffFirstCoach || effectiveFirstCoach));
+                        const rowLastTrain = staffDuty.train_return || (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '' ? customDuty.lastTrain : (staffLastTrain || effectiveLastTrain));
+                        const rowLastCoach = (staffDuty.train_return && staffDuty.coach_return) ? staffDuty.coach_return : ((customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : (staffLastCoach || effectiveLastCoach));
+
+                        // Dynamic TA calculation strictly based on arrival and departure time (NOT copied blindly from train roster)
+                        const dutyDepTime = staffDuty.dep_time || STANDARD_TRAIN_SCHEDULES[rowFirstTrain]?.schedDep || null;
+                        const dutyArrTime = staffDuty.arr_time || STANDARD_TRAIN_SCHEDULES[rowLastTrain]?.schedArr || null;
+                        const dutyTaCalc = calculateDynamicTaFromTimings(
+                          dutyDepTime,
+                          dutyArrTime,
+                          staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || 'GNT',
+                          staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || 'GNT',
+                          rowFirstTrain
+                        );
+
                         dutiesInSlot.push({
                           ...staffDuty,
                           dutyKey,
@@ -7266,10 +7340,16 @@ export default function App() {
                           categoryId: lDef.categoryId,
                           target_category_id: lDef.categoryId,
                           link_number: staffDuty.link_number || lDef.linkNum,
-                          firstTrain: staffDuty.train_out || effectiveFirstTrain,
-                          firstCoaches: staffDuty.coach_out || effectiveFirstCoach,
-                          lastTrain: staffDuty.train_return || effectiveLastTrain,
-                          lastCoaches: staffDuty.coach_return || effectiveLastCoach,
+                          firstTrain: rowFirstTrain,
+                          firstCoaches: rowFirstCoach,
+                          lastTrain: rowLastTrain,
+                          lastCoaches: rowLastCoach,
+                          from_station: staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || '',
+                          to_station: staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || '',
+                          set_type: staffDuty.set_type || staffAssignedLink?.set_type || matchedLink?.set_type || '',
+                          ta_percentage: dutyTaCalc.ta_percentage,
+                          absence_hours: dutyTaCalc.absence_hours,
+                          ta_desc: dutyTaCalc.desc,
                           isLeave: isApprovedLeave,
                           isUpgraded: isUpgradedStaff,
                           originalStaffName: originalSickOrLeaveDuty ? originalSickOrLeaveDuty.name : null,
@@ -16675,7 +16755,11 @@ export default function App() {
           let statusBadgeColor = '#34d399';
           let statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
 
-          if (isReturnedFromLeave) {
+          if (isBusy) {
+            statusLabel = `⚠️ Working: ${currentWorking}`;
+            statusBadgeColor = '#facc15';
+            statusBadgeBg = 'rgba(234, 179, 8, 0.2)';
+          } else if (isReturnedFromLeave) {
             statusLabel = '🟢 Available (Reported Fit / Released at HQ)';
             statusBadgeColor = '#34d399';
             statusBadgeBg = 'rgba(16, 185, 129, 0.2)';
@@ -16683,10 +16767,6 @@ export default function App() {
             statusLabel = `🏖️ ${leaveReason || 'On Leave / Sick'}`;
             statusBadgeColor = '#f87171';
             statusBadgeBg = 'rgba(239, 68, 68, 0.15)';
-          } else if (isBusy) {
-            statusLabel = `⚠️ Working: ${currentWorking}`;
-            statusBadgeColor = '#facc15';
-            statusBadgeBg = 'rgba(234, 179, 8, 0.2)';
           } else if (isLR) {
             statusLabel = '🟢 Available (LR Standby Pool)';
             statusBadgeColor = '#60a5fa';
@@ -16739,6 +16819,7 @@ export default function App() {
           } else if (quickAssignCatId === 'RETURNED_LEAVE') {
             // Show staff who returned from leave or are marked on leave
             if (!s.isReturnedFromLeave && !s.isLeaveOrSick) return false;
+            if (s.isBusy && !quickAssignShowBusy) return false;
           } else if (quickAssignCatId === 'ALL') {
             // All available candidates (including those who reported fit / returned from leave)
             if (s.isLeaveOrSick) return false;

@@ -580,10 +580,10 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--color-text-primary)' }}>
-              {activeMetrics.total}
+              {loading ? '...' : activeMetrics.total}
             </span>
             <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
-              in active link roster
+              {loading ? 'calculating live roster...' : 'in active link roster'}
             </span>
           </div>
         </div>
@@ -596,29 +596,29 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
               Available Staff
             </span>
             <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: 800 }}>
-              {activeMetrics.percentage}% Ready
+              {loading ? '...' : `${activeMetrics.percentage}% Ready`}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10b981' }}>
-              {activeMetrics.available}
+              {loading ? '...' : activeMetrics.available}
             </span>
             <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
               at Headquarters GNT
             </span>
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-            <span>Standby: <strong>{activeMetrics.breakdown?.available_standby || 0}</strong></span>
+            <span>Standby: <strong>{loading ? '...' : (activeMetrics.breakdown?.available_standby || 0)}</strong></span>
             <span>•</span>
-            <span>12h Rest: <strong>{activeMetrics.breakdown?.available_12h_rest || 0}</strong></span>
+            <span>12h Rest: <strong>{loading ? '...' : (activeMetrics.breakdown?.available_12h_rest || 0)}</strong></span>
             <span>•</span>
-            <span>Min 8h: <strong>{activeMetrics.breakdown?.available_8h_rest || 0}</strong></span>
+            <span>Min 8h: <strong>{loading ? '...' : (activeMetrics.breakdown?.available_8h_rest || 0)}</strong></span>
             <span>•</span>
-            <span>Sick Return: <strong style={{ color: '#10b981' }}>{activeMetrics.breakdown?.available_sick_return || 0}</strong></span>
+            <span>Sick Return: <strong style={{ color: '#10b981' }}>{loading ? '...' : (activeMetrics.breakdown?.available_sick_return || 0)}</strong></span>
             <span>•</span>
-            <span>Leave Return: <strong>{activeMetrics.breakdown?.available_leave_return || 0}</strong></span>
+            <span>Leave Return: <strong>{loading ? '...' : (activeMetrics.breakdown?.available_leave_return || 0)}</strong></span>
             <span>•</span>
-            <span>Weekly Rest: <strong>{activeMetrics.breakdown?.available_weekly_rest || 0}</strong></span>
+            <span>Weekly Rest: <strong>{loading ? '...' : (activeMetrics.breakdown?.available_weekly_rest || 0)}</strong></span>
           </div>
         </div>
 
@@ -630,27 +630,27 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
               Not Available Staff
             </span>
             <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 800 }}>
-              {100 - activeMetrics.percentage}% Busy
+              {loading ? '...' : `${100 - activeMetrics.percentage}% Busy`}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
             <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#ef4444' }}>
-              {activeMetrics.notAvailable}
+              {loading ? '...' : activeMetrics.notAvailable}
             </span>
             <span style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
               on duty / outstation / rest
             </span>
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-            <span>Booked: <strong>{activeMetrics.breakdown?.booked_to_duty || 0}</strong></span>
+            <span>Booked: <strong>{loading ? '...' : (activeMetrics.breakdown?.booked_to_duty || 0)}</strong></span>
             <span>•</span>
-            <span>Outstation: <strong>{activeMetrics.breakdown?.outstation || 0}</strong></span>
+            <span>Outstation: <strong>{loading ? '...' : (activeMetrics.breakdown?.outstation || 0)}</strong></span>
             <span>•</span>
-            <span>Leave: <strong>{activeMetrics.breakdown?.on_leave || 0}</strong></span>
+            <span>Leave: <strong>{loading ? '...' : (activeMetrics.breakdown?.on_leave || 0)}</strong></span>
             <span>•</span>
-            <span>Sick: <strong>{activeMetrics.breakdown?.sick || 0}</strong></span>
+            <span>Sick: <strong>{loading ? '...' : (activeMetrics.breakdown?.sick || 0)}</strong></span>
             <span>•</span>
-            <span>In Rest (&lt;8h): <strong>{activeMetrics.breakdown?.in_hq_rest || 0}</strong></span>
+            <span>In Rest (&lt;8h): <strong>{loading ? '...' : (activeMetrics.breakdown?.in_hq_rest || 0)}</strong></span>
           </div>
         </div>
       </div>
@@ -677,7 +677,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
             onClick={() => setStatusFilter('ALL')}
             style={{ padding: '6px 14px', fontSize: '0.82rem' }}
           >
-            All Staff ({activeMetrics.total})
+            All Staff ({loading ? '...' : activeMetrics.total})
           </button>
           <button
             type="button"
@@ -690,7 +690,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
               color: statusFilter === 'AVAILABLE' ? '#fff' : '#10b981'
             }}
           >
-            Available ({activeMetrics.available})
+            Available ({loading ? '...' : activeMetrics.available})
           </button>
           <button
             type="button"
@@ -703,7 +703,7 @@ export default function AvailabilitySheet({ isAdmin, openDutyEditModal }: Availa
               color: statusFilter === 'NOT_AVAILABLE' ? '#fff' : '#ef4444'
             }}
           >
-            Not Available ({activeMetrics.notAvailable})
+            Not Available ({loading ? '...' : activeMetrics.notAvailable})
           </button>
         </div>
 

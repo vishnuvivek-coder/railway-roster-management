@@ -478,6 +478,89 @@ export function calculateReturnTrainHqTa(
   };
 }
 
+/**
+ * Dynamic TA Calculator based strictly on Indian Railways Statutory Departure and Arrival Timings:
+ * - Departure between 00:00 and 11:55 -> 1.0 TA (> 12h gap to 24:00)
+ * - Departure between 12:00 and 17:55 -> 0.7 TA (> 6h gap to 24:00)
+ * - Departure between 18:00 and 23:55 -> 0.3 TA (< 6h gap to 24:00)
+ * - Arrival early morning 00:10 to 06:05 -> 0.3 TA (< 6h absence from 00:00)
+ * - Arrival morning 06:10 to 12:10 -> 0.7 TA (6h to 12h absence from 00:00)
+ * - Arrival afternoon/evening after 12:10 -> 1.0 TA (> 12h absence from 00:00)
+ * - Connecting / Local shuttle (e.g. 17281, 67230 to BZA) -> 0 TA
+ * - Complete known round trip / tour:
+ *     >= 12h absence -> 1.0 TA (100%)
+ *     6h to 12h absence -> 0.7 TA (70%)
+ *     < 6h absence -> 0.3 TA (30%)
+ */
+export function calculateDynamicTaFromTimings(
+  depTime?: string | null,
+  arrTime?: string | null,
+  fromStation: string = 'GNT',
+  toStation: string = '',
+  trainNo: string = ''
+): { ta_percentage: number; absence_hours: number; desc: string } {
+  const parseM = (t?: string | null): number | null => {
+    if (!t || !t.includes(':')) return null;
+    const [h, m] = t.split(':').map(v => parseInt(v, 10) || 0);
+    return h * 60 + m;
+  };
+
+  const depM = parseM(depTime);
+  const arrM = parseM(arrTime);
+  const tNum = String(trainNo || '').trim();
+  const std = STANDARD_TRAIN_SCHEDULES[tNum];
+
+  if ((tNum === '17281' || tNum === '67230') && toStation === 'BZA') {
+    return { ta_percentage: 0, absence_hours: 1.1, desc: 'Connecting leg BZA (0% TA)' };
+  }
+
+  // 1. Both departure and arrival times are known (Same day / full round-trip duty)
+  if (depM !== null && arrM !== null) {
+    const diff = arrM >= depM ? arrM - depM : 1440 - depM + arrM;
+    const hours = Math.round((diff / 60) * 10) / 10;
+    if (hours < 6.0) return { ta_percentage: 0.3, absence_hours: hours, desc: `${hours}h duration (<6h: 30% TA)` };
+    if (hours <= 12.0) return { ta_percentage: 0.7, absence_hours: hours, desc: `${hours}h duration (6-12h: 70% TA)` };
+    return { ta_percentage: 1.0, absence_hours: hours, desc: `${hours}h duration (>12h: 100% TA)` };
+  }
+
+  // 2. Return leg arriving at HQ
+  const isReachingHq = toStation === 'GNT' || toStation === '---' || !toStation || isReturnTrainReachingHq(tNum, toStation, fromStation);
+  if (arrM !== null && isReachingHq) {
+    const hours = Math.round((arrM / 60) * 10) / 10;
+    if (arrM < 10) return { ta_percentage: 0, absence_hours: hours, desc: 'Arrival before 00:10 (0% TA)' };
+    if (arrM <= 6 * 60 + 5) return { ta_percentage: 0.3, absence_hours: hours, desc: `HQ Arrival ${arrTime} (<=06:05: 30% TA)` };
+    if (arrM <= 12 * 60 + 10) return { ta_percentage: 0.7, absence_hours: hours, desc: `HQ Arrival ${arrTime} (06:10-12:10: 70% TA)` };
+    return { ta_percentage: 1.0, absence_hours: hours, desc: `HQ Arrival ${arrTime} (>12:10: 100% TA)` };
+  }
+
+  // 3. Outward departure from HQ
+  if (depM !== null) {
+    const absenceToMidnight = 1440 - depM;
+    const hours = Math.round((absenceToMidnight / 60) * 10) / 10;
+    if (depM <= 11 * 60 + 55) return { ta_percentage: 1.0, absence_hours: hours, desc: `HQ Departure ${depTime} (<=11:55: 100% TA)` };
+    if (depM <= 17 * 60 + 55) return { ta_percentage: 0.7, absence_hours: hours, desc: `HQ Departure ${depTime} (12:00-17:55: 70% TA)` };
+    return { ta_percentage: 0.3, absence_hours: hours, desc: `HQ Departure ${depTime} (>=18:00: 30% TA)` };
+  }
+
+  // 4. Fallback to standard train schedule timings
+  if (std) {
+    if (std.schedDep && std.schedArr) {
+      return calculateDynamicTaFromTimings(std.schedDep, std.schedArr, fromStation, toStation, trainNo);
+    }
+    if (std.schedDep) {
+      return calculateDynamicTaFromTimings(std.schedDep, null, fromStation, toStation, trainNo);
+    }
+    if (std.schedArr && std.isReturnToHq) {
+      return calculateDynamicTaFromTimings(null, std.schedArr, fromStation, toStation, trainNo);
+    }
+    if (std.defaultTa !== undefined) {
+      return { ta_percentage: std.defaultTa, absence_hours: 8.0, desc: `Standard Schedule (${std.defaultTa * 100}% TA)` };
+    }
+  }
+
+  return { ta_percentage: 0.7, absence_hours: 8.0, desc: 'Standard Duty (70% TA)' };
+}
+
 export function evaluateNtesTaRule(
   trainNumber: string | number,
   actualArrTime?: string | null,
