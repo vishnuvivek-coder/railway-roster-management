@@ -2426,18 +2426,18 @@ export default function App() {
   };
 
   const fetchLinkSets = (catFilter = selectedCatId) => {
-    let url = `${API_BASE}/link-sets`;
-    if (catFilter && catFilter !== 'ALL') {
-      url += `?category_id=${catFilter}`;
-    }
-    return fetch(url)
+    return fetch(`${API_BASE}/link-sets`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
           setLinkSetsList(data);
+          const currentCat = (catFilter && catFilter !== 'ALL') ? catFilter : selectedCatId;
+          const catSets = (currentCat && currentCat !== 'ALL')
+            ? data.filter(s => String(s.category_id) === String(currentCat))
+            : data;
           setSelectedLinkSetId(prev => {
-            if (prev && data.some(s => s.id === prev)) return prev;
-            const match = data.find(s => s.status === 'published') || data[0];
+            if (prev && catSets.some(s => s.id === prev && s.status === 'published')) return prev;
+            const match = catSets.find(s => s.status === 'published') || catSets[0];
             return match ? match.id : null;
           });
         }
@@ -4448,8 +4448,18 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to publish link set');
 
+      setSelectedLinkSetId(setId);
       await fetchLinkSets(selectedCatId);
       await fetchLinks(selectedCatId, setId);
+      try {
+        const freshLinksRes = await fetch(`${API_BASE}/links`);
+        if (freshLinksRes.ok) {
+          const freshLinks = await freshLinksRes.json();
+          setAllLinksList(freshLinks);
+        }
+      } catch (e) {}
+      await fetchRoster();
+      await fetchDailyDuties();
       await notifyAllModulesUpdated('link_set_published');
       setPublishModal(null);
       setDragNotice(`🚀 Link Set "${target.name}" is now PUBLISHED and live on the roster!`);
@@ -4476,8 +4486,24 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to turn off link set');
 
-      await fetchLinkSets(selectedCatId);
-      await fetchLinks(selectedCatId, setId);
+      const updatedSets = await fetchLinkSets(selectedCatId);
+      const catSets = Array.isArray(updatedSets)
+        ? updatedSets.filter(s => String(s.category_id) === String(target.category_id || selectedCatId))
+        : [];
+      const remainingActive = catSets.find(s => s.status === 'published' && s.id !== setId) || null;
+      const newTargetSetId = remainingActive ? remainingActive.id : null;
+      setSelectedLinkSetId(newTargetSetId);
+
+      await fetchLinks(selectedCatId, newTargetSetId);
+
+      try {
+        const freshLinksRes = await fetch(`${API_BASE}/links`);
+        if (freshLinksRes.ok) {
+          const freshLinks = await freshLinksRes.json();
+          setAllLinksList(freshLinks);
+        }
+      } catch (e) {}
+
       await fetchRoster();
       await fetchDailyDuties();
       await notifyAllModulesUpdated('link_set_deactivated');
@@ -4491,22 +4517,40 @@ export default function App() {
   const updateLinkSetMeta = async (setId, name, effectiveFrom, effectiveTo, status = undefined) => {
     if (!isAdmin) return;
     try {
+      const bodyPayload = {
+        name,
+        effective_from: effectiveFrom,
+        effective_to: effectiveTo && effectiveTo.trim() ? effectiveTo.trim() : '9999-12-31'
+      };
+      if (status !== undefined) bodyPayload.status = status;
       const res = await fetch(`${API_BASE}/link-sets/${setId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({
-          name,
-          effective_from: effectiveFrom,
-          effective_to: effectiveTo && effectiveTo.trim() ? effectiveTo.trim() : '9999-12-31'
-        })
+        body: JSON.stringify(bodyPayload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update link set');
-      await fetchLinkSets(selectedCatId);
-      await fetchLinks(selectedCatId, setId);
+      const updatedSets = await fetchLinkSets(selectedCatId);
+      if (status === 'draft' && selectedLinkSetId === setId) {
+        const catSets = Array.isArray(updatedSets) ? updatedSets.filter(s => String(s.category_id) === String(selectedCatId)) : [];
+        const remainingActive = catSets.find(s => s.status === 'published' && s.id !== setId) || null;
+        setSelectedLinkSetId(remainingActive ? remainingActive.id : null);
+        await fetchLinks(selectedCatId, remainingActive ? remainingActive.id : null);
+      } else {
+        await fetchLinks(selectedCatId, setId);
+      }
+      try {
+        const freshLinksRes = await fetch(`${API_BASE}/links`);
+        if (freshLinksRes.ok) {
+          const freshLinks = await freshLinksRes.json();
+          setAllLinksList(freshLinks);
+        }
+      } catch (e) {}
+      await fetchRoster();
+      await fetchDailyDuties();
       await notifyAllModulesUpdated('link_set_meta_updated');
       setEditLinkSetModal(null);
       setDragNotice('✓ Link set details updated');
@@ -8100,7 +8144,7 @@ export default function App() {
                                         style={{
                                           borderBottom: (isLastDuty && !hasExtraRow) ? '2px solid var(--border-glass)' : '1px solid rgba(255, 255, 255, 0.05)',
                                           backgroundColor: isSlotHighlighted ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
-                                          outline: dragOverSlotId === group.slotId ? '2px dashed #10b981' : (draggedStaff ? '1px dashed rgba(16, 185, 129, 0.35)' : 'none'),
+                                          outline: dragOverSlotId === group.slotId ? '2px solid #10b981' : 'none',
                                           transition: 'all 0.15s ease'
                                         }}
                                       >
@@ -12771,14 +12815,45 @@ export default function App() {
           {linkSubTab === 'train-centric' && (() => {
             const trainRosterItems = [];
             const activeDate = trainRosterDate || `${year}-${String(month).padStart(2, '0')}-01`;
+
+            // Map each category to its single active published link set for activeDate
+            const activePublishedSetByCat = {};
+            (categories || []).forEach(cat => {
+              const validSets = (linkSetsList || [])
+                .filter(s => {
+                  if (String(s.category_id) !== String(cat.id)) return false;
+                  if (s.status !== 'published') return false;
+                  const f = (s.effective_from || '').slice(0, 10);
+                  const t = (s.effective_to || '9999-12-31').slice(0, 10);
+                  if (f && f > activeDate) return false;
+                  if (t && t < activeDate) return false;
+                  return true;
+                })
+                .sort((a, b) => {
+                  const fa = (a.effective_from || '').slice(0, 10);
+                  const fb = (b.effective_from || '').slice(0, 10);
+                  if (fa !== fb) return fb.localeCompare(fa);
+                  return (b.id || 0) - (a.id || 0);
+                });
+              if (validSets.length > 0) {
+                activePublishedSetByCat[cat.id] = validSets[0].id;
+              }
+            });
+
             // Master Train Roster must ONLY display live published links matching activeDate
             const publishedLinksSource = (allLinksList && allLinksList.length > 0 ? allLinksList : linksList)
               .filter(l => {
                 if (l.status === 'draft') return false;
-                const parentSet = linkSetsList.find(s => String(s.id) === String(l.link_set_id));
+                const parentSet = (linkSetsList || []).find(s => String(s.id) === String(l.link_set_id));
                 if (parentSet && parentSet.status === 'draft') return false;
-                const effFrom = l.effective_from || parentSet?.effective_from;
-                const effTo = l.effective_to || parentSet?.effective_to;
+
+                const catActiveSetId = activePublishedSetByCat[l.category_id];
+                if (catActiveSetId) {
+                  if (l.link_set_id && String(l.link_set_id) !== String(catActiveSetId)) return false;
+                }
+
+                const effFrom = (l.effective_from || parentSet?.effective_from || '').slice(0, 10);
+                const effTo = (l.effective_to || parentSet?.effective_to || '9999-12-31').slice(0, 10);
                 if (effFrom && effFrom > activeDate) return false;
                 if (effTo && effTo < activeDate) return false;
                 return true;

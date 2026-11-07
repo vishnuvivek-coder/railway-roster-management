@@ -726,18 +726,29 @@ function resolveLinkFromList(linksList: any[], categoryId: any, linkNumber: any,
   const catId = parseInt(categoryId, 10);
   const num = parseInt(linkNumber, 10);
   let link: any = null;
+  const toYMD = (val: any) => {
+    if (!val) return null;
+    if (val instanceof Date) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(val).trim();
+    return s.length >= 10 ? s.substring(0, 10) : s;
+  };
   if (catId && catId !== 4) {
     link = linksList.find((l: any) =>
       parseInt(l.category_id, 10) === catId &&
       parseInt(l.link_number, 10) === num &&
-      (!dateStr || ((!l.effective_from || l.effective_from <= dateStr) && (!l.effective_to || l.effective_to >= dateStr)))
+      (!dateStr || ((!l.effective_from || toYMD(l.effective_from) <= dateStr) && (!l.effective_to || toYMD(l.effective_to) >= dateStr)))
     );
   }
   if (!link) {
     link = linksList.find((l: any) =>
       parseInt(l.link_number, 10) === num &&
       parseInt(l.category_id, 10) !== 4 &&
-      (!dateStr || ((!l.effective_from || l.effective_from <= dateStr) && (!l.effective_to || l.effective_to >= dateStr)))
+      (!dateStr || ((!l.effective_from || toYMD(l.effective_from) <= dateStr) && (!l.effective_to || toYMD(l.effective_to) >= dateStr)))
     );
   }
   if (link && dateStr) {
@@ -4083,6 +4094,7 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
       }
     }
 
+    invalidateLinksCache();
     await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name}) [Effective: ${newFrom} to ${newTo}]`, {
       action: 'UPDATE_LINK_SET',
       link_set_id: id,
@@ -4162,6 +4174,7 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
       }
     }
 
+    invalidateLinksCache();
     await logAudit('Admin', 'PUBLISH_LINK_SET', `Published Link Set #${id} "${origSet.name}" with effective date ${effDate}`, {
       action: 'PUBLISH_LINK_SET',
       link_set_id: id,
@@ -4225,6 +4238,7 @@ app.post('/api/link-sets/:id/deactivate', requireAdmin, async (req, res) => {
       }
     }
 
+    invalidateLinksCache();
     await logAudit('Admin', 'DEACTIVATE_LINK_SET', `Turned off Link Set #${id} "${origSet.name}" (set to Inactive / Draft)`, {
       action: 'DEACTIVATE_LINK_SET',
       link_set_id: id,
@@ -4261,6 +4275,7 @@ app.delete('/api/link-sets/:id', requireAdmin, async (req, res) => {
     // Delete the set
     await run('DELETE FROM link_sets WHERE id = ?', [id]);
 
+    invalidateLinksCache();
     await logAudit('Admin', 'DELETE_LINK_SET', `Deleted Link Set #${id} "${origSet.name}" and all its links`, {
       action: 'DELETE_LINK_SET',
       deleted_set: origSet,
@@ -4381,6 +4396,7 @@ app.post('/api/links/reorder', requireAdmin, async (req, res) => {
     for (const item of reorders) {
       await run('UPDATE links SET link_number = ? WHERE id = ?', [item.link_number, item.id]);
     }
+    invalidateLinksCache();
     await logAudit('Admin', 'REORDER_LINKS', `Reordered ${reorders.length} link numbers in train roster`, {
       action: 'REORDER_LINKS',
       previous_reorders: prevRows
@@ -4453,6 +4469,7 @@ app.post('/api/links', requireAdmin, async (req, res) => {
       ]
     );
 
+    invalidateLinksCache();
     await logAudit(
       'Admin',
       'CREATE_LINK',
@@ -4539,6 +4556,7 @@ app.put('/api/links/:id', requireAdmin, async (req, res) => {
         previous: existing
       }
     );
+    invalidateLinksCache();
     const updated = await get('SELECT * FROM links WHERE id = ?', [id]);
     res.json({ message: 'Link updated successfully', link: updated });
   } catch (err) {
@@ -4652,6 +4670,7 @@ app.delete('/api/links/:id', requireAdmin, async (req, res) => {
     }
 
 
+    invalidateLinksCache();
     await logAudit(
       req.user?.username || 'Admin',
       'DELETE_LINK_AND_SHIFT',
@@ -4695,6 +4714,7 @@ app.post('/api/links/clear-all', requireAdmin, async (req, res) => {
       await run("DELETE FROM links WHERE status = 'published' OR status IS NULL");
       await logAudit('Admin', 'CLEAR_ALL_LINKS', 'Cleared all published roster links');
     }
+    invalidateLinksCache();
     res.json({ message: 'Links cleared successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -11562,8 +11582,13 @@ app.get('/api/reports/daily-view', async (req, res) => {
   try {
     const toDateKey = (val: any) => {
       if (!val) return '';
-      if (val instanceof Date) return val.toISOString().split('T')[0];
-      const s = String(val);
+      if (val instanceof Date) {
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      const s = String(val).trim();
       return s.length >= 10 ? s.substring(0, 10) : s;
     };
 
@@ -11606,7 +11631,13 @@ app.get('/api/reports/daily-view', async (req, res) => {
       all('SELECT * FROM categories ORDER BY id ASC'),
       getStaffForDate('ALL', targetDateStr),
       calculateStaffCrBalances(),
-      all("SELECT * FROM links WHERE (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft')"),
+      all(`
+        SELECT * FROM links 
+        WHERE (status = 'published' OR status IS NULL OR status = '') 
+          AND (status != 'draft')
+          AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))
+        ORDER BY date(effective_from) DESC
+      `),
       all('SELECT * FROM overrides WHERE date >= ? AND date <= ?', [dMinus7Str, targetDateStr]),
       all('SELECT * FROM muster_records WHERE date >= ? AND date <= ?', [dMinus3Str, targetDateStr]),
       all('SELECT * FROM lr_sheet_records WHERE date = ?', [targetDateStr]),
@@ -17269,12 +17300,12 @@ async function syncLRSheetCellChange(staffId: any, dateStr: any, dutyCode: any, 
           if (linkNum > 21) {
             targetCatId = 2; // Category 2 Sleeper
           } else {
-            const corCheck = await get('SELECT id FROM links WHERE category_id = 1 AND link_number = ?', [linkNum]);
+            const corCheck = await get("SELECT id FROM links WHERE category_id = 1 AND link_number = ? AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL))", [linkNum]);
             targetCatId = corCheck ? 1 : 2;
           }
         }
 
-        const linkDef = await get('SELECT train_numbers, from_station, to_station, coaches, set_type FROM links WHERE category_id = ? AND link_number = ?', [targetCatId, linkNum]);
+        const linkDef = await get("SELECT train_numbers, from_station, to_station, coaches, set_type FROM links WHERE category_id = ? AND link_number = ? AND (status = 'published' OR status IS NULL OR status = '') AND (status != 'draft') AND (link_set_id IS NULL OR link_set_id IN (SELECT id FROM link_sets WHERE status = 'published' OR status IS NULL)) ORDER BY date(effective_from) DESC", [targetCatId, linkNum]);
         const catLabel = targetCatId === 1 ? 'COR' : 'SL';
         const linkTrain = linkDef?.train_numbers ? ` (${linkDef.train_numbers})` : '';
         const reason = remarks ? `Assigned to ${catLabel} Link #${linkNum}${linkTrain} • ${remarks}` : `Assigned to ${catLabel} Link #${linkNum}${linkTrain}`;
