@@ -4058,6 +4058,21 @@ app.put('/api/link-sets/:id', requireAdmin, async (req, res) => {
       await run('UPDATE links SET status = ? WHERE link_set_id = ?', [newStatus, id]);
     }
 
+    // If turned off to draft, sync category cycle_length to remaining active published set
+    if (newStatus === 'draft' && origSet.status === 'published' && origSet.category_id) {
+      const remainingSets = await all(
+        "SELECT * FROM link_sets WHERE category_id = ? AND status = 'published' AND id != ? ORDER BY date(effective_from) DESC, id DESC",
+        [origSet.category_id, id]
+      );
+      if (remainingSets.length > 0) {
+        const topSet = remainingSets[0];
+        const memberCount = await get('SELECT count(*) as c FROM links WHERE link_set_id = ? AND (status = "published" OR status IS NULL OR status = "")', [topSet.id]);
+        if (memberCount && memberCount.c > 0) {
+          await run('UPDATE categories SET cycle_length = ? WHERE id = ?', [memberCount.c, origSet.category_id]);
+        }
+      }
+    }
+
     await logAudit('Admin', 'UPDATE_LINK_SET', `Updated Link Set #${id} (${name || origSet.name}) [Effective: ${newFrom} to ${newTo}]`, {
       action: 'UPDATE_LINK_SET',
       link_set_id: id,
@@ -4147,6 +4162,67 @@ app.post('/api/link-sets/:id/publish', requireAdmin, async (req, res) => {
       prev_end: prevEnd
     });
     res.json({ success: true, message: `Link set "${origSet.name}" published successfully with effective date ${effDate}!` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5b. POST deactivate / turn off link set (moves to 'draft' / inactive status)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/link-sets/:id/deactivate
+//   • Module          : Roster Link & Slot Configuration
+//   • Frontend Caller : App.jsx
+//   • Reads From DB   : sqlite_db
+//   • Saves To DB     : sqlite_db (link_sets, links, categories)
+//   • Auto-Syncs To   : categories
+//   • Summary         : POST /api/link-sets/:id/deactivate (Turn Off Link Set)
+// ============================================================================
+app.post('/api/link-sets/:id/deactivate', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const origSet = await get('SELECT * FROM link_sets WHERE id = ?', [id]);
+    if (!origSet) return res.status(404).json({ error: 'Link set not found' });
+
+    // 1. Update set to 'draft' (turned off / inactive)
+    await run(
+      `UPDATE link_sets 
+       SET status = 'draft',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [id]
+    );
+
+    // 2. Update all member links to 'draft'
+    await run(
+      `UPDATE links 
+       SET status = 'draft'
+       WHERE link_set_id = ?`,
+      [id]
+    );
+
+    // 3. For the category, update cycle_length to the currently active published set if one exists
+    if (origSet.category_id) {
+      const remainingSets = await all(
+        "SELECT * FROM link_sets WHERE category_id = ? AND status = 'published' AND id != ? ORDER BY date(effective_from) DESC, id DESC",
+        [origSet.category_id, id]
+      );
+      if (remainingSets.length > 0) {
+        const topSet = remainingSets[0];
+        const memberCount = await get('SELECT count(*) as c FROM links WHERE link_set_id = ? AND (status = "published" OR status IS NULL OR status = "")', [topSet.id]);
+        if (memberCount && memberCount.c > 0) {
+          await run('UPDATE categories SET cycle_length = ? WHERE id = ?', [memberCount.c, origSet.category_id]);
+        }
+      }
+    }
+
+    await logAudit('Admin', 'DEACTIVATE_LINK_SET', `Turned off Link Set #${id} "${origSet.name}" (set to Inactive / Draft)`, {
+      action: 'DEACTIVATE_LINK_SET',
+      link_set_id: id,
+      previous_status: origSet.status,
+      category_id: origSet.category_id
+    });
+
+    res.json({ success: true, message: `Link set "${origSet.name}" turned off successfully!` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

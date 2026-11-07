@@ -1664,6 +1664,7 @@ export default function App() {
   const [editSetNameInput, setEditSetNameInput] = useState('');
   const [editSetDateInput, setEditSetDateInput] = useState('');
   const [editSetDateToInput, setEditSetDateToInput] = useState('');
+  const [editSetStatusInput, setEditSetStatusInput] = useState('published');
   const [trainCategoryFilter, setTrainCategoryFilter] = useState('ALL'); // 'ALL' or cat.id
   const [customSets, setCustomSets] = useState([]);
   const [newSetName, setNewSetName] = useState('');
@@ -4458,7 +4459,36 @@ export default function App() {
     }
   };
 
-  const updateLinkSetMeta = async (setId, name, effectiveFrom, effectiveTo) => {
+  const turnOffLinkSet = async (setId) => {
+    if (!isAdmin) return;
+    const target = linkSetsList.find(s => s.id === setId);
+    if (!target) return;
+    if (!confirm(`Are you sure you want to turn off link set "${target.name}"? It will become Inactive / Draft and will no longer be used on the live roster.`)) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/link-sets/${setId}/deactivate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to turn off link set');
+
+      await fetchLinkSets(selectedCatId);
+      await fetchLinks(selectedCatId, setId);
+      await fetchRoster();
+      await fetchDailyDuties();
+      await notifyAllModulesUpdated('link_set_deactivated');
+      setDragNotice(`⏸️ Link set "${target.name}" has been turned off (Draft / Inactive).`);
+      setTimeout(() => setDragNotice(null), 4000);
+    } catch (err) {
+      alert(`Error turning off link set: ${err.message}`);
+    }
+  };
+
+  const updateLinkSetMeta = async (setId, name, effectiveFrom, effectiveTo, status = undefined) => {
     if (!isAdmin) return;
     try {
       const res = await fetch(`${API_BASE}/link-sets/${setId}`, {
@@ -11811,6 +11841,28 @@ export default function App() {
                                     ✏️ Edit Rows
                                   </button>
 
+                                  {/* Turn Off Link Set (Moves published set to Draft / Inactive) */}
+                                  {!isDraft && isAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: '0.75rem',
+                                        background: 'rgba(234, 179, 8, 0.15)',
+                                        color: '#facc15',
+                                        border: '1px solid rgba(234, 179, 8, 0.4)',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        borderRadius: '6px'
+                                      }}
+                                      onClick={() => turnOffLinkSet(s.id)}
+                                      title="Turn off this link set so it is no longer active on the live roster (moves to Draft / Inactive)"
+                                    >
+                                      ⏸️ Turn Off
+                                    </button>
+                                  )}
+
                                   {/* Rename & Date Settings */}
                                   {isAdmin && (
                                     <button
@@ -11821,6 +11873,7 @@ export default function App() {
                                         setEditSetNameInput(s.name);
                                         setEditSetDateInput(s.effective_from || '');
                                         setEditSetDateToInput(s.effective_to === '9999-12-31' ? '' : (s.effective_to || ''));
+                                        setEditSetStatusInput(s.status || 'published');
                                         setEditLinkSetModal({ set: s });
                                       }}
                                       title="Edit name and effective dates (From / Upto)"
@@ -12084,6 +12137,31 @@ export default function App() {
                           title="Duplicate this link set as a draft copy"
                         >
                           <span>📋</span> Duplicate as Draft
+                        </button>
+                      )}
+
+                      {/* Turn Off Set Button */}
+                      {!isDraft && currentSet && isAdmin && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => turnOffLinkSet(currentSet.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '0.82rem',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(234, 179, 8, 0.15)',
+                            color: '#facc15',
+                            border: '1px solid rgba(234, 179, 8, 0.4)',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title="Turn off this link set to make it inactive (moves to Draft / Inactive state)"
+                        >
+                          <span>⏸️</span> Turn Off Set
                         </button>
                       )}
 
@@ -17258,7 +17336,7 @@ export default function App() {
 
             <form onSubmit={(e) => {
               e.preventDefault();
-              updateLinkSetMeta(editLinkSetModal.set.id, editSetNameInput, editSetDateInput, editSetDateToInput);
+              updateLinkSetMeta(editLinkSetModal.set.id, editSetNameInput, editSetDateInput, editSetDateToInput, editSetStatusInput);
             }}>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label className="form-label" style={{ fontWeight: 600 }}>Link Set Name:</label>
@@ -17270,6 +17348,24 @@ export default function App() {
                   value={editSetNameInput}
                   onChange={(e) => setEditSetNameInput(e.target.value)}
                 />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Status / State:</label>
+                <select
+                  className="form-select"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.9rem' }}
+                  value={editSetStatusInput}
+                  onChange={(e) => setEditSetStatusInput(e.target.value)}
+                >
+                  <option value="published">🟢 Published (Live on Roster)</option>
+                  <option value="draft">🟡 Inactive / Draft (Turn Off)</option>
+                </select>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                  {editSetStatusInput === 'draft'
+                    ? '⚠️ Inactive / Draft sets are turned off and not used for live roster calculations.'
+                    : 'Active and live on the roster for its effective dates.'}
+                </span>
               </div>
 
               <div className="form-group" style={{ marginBottom: '16px' }}>
