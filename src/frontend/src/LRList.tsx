@@ -313,6 +313,19 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
   });
   const [savingMember, setSavingMember] = useState(false);
 
+  // Edit LR Member Modal states
+  const [memberToEdit, setMemberToEdit] = useState(null);
+  const [editMemberForm, setEditMemberForm] = useState({
+    name: '',
+    designation: 'CCTC',
+    rest_day: 'MON',
+    pf_no: '',
+    hrms_id: '',
+    is_relieved: false,
+    relieved_note: ''
+  });
+  const [savingEditMember, setSavingEditMember] = useState(false);
+
   // Remove LR Member Confirmation states
   const [memberToRemove, setMemberToRemove] = useState(null);
   const [removePermanent, setRemovePermanent] = useState(false);
@@ -463,6 +476,67 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
       alert('Error removing LR member: ' + err.message);
     } finally {
       setRemovingStaffId(null);
+    }
+  };
+
+  const handleOpenEditMember = (staff) => {
+    setMemberToEdit(staff);
+    setEditMemberForm({
+      name: staff.name || '',
+      designation: staff.designation || 'CCTC',
+      rest_day: staff.restDay && staff.restDay !== '-' ? staff.restDay : 'MON',
+      pf_no: staff.pfNo || '',
+      hrms_id: staff.hrmsId || '',
+      is_relieved: !!staff.isRelieved,
+      relieved_note: staff.relievedNote || 'RELIEVED TO ZRTI / MLY'
+    });
+  };
+
+  const handleSaveEditMember = async (e) => {
+    if (e) e.preventDefault();
+    if (!memberToEdit) return;
+    if (!editMemberForm.name || !editMemberForm.name.trim()) {
+      alert('Please enter employee name.');
+      return;
+    }
+
+    try {
+      setSavingEditMember(true);
+      const token = getAuthToken();
+      const res = await fetch(`${API_BASE}/lr-sheet/edit-member`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify({
+          staff_id: memberToEdit.staffId,
+          name: editMemberForm.name,
+          designation: editMemberForm.designation,
+          rest_day: editMemberForm.is_relieved ? '-' : editMemberForm.rest_day,
+          pf_no: editMemberForm.pf_no,
+          hrms_id: editMemberForm.hrms_id,
+          is_relieved: editMemberForm.is_relieved,
+          relieved_note: editMemberForm.relieved_note
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update member');
+      }
+
+      setMemberToEdit(null);
+      setSyncNotice(data.message || 'Staff member updated successfully!');
+      await fetchSheet(year, month);
+      setTimeout(() => setSyncNotice(null), 5000);
+
+      window.dispatchEvent(new CustomEvent('railway_roster_data_updated', {
+        detail: { source: 'lr_edit_member', timestamp: Date.now() }
+      }));
+    } catch (err) {
+      alert('Error updating LR member: ' + err.message);
+    } finally {
+      setSavingEditMember(false);
     }
   };
 
@@ -1355,7 +1429,7 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                 <th style={{ width: '55px', textAlign: 'center', padding: '8px 4px', background: '#17171a', color: '#f43f5e', fontWeight: 700 }}>
                   LEAVE
                 </th>
-                <th className="no-print" style={{ width: '85px', textAlign: 'center', padding: '8px 4px', background: '#17171a', color: '#f87171', fontWeight: 700 }}>
+                <th className="no-print" style={{ width: '145px', textAlign: 'center', padding: '8px 4px', background: '#17171a', color: '#94a3b8', fontWeight: 700 }}>
                   ACTIONS
                 </th>
               </tr>
@@ -1611,40 +1685,74 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#f43f5e', padding: '6px 2px' }}>
                       {stats.leave}
                     </td>
-                    <td className="no-print" style={{ textAlign: 'center', padding: '6px 4px', verticalAlign: 'middle', borderLeft: '1px solid var(--border-glass)' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMemberToRemove(staff);
-                        }}
-                        disabled={removingStaffId === staff.staffId}
-                        title={`Remove ${staff.name} from Leave Reserve`}
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          color: '#ef4444',
-                          border: '1px solid rgba(239, 68, 68, 0.35)',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          fontSize: '0.74rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          transition: 'all 0.15s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
-                          e.currentTarget.style.borderColor = '#ef4444';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
-                          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
-                        }}
-                      >
-                        <span>🗑️</span> Remove
-                      </button>
+                    <td className="no-print" style={{ textAlign: 'center', padding: '6px 4px', verticalAlign: 'middle', borderLeft: '1px solid var(--border-glass)', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditMember(staff);
+                          }}
+                          title={`Edit ${staff.name}'s details (Name, Designation, Rest Day, PF No, HRMS ID)`}
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.14)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.38)',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.28)';
+                            e.currentTarget.style.borderColor = '#60a5fa';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.14)';
+                            e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.38)';
+                          }}
+                        >
+                          <span>✏️</span> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMemberToRemove(staff);
+                          }}
+                          disabled={removingStaffId === staff.staffId}
+                          title={`Remove ${staff.name} from Leave Reserve`}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.35)',
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                            e.currentTarget.style.borderColor = '#ef4444';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
+                            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                          }}
+                        >
+                          <span>🗑️</span> Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -3342,6 +3450,214 @@ export default function LRList({ isAdmin, authToken, API_BASE = '/api', allLinks
                   }}
                 >
                   {savingMember ? 'Adding...' : '➕ Add to Leave Reserve'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ✏️ EDIT LR MEMBER MODAL */}
+      {memberToEdit && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.78)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#18181b',
+            border: '1px solid rgba(59, 130, 246, 0.4)',
+            borderRadius: '14px',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            color: '#fff'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>✏️</span> Edit LR Member
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Update details for Leave Reserve slot #{memberToEdit.slNo} ({memberToEdit.name})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMemberToEdit(null)}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer', padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditMember}>
+              {/* Employee Name */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                  Full Employee Name: *
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. BR MEENA"
+                  value={editMemberForm.name}
+                  onChange={(e) => setEditMemberForm({ ...editMemberForm, name: e.target.value.toUpperCase() })}
+                  required
+                  style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                />
+              </div>
+
+              {/* Designation & Rest Day Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Designation:
+                  </label>
+                  <select
+                    className="form-input"
+                    value={editMemberForm.designation}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, designation: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  >
+                    <option value="CTI">CTI</option>
+                    <option value="Sr.CCTC">Sr.CCTC</option>
+                    <option value="CCTC">CCTC</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    Weekly Rest Day:
+                  </label>
+                  <select
+                    className="form-input"
+                    value={editMemberForm.rest_day}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, rest_day: e.target.value })}
+                    disabled={editMemberForm.is_relieved}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff', opacity: editMemberForm.is_relieved ? 0.5 : 1 }}
+                  >
+                    <option value="MON">MON (Monday)</option>
+                    <option value="TUE">TUE (Tuesday)</option>
+                    <option value="WED">WED (Wednesday)</option>
+                    <option value="THU">THU (Thursday)</option>
+                    <option value="FRI">FRI (Friday)</option>
+                    <option value="SAT">SAT (Saturday)</option>
+                    <option value="SUN">SUN (Sunday)</option>
+                    <option value="-">- (None / Open)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* PF No & HRMS ID Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    PF / Employee No (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 24508932145"
+                    value={editMemberForm.pf_no}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, pf_no: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: '#e2e8f0' }}>
+                    HRMS ID (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. AB1234"
+                    value={editMemberForm.hrms_id}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, hrms_id: e.target.value.toUpperCase() })}
+                    style={{ width: '100%', padding: '9px 12px', fontSize: '0.88rem', borderRadius: '8px', background: 'var(--bg-secondary)', color: '#fff' }}
+                  />
+                </div>
+              </div>
+
+              {/* Relieved Status Toggle */}
+              <div style={{
+                background: editMemberForm.is_relieved ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.03)',
+                border: editMemberForm.is_relieved ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginBottom: '20px'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={editMemberForm.is_relieved}
+                    onChange={(e) => setEditMemberForm({ ...editMemberForm, is_relieved: e.target.checked })}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: editMemberForm.is_relieved ? '#fca5a5' : '#e2e8f0' }}>
+                      Mark as Relieved (e.g. Transferred / Training at ZRTI / MLY)
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Relieved members are kept at the bottom with a banner and exempted from daily cyclic duties.
+                    </div>
+                  </div>
+                </label>
+
+                {editMemberForm.is_relieved && (
+                  <div style={{ marginTop: '12px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '4px', color: '#f87171' }}>
+                      Relieved Note / Reason:
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. RELIEVED TO ZRTI / MLY"
+                      value={editMemberForm.relieved_note}
+                      onChange={(e) => setEditMemberForm({ ...editMemberForm, relieved_note: e.target.value })}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '0.84rem', borderRadius: '6px', background: 'var(--bg-secondary)', color: '#fff' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setMemberToEdit(null)}
+                  style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingEditMember}
+                  style={{
+                    padding: '8px 22px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
+                  }}
+                >
+                  {savingEditMember ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

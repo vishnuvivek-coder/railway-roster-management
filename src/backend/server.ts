@@ -203,6 +203,16 @@ initDb().then(async () => {
         await run("ALTER TABLE staff ADD COLUMN pin_hash TEXT DEFAULT NULL");
       } catch (err) {}
     }
+    try {
+      await run("ALTER TABLE staff ADD COLUMN is_relieved TINYINT(1) DEFAULT 0");
+    } catch (e) {
+      try { await run("ALTER TABLE staff ADD COLUMN is_relieved INTEGER DEFAULT 0"); } catch (err) {}
+    }
+    try {
+      await run("ALTER TABLE staff ADD COLUMN relieved_note VARCHAR(255) DEFAULT NULL");
+    } catch (e) {
+      try { await run("ALTER TABLE staff ADD COLUMN relieved_note TEXT DEFAULT NULL"); } catch (err) {}
+    }
 
     // Ensure VACANT placeholder duties never hold real employee PF numbers
     try {
@@ -17565,6 +17575,107 @@ app.post('/api/lr-sheet/add-member', async (req, res) => {
     });
   } catch (err) {
     console.error('Error adding LR member:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lr-sheet/edit-member - Edit a staff member in Leave Reserve (Category 4)
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/lr-sheet/edit-member
+//   • Module          : Leave Reserve (LR) Sheet
+//   • Frontend Caller : LRList.tsx
+//   • Reads From DB   : staff, seniority_list
+//   • Saves To DB     : staff, seniority_list, links, audit_logs
+//   • Auto-Syncs To   : seniority_list, links, audit_logs
+//   • Summary         : Update LR staff profile details (Name, Designation, Rest Day, PF No, HRMS ID, Relieved Status)
+// ============================================================================
+app.post('/api/lr-sheet/edit-member', async (req, res) => {
+  if (req.user && (req.user.role || '').toLowerCase() !== 'admin') {
+    return res.status(403).json({ error: 'Permission denied: Administrator privileges required.' });
+  }
+  try {
+    const { staff_id, name, designation, rest_day, pf_no, hrms_id, is_relieved, relieved_note } = req.body;
+    if (!staff_id) {
+      return res.status(400).json({ error: 'staff_id is required' });
+    }
+    const staff = await get('SELECT * FROM staff WHERE id = ?', [staff_id]);
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    const cleanName = name && name.trim() ? name.trim().toUpperCase() : staff.name;
+    const cleanDesg = designation && designation.trim() ? designation.trim() : (staff.designation || 'CCTC');
+    const cleanRest = rest_day !== undefined ? (rest_day === '-' || !rest_day ? '-' : String(rest_day).trim().toUpperCase()) : (staff.rest_day || '-');
+    const cleanPf = pf_no !== undefined ? (pf_no && pf_no.trim() ? pf_no.trim() : null) : staff.pf_no;
+    const cleanHrms = hrms_id !== undefined ? (hrms_id && hrms_id.trim() ? hrms_id.trim().toUpperCase() : null) : staff.hrms_id;
+    const cleanRelieved = is_relieved !== undefined ? (is_relieved ? 1 : 0) : (staff.is_relieved || 0);
+    const cleanRelievedNote = relieved_note !== undefined ? (relieved_note && relieved_note.trim() ? relieved_note.trim() : null) : staff.relieved_note;
+
+    await run(`
+      UPDATE staff
+      SET name = ?,
+          designation = ?,
+          rest_day = ?,
+          pf_no = ?,
+          hrms_id = ?,
+          is_relieved = ?,
+          relieved_note = ?
+      WHERE id = ?
+    `, [
+      cleanName,
+      cleanDesg,
+      cleanRest,
+      cleanPf,
+      cleanHrms,
+      cleanRelieved,
+      cleanRelievedNote,
+      staff_id
+    ]);
+
+    // Also update matching link label if applicable
+    if (staff.row_position) {
+      await run(`
+        UPDATE links
+        SET train_numbers = ?
+        WHERE category_id = 4 AND link_number = ?
+      `, [`LR-${staff.row_position} (${cleanRest} Rest)`, staff.row_position]);
+    }
+
+    // Sync seniority_list if matching pf_no exists
+    try {
+      if (staff.pf_no || cleanPf) {
+        await run(`
+          UPDATE seniority_list 
+          SET name = ?,
+              designation = ?,
+              pf_number = ?
+          WHERE pf_number = ? OR pf_number = ?
+        `, [cleanName, cleanDesg, cleanPf, staff.pf_no, cleanPf]);
+      }
+    } catch (e) { }
+
+    await logAudit(
+      req.user ? req.user.role : 'Admin',
+      'EDIT_LR_MEMBER',
+      `Updated LR staff member #${staff_id} (${cleanName}, Desg: ${cleanDesg}, Rest: ${cleanRest}, PF: ${cleanPf || '-'}, HRMS: ${cleanHrms || '-'})`
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully updated Leave Reserve member "${cleanName}"!`,
+      staff: {
+        staffId: staff_id,
+        name: cleanName,
+        designation: cleanDesg,
+        restDay: cleanRest,
+        pfNo: cleanPf,
+        hrmsId: cleanHrms,
+        isRelieved: !!cleanRelieved,
+        relievedNote: cleanRelievedNote
+      }
+    });
+  } catch (err: any) {
+    console.error('Error editing LR member:', err);
     res.status(500).json({ error: err.message });
   }
 });
