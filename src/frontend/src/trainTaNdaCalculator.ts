@@ -105,6 +105,16 @@ export interface CumulativeLinkTotalsResult {
  * Standard Railway Schedules with sensitive midnight (00:00) and morning (06:00) boundaries
  */
 export const STANDARD_TRAIN_SCHEDULES: Record<string, StandardTrainSchedule> = {
+  '12604': {
+    trainNo: '12604',
+    name: 'Hyderabad - Chennai Express',
+    route: 'GNT -> MAS',
+    schedDep: '21:10',
+    isReturnToHq: false,
+    boundary: 'daytime',
+    defaultTa: 0.3,
+    boundaryDesc: 'Night departure from GNT to MAS at 21:10 (30% TA).'
+  },
   '12603': {
     trainNo: '12603',
     name: 'Chennai - Hyderabad Express',

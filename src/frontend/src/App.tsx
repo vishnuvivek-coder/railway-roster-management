@@ -880,7 +880,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     title: '12604 / 12603 (Chennai Express: GNT ➔ MAS)',
     links: [
       { categoryId: 1, linkNum: 12, altLinkNums: [13], firstTrain: '12604', firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
-      { categoryId: 2, linkNum: 3, firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
+      { categoryId: 2, linkNum: 3, altLinkNums: [4], firstTrain: '12604', firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
     ]
   },
   // 14. Train 12734 / 20630 / 17262 (Narayanadri Express: GNT - TPTY - GNT) [Page 49/51/53 Rows 2 & 3]
@@ -1090,9 +1090,8 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12603',
     title: '12604 / 12603 (Chennai Express: GNT ➔ MAS)',
     links: [
-      { categoryId: 1, linkNum: 12, firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
-      { categoryId: 2, linkNum: 3, firstCoach: 'SL', lastTrain: '12603', lastCoach: 'SL' },
-      { categoryId: 2, linkNum: 4, firstCoach: 'SL', lastTrain: '12603', lastCoach: 'SL' }
+      { categoryId: 1, linkNum: 12, altLinkNums: [13], firstTrain: '12604', firstCoach: 'AC', lastTrain: '12603', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 3, altLinkNums: [4], firstTrain: '12604', firstCoach: 'S1-S5', lastTrain: '12603', lastCoach: 'S1-S5' }
     ]
   },
   // 14. Train 12734 / 20630 / 17262 (Narayanadri Express AC: GNT ➔ TPTY) [Page 111 Row 14]
@@ -7084,6 +7083,9 @@ export default function App() {
                           if (parseInt(lDef.categoryId, 10) === 2 && parseInt(lDef.linkNum, 10) === 38) {
                             if (!dynamicSlotFirst) dynamicSlotFirst = '17281';
                             if (!dynamicSlotLast) dynamicSlotLast = '17282';
+                          } else if (parseInt(lDef.categoryId, 10) === 1 && parseInt(lDef.linkNum, 10) === 12) {
+                            if (!dynamicSlotFirst) dynamicSlotFirst = '12604';
+                            if (!dynamicSlotLast) dynamicSlotLast = '12603';
                           } else {
                             const parts = matched.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
                             if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
@@ -7142,6 +7144,10 @@ export default function App() {
                           dynamicTrainNums = `${retT}, PILOT(12703)`;
                         } else if (cId === 2 && lNum === 38) {
                           dynamicTrainNums = '17281, 17282';
+                        } else if (cId === 1 && lNum === 12) {
+                          dynamicTrainNums = '12604, 12603';
+                        } else if (cId === 2 && lNum === 3) {
+                          dynamicTrainNums = '12604, 12603';
                         }
 
                         const parts = dynamicTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
@@ -7153,6 +7159,10 @@ export default function App() {
                       }
                       if (cId === 2 && lNum === 38) {
                         linkCoach = 'D1-D2';
+                      } else if (cId === 1 && lNum === 12) {
+                        linkCoach = 'AC';
+                      } else if (cId === 2 && lNum === 3) {
+                        linkCoach = 'S1-S5';
                       }
 
                       // Active Train Roster takes top priority for all train information
@@ -7326,6 +7336,10 @@ export default function App() {
                           let sTrainNums = staffAssignedLink.train_numbers;
                           if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
                             sTrainNums = '17281, 17282';
+                          } else if (parseInt(staffAssignedLink.category_id, 10) === 1 && (parseInt(staffAssignedLink.link_number, 10) === 12 || parseInt(staffAssignedLink.link_number, 10) === 13)) {
+                            sTrainNums = '12604, 12603';
+                          } else if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 3 || parseInt(staffAssignedLink.link_number, 10) === 4)) {
+                            sTrainNums = '12604, 12603';
                           }
                           if (sTrainNums && sTrainNums.trim() && sTrainNums.toUpperCase() !== 'REST') {
                             const parts = sTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
@@ -7335,6 +7349,10 @@ export default function App() {
                           let sCoaches = (staffAssignedLink.coaches && staffAssignedLink.coaches.trim()) ? staffAssignedLink.coaches.trim() : '';
                           if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
                             sCoaches = 'D1-D2';
+                          } else if (parseInt(staffAssignedLink.category_id, 10) === 1 && (parseInt(staffAssignedLink.link_number, 10) === 12 || parseInt(staffAssignedLink.link_number, 10) === 13)) {
+                            sCoaches = 'AC';
+                          } else if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 3 || parseInt(staffAssignedLink.link_number, 10) === 4)) {
+                            sCoaches = 'S1-S5';
                           }
                           if (sCoaches) {
                             staffFirstCoach = sCoaches;
@@ -7352,6 +7370,9 @@ export default function App() {
                         if (parseInt(assignedCatId, 10) === 2 && parseInt(assignedLinkNum, 10) === 38) {
                           dutyFromStation = 'GNT';
                           dutyToStation = 'NS';
+                        } else if ((parseInt(assignedCatId, 10) === 1 && parseInt(assignedLinkNum, 10) === 12) || (parseInt(assignedCatId, 10) === 2 && parseInt(assignedLinkNum, 10) === 3)) {
+                          dutyFromStation = 'GNT';
+                          dutyToStation = 'MAS';
                         }
 
                         // Dynamic TA calculation strictly based on arrival and departure time (NOT copied blindly from train roster)
