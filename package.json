@@ -11,6 +11,7 @@
                     "dev:frontend":  "npm run dev --prefix src/frontend",
                     "dev":  "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
                     "migrate:mysql":  "tsx src/backend/migrate_to_mysql.ts",
+                    "sync:db": "tsx src/backend/sync_mysql_to_sqlite.ts",
                     "typecheck":  "tsc --noEmit \u0026\u0026 npm --prefix src/frontend run build"
                 },
     "dependencies":  {

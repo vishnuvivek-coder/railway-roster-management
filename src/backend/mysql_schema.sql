@@ -538,5 +538,41 @@ CREATE TABLE IF NOT EXISTS seniority_list (
   INDEX idx_seniority_desg (designation)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- 25. ROSTER VERSIONS TABLE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS roster_versions (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  version_code VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  effective_from DATE NOT NULL,
+  effective_to DATE DEFAULT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'published',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_rv_dates (effective_from, effective_to)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 26. STAFF ROSTER ASSIGNMENTS TABLE
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS staff_roster_assignments (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  roster_version_id INT NOT NULL,
+  staff_id INT DEFAULT NULL,
+  category_id INT NOT NULL,
+  row_position INT NOT NULL,
+  staff_name VARCHAR(255) NOT NULL,
+  designation VARCHAR(100) DEFAULT NULL,
+  pf_no VARCHAR(50) DEFAULT NULL,
+  rest_day VARCHAR(20) DEFAULT NULL,
+  is_vacant TINYINT(1) DEFAULT 0,
+  effective_from DATE NOT NULL,
+  effective_to DATE DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sra_cat_dates (category_id, effective_from, effective_to),
+  INDEX idx_sra_staff_dates (staff_id, effective_from, effective_to),
+  INDEX idx_sra_version_cat (roster_version_id, category_id, row_position)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Re-enable foreign key constraints
 SET FOREIGN_KEY_CHECKS = 1;
