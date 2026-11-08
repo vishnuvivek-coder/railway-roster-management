@@ -228,6 +228,16 @@ export const STANDARD_TRAIN_SCHEDULES: Record<string, StandardTrainSchedule> = {
     boundaryDesc: 'Morning arrival at 07:45. Absence exceeds 6 hours, granting 0.7 TA.',
     nextDayTaOnDelay: 0
   },
+  '17281': {
+    trainNo: '17281',
+    name: 'Guntur - Narasapur Express',
+    route: 'GNT -> NS',
+    schedDep: '07:15',
+    isReturnToHq: false,
+    boundary: 'daytime',
+    defaultTa: 1.0,
+    boundaryDesc: 'Morning departure from GNT to NS at 07:15. Absence exceeds 12h, granting 1.0 TA.'
+  },
   '17282': {
     trainNo: '17282',
     name: 'Narsapur - Guntur Express',

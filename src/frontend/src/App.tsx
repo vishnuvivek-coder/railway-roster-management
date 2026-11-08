@@ -805,7 +805,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '17282',
     title: '17281 / 17282 (GNT ➔ NS Express)',
     links: [
-      { categoryId: 2, linkNum: 38, firstCoach: '2S', lastTrain: '17282', lastCoach: '2S' }
+      { categoryId: 2, linkNum: 38, altLinkNums: [39], firstTrain: '17281', firstCoach: 'D1-D2', lastTrain: '17282', lastCoach: 'D1-D2' }
     ]
   },
   // 8. Train 17261 / 12733 / 17262 (GNT - TPTY - GNT) [Page 48/50/52 Row 8]
@@ -831,7 +831,7 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     links: [
       { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
       { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
-      { categoryId: 2, linkNum: 36, altLinkNums: [37, 38], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
+      { categoryId: 2, linkNum: 36, altLinkNums: [37], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA - GTL - BZA) [Page 48/50/52 Row 10]
@@ -1018,7 +1018,7 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '17282',
     title: '17281 / 17282 (GNT ➔ NS Express)',
     links: [
-      { categoryId: 2, linkNum: 38, firstCoach: '2S', lastTrain: '17282', lastCoach: '2S' }
+      { categoryId: 2, linkNum: 38, altLinkNums: [39], firstTrain: '17281', firstCoach: 'D1-D2', lastTrain: '17282', lastCoach: 'D1-D2' }
     ]
   },
   // 8. Train 17261 / 12733 / 17262 (GNT ➔ TPTY) [Page 110 Row 8]
@@ -1043,7 +1043,7 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     links: [
       { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
       { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
-      { categoryId: 2, linkNum: 36, altLinkNums: [37, 38], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'S1-S4' }
+      { categoryId: 2, linkNum: 36, altLinkNums: [37], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'S1-S4' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA ➔ GTL) [Page 110 Row 10]
@@ -7081,9 +7081,14 @@ export default function App() {
                           parseInt(al.link_number, 10) === parseInt(lDef.linkNum, 10)
                         );
                         if (matched && matched.train_numbers && matched.train_numbers.trim() && matched.train_numbers.toUpperCase() !== 'REST') {
-                          const parts = matched.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
-                          if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
-                          if (parts.length > 1 && !dynamicSlotLast) dynamicSlotLast = parts[parts.length - 1];
+                          if (parseInt(lDef.categoryId, 10) === 2 && parseInt(lDef.linkNum, 10) === 38) {
+                            if (!dynamicSlotFirst) dynamicSlotFirst = '17281';
+                            if (!dynamicSlotLast) dynamicSlotLast = '17282';
+                          } else {
+                            const parts = matched.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                            if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
+                            if (parts.length > 1 && !dynamicSlotLast) dynamicSlotLast = parts[parts.length - 1];
+                          }
                         }
                       }
                     }
@@ -7135,6 +7140,8 @@ export default function App() {
                         } else if (cId === 2 && lNum === 52) {
                           const retT = is18048Day(selectedDate) ? '18048' : '17226';
                           dynamicTrainNums = `${retT}, PILOT(12703)`;
+                        } else if (cId === 2 && lNum === 38) {
+                          dynamicTrainNums = '17281, 17282';
                         }
 
                         const parts = dynamicTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
@@ -7143,6 +7150,9 @@ export default function App() {
                       }
                       if (matchedLink && matchedLink.coaches && matchedLink.coaches.trim()) {
                         linkCoach = matchedLink.coaches.trim();
+                      }
+                      if (cId === 2 && lNum === 38) {
+                        linkCoach = 'D1-D2';
                       }
 
                       // Active Train Roster takes top priority for all train information
@@ -7313,14 +7323,22 @@ export default function App() {
                         let staffLastCoach = '';
 
                         if (staffAssignedLink) {
-                          if (staffAssignedLink.train_numbers && staffAssignedLink.train_numbers.trim() && staffAssignedLink.train_numbers.toUpperCase() !== 'REST') {
-                            const parts = staffAssignedLink.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+                          let sTrainNums = staffAssignedLink.train_numbers;
+                          if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
+                            sTrainNums = '17281, 17282';
+                          }
+                          if (sTrainNums && sTrainNums.trim() && sTrainNums.toUpperCase() !== 'REST') {
+                            const parts = sTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
                             if (parts.length > 0) staffFirstTrain = parts[0];
                             if (parts.length > 1) staffLastTrain = parts[parts.length - 1];
                           }
-                          if (staffAssignedLink.coaches && staffAssignedLink.coaches.trim()) {
-                            staffFirstCoach = staffAssignedLink.coaches.trim();
-                            staffLastCoach = staffAssignedLink.coaches.trim();
+                          let sCoaches = (staffAssignedLink.coaches && staffAssignedLink.coaches.trim()) ? staffAssignedLink.coaches.trim() : '';
+                          if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
+                            sCoaches = 'D1-D2';
+                          }
+                          if (sCoaches) {
+                            staffFirstCoach = sCoaches;
+                            staffLastCoach = sCoaches;
                           }
                         }
 
@@ -7329,14 +7347,21 @@ export default function App() {
                         const rowLastTrain = staffDuty.train_return || (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '' ? customDuty.lastTrain : (staffLastTrain || effectiveLastTrain));
                         const rowLastCoach = (staffDuty.train_return && staffDuty.coach_return) ? staffDuty.coach_return : ((customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : (staffLastCoach || effectiveLastCoach));
 
+                        let dutyFromStation = staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || 'GNT';
+                        let dutyToStation = staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || 'GNT';
+                        if (parseInt(assignedCatId, 10) === 2 && parseInt(assignedLinkNum, 10) === 38) {
+                          dutyFromStation = 'GNT';
+                          dutyToStation = 'NS';
+                        }
+
                         // Dynamic TA calculation strictly based on arrival and departure time (NOT copied blindly from train roster)
                         const dutyDepTime = staffDuty.dep_time || STANDARD_TRAIN_SCHEDULES[rowFirstTrain]?.schedDep || null;
                         const dutyArrTime = staffDuty.arr_time || STANDARD_TRAIN_SCHEDULES[rowLastTrain]?.schedArr || null;
                         const dutyTaCalc = calculateDynamicTaFromTimings(
                           dutyDepTime,
                           dutyArrTime,
-                          staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || 'GNT',
-                          staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || 'GNT',
+                          dutyFromStation,
+                          dutyToStation,
                           rowFirstTrain
                         );
 
@@ -7351,8 +7376,8 @@ export default function App() {
                           firstCoaches: rowFirstCoach,
                           lastTrain: rowLastTrain,
                           lastCoaches: rowLastCoach,
-                          from_station: staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || '',
-                          to_station: staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || '',
+                          from_station: dutyFromStation,
+                          to_station: dutyToStation,
                           set_type: staffDuty.set_type || staffAssignedLink?.set_type || matchedLink?.set_type || '',
                           ta_percentage: dutyTaCalc.ta_percentage,
                           absence_hours: dutyTaCalc.absence_hours,
