@@ -829,9 +829,9 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
-      { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
-      { categoryId: 2, linkNum: 36, altLinkNums: [37], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
+      { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA - GTL - BZA) [Page 48/50/52 Row 10]
@@ -1042,9 +1042,9 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
-      { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
-      { categoryId: 2, linkNum: 36, altLinkNums: [37], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'S1-S4' }
+      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
+      { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
+      { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'S1-S4' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA ➔ GTL) [Page 110 Row 10]
@@ -7184,6 +7184,7 @@ export default function App() {
                       // Helper to match overridden duty to this slot link (direct linkNum or altLinkNums)
                       const matchesOverrideLink = (duty) => {
                         if (!duty || !duty.isOverridden) return false;
+                        if (parseInt(slot.slotId, 10) === 9 && parseInt(duty.link_number, 10) === 9) return false;
                         const dLink = parseInt(duty.link_number, 10);
                         const targetCat = duty.target_category_id != null 
                           ? parseInt(duty.target_category_id, 10) 
@@ -7202,6 +7203,10 @@ export default function App() {
                           return false;
                         }
                         if (isReturnDuty(duty)) return false;
+                        if (parseInt(slot.slotId, 10) === 9 && parseInt(duty.link_number, 10) === 9) return false;
+                        if (duty.categoryId === lDef.categoryId && duty.link_number && parseInt(duty.link_number, 10) !== parseInt(lDef.linkNum, 10)) {
+                          return false;
+                        }
                         const dTrain = duty.train_out ? String(duty.train_out).trim() : null;
                         const dNums = duty.train_numbers ? String(duty.train_numbers).trim() : null;
                         const sFirst = String(effectiveFirstTrain || slot.firstTrain || '').trim();
@@ -7601,6 +7606,7 @@ export default function App() {
                       d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                       (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
                       !isReturnDuty(d) &&
+                      !(parseInt(slot.slotId, 10) === 9 && parseInt(d.link_number, 10) === 9) &&
                       (
                         (d.train_out && (String(d.train_out) === String(slot.firstTrain) || (slot.altFirstTrains && slot.altFirstTrains.includes(String(d.train_out))) || String(d.train_out) === String(effectiveSlotFirstTrain))) ||
                         (d.extra_train_no && (String(d.extra_train_no) === String(slot.firstTrain) || (slot.altFirstTrains && slot.altFirstTrains.includes(String(d.extra_train_no))) || String(d.extra_train_no) === String(effectiveSlotFirstTrain))) ||
