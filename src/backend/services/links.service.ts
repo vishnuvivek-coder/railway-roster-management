@@ -837,15 +837,33 @@ export async function getNonDailyTrains(day_of_week?: any, date?: any) {
 }
 
 export async function createNonDailyTrain(body: any) {
-  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = body;
+  const {
+    day_of_week,
+    train_number,
+    last_day_train_number,
+    departure_station,
+    departure_time,
+    arrival_station,
+    arrival_time,
+    coaches,
+    last_day_coaches,
+    remarks,
+    assigned_staff_id,
+    assigned_staff_name,
+    from_date,
+    to_date
+  } = body;
   if (!day_of_week || !train_number) {
     throw { status: 400, message: 'Day of week and Train number are required' };
   }
 
+  const cleanFromDate = from_date ? String(from_date).trim() : null;
+  const cleanToDate = to_date ? String(to_date).trim() : null;
+
   const result = await run(
     `INSERT INTO non_daily_trains 
-     (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name, from_date, to_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       day_of_week.toUpperCase(),
       train_number,
@@ -858,15 +876,32 @@ export async function createNonDailyTrain(body: any) {
       last_day_coaches || coaches || 'SL / AC',
       remarks || null,
       assigned_staff_id || null,
-      assigned_staff_name || null
+      assigned_staff_name || null,
+      cleanFromDate,
+      cleanToDate
     ]
   );
-  await logAudit('Admin', 'ADD_NON_DAILY_TRAIN', `Added non-daily train ${train_number}${last_day_train_number ? '/' + last_day_train_number : ''} for ${day_of_week}`);
+  await logAudit('Admin', 'ADD_NON_DAILY_TRAIN', `Added non-daily train ${train_number}${last_day_train_number ? '/' + last_day_train_number : ''} for ${day_of_week}${cleanFromDate && cleanToDate ? ' (Valid: ' + cleanFromDate + ' to ' + cleanToDate + ')' : ''}`);
   return { id: result.lastID, message: 'Non-daily train added successfully' };
 }
 
 export async function updateNonDailyTrain(id: any, body: any) {
-  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = body;
+  const {
+    day_of_week,
+    train_number,
+    last_day_train_number,
+    departure_station,
+    departure_time,
+    arrival_station,
+    arrival_time,
+    coaches,
+    last_day_coaches,
+    remarks,
+    assigned_staff_id,
+    assigned_staff_name,
+    from_date,
+    to_date
+  } = body;
   const existingTrain = await get('SELECT * FROM non_daily_trains WHERE id = ?', [id]);
   if (!existingTrain) throw { status: 404, message: 'Non-daily train not found' };
   const oldTrainNo = existingTrain.train_number;
@@ -884,7 +919,9 @@ export async function updateNonDailyTrain(id: any, body: any) {
          last_day_coaches = ?,
          remarks = ?,
          assigned_staff_id = ?,
-         assigned_staff_name = ?
+         assigned_staff_name = ?,
+         from_date = ?,
+         to_date = ?
      WHERE id = ?`,
     [
       day_of_week ? day_of_week.toUpperCase() : (day_of_week === null ? null : existingTrain.day_of_week),
@@ -899,6 +936,8 @@ export async function updateNonDailyTrain(id: any, body: any) {
       remarks !== undefined ? remarks : existingTrain.remarks,
       assigned_staff_id !== undefined ? assigned_staff_id : existingTrain.assigned_staff_id,
       assigned_staff_name !== undefined ? assigned_staff_name : existingTrain.assigned_staff_name,
+      from_date !== undefined ? (from_date ? String(from_date).trim() : null) : existingTrain.from_date,
+      to_date !== undefined ? (to_date ? String(to_date).trim() : null) : existingTrain.to_date,
       id
     ]
   );
@@ -938,6 +977,8 @@ export async function patchNonDailyTrain(id: any, updates: any) {
   const new1stCoach = updates.coaches !== undefined ? updates.coaches : existingTrain.coaches;
   const newLastCoach = updates.last_day_coaches !== undefined ? updates.last_day_coaches : existingTrain.last_day_coaches;
   const newRemarks = updates.remarks !== undefined ? updates.remarks : existingTrain.remarks;
+  const newFromDate = updates.from_date !== undefined ? (updates.from_date ? String(updates.from_date).trim() : null) : existingTrain.from_date;
+  const newToDate = updates.to_date !== undefined ? (updates.to_date ? String(updates.to_date).trim() : null) : existingTrain.to_date;
 
   await run(
     `UPDATE non_daily_trains
@@ -945,9 +986,11 @@ export async function patchNonDailyTrain(id: any, updates: any) {
          last_day_train_number = ?,
          coaches = ?,
          last_day_coaches = ?,
-         remarks = ?
+         remarks = ?,
+         from_date = ?,
+         to_date = ?
      WHERE id = ?`,
-    [new1stTrain, newLastTrain, new1stCoach, newLastCoach, newRemarks, id]
+    [new1stTrain, newLastTrain, new1stCoach, newLastCoach, newRemarks, newFromDate, newToDate, id]
   );
 
   if (updates.train_number && existingTrain.train_number && existingTrain.train_number !== updates.train_number) {

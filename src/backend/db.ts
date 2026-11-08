@@ -273,6 +273,10 @@ async function initDbInternal() {
       try { await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_train_number VARCHAR(100) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches VARCHAR(100) DEFAULT 'SL / AC'"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN from_date DATE DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN to_date DATE DEFAULT NULL"); } catch (_) {}
 
       // Ensure Admin 12345 / CLICKME exists (upsert — never overwrites other users)
       const clickmeHash = await bcrypt.hash('CLICKME', 10);
@@ -1542,6 +1546,18 @@ async function initDbInternal() {
 
   try {
     await run(`ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches TEXT DEFAULT 'SL / AC'`);
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    await run(`ALTER TABLE non_daily_trains ADD COLUMN from_date TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    await run(`ALTER TABLE non_daily_trains ADD COLUMN to_date TEXT`);
   } catch (e) {
     // Column already exists
   }

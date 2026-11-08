@@ -5379,9 +5379,51 @@ app.post('/api/train-ta-nda/reset', async (req, res) => {
 //   • Auto-Syncs To   : None
 //   • Summary         : GET /api/non-daily-trains
 // ============================================================================
+// Helper function: automatically delete expired non-daily special trains whose validity period (to_date) has ended
+async function cleanupExpiredNonDailyTrains(referenceDate?: string) {
+  try {
+    let today = referenceDate;
+    if (!today) {
+      const now = new Date();
+      // Indian Standard Time (UTC+5:30)
+      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+      today = istTime.toISOString().split('T')[0];
+    }
+
+    // Find all expired non-daily trains where to_date is provided and strictly past reference/today
+    const expired = await all(
+      `SELECT * FROM non_daily_trains 
+       WHERE to_date IS NOT NULL 
+         AND to_date > '1970-01-01' 
+         AND to_date < ?`,
+      [today]
+    );
+
+    if (expired && expired.length > 0) {
+      for (const t of expired) {
+        await run('DELETE FROM non_daily_trains WHERE id = ?', [t.id]);
+        await run('UPDATE overrides SET extra_train_no = NULL WHERE extra_train_no = ?', [t.train_number]);
+        await logAudit(
+          'System',
+          'AUTO_DELETE_EXPIRED_TRAIN',
+          `Auto-deleted expired non-daily special train ${t.train_number}${t.last_day_train_number ? '/' + t.last_day_train_number : ''} for ${t.day_of_week} (Validity period expired on ${t.to_date})`
+        );
+      }
+      console.log(`[Special Train Expiry] Auto-deleted ${expired.length} expired non-daily train(s) whose validity period ended before ${today}.`);
+    }
+    return expired || [];
+  } catch (err: any) {
+    console.error('Failed to cleanup expired non-daily trains:', err.message);
+    return [];
+  }
+}
+
 app.get('/api/non-daily-trains', async (req, res) => {
   const { day_of_week, date } = req.query;
   try {
+    // Auto-prune any special non-daily trains whose to_date has already expired
+    await cleanupExpiredNonDailyTrains(date ? String(date) : undefined);
+
     let day = day_of_week;
     if (date && !day) {
       const parts = String(date).split('-');
@@ -5392,20 +5434,37 @@ app.get('/api/non-daily-trains', async (req, res) => {
       }
     }
 
-    let sql = 'SELECT * FROM non_daily_trains';
+    let sql = 'SELECT * FROM non_daily_trains WHERE 1=1';
     let params = [];
     if (day) {
-      sql += ' WHERE UPPER(day_of_week) = ? ORDER BY id';
+      sql += ' AND UPPER(day_of_week) = ?';
       params.push(day.toUpperCase());
-    } else {
-      sql += ' ORDER BY CASE day_of_week ' +
-        "WHEN 'SUNDAY' THEN 1 WHEN 'MONDAY' THEN 2 WHEN 'TUESDAY' THEN 3 " +
-        "WHEN 'WEDNESDAY' THEN 4 WHEN 'THURSDAY' THEN 5 WHEN 'FRIDAY' THEN 6 WHEN 'SATURDAY' THEN 7 ELSE 8 END, id";
     }
+
+    // When querying for a specific date, enforce validity window (from_date <= date and to_date >= date)
+    if (date) {
+      sql += ' AND (from_date IS NULL OR from_date <= ?) AND (to_date IS NULL OR to_date >= ?)';
+      params.push(String(date), String(date));
+    }
+
+    sql += ' ORDER BY CASE day_of_week ' +
+      "WHEN 'SUNDAY' THEN 1 WHEN 'MONDAY' THEN 2 WHEN 'TUESDAY' THEN 3 " +
+      "WHEN 'WEDNESDAY' THEN 4 WHEN 'THURSDAY' THEN 5 WHEN 'FRIDAY' THEN 6 WHEN 'SATURDAY' THEN 7 ELSE 8 END, id";
 
     const trains = await all(sql, params);
     res.json(trains);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Explicit cleanup endpoint to trigger expired train pruning
+app.post('/api/non-daily-trains/cleanup-expired', requireAdmin, async (req, res) => {
+  const { reference_date } = req.body;
+  try {
+    const deleted = await cleanupExpiredNonDailyTrains(reference_date);
+    res.json({ message: `Successfully cleaned up ${deleted.length} expired non-daily train(s)`, deleted });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -5420,15 +5479,33 @@ app.get('/api/non-daily-trains', async (req, res) => {
 //   • Summary         : POST /api/non-daily-trains
 // ============================================================================
 app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
-  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
+  const {
+    day_of_week,
+    train_number,
+    last_day_train_number,
+    departure_station,
+    departure_time,
+    arrival_station,
+    arrival_time,
+    coaches,
+    last_day_coaches,
+    remarks,
+    assigned_staff_id,
+    assigned_staff_name,
+    from_date,
+    to_date
+  } = req.body;
   if (!day_of_week || !train_number) {
     return res.status(400).json({ error: 'Day of week and Train number are required' });
   }
   try {
+    const cleanFromDate = from_date ? String(from_date).trim() : null;
+    const cleanToDate = to_date ? String(to_date).trim() : null;
+
     const result = await run(
       `INSERT INTO non_daily_trains 
-       (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name, from_date, to_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         day_of_week.toUpperCase(),
         train_number,
@@ -5441,10 +5518,16 @@ app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
         last_day_coaches || coaches || 'SL / AC',
         remarks || null,
         assigned_staff_id || null,
-        assigned_staff_name || null
+        assigned_staff_name || null,
+        cleanFromDate,
+        cleanToDate
       ]
     );
-    await logAudit('Admin', 'ADD_NON_DAILY_TRAIN', `Added non-daily train ${train_number}${last_day_train_number ? '/' + last_day_train_number : ''} for ${day_of_week}`);
+    await logAudit(
+      'Admin',
+      'ADD_NON_DAILY_TRAIN',
+      `Added non-daily train ${train_number}${last_day_train_number ? '/' + last_day_train_number : ''} for ${day_of_week}${cleanFromDate && cleanToDate ? ' (Valid: ' + cleanFromDate + ' to ' + cleanToDate + ')' : ''}`
+    );
     res.json({ id: result.lastID, message: 'Non-daily train added successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -5462,7 +5545,22 @@ app.post('/api/non-daily-trains', requireAdmin, async (req, res) => {
 // ============================================================================
 app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { day_of_week, train_number, last_day_train_number, departure_station, departure_time, arrival_station, arrival_time, coaches, last_day_coaches, remarks, assigned_staff_id, assigned_staff_name } = req.body;
+  const {
+    day_of_week,
+    train_number,
+    last_day_train_number,
+    departure_station,
+    departure_time,
+    arrival_station,
+    arrival_time,
+    coaches,
+    last_day_coaches,
+    remarks,
+    assigned_staff_id,
+    assigned_staff_name,
+    from_date,
+    to_date
+  } = req.body;
   try {
     const existingTrain = await get('SELECT * FROM non_daily_trains WHERE id = ?', [id]);
     if (!existingTrain) return res.status(404).json({ error: 'Non-daily train not found' });
@@ -5481,7 +5579,9 @@ app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
            last_day_coaches = ?,
            remarks = ?,
            assigned_staff_id = ?,
-           assigned_staff_name = ?
+           assigned_staff_name = ?,
+           from_date = ?,
+           to_date = ?
        WHERE id = ?`,
       [
         day_of_week ? day_of_week.toUpperCase() : (day_of_week === null ? null : existingTrain.day_of_week),
@@ -5496,6 +5596,8 @@ app.put('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
         remarks !== undefined ? remarks : existingTrain.remarks,
         assigned_staff_id !== undefined ? assigned_staff_id : existingTrain.assigned_staff_id,
         assigned_staff_name !== undefined ? assigned_staff_name : existingTrain.assigned_staff_name,
+        from_date !== undefined ? (from_date ? String(from_date).trim() : null) : existingTrain.from_date,
+        to_date !== undefined ? (to_date ? String(to_date).trim() : null) : existingTrain.to_date,
         id
       ]
     );
@@ -5542,6 +5644,8 @@ app.patch('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
     const new1stCoach = updates.coaches !== undefined ? updates.coaches : existingTrain.coaches;
     const newLastCoach = updates.last_day_coaches !== undefined ? updates.last_day_coaches : existingTrain.last_day_coaches;
     const newRemarks = updates.remarks !== undefined ? updates.remarks : existingTrain.remarks;
+    const newFromDate = updates.from_date !== undefined ? (updates.from_date ? String(updates.from_date).trim() : null) : existingTrain.from_date;
+    const newToDate = updates.to_date !== undefined ? (updates.to_date ? String(updates.to_date).trim() : null) : existingTrain.to_date;
 
     await run(
       `UPDATE non_daily_trains
@@ -5549,9 +5653,11 @@ app.patch('/api/non-daily-trains/:id', requireAdmin, async (req, res) => {
            last_day_train_number = ?,
            coaches = ?,
            last_day_coaches = ?,
-           remarks = ?
+           remarks = ?,
+           from_date = ?,
+           to_date = ?
        WHERE id = ?`,
-      [new1stTrain, newLastTrain, new1stCoach, newLastCoach, newRemarks, id]
+      [new1stTrain, newLastTrain, new1stCoach, newLastCoach, newRemarks, newFromDate, newToDate, id]
     );
 
     if (updates.train_number && existingTrain.train_number && existingTrain.train_number !== updates.train_number) {

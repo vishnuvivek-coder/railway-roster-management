@@ -27,6 +27,8 @@ export interface NonDailyTrainData {
   remarks?: string;
   assigned_staff_id?: number | string | null;
   assigned_staff_name?: string | null;
+  from_date?: string;
+  to_date?: string;
   [key: string]: any;
 }
 
@@ -65,7 +67,9 @@ export default function NonDailyTrainModal({
     last_day_coaches: 'SL / AC',
     remarks: '',
     assigned_staff_id: '',
-    assigned_staff_name: ''
+    assigned_staff_name: '',
+    from_date: '',
+    to_date: ''
   });
 
   const [assignMode, setAssignMode] = useState<string>('REST'); // 'REST', 'LR', 'ALL', 'CUSTOM', 'NONE'
@@ -106,7 +110,9 @@ export default function NonDailyTrainModal({
         last_day_coaches: trainData.last_day_coaches || trainData.coaches || 'SL / AC',
         remarks: trainData.remarks || '',
         assigned_staff_id: staffIdStr,
-        assigned_staff_name: trainData.assigned_staff_name || ''
+        assigned_staff_name: trainData.assigned_staff_name || '',
+        from_date: trainData.from_date || '',
+        to_date: trainData.to_date || ''
       });
 
       if (isRestStaff) {
@@ -133,7 +139,9 @@ export default function NonDailyTrainModal({
         last_day_coaches: 'SL / AC',
         remarks: '',
         assigned_staff_id: '',
-        assigned_staff_name: ''
+        assigned_staff_name: '',
+        from_date: '',
+        to_date: ''
       });
       setAssignMode(restStaffList.length > 0 ? 'REST' : 'LR');
     }
@@ -185,6 +193,8 @@ export default function NonDailyTrainModal({
         },
         body: JSON.stringify({
           ...formData,
+          from_date: formData.from_date ? formData.from_date.trim() : null,
+          to_date: formData.to_date ? formData.to_date.trim() : null,
           assigned_staff_id: formData.assigned_staff_id ? parseInt(formData.assigned_staff_id, 10) : null,
           assigned_staff_name: formData.assigned_staff_name || null
         })
@@ -402,6 +412,74 @@ export default function NonDailyTrainModal({
                 </div>
               </div>
             </div>
+
+            {/* Service Validity Window & Auto-Expiry for 0-series Special Trains */}
+            {(() => {
+              const isSpecial = Boolean(
+                (formData.train_number && formData.train_number.trim().startsWith('0')) ||
+                (formData.last_day_train_number && formData.last_day_train_number.trim().startsWith('0'))
+              );
+              return (
+                <div style={{
+                  background: isSpecial 
+                    ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.05))'
+                    : 'rgba(255, 255, 255, 0.03)',
+                  border: isSpecial 
+                    ? '1px solid rgba(245, 158, 11, 0.45)' 
+                    : '1px solid var(--border-glass)',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>{isSpecial ? '🚄' : '📅'}</span>
+                      <span style={{ fontWeight: 800, color: isSpecial ? '#f59e0b' : 'var(--color-text-primary)', fontSize: '0.9rem' }}>
+                        {isSpecial ? 'Special Train (Starts with 0) — Validity Window' : 'Service Validity Period (From & To Date)'}
+                      </span>
+                    </div>
+                    {isSpecial && (
+                      <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24', border: '1px solid #f59e0b', fontWeight: 800, fontSize: '0.74rem' }}>
+                        Auto-Deletes When Period Ends
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: isSpecial ? '#fbbf24' : 'var(--color-text-secondary)', lineHeight: '1.4' }}>
+                    {isSpecial
+                      ? 'Special trains starting with 0 exist only for a certain period of time. Once the "To Date" is over, this train data will be automatically deleted from the system.'
+                      : 'Optional validity dates for temporary operations. Leave blank for permanent non-daily services.'}
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '2px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: isSpecial ? '#f59e0b' : undefined }}>
+                        From Date (Start Date):
+                      </label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={formData.from_date}
+                        onChange={(e) => setFormData({ ...formData, from_date: e.target.value })}
+                        style={isSpecial ? { border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(0,0,0,0.3)' } : {}}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: isSpecial ? '#f59e0b' : undefined }}>
+                        To Date (End / Auto-Delete Date):
+                      </label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={formData.to_date}
+                        onChange={(e) => setFormData({ ...formData, to_date: e.target.value })}
+                        style={isSpecial ? { border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(0,0,0,0.3)' } : {}}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Departure Station & Time */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

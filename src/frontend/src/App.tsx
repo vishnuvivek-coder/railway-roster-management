@@ -10605,6 +10605,7 @@ export default function App() {
                                     <th style={{ width: '100px', textAlign: 'center' }}>Coach (last day) ✏️</th>
                                     <th style={{ width: '120px' }}>Departure</th>
                                     <th style={{ width: '120px' }}>Arrival</th>
+                                    <th style={{ width: '145px', textAlign: 'center' }}>Validity Window 📅</th>
                                     <th>Assigned Staff / Relief Crew</th>
                                     <th>Remarks</th>
                                     {isAdmin && <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>}
@@ -10704,6 +10705,59 @@ export default function App() {
                                               ({item.arrival_time})
                                             </span>
                                           )}
+                                        </td>
+
+                                        {/* VALIDITY WINDOW */}
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                          {(() => {
+                                            const isZeroTrain = (item.train_number && item.train_number.startsWith('0')) ||
+                                                                (item.last_day_train_number && item.last_day_train_number.startsWith('0'));
+                                            if (item.from_date || item.to_date) {
+                                              return (
+                                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                                                  <span className="badge" style={{
+                                                    background: isZeroTrain ? 'rgba(245, 158, 11, 0.18)' : 'rgba(59, 130, 246, 0.15)',
+                                                    color: isZeroTrain ? '#f59e0b' : '#60a5fa',
+                                                    border: isZeroTrain ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(96, 165, 250, 0.4)',
+                                                    fontSize: '0.74rem',
+                                                    padding: '2px 8px',
+                                                    fontWeight: 700
+                                                  }}>
+                                                    {item.from_date || 'Start'} ➔ {item.to_date || 'Open'}
+                                                  </span>
+                                                  {isZeroTrain && (
+                                                    <span style={{ fontSize: '0.68rem', color: '#fbbf24', fontWeight: 600 }}>
+                                                      Special (Auto-Prunes)
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              );
+                                            }
+                                            if (isZeroTrain) {
+                                              return (
+                                                <span
+                                                  className="badge"
+                                                  onClick={() => {
+                                                    setEditingNonDailyTrain(item);
+                                                    setNonDailyInitialDay(item.day_of_week);
+                                                    setNonDailyModalOpen(true);
+                                                  }}
+                                                  style={{
+                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                    color: '#f87171',
+                                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                    fontSize: '0.72rem',
+                                                    cursor: 'pointer',
+                                                    padding: '2px 8px'
+                                                  }}
+                                                  title="Click to assign From & To dates for this special train"
+                                                >
+                                                  ⚠️ Set Period
+                                                </span>
+                                              );
+                                            }
+                                            return <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.78rem' }}>Permanent</span>;
+                                          })()}
                                         </td>
 
                                         {/* ASSIGNED CREW */}
@@ -10827,7 +10881,7 @@ export default function App() {
 
                                   {searchedTrains.length === 0 && (
                                     <tr>
-                                      <td colSpan={isAdmin ? 10 : 9} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '24px' }}>
+                                      <td colSpan={isAdmin ? 11 : 10} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '24px' }}>
                                         No non-daily trains found matching filter {dailyNonDailySearch ? `"${dailyNonDailySearch}"` : `for ${nonDailySubTab === 'today' ? currentSelectedDay : 'all services'}`}.
                                       </td>
                                     </tr>

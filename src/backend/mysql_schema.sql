@@ -513,6 +513,8 @@ CREATE TABLE IF NOT EXISTS non_daily_trains (
   remarks VARCHAR(255) DEFAULT NULL,
   assigned_staff_id INT DEFAULT NULL,
   assigned_staff_name VARCHAR(255) DEFAULT NULL,
+  from_date DATE DEFAULT NULL,
+  to_date DATE DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_non_daily_day (day_of_week),
   CONSTRAINT fk_non_daily_staff FOREIGN KEY (assigned_staff_id) REFERENCES staff(id) ON DELETE SET NULL
