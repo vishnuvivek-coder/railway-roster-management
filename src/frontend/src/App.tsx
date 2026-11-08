@@ -1126,8 +1126,9 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '17244',
     title: '17243 / 17244 (Rayagada Express: GNT ➔ VSKP)',
     links: [
-      { categoryId: 2, linkNum: 32, firstCoach: 'AC + SL', lastTrain: '17244', lastCoach: 'AC + SL' },
-      { categoryId: 2, linkNum: 46, firstCoach: 'SL', lastTrain: '17244', lastCoach: 'SL' }
+      { categoryId: 1, linkNum: 15, altLinkNums: [16, 17], firstCoach: 'AC', lastTrain: '17244', lastCoach: 'AC' },
+      { categoryId: 2, linkNum: 32, altLinkNums: [33, 34], firstCoach: 'AC + SL', lastTrain: '17244', lastCoach: 'AC + SL' },
+      { categoryId: 2, linkNum: 46, altLinkNums: [47, 48], firstCoach: 'SL', lastTrain: '17244', lastCoach: 'SL' }
     ]
   },
   // 17. Train 07811 / 07812 [Page 111 Row 17]
@@ -7110,19 +7111,19 @@ export default function App() {
                       let linkCoach = '';
                       const cId = parseInt(lDef.categoryId, 10);
                       const lNum = parseInt(lDef.linkNum, 10);
-                      const isDynamicAmaravatiSlot = (cId === 1 && lNum === 15) || (cId === 2 && (lNum === 50 || lNum === 57));
+                      const isDynamicAmaravatiSlot = (selectedDate < '2026-11-01' && cId === 1 && lNum === 15) || (cId === 2 && (lNum === 50 || lNum === 57));
                       if (isDynamicAmaravatiSlot) {
                         linkFirstTrain = is18047Day(selectedDate) ? '18047' : '17225';
                         linkLastTrain = is18048Day(selectedDate) ? '18048' : '17226';
                       } else if (matchedLink && matchedLink.train_numbers && matchedLink.train_numbers.trim() && matchedLink.train_numbers.toUpperCase() !== 'REST') {
                         let dynamicTrainNums = matchedLink.train_numbers;
-                        if (cId === 1 && lNum === 16) {
+                        if (cId === 1 && lNum === 16 && selectedDate < '2026-11-01') {
                           const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
                           const dow = d.getDay();
                           const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
                           const retT = is18048Day(selectedDate) ? '18048' : '17226';
                           dynamicTrainNums = `${inT}, ${retT}`;
-                        } else if (cId === 1 && lNum === 17) {
+                        } else if (cId === 1 && lNum === 17 && selectedDate < '2026-11-01') {
                           const retT = is18048Day(selectedDate) ? '18048' : '17226';
                           dynamicTrainNums = `${retT}, 57201`;
                         } else if (cId === 2 && lNum === 51) {
