@@ -7520,7 +7520,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             const resA = await resolveDutyCodeForLRStaff(staffA.id, dStr, dayOfWeek, staffA.rest_day);
             if (resA && resA.code) {
               await syncLRSheetRecord(staffA.id, dStr, resA.code, reasonForA);
-            } else if (dutyProfileB.isRest) {
+            } else if (isRestB) {
               await syncLRSheetRecord(staffA.id, dStr, 'R', reasonForA);
             }
           }
@@ -7529,24 +7529,24 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             const resB = await resolveDutyCodeForLRStaff(staffB.id, dStr, dayOfWeek, staffB.rest_day);
             if (resB && resB.code) {
               await syncLRSheetRecord(staffB.id, dStr, resB.code, reasonForB);
-            } else if (dutyProfileA.isRest) {
+            } else if (isRestA) {
               await syncLRSheetRecord(staffB.id, dStr, 'R', reasonForB);
             }
           }
 
           // Synchronize across TA approvals and documents for both staff
           await syncDutyChangeAcrossAllModules({ get, all, run }, staffA.id, dStr, {
-            targetLink: dutyProfileB.linkNum,
-            targetTrain: dutyProfileB.extraTrainNo,
+            targetLink: linkB,
+            targetTrain: tOutB,
             isLeave: false,
-            isRest: dutyProfileB.isRest,
+            isRest: isRestB,
             remarks: reasonForA
           });
           await syncDutyChangeAcrossAllModules({ get, all, run }, staffB.id, dStr, {
-            targetLink: dutyProfileA.linkNum,
-            targetTrain: dutyProfileA.extraTrainNo,
+            targetLink: linkA,
+            targetTrain: tOutA,
             isLeave: false,
-            isRest: dutyProfileA.isRest,
+            isRest: isRestA,
             remarks: reasonForB
           });
         }
@@ -11746,7 +11746,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         matched = allLinks.find((l: any) =>
           parseInt(l.category_id, 10) === catId &&
           parseInt(l.link_number, 10) === num &&
-          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(activeSetId, 10)) &&
+          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(String(activeSetId), 10)) &&
           (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
           (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
         );
@@ -11755,7 +11755,7 @@ app.get('/api/reports/daily-view', async (req, res) => {
         matched = allLinks.find((l: any) =>
           parseInt(l.link_number, 10) === num &&
           parseInt(l.category_id, 10) !== 4 &&
-          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(activeSetId, 10)) &&
+          (!activeSetId || !l.link_set_id || parseInt(l.link_set_id, 10) === parseInt(String(activeSetId), 10)) &&
           (!l.effective_from || toDateKey(l.effective_from) <= dateStr) &&
           (!l.effective_to || toDateKey(l.effective_to) >= dateStr)
         );
