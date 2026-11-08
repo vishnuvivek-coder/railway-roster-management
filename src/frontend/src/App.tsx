@@ -7327,65 +7327,24 @@ export default function App() {
 
                         const isUpgradedStaff = (parseInt(lDef.categoryId, 10) === 1 && parseInt(staffDuty.categoryId, 10) !== 1) || (staffDuty.status === 'SUBSTITUTE' && parseInt(lDef.categoryId, 10) === 1);
 
-                        // Take train information from staff's assigned link in the Train Roster
-                        const assignedLinkNum = staffDuty.link_number || lDef.linkNum;
-                        const assignedCatId = staffDuty.target_category_id != null ? staffDuty.target_category_id : (staffDuty.categoryId || lDef.categoryId);
+                        // Strictly preserve slot link definition: When an employee is shifted or assigned to this link slot,
+                        // ONLY the employee name should be updated. The link no, coach no, and all train details must NOT deviate or change!
+                        const rowFirstTrain = (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '') ? customDuty.firstTrain : effectiveFirstTrain;
+                        const rowFirstCoach = (customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : effectiveFirstCoach;
+                        const rowLastTrain = (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '') ? customDuty.lastTrain : effectiveLastTrain;
+                        const rowLastCoach = (customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : effectiveLastCoach;
 
-                        const staffAssignedLink = safeLinksList.find(al =>
-                          matchesLinkSet(al) &&
-                          parseInt(al.category_id, 10) === parseInt(assignedCatId, 10) &&
-                          parseInt(al.link_number, 10) === parseInt(assignedLinkNum, 10)
-                        );
-
-                        let staffFirstTrain = '';
-                        let staffLastTrain = '';
-                        let staffFirstCoach = '';
-                        let staffLastCoach = '';
-
-                        if (staffAssignedLink) {
-                          let sTrainNums = staffAssignedLink.train_numbers;
-                          if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
-                            sTrainNums = '17281, 17282';
-                          } else if (parseInt(staffAssignedLink.category_id, 10) === 1 && (parseInt(staffAssignedLink.link_number, 10) === 12 || parseInt(staffAssignedLink.link_number, 10) === 13)) {
-                            sTrainNums = '12604, 12603';
-                          } else if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 3 || parseInt(staffAssignedLink.link_number, 10) === 4)) {
-                            sTrainNums = '12604, 12603';
-                          }
-                          if (sTrainNums && sTrainNums.trim() && sTrainNums.toUpperCase() !== 'REST') {
-                            const parts = sTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
-                            if (parts.length > 0) staffFirstTrain = parts[0];
-                            if (parts.length > 1) staffLastTrain = parts[parts.length - 1];
-                          }
-                          let sCoaches = (staffAssignedLink.coaches && staffAssignedLink.coaches.trim()) ? staffAssignedLink.coaches.trim() : '';
-                          if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 38 || parseInt(staffAssignedLink.link_number, 10) === 39)) {
-                            sCoaches = 'D1-D2';
-                          } else if (parseInt(staffAssignedLink.category_id, 10) === 1 && (parseInt(staffAssignedLink.link_number, 10) === 12 || parseInt(staffAssignedLink.link_number, 10) === 13)) {
-                            sCoaches = 'AC';
-                          } else if (parseInt(staffAssignedLink.category_id, 10) === 2 && (parseInt(staffAssignedLink.link_number, 10) === 3 || parseInt(staffAssignedLink.link_number, 10) === 4)) {
-                            sCoaches = 'S1-S5';
-                          }
-                          if (sCoaches) {
-                            staffFirstCoach = sCoaches;
-                            staffLastCoach = sCoaches;
-                          }
-                        }
-
-                        const rowFirstTrain = staffDuty.train_out || (customDuty.firstTrain !== undefined && customDuty.firstTrain !== '' ? customDuty.firstTrain : (staffFirstTrain || effectiveFirstTrain));
-                        const rowFirstCoach = (staffDuty.train_out && staffDuty.coach_out) ? staffDuty.coach_out : ((customDuty.firstCoach !== undefined && customDuty.firstCoach !== '') ? customDuty.firstCoach : (staffFirstCoach || effectiveFirstCoach));
-                        const rowLastTrain = staffDuty.train_return || (customDuty.lastTrain !== undefined && customDuty.lastTrain !== '' ? customDuty.lastTrain : (staffLastTrain || effectiveLastTrain));
-                        const rowLastCoach = (staffDuty.train_return && staffDuty.coach_return) ? staffDuty.coach_return : ((customDuty.lastCoach !== undefined && customDuty.lastCoach !== '') ? customDuty.lastCoach : (staffLastCoach || effectiveLastCoach));
-
-                        let dutyFromStation = staffDuty.from_station || staffAssignedLink?.from_station || matchedLink?.from_station || 'GNT';
-                        let dutyToStation = staffDuty.to_station || staffAssignedLink?.to_station || matchedLink?.to_station || 'GNT';
-                        if (parseInt(assignedCatId, 10) === 2 && parseInt(assignedLinkNum, 10) === 38) {
+                        let dutyFromStation = lDef.from_station || matchedLink?.from_station || slot.from_station || 'GNT';
+                        let dutyToStation = lDef.to_station || matchedLink?.to_station || slot.to_station || 'GNT';
+                        if (parseInt(lDef.categoryId, 10) === 2 && parseInt(lDef.linkNum, 10) === 38) {
                           dutyFromStation = 'GNT';
                           dutyToStation = 'NS';
-                        } else if ((parseInt(assignedCatId, 10) === 1 && parseInt(assignedLinkNum, 10) === 12) || (parseInt(assignedCatId, 10) === 2 && parseInt(assignedLinkNum, 10) === 3)) {
+                        } else if ((parseInt(lDef.categoryId, 10) === 1 && parseInt(lDef.linkNum, 10) === 12) || (parseInt(lDef.categoryId, 10) === 2 && parseInt(lDef.linkNum, 10) === 3)) {
                           dutyFromStation = 'GNT';
                           dutyToStation = 'MAS';
                         }
 
-                        // Dynamic TA calculation strictly based on arrival and departure time (NOT copied blindly from train roster)
+                        // Dynamic TA calculation strictly based on arrival and departure time
                         const dutyDepTime = staffDuty.dep_time || STANDARD_TRAIN_SCHEDULES[rowFirstTrain]?.schedDep || null;
                         const dutyArrTime = staffDuty.arr_time || STANDARD_TRAIN_SCHEDULES[rowLastTrain]?.schedArr || null;
                         const dutyTaCalc = calculateDynamicTaFromTimings(
@@ -7402,14 +7361,14 @@ export default function App() {
                           slotId: slot.slotId,
                           categoryId: lDef.categoryId,
                           target_category_id: lDef.categoryId,
-                          link_number: staffDuty.link_number || lDef.linkNum,
+                          link_number: lDef.linkNum,
                           firstTrain: rowFirstTrain,
                           firstCoaches: rowFirstCoach,
                           lastTrain: rowLastTrain,
                           lastCoaches: rowLastCoach,
                           from_station: dutyFromStation,
                           to_station: dutyToStation,
-                          set_type: staffDuty.set_type || staffAssignedLink?.set_type || matchedLink?.set_type || '',
+                          set_type: matchedLink?.set_type || staffDuty.set_type || '',
                           ta_percentage: dutyTaCalc.ta_percentage,
                           absence_hours: dutyTaCalc.absence_hours,
                           ta_desc: dutyTaCalc.desc,

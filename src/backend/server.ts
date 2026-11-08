@@ -6469,8 +6469,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
 
         await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
          ON CONFLICT(staff_id, date) DO UPDATE SET
            overridden_link_number = excluded.overridden_link_number,
            status = excluded.status,
@@ -6482,7 +6482,12 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
            is_advance_duty = 0,
            advance_train_no = NULL,
            reason = excluded.reason,
-           target_category_id = excluded.target_category_id`,
+           target_category_id = excluded.target_category_id,
+           train_out = NULL,
+           coach_out = NULL,
+           train_return = NULL,
+           coach_return = NULL,
+           duty_label = NULL`,
           [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
         );
 
@@ -6991,15 +6996,20 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           const subReason = reason || `Reassigned to Link #${targetLink} (Relieved ${staff.name})`;
 
           await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-           VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?, ?, ?)
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
+           VALUES (?, ?, ?, ?, 'CHANGED_LINK', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)
            ON CONFLICT(staff_id, date) DO UPDATE SET
              overridden_link_number = excluded.overridden_link_number,
              status = 'CHANGED_LINK',
              substitute_staff_id = excluded.substitute_staff_id,
              substitute_name = excluded.substitute_name,
              reason = excluded.reason,
-             target_category_id = excluded.target_category_id`,
+             target_category_id = excluded.target_category_id,
+             train_out = NULL,
+             coach_out = NULL,
+             train_return = NULL,
+             coach_return = NULL,
+             duty_label = NULL`,
             [subStaff.id, dStr, subOrigLink, targetLink, staff_id, staff.name, subReason, targetCatId]
           );
 
@@ -7376,34 +7386,54 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           }
 
           // Resolve Staff A's current duty details
-          let tOutA = existingOverrideA?.train_out || dregA?.train_out || null;
-          let cOutA = existingOverrideA?.coach_out || dregA?.coach_out || null;
-          let tRetA = existingOverrideA?.train_return || dregA?.train_return || null;
-          let cRetA = existingOverrideA?.coach_return || dregA?.coach_return || null;
-          let dLabelA = existingOverrideA?.duty_label || dregA?.duty_label || null;
+          let tOutA = null;
+          let cOutA = null;
+          let tRetA = null;
+          let cRetA = null;
+          let dLabelA = null;
 
-          if (!tOutA && linkDefA && linkDefA.train_numbers && linkDefA.train_numbers.toUpperCase() !== 'REST') {
+          if (linkDefA && linkDefA.train_numbers && linkDefA.train_numbers.toUpperCase() !== 'REST') {
             const parts = linkDefA.train_numbers.split(/[/,]+/).map((s: string) => s.trim()).filter(Boolean);
             if (parts.length > 0) tOutA = parts[0];
             if (parts.length > 1) tRetA = parts[parts.length - 1];
-            if (!cOutA && linkDefA.coaches) cOutA = linkDefA.coaches;
+            if (linkDefA.coaches) {
+              cOutA = linkDefA.coaches;
+              cRetA = linkDefA.coaches;
+            }
+            dLabelA = linkDefA.train_numbers;
+          } else {
+            tOutA = existingOverrideA?.train_out || dregA?.train_out || null;
+            cOutA = existingOverrideA?.coach_out || dregA?.coach_out || null;
+            tRetA = existingOverrideA?.train_return || dregA?.train_return || null;
+            cRetA = existingOverrideA?.coach_return || dregA?.coach_return || null;
+            dLabelA = existingOverrideA?.duty_label || dregA?.duty_label || null;
           }
           if (!dLabelA) {
             dLabelA = tOutA ? (tRetA ? `${tOutA} / ${tRetA}` : tOutA) : (linkA ? `Link #${linkA}` : 'Duty');
           }
 
           // Resolve Staff B's current duty details
-          let tOutB = existingOverrideB?.train_out || dregB?.train_out || null;
-          let cOutB = existingOverrideB?.coach_out || dregB?.coach_out || null;
-          let tRetB = existingOverrideB?.train_return || dregB?.train_return || null;
-          let cRetB = existingOverrideB?.coach_return || dregB?.coach_return || null;
-          let dLabelB = existingOverrideB?.duty_label || dregB?.duty_label || null;
+          let tOutB = null;
+          let cOutB = null;
+          let tRetB = null;
+          let cRetB = null;
+          let dLabelB = null;
 
-          if (!tOutB && linkDefB && linkDefB.train_numbers && linkDefB.train_numbers.toUpperCase() !== 'REST') {
+          if (linkDefB && linkDefB.train_numbers && linkDefB.train_numbers.toUpperCase() !== 'REST') {
             const parts = linkDefB.train_numbers.split(/[/,]+/).map((s: string) => s.trim()).filter(Boolean);
             if (parts.length > 0) tOutB = parts[0];
             if (parts.length > 1) tRetB = parts[parts.length - 1];
-            if (!cOutB && linkDefB.coaches) cOutB = linkDefB.coaches;
+            if (linkDefB.coaches) {
+              cOutB = linkDefB.coaches;
+              cRetB = linkDefB.coaches;
+            }
+            dLabelB = linkDefB.train_numbers;
+          } else {
+            tOutB = existingOverrideB?.train_out || dregB?.train_out || null;
+            cOutB = existingOverrideB?.coach_out || dregB?.coach_out || null;
+            tRetB = existingOverrideB?.train_return || dregB?.train_return || null;
+            cRetB = existingOverrideB?.coach_return || dregB?.coach_return || null;
+            dLabelB = existingOverrideB?.duty_label || dregB?.duty_label || null;
           }
           if (!dLabelB) {
             dLabelB = tOutB ? (tRetB ? `${tOutB} / ${tRetB}` : tOutB) : (linkB ? `Link #${linkB}` : 'Duty');
@@ -7746,15 +7776,20 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
               const subReason = `Substitute for ${staff.name} (${shiftReason}) on Link #${originalLink}`;
 
               await run(
-                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
-               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
+                `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
+               VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)
                ON CONFLICT(staff_id, date) DO UPDATE SET
                  overridden_link_number = excluded.overridden_link_number,
                  status = excluded.status,
                  substitute_staff_id = excluded.substitute_staff_id,
                  substitute_name = excluded.substitute_name,
                  reason = excluded.reason,
-                 target_category_id = excluded.target_category_id`,
+                 target_category_id = excluded.target_category_id,
+                 train_out = NULL,
+                 coach_out = NULL,
+                 train_return = NULL,
+                 coach_return = NULL,
+                 duty_label = NULL`,
                 [subStaff.id, dStr, subOrigLink, originalLink, staff.id, staff.name, subReason, staff.category_id]
               );
 
@@ -8357,7 +8392,12 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
         substitute_staff_id = NULL,
         substitute_name = NULL,
         advance_train_no = NULL,
-        is_advance_duty = 0`,
+        is_advance_duty = 0,
+        train_out = NULL,
+        coach_out = NULL,
+        train_return = NULL,
+        coach_return = NULL,
+        duty_label = NULL`,
       [
         staff.id,
         date,
