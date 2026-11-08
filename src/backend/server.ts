@@ -3415,11 +3415,22 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
         throw new Error(`Employee ID ${item.id} not found`);
       }
       const targetPos = item.row_position !== undefined && item.row_position !== null ? parseInt(item.row_position, 10) : current.row_position;
+      const targetCat = item.category_id !== undefined && item.category_id !== null ? parseInt(item.category_id, 10) : current.category_id;
+
+      // If an LR employee (Category 4) is moved into Category 1, 2, or 3 (Main Link / Roster Grid):
+      if (current.category_id === 4 && targetCat && targetCat !== 4) {
+        try {
+          await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [item.id]);
+        } catch (e) { }
+        try {
+          await run('UPDATE staff_roster_assignments SET category_id = ? WHERE staff_id = ?', [targetCat, item.id]);
+        } catch (e) { }
+      }
 
       // Avoid UNIQUE(category_id, row_position) collision when saving one-by-one without a transaction
       const conflict = await get(
         'SELECT id FROM staff WHERE category_id = ? AND row_position = ? AND id != ?',
-        [current.category_id, targetPos, item.id]
+        [targetCat || current.category_id, targetPos, item.id]
       );
       if (conflict) {
         await run('UPDATE staff SET row_position = ? WHERE id = ?', [-(conflict.id + 10000), conflict.id]);
@@ -3427,6 +3438,7 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
 
       await run(
         `UPDATE staff SET
+           category_id = COALESCE(?, category_id),
            row_position = ?,
            name = COALESCE(?, name),
            designation = COALESCE(?, designation),
@@ -3436,6 +3448,7 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
            seniority_no = COALESCE(?, seniority_no)
          WHERE id = ?`,
         [
+          item.category_id !== undefined ? targetCat : null,
           targetPos,
           item.name !== undefined ? String(item.name).trim() : null,
           item.designation !== undefined ? String(item.designation).trim() : null,
@@ -3481,15 +3494,37 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
 // ============================================================================
 app.put('/api/staff/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, designation, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no } = req.body;
+  const { name, designation, category_id, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no } = req.body;
   try {
     const currentStaff = await get('SELECT * FROM staff WHERE id = ?', [id]);
     if (!currentStaff) {
       return res.status(404).json({ error: 'Staff member not found' });
     }
 
+    const oldCatId = currentStaff.category_id;
+    const targetCatId = category_id !== undefined && category_id !== null ? parseInt(category_id, 10) : oldCatId;
+
+    // If an LR employee (Category 4) is moved into Category 1, 2, or 3 (Main Link / Roster Grid):
+    if (oldCatId === 4 && targetCatId && targetCatId !== 4) {
+      // 1. Delete all LR sheet records for this staff member
+      try {
+        await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [id]);
+      } catch (e) { }
+
+      // 2. Update versioned staff_roster_assignments to reflect target category
+      try {
+        await run('UPDATE staff_roster_assignments SET category_id = ? WHERE staff_id = ?', [targetCatId, id]);
+      } catch (e) { }
+
+      // 3. Re-index remaining Category 4 staff row positions in staff table
+      const remainingCat4 = await all('SELECT id FROM staff WHERE category_id = 4 AND id != ? ORDER BY row_position ASC, id ASC', [id]);
+      for (let i = 0; i < remainingCat4.length; i++) {
+        await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remainingCat4[i].id]);
+      }
+    }
+
     if (row_position && row_position !== currentStaff.row_position) {
-      const catId = currentStaff.category_id;
+      const catId = targetCatId || currentStaff.category_id;
       // Shift others
       if (row_position > currentStaff.row_position) {
         await run(
@@ -3513,6 +3548,7 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
       `UPDATE staff 
        SET name = ?, 
            designation = ?, 
+           category_id = COALESCE(?, category_id),
            row_position = COALESCE(?, row_position), 
            active = COALESCE(?, active),
            pf_no = ?,
@@ -3524,7 +3560,7 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
            hrms_id = ?,
            seniority_no = COALESCE(?, seniority_no)
        WHERE id = ?`,
-      [targetName, targetDesg, row_position || null, active !== undefined ? active : null, targetPf, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
+      [targetName, targetDesg, targetCatId || null, row_position || null, active !== undefined ? active : null, targetPf, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
     );
 
     // Sync seniority_list if matching pf_no or seniority_no exists
@@ -3794,6 +3830,16 @@ app.post('/api/staff/upgrade-to-cor', requireAdmin, async (req, res) => {
              WHERE id = ?`,
             [oldCatId, oldRowPos, currentOccupant.designation || '', currentOccupant.id]
           );
+
+          if (oldCatId === 4) {
+            try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+            try { await run('UPDATE staff_roster_assignments SET category_id = 1, row_position = ? WHERE staff_id = ?', [targetRowInt, staff_id]); } catch (e) { }
+            const remainingCat4 = await all('SELECT id FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
+            for (let i = 0; i < remainingCat4.length; i++) {
+              await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remainingCat4[i].id]);
+            }
+          }
+
           await run('COMMIT');
           await logAudit(
             'Admin',
@@ -3835,6 +3881,15 @@ app.post('/api/staff/upgrade-to-cor', requireAdmin, async (req, res) => {
          VALUES (?, ?, ?, ?, ?, 1)`,
         ['VACANT (V)', '', oldCatId, oldRowPos, oldRestDay || null]
       );
+
+      if (oldCatId === 4) {
+        try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [staff_id]); } catch (e) { }
+        try { await run('UPDATE staff_roster_assignments SET category_id = 1, row_position = ? WHERE staff_id = ?', [targetRowInt, staff_id]); } catch (e) { }
+        const remainingCat4 = await all('SELECT id FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
+        for (let i = 0; i < remainingCat4.length; i++) {
+          await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remainingCat4[i].id]);
+        }
+      }
 
       await run('COMMIT');
 
@@ -16450,6 +16505,12 @@ app.post('/api/muster/add-employee', async (req, res) => {
       const maxRow = await get('SELECT MAX(row_position) as maxPos FROM staff WHERE category_id = ?', [targetCatId]);
       const nextPos = (maxRow?.maxPos || 0) + 1;
 
+      // If an LR employee (Category 4) is moved into Category 1, 2, or 3 (Main Link / Roster Grid):
+      if (existing.category_id === 4 && targetCatId !== 4) {
+        try { await run('DELETE FROM lr_sheet_records WHERE staff_id = ?', [existing_staff_id]); } catch (e) { }
+        try { await run('UPDATE staff_roster_assignments SET category_id = ?, row_position = ? WHERE staff_id = ?', [targetCatId, nextPos, existing_staff_id]); } catch (e) { }
+      }
+
       await run(
         `UPDATE staff 
          SET category_id = ?, 
@@ -16462,6 +16523,13 @@ app.post('/api/muster/add-employee', async (req, res) => {
          WHERE id = ?`,
         [targetCatId, nextPos, designation || null, rest_day || null, pf_no || null, hrms_id || null, seniority_no || null, existing_staff_id]
       );
+
+      if (existing.category_id === 4 && targetCatId !== 4) {
+        const remainingCat4 = await all('SELECT id FROM staff WHERE category_id = 4 ORDER BY row_position ASC, id ASC');
+        for (let i = 0; i < remainingCat4.length; i++) {
+          await run('UPDATE staff SET row_position = ? WHERE id = ?', [i + 1, remainingCat4[i].id]);
+        }
+      }
 
       if (targetCatId === 4) {
         try {
@@ -16949,6 +17017,20 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
     const cat4Staff = await getStaffForDate(4, startDateStr);
+    const mainGridStaffRows = await all(`
+      SELECT DISTINCT staff_id 
+      FROM staff_roster_assignments 
+      WHERE category_id IN (1, 2, 3) 
+        AND date(effective_from) <= date(?) 
+        AND (effective_to IS NULL OR date(effective_to) >= date(?))
+        AND staff_id IS NOT NULL
+      UNION
+      SELECT id as staff_id 
+      FROM staff 
+      WHERE category_id IN (1, 2, 3)
+    `, [startDateStr, startDateStr]);
+    const mainGridStaffIdSet = new Set(mainGridStaffRows.map((r: any) => parseInt(r.staff_id, 10)));
+    const cleanCat4Staff = cat4Staff.filter((s: any) => !mainGridStaffIdSet.has(parseInt(s.id, 10)));
     const monthOverrides = await all(`
       SELECT o.*, s1.name as staff_name, s1.category_id as staff_cat
       FROM overrides o
@@ -17004,7 +17086,7 @@ async function syncLRSheetFromDailyDuty(targetYear = 2026, targetMonth = 9) {
 
     let syncedCount = 0;
 
-    for (const staff of cat4Staff) {
+    for (const staff of cleanCat4Staff) {
       if (staff.id === 115) continue; // Skip K NAGA NAIK (relieved)
 
       for (let d = 1; d <= daysInMonth; d++) {
@@ -17172,9 +17254,40 @@ app.get('/api/lr-sheet', async (req, res) => {
       all('SELECT id, category_id FROM staff')
     ]);
 
+    // Identify any staff member who is assigned to Category 1, 2, or 3 (Main Link / Roster Grid)
+    // during this month period in staff_roster_assignments or currently in staff table.
+    const mainGridStaffRows = await all(`
+      SELECT DISTINCT staff_id 
+      FROM staff_roster_assignments 
+      WHERE category_id IN (1, 2, 3) 
+        AND date(effective_from) <= date(?) 
+        AND (effective_to IS NULL OR date(effective_to) >= date(?))
+        AND staff_id IS NOT NULL
+      UNION
+      SELECT id as staff_id 
+      FROM staff 
+      WHERE category_id IN (1, 2, 3)
+    `, [startDateStr, startDateStr]);
+    const mainGridStaffIdSet = new Set(mainGridStaffRows.map((r: any) => parseInt(r.staff_id, 10)));
+
+    // Purge any stale lr_sheet_records for main grid staff in this month range
+    if (mainGridStaffIdSet.size > 0) {
+      const mainIds = Array.from(mainGridStaffIdSet);
+      try {
+        await run(`
+          DELETE FROM lr_sheet_records 
+          WHERE staff_id IN (${mainIds.map(() => '?').join(',')}) 
+            AND date >= ? AND date <= ?
+        `, [...mainIds, startDateStr, endDateStr]);
+      } catch (e) { }
+    }
+
+    // Exclude any main grid staff from LR staff list
+    const cleanCat4Staff = allCat4Staff.filter((s: any) => !mainGridStaffIdSet.has(parseInt(s.id, 10)));
+
     // Separate active and relieved staff (relieved kept at bottom)
-    const activeStaff = allCat4Staff.filter((s: any) => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
-    const relievedStaff = allCat4Staff.filter((s: any) => s.name === 'K NAGA NAIK' || s.id === 115 || s.is_relieved);
+    const activeStaff = cleanCat4Staff.filter((s: any) => s.name !== 'K NAGA NAIK' && s.id !== 115 && !s.is_relieved);
+    const relievedStaff = cleanCat4Staff.filter((s: any) => s.name === 'K NAGA NAIK' || s.id === 115 || s.is_relieved);
     const sortedCat4Staff = [...activeStaff, ...relievedStaff];
 
     const staffList = sortedCat4Staff.map((s: any, idx: number) => {
@@ -17194,6 +17307,7 @@ app.get('/api/lr-sheet', async (req, res) => {
 
     const recordsMap: Record<string, any> = {};
     records.forEach((r: any) => {
+      if (mainGridStaffIdSet.has(parseInt(r.staff_id, 10))) return;
       recordsMap[`${r.staff_id}_${r.date}`] = {
         id: r.id,
         dutyCode: r.duty_code,
