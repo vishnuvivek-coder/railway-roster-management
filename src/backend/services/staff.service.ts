@@ -69,21 +69,91 @@ export async function getSeniorityList(query: any) {
   return await all(sql, params);
 }
 
+export async function createSeniorityRecord(data: any, user: any) {
+  const { sl_no, name, designation, working_designation, cug_number, contact_number, pf_number, email } = data;
+  const tierMap: Record<string, number> = { 'CTI': 1, 'TTI': 2, 'SRTE': 3, 'Sr.CCTC': 4, 'SRCCTC': 4, 'CCTC': 5 };
+  const cleanDesg = (designation || '').trim();
+  const cleanName = (name || '').trim().toUpperCase();
+  const workingDesg = (working_designation && working_designation.trim())
+    ? working_designation.trim()
+    : (cleanName.includes('CHANDRIKA') ? 'TTI' : cleanDesg);
+  const tier = tierMap[cleanDesg] || 999;
+
+  let targetSlNo = sl_no !== undefined && sl_no !== null && sl_no !== '' ? parseInt(sl_no, 10) : null;
+  if (!targetSlNo || isNaN(targetSlNo) || targetSlNo <= 0) {
+    const maxRow = await get("SELECT COALESCE(MAX(sl_no), 0) AS max_sl FROM seniority_list");
+    targetSlNo = (maxRow?.max_sl || 0) + 1;
+  } else {
+    const exists = await get("SELECT id FROM seniority_list WHERE sl_no = ?", [targetSlNo]);
+    if (exists) {
+      await run("UPDATE seniority_list SET sl_no = sl_no + 1 WHERE sl_no >= ?", [targetSlNo]);
+    }
+  }
+
+  await run(
+    `INSERT INTO seniority_list (sl_no, name, designation, working_designation, cug_number, contact_number, pf_number, email, hierarchy_tier)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [targetSlNo, cleanName, cleanDesg, workingDesg, cug_number || null, contact_number || null, pf_number || null, email || null, tier]
+  );
+  await logAudit(user?.name || 'Admin', 'ADD_SENIORITY', `Added Seniority record for ${cleanName} (SL #${targetSlNo}, ${cleanDesg})`);
+  return await get("SELECT * FROM seniority_list WHERE sl_no = ?", [targetSlNo]);
+}
+
 export async function updateSeniorityRecord(id: any, data: any, user: any) {
-  const { name, designation, cug_number, contact_number, pf_number, email } = data;
+  const { sl_no, name, designation, working_designation, cug_number, contact_number, pf_number, email } = data;
+  const existing = await get("SELECT * FROM seniority_list WHERE id = ? OR sl_no = ?", [id, id]);
+  if (!existing) {
+    throw new Error('Seniority record not found');
+  }
+
+  const tierMap: Record<string, number> = { 'CTI': 1, 'TTI': 2, 'SRTE': 3, 'Sr.CCTC': 4, 'SRCCTC': 4, 'CCTC': 5 };
+  const newDesg = designation !== undefined && designation !== null ? designation.trim() : existing.designation;
+  const newTier = newDesg ? (tierMap[newDesg] || 999) : existing.hierarchy_tier;
+  const newName = name !== undefined && name !== null ? name.trim().toUpperCase() : existing.name;
+  const newWorkingDesg = working_designation !== undefined && working_designation !== null
+    ? working_designation.trim()
+    : ((newName && newName.includes('CHANDRIKA')) ? 'TTI' : existing.working_designation || newDesg);
+
+  let newSlNo = sl_no !== undefined && sl_no !== null && sl_no !== '' ? parseInt(sl_no, 10) : existing.sl_no;
+  if (isNaN(newSlNo) || newSlNo <= 0) newSlNo = existing.sl_no;
+
   await run(
     `UPDATE seniority_list 
-     SET name = COALESCE(?, name),
-         designation = COALESCE(?, designation),
-         cug_number = COALESCE(?, cug_number),
-         contact_number = COALESCE(?, contact_number),
-         pf_number = COALESCE(?, pf_number),
-         email = COALESCE(?, email)
+     SET sl_no = ?,
+         name = ?,
+         designation = ?,
+         working_designation = ?,
+         hierarchy_tier = ?,
+         cug_number = ?,
+         contact_number = ?,
+         pf_number = ?,
+         email = ?
      WHERE id = ?`,
-    [name, designation, cug_number, contact_number, pf_number, email, id]
+    [
+      newSlNo,
+      newName,
+      newDesg,
+      newWorkingDesg,
+      newTier,
+      cug_number !== undefined ? (cug_number ? cug_number.trim() : null) : existing.cug_number,
+      contact_number !== undefined ? (contact_number ? contact_number.trim() : null) : existing.contact_number,
+      pf_number !== undefined ? (pf_number ? pf_number.trim() : null) : existing.pf_number,
+      email !== undefined ? (email ? email.trim() : null) : existing.email,
+      existing.id
+    ]
   );
-  await logAudit(user?.name || 'Admin', 'UPDATE_SENIORITY', `Updated Seniority record ID ${id} (${name || ''})`);
+  await logAudit(user?.name || 'Admin', 'UPDATE_SENIORITY', `Updated Seniority record ID ${existing.id} (${newName || ''})`);
   return { message: 'Seniority record updated successfully' };
+}
+
+export async function deleteSeniorityRecord(id: any, user: any) {
+  const existing = await get("SELECT * FROM seniority_list WHERE id = ? OR sl_no = ?", [id, id]);
+  if (!existing) {
+    throw new Error('Seniority record not found');
+  }
+  await run("DELETE FROM seniority_list WHERE id = ?", [existing.id]);
+  await logAudit(user?.name || 'Admin', 'DELETE_SENIORITY', `Deleted Seniority record ID ${existing.id} (${existing.name}, SL #${existing.sl_no})`);
+  return { message: 'Seniority record deleted successfully' };
 }
 
 export async function getStaff(categoryId: any) {

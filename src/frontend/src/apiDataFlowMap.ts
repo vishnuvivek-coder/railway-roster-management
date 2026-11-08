@@ -556,9 +556,9 @@ export const MODULE_DATA_FLOW_INFO: Record<string, ModuleDataFlowInfo> = {
     frontendRoute: '/seniority',
     frontendSource: 'SeniorityList.jsx',
     readEndpoints: ['GET /api/seniority-list'],
-    writeEndpoints: ['PUT /api/seniority-list/:id'],
+    writeEndpoints: ['POST /api/seniority-list', 'PUT /api/seniority-list/:id', 'DELETE /api/seniority-list/:id'],
     primaryTables: ['seniority_list', 'staff'],
     syncedTargets: ['Staff Directory', 'Coach Allocation', 'Audit Logs (audit_logs)'],
-    summary: 'Updates employee seniority rank and details in `seniority_list`.'
+    summary: 'Manages employee seniority records, adding new staff, editing designations, ranks, contact numbers, and removing employees in `seniority_list`.'
   }
 };

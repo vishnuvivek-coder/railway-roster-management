@@ -2927,33 +2927,229 @@ app.get('/api/seniority-list', async (req, res) => {
   }
 });
 
+async function recalculateSeniorityRanks() {
+  try {
+    const tierMap: Record<string, number> = { 'CTI': 1, 'TTI': 2, 'SRTE': 3, 'Sr.CCTC': 4, 'SRCCTC': 4, 'CCTC': 5 };
+    const allRows = await all("SELECT id, designation, sl_no, name FROM seniority_list ORDER BY sl_no ASC");
+    const counters: Record<string, number> = {};
+    for (const r of allRows) {
+      const d = r.designation || 'OTHER';
+      counters[d] = (counters[d] || 0) + 1;
+      const tier = tierMap[d] || 999;
+      await run("UPDATE seniority_list SET desg_rank = ?, hierarchy_tier = ? WHERE id = ?", [counters[d], tier, r.id]);
+    }
+  } catch (err: any) {
+    console.error('Failed to recalculate seniority ranks:', err?.message || err);
+  }
+}
+
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/seniority-list
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : SeniorityList.tsx
+//   • Reads From DB   : seniority_list
+//   • Saves To DB     : seniority_list, staff, audit_logs
+//   • Auto-Syncs To   : None
+//   • Summary         : Add a new employee to the seniority list
+// ============================================================================
+app.post('/api/seniority-list', requireAdmin, async (req, res) => {
+  const {
+    sl_no,
+    name,
+    designation,
+    working_designation,
+    cug_number,
+    contact_number,
+    pf_number,
+    email
+  } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Employee name is required' });
+  }
+  if (!designation || !designation.trim()) {
+    return res.status(400).json({ error: 'Designation is required' });
+  }
+
+  try {
+    const tierMap: Record<string, number> = {
+      'CTI': 1,
+      'TTI': 2,
+      'SRTE': 3,
+      'Sr.CCTC': 4,
+      'SRCCTC': 4,
+      'CCTC': 5
+    };
+    const cleanDesg = designation.trim();
+    const cleanName = name.trim().toUpperCase();
+    const workingDesg = (working_designation && working_designation.trim())
+      ? working_designation.trim()
+      : (cleanName.includes('CHANDRIKA') ? 'TTI' : cleanDesg);
+    const tier = tierMap[cleanDesg] || 999;
+
+    let targetSlNo = sl_no !== undefined && sl_no !== null && sl_no !== '' ? parseInt(sl_no, 10) : null;
+    if (!targetSlNo || isNaN(targetSlNo) || targetSlNo <= 0) {
+      const maxRow = await get("SELECT COALESCE(MAX(sl_no), 0) AS max_sl FROM seniority_list");
+      targetSlNo = (maxRow?.max_sl || 0) + 1;
+    } else {
+      // If targetSlNo already exists, shift records >= targetSlNo
+      const exists = await get("SELECT id FROM seniority_list WHERE sl_no = ?", [targetSlNo]);
+      if (exists) {
+        await run("UPDATE seniority_list SET sl_no = sl_no + 1 WHERE sl_no >= ?", [targetSlNo]);
+      }
+    }
+
+    await run(
+      `INSERT INTO seniority_list (sl_no, name, designation, working_designation, cug_number, contact_number, pf_number, email, hierarchy_tier)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        targetSlNo,
+        cleanName,
+        cleanDesg,
+        workingDesg,
+        cug_number?.trim() || null,
+        contact_number?.trim() || null,
+        pf_number?.trim() || null,
+        email?.trim() || null,
+        tier
+      ]
+    );
+
+    await recalculateSeniorityRanks();
+    await logAudit(req.user?.name || 'Admin', 'ADD_SENIORITY', `Added Seniority record for ${cleanName} (SL #${targetSlNo}, ${cleanDesg})`);
+
+    const newRecord = await get("SELECT * FROM seniority_list WHERE sl_no = ?", [targetSlNo]);
+    res.status(201).json({ message: 'Seniority record created successfully', employee: newRecord });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ============================================================================
 // [ENDPOINT DATA-FLOW] PUT /api/seniority-list/:id
 //   • Module          : Staff, Categories & Seniority Master
-//   • Frontend Caller : App.jsx
-//   • Reads From DB   : sqlite_db
-//   • Saves To DB     : sqlite_db
-//   • Auto-Syncs To   : None
-//   • Summary         : PUT /api/seniority-list/:id
+//   • Frontend Caller : SeniorityList.tsx
+//   • Reads From DB   : seniority_list
+//   • Saves To DB     : seniority_list, staff, audit_logs
+//   • Auto-Syncs To   : staff, audit_logs
+//   • Summary         : Update an existing employee in the seniority list
 // ============================================================================
 app.put('/api/seniority-list/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, designation, cug_number, contact_number, pf_number, email } = req.body;
+  const { sl_no, name, designation, working_designation, cug_number, contact_number, pf_number, email } = req.body;
   try {
+    const existing = await get("SELECT * FROM seniority_list WHERE id = ? OR sl_no = ?", [id, id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Seniority record not found' });
+    }
+
+    const tierMap: Record<string, number> = {
+      'CTI': 1,
+      'TTI': 2,
+      'SRTE': 3,
+      'Sr.CCTC': 4,
+      'SRCCTC': 4,
+      'CCTC': 5
+    };
+
+    const newDesg = designation !== undefined && designation !== null ? designation.trim() : existing.designation;
+    const newTier = newDesg ? (tierMap[newDesg] || 999) : existing.hierarchy_tier;
+    const newName = name !== undefined && name !== null ? name.trim().toUpperCase() : existing.name;
+    const newWorkingDesg = working_designation !== undefined && working_designation !== null
+      ? working_designation.trim()
+      : ((newName && newName.includes('CHANDRIKA')) ? 'TTI' : existing.working_designation || newDesg);
+
+    let newSlNo = sl_no !== undefined && sl_no !== null && sl_no !== '' ? parseInt(sl_no, 10) : existing.sl_no;
+    if (isNaN(newSlNo) || newSlNo <= 0) newSlNo = existing.sl_no;
+
+    // If sl_no changed, adjust colliding records
+    if (newSlNo !== existing.sl_no) {
+      const conflict = await get("SELECT id FROM seniority_list WHERE sl_no = ? AND id != ?", [newSlNo, existing.id]);
+      if (conflict) {
+        if (newSlNo < existing.sl_no) {
+          await run("UPDATE seniority_list SET sl_no = sl_no + 1 WHERE sl_no >= ? AND sl_no < ? AND id != ?", [newSlNo, existing.sl_no, existing.id]);
+        } else {
+          await run("UPDATE seniority_list SET sl_no = sl_no - 1 WHERE sl_no > ? AND sl_no <= ? AND id != ?", [existing.sl_no, newSlNo, existing.id]);
+        }
+      }
+    }
+
     await run(
       `UPDATE seniority_list 
-       SET name = COALESCE(?, name),
-           designation = COALESCE(?, designation),
-           cug_number = COALESCE(?, cug_number),
-           contact_number = COALESCE(?, contact_number),
-           pf_number = COALESCE(?, pf_number),
-           email = COALESCE(?, email)
+       SET sl_no = ?,
+           name = ?,
+           designation = ?,
+           working_designation = ?,
+           hierarchy_tier = ?,
+           cug_number = ?,
+           contact_number = ?,
+           pf_number = ?,
+           email = ?
        WHERE id = ?`,
-      [name, designation, cug_number, contact_number, pf_number, email, id]
+      [
+        newSlNo,
+        newName,
+        newDesg,
+        newWorkingDesg,
+        newTier,
+        cug_number !== undefined ? (cug_number ? cug_number.trim() : null) : existing.cug_number,
+        contact_number !== undefined ? (contact_number ? contact_number.trim() : null) : existing.contact_number,
+        pf_number !== undefined ? (pf_number ? pf_number.trim() : null) : existing.pf_number,
+        email !== undefined ? (email ? email.trim() : null) : existing.email,
+        existing.id
+      ]
     );
-    await logAudit(req.user?.name || 'Admin', 'UPDATE_SENIORITY', `Updated Seniority record ID ${id} (${name || ''})`);
-    res.json({ message: 'Seniority record updated successfully' });
-  } catch (err) {
+
+    // Sync with staff directory if matching pf_number or name exists
+    try {
+      const targetPf = (pf_number || existing.pf_number)?.trim();
+      if (targetPf) {
+        await run(
+          `UPDATE staff 
+           SET name = COALESCE(?, name),
+               designation = COALESCE(?, designation),
+               seniority_no = COALESCE(?, seniority_no),
+               contact_number = COALESCE(?, contact_number),
+               cug_number = COALESCE(?, cug_number)
+           WHERE pf_no = ?`,
+          [newName, newDesg, newSlNo, contact_number, cug_number, targetPf]
+        );
+      }
+    } catch (e: any) {
+      console.warn('Could not sync with staff table:', e.message);
+    }
+
+    await recalculateSeniorityRanks();
+    await logAudit(req.user?.name || 'Admin', 'UPDATE_SENIORITY', `Updated Seniority record ID ${existing.id} (${newName}, SL #${newSlNo})`);
+
+    const updated = await get("SELECT * FROM seniority_list WHERE id = ?", [existing.id]);
+    res.json({ message: 'Seniority record updated successfully', employee: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// [ENDPOINT DATA-FLOW] DELETE /api/seniority-list/:id
+//   • Module          : Staff, Categories & Seniority Master
+//   • Frontend Caller : SeniorityList.tsx
+//   • Reads From DB   : seniority_list
+//   • Saves To DB     : seniority_list, audit_logs
+//   • Auto-Syncs To   : None
+//   • Summary         : Delete an employee from the seniority list
+// ============================================================================
+app.delete('/api/seniority-list/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await get("SELECT * FROM seniority_list WHERE id = ? OR sl_no = ?", [id, id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Seniority record not found' });
+    }
+    await run("DELETE FROM seniority_list WHERE id = ?", [existing.id]);
+    await recalculateSeniorityRanks();
+    await logAudit(req.user?.name || 'Admin', 'DELETE_SENIORITY', `Deleted Seniority record ID ${existing.id} (${existing.name}, SL #${existing.sl_no})`);
+    res.json({ message: 'Seniority record deleted successfully' });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
