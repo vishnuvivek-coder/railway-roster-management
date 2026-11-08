@@ -817,8 +817,8 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     title: '17261 / 12733 / 17262 (GNT ➔ TPTY)',
     links: [
       { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
-      { categoryId: 3, linkNum: 1, firstCoach: 'S1-S5', lastTrain: '17262', lastCoach: 'S1-S5' },
-      { categoryId: 3, linkNum: 4, firstCoach: 'S10-S14', lastTrain: '17262', lastCoach: 'S10-S14' }
+      { categoryId: 3, linkNum: 1, altLinkNums: [2, 3], firstTrain: '17261', firstCoach: 'S1-S5', lastTrain: '17262', lastCoach: 'S1-S5' },
+      { categoryId: 3, linkNum: 4, altLinkNums: [5, 6], firstTrain: '17261', firstCoach: 'S10-S14', lastTrain: '17262', lastCoach: 'S10-S14' }
     ]
   },
   // 9. Train 20629 / 12733 / 20630 (Tirupati Express: GNT - TPTY - GNT) [Page 48/50/52 Row 9]
@@ -1030,7 +1030,8 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     title: '17261 / 12733 / 17262 (GNT ➔ TPTY)',
     links: [
       { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
-      { categoryId: 3, linkNum: 1, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
+      { categoryId: 3, linkNum: 1, altLinkNums: [2, 3], firstTrain: '17261', firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' },
+      { categoryId: 3, linkNum: 4, altLinkNums: [5, 6], firstTrain: '17261', firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
     ]
   },
   // 9. Train 20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY) [Page 110 Row 9]
@@ -1222,8 +1223,8 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     links: [
       { categoryId: 1, linkNum: 4, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
-      { categoryId: 3, linkNum: 1, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' },
-      { categoryId: 3, linkNum: 4, firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
+      { categoryId: 3, linkNum: 1, altLinkNums: [2, 3], firstTrain: '17261', firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' },
+      { categoryId: 3, linkNum: 4, altLinkNums: [5, 6], firstTrain: '17261', firstCoach: 'SL', lastTrain: '17262', lastCoach: 'SL' }
     ]
   },
   // 5. Train 20629 / 12733 / 20630 (GNT - TPTY - GNT)
@@ -7148,6 +7149,8 @@ export default function App() {
                           dynamicTrainNums = '12604, 12603';
                         } else if (cId === 2 && lNum === 3) {
                           dynamicTrainNums = '12604, 12603';
+                        } else if (cId === 3 && (lNum === 1 || lNum === 4)) {
+                          dynamicTrainNums = '17261, 17262';
                         }
 
                         const parts = dynamicTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
@@ -7163,6 +7166,8 @@ export default function App() {
                         linkCoach = 'AC';
                       } else if (cId === 2 && lNum === 3) {
                         linkCoach = 'S1-S5';
+                      } else if (cId === 3 && (lNum === 1 || lNum === 4)) {
+                        linkCoach = 'SL';
                       }
 
                       // Active Train Roster takes top priority for all train information
@@ -7182,7 +7187,7 @@ export default function App() {
                         const dLink = parseInt(duty.link_number, 10);
                         const targetCat = duty.target_category_id != null 
                           ? parseInt(duty.target_category_id, 10) 
-                          : (duty.categoryId === 1 ? 1 : 2);
+                          : (duty.categoryId === 1 ? 1 : (duty.categoryId === 3 ? 3 : 2));
                         
                         if (targetCat !== parseInt(lDef.categoryId, 10)) return false;
 

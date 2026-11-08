@@ -190,6 +190,16 @@ export const STANDARD_TRAIN_SCHEDULES: Record<string, StandardTrainSchedule> = {
     boundaryDesc: 'Morning arrival at 06:15. Absence from midnight exceeds 6 hours, granting 0.7 TA.',
     nextDayTaOnDelay: 0
   },
+  '17261': {
+    trainNo: '17261',
+    name: 'Guntur - Tirupati Express',
+    route: 'GNT -> TPTY',
+    schedDep: '16:30',
+    isReturnToHq: false,
+    boundary: 'daytime',
+    defaultTa: 0.7,
+    boundaryDesc: 'Evening departure from GNT at 16:30 to TPTY (70% TA).'
+  },
   '17262': {
     trainNo: '17262',
     name: 'Tirupati - Guntur Express',
