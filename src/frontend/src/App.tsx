@@ -829,9 +829,9 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
-      { categoryId: 2, linkNum: 36, firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' },
-      { categoryId: 2, linkNum: 22, firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' }
+      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-2' },
+      { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
+      { categoryId: 2, linkNum: 36, altLinkNums: [37, 38], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'SL' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA - GTL - BZA) [Page 48/50/52 Row 10]
@@ -1041,9 +1041,9 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
     lastTrain: '12733',
     title: '20629 / 12733 / 20630 (Tirupati Express: GNT ➔ TPTY)',
     links: [
-      { categoryId: 1, linkNum: 8, firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
-      { categoryId: 2, linkNum: 36, firstCoach: 'SL', lastTrain: '12733', lastCoach: 'SL' },
-      { categoryId: 2, linkNum: 22, firstCoach: 'SL', lastTrain: '20630', lastCoach: 'SL' }
+      { categoryId: 1, linkNum: 8, altLinkNums: [9, 10], firstCoach: 'AC', lastTrain: '12733', lastCoach: 'COR-1' },
+      { categoryId: 2, linkNum: 22, altLinkNums: [23, 24], firstCoach: 'S5-S8', lastTrain: '20630', lastCoach: 'S5-S8' },
+      { categoryId: 2, linkNum: 36, altLinkNums: [37, 38], firstCoach: 'S1-S4', lastTrain: '12733', lastCoach: 'S1-S4' }
     ]
   },
   // 10. Train 17225 / 17226 (Amaravati Express: BZA ➔ GTL) [Page 110 Row 10]
@@ -7183,7 +7183,7 @@ export default function App() {
                         const sLast = String(effectiveLastTrain || slot.lastTrain || '').trim();
 
                         const trainMatches = (dTrain && (dTrain === sFirst || (sFirst && dTrain.includes(sFirst)))) ||
-                          (sFirst && dNums && (dNums === sFirst || dNums.startsWith(sFirst + ',') || dNums.startsWith(sFirst + ' ') || dNums.startsWith(sFirst + '/')));
+                          (sFirst && (duty.isOverridden || duty.categoryId === 4) && dNums && (dNums === sFirst || dNums.startsWith(sFirst + ',') || dNums.startsWith(sFirst + ' ') || dNums.startsWith(sFirst + '/')));
 
                         if (!trainMatches) return false;
 
@@ -7205,10 +7205,6 @@ export default function App() {
                       let overriddenStaffDuty = staffDuties.find(d => 
                         !activeWorkedStaffIds.has(d.staffId) &&
                         matchesOverrideLink(d) &&
-                        d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
-                      ) || staffDuties.find(d => 
-                        !activeWorkedStaffIds.has(d.staffId) &&
-                        matchesTrainBooking(d) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
@@ -7272,9 +7268,19 @@ export default function App() {
                         ? (originalSickOrLeaveDuty.substituteStaffId || originalSickOrLeaveDuty.substitute_staff_id) 
                         : null;
 
+                      let bookedTrainStaffDuty = null;
+                      if (!overriddenStaffDuty && !regularStaffDuty && !originalSickOrLeaveDuty) {
+                        bookedTrainStaffDuty = staffDuties.find(d => 
+                          !activeWorkedStaffIds.has(d.staffId) &&
+                          (d.isOverridden || d.train_out || d.categoryId === 4) &&
+                          matchesTrainBooking(d) &&
+                          d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
+                        );
+                      }
+
                       let staffDuty = overriddenStaffDuty || (subId 
                         ? staffDuties.find(s => !activeWorkedStaffIds.has(s.staffId) && s.staffId === subId && s.name && !s.name.includes('VACANT') && s.name.trim() !== 'V' && !s.isVacant) 
-                        : (originalSickOrLeaveDuty ? null : (regularStaffDuty && (regularStaffDuty.status === 'AVAILABLE_FOR_BOOKING' || regularStaffDuty.status === 'SUBSTITUTE' || regularStaffDuty.status === 'UTILISED_ADVANCE') ? null : regularStaffDuty)));
+                        : (originalSickOrLeaveDuty ? null : (regularStaffDuty && (regularStaffDuty.status === 'AVAILABLE_FOR_BOOKING' || regularStaffDuty.status === 'SUBSTITUTE' || regularStaffDuty.status === 'UTILISED_ADVANCE') ? null : regularStaffDuty))) || bookedTrainStaffDuty;
 
                       const isRealHumanStaff = staffDuty && staffDuty.name && !staffDuty.name.includes('VACANT') && staffDuty.name.trim() !== 'V' && !staffDuty.isVacant;
 
