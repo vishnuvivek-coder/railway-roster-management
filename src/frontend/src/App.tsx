@@ -3260,7 +3260,9 @@ export default function App() {
       staffDuty.isVacantAdvance || 
       staffDuty.isVacantAvailableReturn || 
       staffDuty.isVacantMarkLater || 
-      (staffDuty.name && staffDuty.name.toUpperCase().includes('VACANT'))
+      staffDuty.isTrainCancelled ||
+      staffDuty.isTrainLate ||
+      (staffDuty.name && (staffDuty.name.toUpperCase().includes('VACANT') || staffDuty.name.toUpperCase().includes('CANCELLED')))
     );
     let staffId = null;
     if (typeof rawStaffId === 'number' && !isNaN(rawStaffId)) {
@@ -3269,7 +3271,7 @@ export default function App() {
       if (rawStaffId.startsWith('vacant-slot-')) {
         staffId = null;
       } else {
-        const match = rawStaffId.match(/^vacant-(?:upgrade-|shifted-|advance-|avl-|mark-later-)?(\d+)$/);
+        const match = rawStaffId.match(/^vacant-(?:upgrade-|shifted-|advance-|avl-|mark-later-|cancelled-|late-)?(\d+)$/);
         if (match) {
           staffId = parseInt(match[1], 10);
         } else if (/^\d+$/.test(rawStaffId.trim())) {
@@ -3305,6 +3307,8 @@ export default function App() {
       originalStaffId: staffDuty.originalStaffId || staffId,
       shiftedStaffId: (staffDuty.isVacantShifted || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-shifted-'))) ? staffId : null,
       advanceStaffId: (staffDuty.isVacantAdvance || (typeof rawStaffId === 'string' && rawStaffId.startsWith('vacant-advance-'))) ? staffId : null,
+      isTrainLate: staffDuty.isTrainLate || staffDuty.status === 'TRAIN_RUNNING_LATE' || staffDuty.status === 'TRAIN_LATE' || false,
+      isTrainCancelled: staffDuty.isTrainCancelled || staffDuty.status === 'TRAIN_CANCELLED' || false,
       originalStaffName: staffDuty.originalStaffName || (staffId && staffObj ? staffObj.name : null),
       name: staffName,
       designation,
@@ -7254,7 +7258,7 @@ export default function App() {
                         parseInt(d.categoryId, 10) === parseInt(lDef.categoryId, 10) &&
                         parseInt(d.original_link_number, 10) === parseInt(lDef.linkNum, 10) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
-                        (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
+                        (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'TRAIN_CANCELLED' || d.status === 'TRAIN_RUNNING_LATE' || d.status === 'TRAIN_LATE' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
                       );
 
                       const isUtilisedAdvance = originalSickOrLeaveDuty &&
@@ -7460,6 +7464,56 @@ export default function App() {
                             originalStaffId: originalSickOrLeaveDuty.staffId,
                             originalStaffName: originalSickOrLeaveDuty.name,
                             originalStaffStatus: 'SHIFTED',
+                            isRestLink: slot.isRestLink || lDef.isRest
+                          });
+                        } else if (originalSickOrLeaveDuty.status === 'TRAIN_CANCELLED' || (originalSickOrLeaveDuty.overrideReason && /train .*cancelled/i.test(originalSickOrLeaveDuty.overrideReason))) {
+                          dutiesInSlot.push({
+                            ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
+                            staffId: `vacant-cancelled-${originalSickOrLeaveDuty.staffId}`,
+                            name: `[TRAIN CANCELLED]`,
+                            designation: 'CANCELLED',
+                            link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
+                            isTrainCancelled: true,
+                            isVacant: true,
+                            isLeave: false,
+                            isSick: false,
+                            isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
+                            originalStaffName: originalSickOrLeaveDuty.name,
+                            originalStaffStatus: 'TRAIN_CANCELLED',
+                            isRestLink: slot.isRestLink || lDef.isRest
+                          });
+                        } else if (originalSickOrLeaveDuty.status === 'TRAIN_RUNNING_LATE' || originalSickOrLeaveDuty.status === 'TRAIN_LATE') {
+                          dutiesInSlot.push({
+                            ...originalSickOrLeaveDuty,
+                            dutyKey,
+                            slotId: slot.slotId,
+                            staffId: originalSickOrLeaveDuty.substituteName ? originalSickOrLeaveDuty.staffId : `vacant-late-${originalSickOrLeaveDuty.staffId}`,
+                            name: originalSickOrLeaveDuty.substituteName || `[UNMANNED / VACANT]`,
+                            designation: originalSickOrLeaveDuty.substituteName ? 'Relief TTE' : 'VACANT',
+                            link_number: lDef.linkNum,
+                            categoryId: lDef.categoryId,
+                            target_category_id: lDef.categoryId,
+                            firstTrain: effectiveFirstTrain,
+                            firstCoaches: effectiveFirstCoach,
+                            lastTrain: effectiveLastTrain,
+                            lastCoaches: effectiveLastCoach,
+                            isTrainLate: true,
+                            isVacant: !originalSickOrLeaveDuty.substituteName,
+                            isLeave: false,
+                            isSick: false,
+                            isCr: false,
+                            originalStaffId: originalSickOrLeaveDuty.staffId,
+                            originalStaffName: originalSickOrLeaveDuty.name,
+                            originalStaffStatus: 'TRAIN_RUNNING_LATE',
                             isRestLink: slot.isRestLink || lDef.isRest
                           });
                         } else if (originalSickOrLeaveDuty.status === 'AVAILABLE_FOR_BOOKING') {
@@ -7730,7 +7784,7 @@ export default function App() {
                             poolType: 'LR'
                           });
                         }
-                      } else if (s.status === 'AVAILABLE_FOR_BOOKING' || (s.overrideReason && s.overrideReason.toLowerCase().includes('available for booking'))) {
+                      } else if (s.status === 'AVAILABLE_FOR_BOOKING' || s.status === 'TRAIN_CANCELLED' || s.status === 'TRAIN_RUNNING_LATE' || (s.overrideReason && s.overrideReason.toLowerCase().includes('available for booking')) || (s.overrideReason && s.overrideReason.toLowerCase().includes('spare at hq'))) {
                         seenIds.add(s.staffId);
                         list.push({
                           ...s,
@@ -8519,6 +8573,16 @@ export default function App() {
                                                   ⏳ REASON LATER (MUSTER BLANK)
                                                 </span>
                                               )}
+                                              {d.isTrainCancelled && (
+                                                <span className="badge no-print" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1.5px solid #ef4444', fontSize: '0.72rem', padding: '2px 8px', fontWeight: 800 }}>
+                                                  🚫 TRAIN CANCELLED
+                                                </span>
+                                              )}
+                                              {d.isTrainLate && (
+                                                <span className="badge no-print" style={{ background: 'rgba(249, 115, 22, 0.2)', color: '#fdba74', border: '1px solid #f97316', fontSize: '0.68rem', padding: '1px 6px', fontWeight: 700 }}>
+                                                  ⏱️ TRAIN RUNNING LATE
+                                                </span>
+                                              )}
                                               {!d.isVacantUpgrade && !d.isVacantShifted && !d.isVacantAdvance && d.isUpgraded && (
                                                 <span className="badge no-print" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#eab308', border: '1px solid #eab308', fontSize: '0.7rem', padding: '2px 8px', fontWeight: 700 }}>
                                                   ⭐ Upgraded (COR{d.originalStaffName ? ` - Sub for ${d.originalStaffName}` : ''})
@@ -8535,7 +8599,11 @@ export default function App() {
                                                 }}>
                                                   {(d.overrideReason && /mutual (?:link )?exchange/i.test(d.overrideReason))
                                                     ? `🔄 Exchanged with ${d.originalStaffName || d.overrideReason.match(/exchange with ([^:(]+)/i)?.[1]?.trim() || 'Staff'}`
-                                                    : `${d.isVacant ? 'Vacated by' : 'Sub for'} ${d.originalStaffName} (${d.originalStaffStatus || 'LEAVE'})`}
+                                                    : (d.isTrainCancelled
+                                                        ? `🚫 Train Cancelled (Originally ${d.originalStaffName})`
+                                                        : (d.isTrainLate
+                                                            ? `⏱️ Vacated by ${d.originalStaffName} (TRAIN RUNNING LATE)`
+                                                            : `${d.isVacant ? 'Vacated by' : 'Sub for'} ${d.originalStaffName} (${d.originalStaffStatus || 'LEAVE'})`))}
                                                 </span>
                                               )}
                                               {d.muster_code && (

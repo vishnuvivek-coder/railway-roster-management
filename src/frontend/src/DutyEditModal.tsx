@@ -312,6 +312,8 @@ export default function DutyEditModal({
   const [deleteReason, setDeleteReason] = useState(() => {
     if (dutyModal.initialMode === 'EXCHANGE_STAFF' || dutyModal.initialMode === 'EXCHANGE_LINK') return 'EXCHANGE_LINK';
     if (dutyModal.status === 'MARK_LATER' || dutyModal.isMarkLater) return 'MARK_LATER';
+    if (dutyModal.status === 'TRAIN_CANCELLED' || dutyModal.isTrainCancelled) return 'TRAIN_CANCELLED';
+    if (dutyModal.status === 'TRAIN_RUNNING_LATE' || dutyModal.status === 'TRAIN_LATE' || dutyModal.isTrainLate) return 'TRAIN_LATE';
     if (dutyModal.isVacantShifted || dutyModal.status === 'SHIFTED') return 'SHIFTED';
     if (dutyModal.status === 'SICK') return 'SICK';
     if (dutyModal.status === 'ABSENT') return 'ABSENT';
@@ -416,6 +418,28 @@ export default function DutyEditModal({
   const [shiftedNonDailyId, setShiftedNonDailyId] = useState('');
   const [shiftedNonDailyTrainNo, setShiftedNonDailyTrainNo] = useState('');
   const [shiftedNonDailyDayFilter, setShiftedNonDailyDayFilter] = useState('AUTO'); // 'AUTO' | 'ALL' | 'SUNDAY' ... 'SATURDAY'
+
+  // Train Running Late inputs
+  const [lateTrainNo, setLateTrainNo] = useState(() => {
+    return dutyModal.firstTrain || dutyModal.dutyTrain || (dutyModal.train_numbers ? String(dutyModal.train_numbers).split(/[\s,/]+/)[0] : '');
+  });
+  const [lateRemarks, setLateRemarks] = useState('Train running late - removed from duty');
+  const [lateStaffAction, setLateStaffAction] = useState('SPARE_HQ'); // 'SPARE_HQ' | 'REST'
+
+  // Train Cancelled inputs
+  const [cancelledTrainNo, setCancelledTrainNo] = useState(() => {
+    return dutyModal.firstTrain || dutyModal.dutyTrain || (dutyModal.train_numbers ? String(dutyModal.train_numbers).split(/[\s,/]+/)[0] : '');
+  });
+  const [cancelledReason, setCancelledReason] = useState('Train cancelled by administration');
+  const [cancelledAction, setCancelledAction] = useState('REMOVE'); // 'REMOVE' | 'ALLOT_ANOTHER'
+  const [cancelledAllotType, setCancelledAllotType] = useState('DAILY_LINK'); // 'DAILY_LINK' | 'NON_DAILY' | 'CUSTOM'
+  const [cancelledAllotCatId, setCancelledAllotCatId] = useState(() => {
+    return dutyModal.categoryId ? String(dutyModal.categoryId) : '2';
+  });
+  const [cancelledAllotLinkNum, setCancelledAllotLinkNum] = useState('');
+  const [cancelledAllotNonDailyId, setCancelledAllotNonDailyId] = useState('');
+  const [cancelledAllotNonDailyTrainNo, setCancelledAllotNonDailyTrainNo] = useState('');
+  const [cancelledAllotCustomDuty, setCancelledAllotCustomDuty] = useState('PILOT(12705)');
 
   // Mutual Shift of Places inputs
   const [mutualStaffId, setMutualStaffId] = useState('');
@@ -772,6 +796,22 @@ export default function DutyEditModal({
             isRest: true,
             isLr: false,
             linkNum: activeDuty.link_number
+          };
+        }
+        if (activeDuty.status === 'TRAIN_CANCELLED') {
+          return {
+            label: 'Train Cancelled (Spare at HQ)',
+            isRest: false,
+            isLr: false,
+            linkNum: null
+          };
+        }
+        if (activeDuty.status === 'TRAIN_RUNNING_LATE' || activeDuty.status === 'TRAIN_LATE') {
+          return {
+            label: 'Train Late (Relieved from Duty)',
+            isRest: false,
+            isLr: false,
+            linkNum: null
           };
         }
         if (activeDuty.status === 'AVAILABLE_FOR_BOOKING') {
@@ -1705,6 +1745,26 @@ export default function DutyEditModal({
           if (!finalReason) {
             finalReason = reason?.trim() || 'Mark Reason Later (Muster Blank)';
           }
+        } else if (deleteReason === 'TRAIN_LATE') {
+          actionCode = 'TRAIN_RUNNING_LATE';
+          if (!finalReason) {
+            finalReason = `Train ${lateTrainNo || dutyModal.firstTrain || ''} running late${lateRemarks ? ` (${lateRemarks})` : ''} - removed from duty`;
+          }
+        } else if (deleteReason === 'TRAIN_CANCELLED') {
+          actionCode = 'TRAIN_CANCELLED';
+          if (cancelledAction === 'ALLOT_ANOTHER') {
+            let newDutyDesc = '';
+            if (cancelledAllotType === 'DAILY_LINK') {
+              newDutyDesc = `Link #${cancelledAllotLinkNum}`;
+            } else if (cancelledAllotType === 'NON_DAILY') {
+              newDutyDesc = `Non-Daily Train ${cancelledAllotNonDailyTrainNo || cancelledAllotNonDailyId}`;
+            } else {
+              newDutyDesc = cancelledAllotCustomDuty?.trim() || 'Station / Pilot Duty';
+            }
+            finalReason = `Train ${cancelledTrainNo || dutyModal.firstTrain || ''} Cancelled -> Allotted to ${newDutyDesc} (${cancelledReason})`;
+          } else {
+            finalReason = `Train ${cancelledTrainNo || dutyModal.firstTrain || ''} Cancelled - Removed from duty (${cancelledReason})`;
+          }
         }
 
         const chosenNonDaily = shiftedMode === 'NON_DAILY'
@@ -1773,7 +1833,19 @@ export default function DutyEditModal({
           replacement_type: repType,
           replacement_staff_id: isMutualMode ? null : (effectiveRepIdVal ? parseInt(effectiveRepIdVal, 10) : null),
           replacement_name: isMutualMode ? null : effectiveRepNameVal,
-          wrong_allotment_action: deleteSlotAction
+          wrong_allotment_action: deleteSlotAction,
+          late_train_no: lateTrainNo,
+          late_remarks: lateRemarks,
+          late_staff_action: lateStaffAction,
+          cancelled_train_no: cancelledTrainNo,
+          cancelled_reason: cancelledReason,
+          cancelled_mode: cancelledAction,
+          cancelled_allot_type: cancelledAllotType,
+          cancelled_allot_link_num: cancelledAllotLinkNum ? parseInt(cancelledAllotLinkNum, 10) : null,
+          cancelled_allot_cat_id: cancelledAllotCatId ? parseInt(cancelledAllotCatId, 10) : null,
+          cancelled_allot_non_daily_id: cancelledAllotNonDailyId ? parseInt(cancelledAllotNonDailyId, 10) : null,
+          cancelled_allot_non_daily_train: cancelledAllotNonDailyTrainNo,
+          cancelled_allot_custom_duty: cancelledAllotCustomDuty
         };
 
         // If replacement employee is currently working another train/duty, confirm before shifting
@@ -2320,7 +2392,9 @@ export default function DutyEditModal({
                     { id: 'UPGRADE_COR', label: '7. Upgrade to COR', icon: '⭐', desc: 'Upgrade to Conductor link' },
                     { id: 'REASSIGN_STAFF', label: '8. Reassign / Replace', icon: '🔀', desc: 'Replace with another employee' },
                     { id: 'EXCHANGE_LINK', label: '9. Exchange Link', icon: '🔄', desc: 'Mutual link / duty swap' },
-                    { id: 'MARK_LATER', label: '10. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' }
+                    { id: 'MARK_LATER', label: '10. Reason Later', icon: '⏳', desc: 'Delete name, keep muster blank' },
+                    { id: 'TRAIN_LATE', label: '11. Train Running Late', icon: '⏱️', desc: 'Remove from duty' },
+                    { id: 'TRAIN_CANCELLED', label: '12. Train Cancelled', icon: '🚫', desc: 'Remove / Allot duty' }
                   ].map(r => {
                     const isSelected = deleteReason === r.id;
                     const isExchange = r.id === 'EXCHANGE_LINK';
@@ -2343,6 +2417,14 @@ export default function DutyEditModal({
                       activeBorder = '#3b82f6';
                       activeBg = 'rgba(59, 130, 246, 0.22)';
                       activeColor = '#93c5fd';
+                    } else if (r.id === 'TRAIN_LATE') {
+                      activeBorder = '#f97316';
+                      activeBg = 'rgba(249, 115, 22, 0.22)';
+                      activeColor = '#fdba74';
+                    } else if (r.id === 'TRAIN_CANCELLED') {
+                      activeBorder = '#ef4444';
+                      activeBg = 'rgba(239, 68, 68, 0.25)';
+                      activeColor = '#fca5a5';
                     }
 
                     return (
@@ -2351,7 +2433,7 @@ export default function DutyEditModal({
                         type="button"
                         onClick={() => {
                           setDeleteReason(r.id);
-                          if (r.id === 'MARK_LATER') {
+                          if (r.id === 'MARK_LATER' || r.id === 'TRAIN_LATE' || r.id === 'TRAIN_CANCELLED') {
                             setDeleteSlotAction('VACANT');
                           } else if (r.id === 'WRONG_ALLOTMENT') {
                             if (dutyModal.isOverridden) {
@@ -4272,8 +4354,378 @@ export default function DutyEditModal({
                   </div>
                 )}
 
+                {/* 11. Train Running Late UI Panel */}
+                {deleteReason === 'TRAIN_LATE' && (
+                  <div style={{
+                    background: 'rgba(249, 115, 22, 0.06)',
+                    border: '1.5px solid rgba(249, 115, 22, 0.35)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.84rem', fontWeight: 800, margin: 0, color: '#fb923c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⏱️ Train Running Late — Remove Employee from Duty</span>
+                      </label>
+                      <span className="badge" style={{ background: 'rgba(249, 115, 22, 0.2)', color: '#fdba74', fontSize: '0.72rem', border: '1px solid rgba(249, 115, 22, 0.4)' }}>
+                        Late Running Relief
+                      </span>
+                    </div>
+
+                    <div style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(249, 115, 22, 0.1)',
+                      border: '1px solid rgba(249, 115, 22, 0.25)',
+                      fontSize: '0.78rem',
+                      color: '#ffedd5',
+                      lineHeight: 1.45
+                    }}>
+                      <strong>{dutyModal.name || 'This employee'}</strong> is scheduled for Train <strong>{lateTrainNo || dutyModal.firstTrain || dutyModal.dutyTrain || ''}</strong> (Link #{targetLink || 'Duty'}).
+                      Because the train is running late (or incoming link was delayed), they will be removed from this duty so their rest/schedule is maintained.
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Train Number:</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={lateTrainNo}
+                          onChange={(e) => setLateTrainNo(e.target.value)}
+                          placeholder="e.g. 12733"
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Delay / Late Remarks:</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={lateRemarks}
+                          onChange={(e) => setLateRemarks(e.target.value)}
+                          placeholder="e.g. Train running late by 3 hrs / Incoming train delayed"
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '6px' }}>
+                        Staff Attendance &amp; Availability:
+                      </label>
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', color: lateStaffAction === 'SPARE_HQ' ? '#fdba74' : 'var(--color-text-secondary)' }}>
+                          <input
+                            type="radio"
+                            name="lateStaffAction"
+                            checked={lateStaffAction === 'SPARE_HQ'}
+                            onChange={() => setLateStaffAction('SPARE_HQ')}
+                          />
+                          <strong>Available at HQ / Spare (Muster: P)</strong>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', color: lateStaffAction === 'REST' ? '#fdba74' : 'var(--color-text-secondary)' }}>
+                          <input
+                            type="radio"
+                            name="lateStaffAction"
+                            checked={lateStaffAction === 'REST'}
+                            onChange={() => setLateStaffAction('REST')}
+                          />
+                          <strong>Relieved for Rest (Muster: R / Rest)</strong>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 12. Train Cancelled UI Panel */}
+                {deleteReason === 'TRAIN_CANCELLED' && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.06)',
+                    border: '1.5px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.84rem', fontWeight: 800, margin: 0, color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>🚫 Train Cancelled — Remove from Duty / Allot Another Duty</span>
+                      </label>
+                      <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontSize: '0.72rem', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                        Train Cancelled
+                      </span>
+                    </div>
+
+                    <div style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      fontSize: '0.78rem',
+                      color: '#fee2e2',
+                      lineHeight: 1.45
+                    }}>
+                      Train <strong>{cancelledTrainNo || dutyModal.firstTrain || dutyModal.dutyTrain || ''}</strong> (Link #{targetLink || 'Duty'}) has been cancelled on <strong>{selectedDate}</strong>.
+                      Choose whether to <strong>remove {dutyModal.name || 'employee'} from duty</strong> (keep spare at HQ) or <strong>allot them another duty</strong>.
+                    </div>
+
+                    {/* Cancelled Train inputs */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Cancelled Train Number:</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={cancelledTrainNo}
+                          onChange={(e) => setCancelledTrainNo(e.target.value)}
+                          placeholder="e.g. 12733"
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Cancellation Reason / Order No:</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={cancelledReason}
+                          onChange={(e) => setCancelledReason(e.target.value)}
+                          placeholder="e.g. Train cancelled due to operational reasons / Fog"
+                          style={{ fontSize: '0.84rem' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Two Main Options: 1. Remove from Duty vs 2. Allot Another Duty */}
+                    <div>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: '#fca5a5' }}>
+                        Select Action for {dutyModal.name || 'Employee'}:
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCancelledAction('REMOVE');
+                            setDeleteSlotAction('VACANT');
+                          }}
+                          style={{
+                            padding: '12px 10px',
+                            borderRadius: '8px',
+                            border: cancelledAction === 'REMOVE' ? '2px solid #ef4444' : '1px solid var(--border-glass)',
+                            background: cancelledAction === 'REMOVE' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(255,255,255,0.02)',
+                            color: cancelledAction === 'REMOVE' ? '#ffffff' : 'var(--color-text-secondary)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          <span style={{ fontWeight: 800, fontSize: '0.86rem', color: cancelledAction === 'REMOVE' ? '#fca5a5' : 'inherit' }}>
+                            1. Remove from Duty
+                          </span>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
+                            Keep employee Spare at HQ (Muster: P). Original link slot marked [TRAIN CANCELLED].
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCancelledAction('ALLOT_ANOTHER');
+                          }}
+                          style={{
+                            padding: '12px 10px',
+                            borderRadius: '8px',
+                            border: cancelledAction === 'ALLOT_ANOTHER' ? '2px solid #3b82f6' : '1px solid var(--border-glass)',
+                            background: cancelledAction === 'ALLOT_ANOTHER' ? 'rgba(59, 130, 246, 0.22)' : 'rgba(255,255,255,0.02)',
+                            color: cancelledAction === 'ALLOT_ANOTHER' ? '#93c5fd' : 'var(--color-text-secondary)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          <span style={{ fontWeight: 800, fontSize: '0.86rem', color: cancelledAction === 'ALLOT_ANOTHER' ? '#60a5fa' : 'inherit' }}>
+                            2. Allot Another Duty
+                          </span>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
+                            Allot employee to another link, non-daily train, or station/pilot duty.
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* If Allot Another Duty is selected */}
+                    {cancelledAction === 'ALLOT_ANOTHER' && (
+                      <div style={{
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#60a5fa' }}>
+                            Choose New Duty to Allot:
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => setCancelledAllotType('DAILY_LINK')}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                border: cancelledAllotType === 'DAILY_LINK' ? '1px solid #60a5fa' : '1px solid var(--border-glass)',
+                                background: cancelledAllotType === 'DAILY_LINK' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+                                color: cancelledAllotType === 'DAILY_LINK' ? '#93c5fd' : 'var(--color-text-secondary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Daily Link
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelledAllotType('NON_DAILY')}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                border: cancelledAllotType === 'NON_DAILY' ? '1px solid #60a5fa' : '1px solid var(--border-glass)',
+                                background: cancelledAllotType === 'NON_DAILY' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+                                color: cancelledAllotType === 'NON_DAILY' ? '#93c5fd' : 'var(--color-text-secondary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Non-Daily Train
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelledAllotType('CUSTOM')}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                border: cancelledAllotType === 'CUSTOM' ? '1px solid #60a5fa' : '1px solid var(--border-glass)',
+                                background: cancelledAllotType === 'CUSTOM' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+                                color: cancelledAllotType === 'CUSTOM' ? '#93c5fd' : 'var(--color-text-secondary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Station / Pilot / Other
+                            </button>
+                          </div>
+                        </div>
+
+                        {cancelledAllotType === 'DAILY_LINK' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '0.76rem' }}>Select Category:</label>
+                              <select
+                                className="form-input"
+                                value={cancelledAllotCatId}
+                                onChange={(e) => setCancelledAllotCatId(e.target.value)}
+                                style={{ fontSize: '0.84rem' }}
+                              >
+                                {(categories || []).map(c => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '0.76rem' }}>Select Link Number:</label>
+                              <select
+                                className="form-input"
+                                value={cancelledAllotLinkNum}
+                                onChange={(e) => setCancelledAllotLinkNum(e.target.value)}
+                                style={{ fontSize: '0.84rem', fontWeight: 600 }}
+                              >
+                                <option value="">-- Choose Target Link --</option>
+                                {safeLinksList
+                                  .filter(l => String(l.category_id) === String(cancelledAllotCatId))
+                                  .map(l => (
+                                    <option key={l.id || l.link_number} value={l.link_number}>
+                                      Link #{l.link_number} {l.train_numbers ? `(Tr ${l.train_numbers})` : ''}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        {cancelledAllotType === 'NON_DAILY' && (
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.76rem' }}>Select Non-Daily Train ({availableNonDailyTrains.length}):</label>
+                            <select
+                              className="form-input"
+                              value={cancelledAllotNonDailyId}
+                              onChange={(e) => {
+                                setCancelledAllotNonDailyId(e.target.value);
+                                const found = (nonDailyList || []).find(t => String(t.id) === String(e.target.value));
+                                if (found) setCancelledAllotNonDailyTrainNo(found.train_number);
+                              }}
+                              style={{ fontSize: '0.84rem', fontWeight: 600 }}
+                            >
+                              <option value="">-- Choose Non-Daily Service ({availableNonDailyTrains.length}) --</option>
+                              {availableNonDailyTrains.map(t => (
+                                <option key={t.id} value={t.id}>
+                                  Tr {t.train_number}{t.last_day_train_number ? `/${t.last_day_train_number}` : ''} {t.departure_station ? `(${t.departure_station} -> ${t.arrival_station})` : ''} ({t.day_of_week})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {cancelledAllotType === 'CUSTOM' && (
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.76rem' }}>Enter Duty / Place / Pilot:</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={cancelledAllotCustomDuty}
+                              onChange={(e) => setCancelledAllotCustomDuty(e.target.value)}
+                              placeholder="e.g. PILOT(12705), Station Duty, Counter Checking, Platform Duty"
+                              style={{ fontSize: '0.84rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                              {['PILOT(12705)', 'Station Duty', 'Counter Checking', 'Platform Duty', 'HQ Standby', 'Gate Duty'].map(quick => (
+                                <button
+                                  key={quick}
+                                  type="button"
+                                  onClick={() => setCancelledAllotCustomDuty(quick)}
+                                  style={{
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    color: '#93c5fd',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  + {quick}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Slot Action: Replace with Another Employee (name changes, link fixed) or Leave Vacant */}
-                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'EXCHANGE_LINK' && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && (
+                {!(deleteReason === 'SHIFTED' && shiftedMode === 'MUTUAL') && deleteReason !== 'EXCHANGE_LINK' && deleteReason !== 'REASSIGN_STAFF' && !(deleteReason === 'UPGRADE_COR' && upgradeMode === 'PERMANENT') && deleteReason !== 'TRAIN_CANCELLED' && (
                   <div style={{
                     background: 'rgba(255, 255, 255, 0.02)',
                     border: '1px solid var(--border-glass)',
@@ -5008,7 +5460,11 @@ export default function DutyEditModal({
                                 ? 'linear-gradient(135deg, #0284c7, #0369a1)' 
                                 : (deleteReason === 'MARK_LATER'
                                     ? 'linear-gradient(135deg, #d97706, #b45309)'
-                                    : 'linear-gradient(135deg, #ef4444, #dc2626)'))))
+                                    : (deleteReason === 'TRAIN_LATE'
+                                        ? 'linear-gradient(135deg, #ea580c, #c2410c)'
+                                        : (deleteReason === 'TRAIN_CANCELLED'
+                                            ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
+                                            : 'linear-gradient(135deg, #ef4444, #dc2626)'))))))
                     : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#ffffff',
                   border: 'none',
@@ -5030,13 +5486,17 @@ export default function DutyEditModal({
                              ? '🔄 Save & Exchange Links'
                              : (deleteReason === 'REASSIGN_STAFF'
                                  ? `Save & Reassign Link #${targetLink || 'Duty'} to Staff`
-                                 : (deleteReason === 'MARK_LATER'
-                                     ? 'Delete Name & Mark Reason Later'
-                                     : (deleteReason === 'WRONG_ALLOTMENT'
-                                         ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
-                                         : (deleteReason === 'SHIFTED' 
-                                             ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
-                                             : `Save Status Change`))))))
+                                 : (deleteReason === 'TRAIN_LATE'
+                                     ? '⏱️ Save & Remove (Train Running Late)'
+                                     : (deleteReason === 'TRAIN_CANCELLED'
+                                         ? (cancelledAction === 'ALLOT_ANOTHER' ? '🚫 Allot Another Duty (Train Cancelled)' : '🚫 Save & Remove (Train Cancelled)')
+                                         : (deleteReason === 'MARK_LATER'
+                                             ? 'Delete Name & Mark Reason Later'
+                                             : (deleteReason === 'WRONG_ALLOTMENT'
+                                                 ? (deleteSlotAction === 'REPLACE' ? 'Save & Replace Wrong Allotment' : (deleteSlotAction === 'RESET' ? 'Save & Revert Wrong Allotment' : 'Save & Remove Wrong Allotment'))
+                                                 : (deleteReason === 'SHIFTED' 
+                                                     ? (shiftedMode === 'MUTUAL' ? 'Save & Shift Employee Names' : 'Shift & Save Duty') 
+                                                     : `Save Status Change`))))))))
                  ) :
                  `Save & Assign to Link #${targetLink || 'Duty'}`}
               </button>

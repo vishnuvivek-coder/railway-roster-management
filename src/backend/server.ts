@@ -7587,6 +7587,299 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         });
       }
 
+      // ----------------------------------------------------
+      // TRAIN_RUNNING_LATE / TRAIN_LATE: Train Running Late - Remove from Duty
+      // ----------------------------------------------------
+      if (action === 'TRAIN_RUNNING_LATE' || action === 'TRAIN_LATE') {
+        const dayOffset = getDayOffset(category.anchor_date, date);
+        const cyclicLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const originalLink = (req.body.link_number !== undefined && req.body.link_number !== null && req.body.link_number !== '')
+          ? parseInt(req.body.link_number, 10)
+          : (req.body.original_link_number ? parseInt(req.body.original_link_number, 10) : cyclicLink);
+
+        const lateTrainNo = req.body.late_train_no || req.body.train_number || '';
+        const lateRemarks = req.body.late_remarks ? String(req.body.late_remarks).trim() : '';
+        const lateStaffAction = req.body.late_staff_action || 'SPARE_HQ'; // 'SPARE_HQ' | 'REST'
+
+        const finalReason = reason || (lateTrainNo 
+          ? `Train ${lateTrainNo} running late${lateRemarks ? ` (${lateRemarks})` : ''} - removed from duty`
+          : `Train running late${lateRemarks ? ` (${lateRemarks})` : ''} - removed from duty`);
+
+        const repStaffIdVal = replacement_staff_id ? parseInt(replacement_staff_id, 10) : null;
+        const repStaffNameVal = replacement_name || null;
+
+        // 1. Insert/update override for the original staff member
+        await run(
+          `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, is_extra
+          ) VALUES (?, ?, ?, NULL, 'TRAIN_RUNNING_LATE', ?, ?, ?, ?, ?, 0)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = NULL,
+             status = 'TRAIN_RUNNING_LATE',
+             substitute_staff_id = excluded.substitute_staff_id,
+             substitute_name = excluded.substitute_name,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place`,
+          [
+            staff_id,
+            date,
+            originalLink,
+            repStaffIdVal,
+            repStaffNameVal,
+            finalReason,
+            staff.category_id,
+            lateStaffAction === 'SPARE_HQ' ? 'Available at HQ (Spare)' : 'Relieved for Rest'
+          ]
+        );
+
+        // 2. Attendance / Muster record: 'P' (Present at HQ) or 'R' (Rest)
+        const musterCode = lateStaffAction === 'REST' ? 'R' : 'P';
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = excluded.code,
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [staff_id, date, musterCode, finalReason]
+        );
+
+        // 3. If replacement employee was selected, assign them to this link
+        if (repStaffIdVal && repStaffIdVal !== staff.id) {
+          await run(
+            `INSERT INTO overrides (
+              staff_id, date, original_link_number, overridden_link_number, status,
+              reason, target_category_id
+            ) VALUES (?, ?, NULL, ?, 'CHANGED_LINK', ?, ?)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               overridden_link_number = excluded.overridden_link_number,
+               status = 'CHANGED_LINK',
+               reason = excluded.reason,
+               target_category_id = excluded.target_category_id`,
+            [
+              repStaffIdVal,
+              date,
+              originalLink,
+              `Relief staff for ${staff.name} on Link #${originalLink} (Late running of Train ${lateTrainNo})`,
+              staff.category_id
+            ]
+          );
+
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+             VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               code = 'P',
+               remarks = excluded.remarks,
+               updated_by = excluded.updated_by,
+               updated_at = CURRENT_TIMESTAMP`,
+            [repStaffIdVal, date, `On duty on Link #${originalLink} (Sub for ${staff.name} - Late train)`]
+          );
+        }
+
+        // 4. If LR staff, update LR sheet
+        if (staff.category_id === 4) {
+          await syncLRSheetRecord(staff.id, date, 'SPARE', finalReason);
+        }
+
+        await syncDocumentsAndEarningsForStaffDate(staff.id, date, {
+          dutyText: lateStaffAction === 'REST' ? 'REST' : 'AVL(HQ)',
+          isLeaveOrRest: lateStaffAction === 'REST',
+          remarks: finalReason
+        });
+
+        await logAudit(
+          'Admin',
+          'TRAIN_RUNNING_LATE',
+          `Removed ${staff.name} from Link #${originalLink} on ${date} due to late running train ${lateTrainNo}. Status: ${lateStaffAction}. Reason: ${finalReason}`,
+          { staff_id, staff_name: staff.name, date, original_link: originalLink, lateTrainNo, lateStaffAction }
+        );
+
+        return res.json({
+          success: true,
+          message: `${staff.name} removed from Link #${originalLink} on ${date} due to Train Running Late (${lateStaffAction === 'REST' ? 'Relieved for Rest' : 'Available at HQ / Spare'}).`
+        });
+      }
+
+      // ----------------------------------------------------
+      // TRAIN_CANCELLED: Train Cancelled - Remove from Duty OR Allot Another Duty
+      // ----------------------------------------------------
+      if (action === 'TRAIN_CANCELLED') {
+        const dayOffset = getDayOffset(category.anchor_date, date);
+        const cyclicLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const originalLink = (req.body.link_number !== undefined && req.body.link_number !== null && req.body.link_number !== '')
+          ? parseInt(req.body.link_number, 10)
+          : (req.body.original_link_number ? parseInt(req.body.original_link_number, 10) : cyclicLink);
+
+        const cancelledTrainNo = req.body.cancelled_train_no || req.body.train_number || '';
+        const cancelReason = req.body.cancelled_reason ? String(req.body.cancelled_reason).trim() : 'Train cancelled by administration';
+        const cancelMode = req.body.cancelled_mode || 'REMOVE'; // 'REMOVE' | 'ALLOT_ANOTHER'
+
+        // 1. If Allot Another Duty is chosen
+        if (cancelMode === 'ALLOT_ANOTHER') {
+          const allotType = req.body.cancelled_allot_type || 'DAILY_LINK';
+          let newLinkNum = req.body.cancelled_allot_link_num ? parseInt(req.body.cancelled_allot_link_num, 10) : null;
+          const targetCatId = req.body.cancelled_allot_cat_id ? parseInt(req.body.cancelled_allot_cat_id, 10) : staff.category_id;
+          const nonDailyId = req.body.cancelled_allot_non_daily_id ? parseInt(req.body.cancelled_allot_non_daily_id, 10) : null;
+          const nonDailyTrainNo = req.body.cancelled_allot_non_daily_train || null;
+          const customDuty = req.body.cancelled_allot_custom_duty ? String(req.body.cancelled_allot_custom_duty).trim() : null;
+
+          let newDutyDesc = '';
+          let newStatus = 'CHANGED_LINK';
+          let extraTrainNo = null;
+          let isExtra = 0;
+          let shiftedPlace = null;
+
+          if (allotType === 'DAILY_LINK') {
+            newDutyDesc = `Link #${newLinkNum}`;
+            newStatus = 'CHANGED_LINK';
+          } else if (allotType === 'NON_DAILY') {
+            newDutyDesc = `Non-Daily Train ${nonDailyTrainNo || nonDailyId || ''}`;
+            newStatus = 'EXTRA_CREW';
+            extraTrainNo = nonDailyTrainNo;
+            isExtra = 1;
+            shiftedPlace = `Non-Daily Train ${nonDailyTrainNo}`;
+          } else {
+            newDutyDesc = customDuty || 'Custom Duty / Standby';
+            newStatus = 'SHIFTED';
+            shiftedPlace = customDuty;
+          }
+
+          const allotReason = reason || `Train ${cancelledTrainNo} Cancelled -> Allotted to ${newDutyDesc} (${cancelReason})`;
+
+          // Overwrite / set override for the employee to the new duty
+          await run(
+            `INSERT INTO overrides (
+              staff_id, date, original_link_number, overridden_link_number, status,
+              substitute_staff_id, substitute_name, reason, target_category_id,
+              shifted_place, extra_train_no, is_extra, shifted_from_link, shifted_from_train
+            ) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               overridden_link_number = excluded.overridden_link_number,
+               status = excluded.status,
+               substitute_staff_id = NULL,
+               substitute_name = NULL,
+               reason = excluded.reason,
+               target_category_id = excluded.target_category_id,
+               shifted_place = excluded.shifted_place,
+               extra_train_no = excluded.extra_train_no,
+               is_extra = excluded.is_extra,
+               shifted_from_link = excluded.shifted_from_link,
+               shifted_from_train = excluded.shifted_from_train`,
+            [
+              staff_id,
+              date,
+              originalLink,
+              newLinkNum,
+              newStatus,
+              allotReason,
+              targetCatId,
+              shiftedPlace,
+              extraTrainNo,
+              isExtra,
+              originalLink,
+              cancelledTrainNo
+            ]
+          );
+
+          // Muster: Present on duty
+          await run(
+            `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+             VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               code = 'P',
+               remarks = excluded.remarks,
+               updated_by = excluded.updated_by,
+               updated_at = CURRENT_TIMESTAMP`,
+            [staff_id, date, allotReason]
+          );
+
+          await syncDocumentsAndEarningsForStaffDate(staff.id, date, {
+            dutyText: newDutyDesc,
+            isLeaveOrRest: false,
+            remarks: allotReason
+          });
+
+          await logAudit(
+            'Admin',
+            'TRAIN_CANCELLED_ALLOT_DUTY',
+            `Train ${cancelledTrainNo} Cancelled for ${staff.name} on Link #${originalLink}. Allotted to ${newDutyDesc}.`,
+            { staff_id, staff_name: staff.name, date, original_link: originalLink, cancelledTrainNo, newDutyDesc }
+          );
+
+          return res.json({
+            success: true,
+            message: `Train ${cancelledTrainNo} marked Cancelled. ${staff.name} has been successfully allotted to ${newDutyDesc} on ${date}!`
+          });
+        }
+
+        // 2. Choice: REMOVE (Staff kept Spare at HQ, slot marked [TRAIN CANCELLED])
+        const removeReason = reason || (cancelledTrainNo
+          ? `Train ${cancelledTrainNo} Cancelled - Staff Spare at HQ (${cancelReason})`
+          : `Train Cancelled - Staff Spare at HQ (${cancelReason})`);
+
+        await run(
+          `INSERT INTO overrides (
+            staff_id, date, original_link_number, overridden_link_number, status,
+            substitute_staff_id, substitute_name, reason, target_category_id,
+            shifted_place, is_extra
+          ) VALUES (?, ?, ?, NULL, 'TRAIN_CANCELLED', NULL, '[TRAIN CANCELLED]', ?, ?, 'Available at HQ (Train Cancelled)', 0)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = NULL,
+             status = 'TRAIN_CANCELLED',
+             substitute_staff_id = NULL,
+             substitute_name = '[TRAIN CANCELLED]',
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             shifted_place = excluded.shifted_place`,
+          [
+            staff_id,
+            date,
+            originalLink,
+            removeReason,
+            staff.category_id
+          ]
+        );
+
+        // Attendance / Muster: Present at HQ (Spare)
+        await run(
+          `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
+           VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             code = 'P',
+             remarks = excluded.remarks,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP`,
+          [staff_id, date, removeReason]
+        );
+
+        if (staff.category_id === 4) {
+          await syncLRSheetRecord(staff.id, date, 'SPARE', removeReason);
+        }
+
+        await syncDocumentsAndEarningsForStaffDate(staff.id, date, {
+          dutyText: 'CAN/AVL',
+          isLeaveOrRest: false,
+          remarks: removeReason
+        });
+
+        await logAudit(
+          'Admin',
+          'TRAIN_CANCELLED',
+          `Train ${cancelledTrainNo} Cancelled on Link #${originalLink}. ${staff.name} removed from duty and kept Spare at HQ. Slot marked [TRAIN CANCELLED].`,
+          { staff_id, staff_name: staff.name, date, original_link: originalLink, cancelledTrainNo }
+        );
+
+        return res.json({
+          success: true,
+          message: `Train ${cancelledTrainNo} marked Cancelled on Link #${originalLink}. ${staff.name} is now Spare at HQ and the slot is marked [TRAIN CANCELLED].`
+        });
+      }
+
       // MUTUAL_SHIFT: Mutual exchange/shift of duties/places between Staff A and Staff B across date range
       if (action === 'MUTUAL_SHIFT' || (action === 'SHIFTED' && req.body.shifted_mode === 'MUTUAL')) {
         const staffBId = req.body.staff_b_id || req.body.replacement_staff_id;
