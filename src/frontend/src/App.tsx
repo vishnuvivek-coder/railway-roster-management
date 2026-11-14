@@ -7241,6 +7241,22 @@ export default function App() {
                         (d.status === 'SICK' || d.status === 'LEAVE' || d.status === 'CR' || d.status === 'ABSENT' || d.status === 'MARK_LATER' || d.status === 'AVAILABLE_FOR_BOOKING' || d.status === 'TRAIN_CANCELLED' || d.status === 'TRAIN_RUNNING_LATE' || d.status === 'TRAIN_LATE' || d.status === 'SUBSTITUTE' || d.status === 'UTILISED_ADVANCE' || d.status === 'SHIFTED' || d.status === 'EXTRA_CREW' || d.is_extra === 1 || (d.status === 'CHANGED_LINK' && parseInt(d.link_number, 10) !== parseInt(lDef.linkNum, 10)) || (d.overrideReason && /utili[sz]ed\s+advance/i.test(d.overrideReason)))
                       );
 
+                      // DEFENSIVE GUARD:
+                      // If regularStaffDuty is actively manned and scheduled to work this exact link
+                      // (and is NOT on leave/sick/rest itself), then an originalSickOrLeaveDuty belonging
+                      // to a DIFFERENT staff member must NEVER displace or vacate this regular staff member!
+                      if (originalSickOrLeaveDuty && regularStaffDuty && String(originalSickOrLeaveDuty.staffId) !== String(regularStaffDuty.staffId)) {
+                        const isRegularWorking = regularStaffDuty.status !== 'LEAVE' &&
+                                                 regularStaffDuty.status !== 'SICK' &&
+                                                 regularStaffDuty.status !== 'CR' &&
+                                                 regularStaffDuty.status !== 'ABSENT' &&
+                                                 regularStaffDuty.status !== 'REST' &&
+                                                 regularStaffDuty.status !== 'MARK_LATER';
+                        if (isRegularWorking) {
+                          originalSickOrLeaveDuty = null;
+                        }
+                      }
+
                       const isUtilisedAdvance = originalSickOrLeaveDuty &&
                         originalSickOrLeaveDuty.status !== 'EXTRA_CREW' &&
                         originalSickOrLeaveDuty.status !== 'SHIFTED' &&

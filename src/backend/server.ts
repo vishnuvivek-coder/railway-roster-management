@@ -5785,22 +5785,67 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
   }
 
   try {
-    const staffWithCat = await get(
+    let staff = await get(
       `SELECT s.*, c.anchor_date as cat_anchor_date, c.cycle_length as cat_cycle_length, c.name as cat_name
        FROM staff s 
        LEFT JOIN categories c ON s.category_id = c.id 
        WHERE s.id = ?`,
       [staff_id]
     );
-    if (!staffWithCat) {
-      return res.status(404).json({ error: 'Staff member not found' });
+    if (!staff) {
+      const sraFallback = await get(
+        `SELECT sra.staff_id as id, sra.staff_name as name, sra.category_id, sra.designation, sra.row_position, sra.rest_day, sra.pf_no,
+                c.anchor_date as cat_anchor_date, c.cycle_length as cat_cycle_length, c.name as cat_name
+         FROM staff_roster_assignments sra
+         LEFT JOIN categories c ON sra.category_id = c.id
+         WHERE sra.staff_id = ?
+         ORDER BY sra.id DESC LIMIT 1`,
+        [staff_id]
+      );
+      if (sraFallback) {
+        staff = sraFallback;
+      } else {
+        return res.status(404).json({ error: 'Staff member not found' });
+      }
     }
-    const staff = staffWithCat;
     const category = {
       id: staff.category_id,
       anchor_date: staff.cat_anchor_date,
       cycle_length: staff.cat_cycle_length,
       name: staff.cat_name
+    };
+
+    const explicitSlotLink = (req.body.target_link || req.body.link_number || req.body.staff_a_link_number || req.body.original_link_number)
+      ? parseInt(req.body.target_link || req.body.link_number || req.body.staff_a_link_number || req.body.original_link_number, 10)
+      : null;
+
+    const resolveStaffOriginalLink = async (targetStaff: any, dStr: string, catParams: any, isFirstDate: boolean) => {
+      if (isFirstDate && explicitSlotLink && !isNaN(explicitSlotLink) && explicitSlotLink > 0) {
+        return explicitSlotLink;
+      }
+      try {
+        const dateStaffList = await getStaffForDate(targetStaff.category_id, dStr);
+        const activeStaffObj = (dateStaffList || []).find((s: any) => String(s.id) === String(targetStaff.id));
+        const activeRowPos = activeStaffObj?.row_position ?? targetStaff.row_position;
+        const dayOffset = getDayOffset(catParams.anchor_date, dStr);
+        return getBaseLinkNumber(activeRowPos, dayOffset, catParams.cycle_length);
+      } catch (e) {
+        const dayOffset = getDayOffset(catParams.anchor_date, dStr);
+        return getBaseLinkNumber(targetStaff.row_position, dayOffset, catParams.cycle_length);
+      }
+    };
+
+    const resolveSubOriginalLink = async (targetSubStaff: any, dStr: string, subParams: any) => {
+      try {
+        const subDateStaffList = await getStaffForDate(targetSubStaff.category_id, dStr);
+        const activeSubStaffObj = (subDateStaffList || []).find((s: any) => String(s.id) === String(targetSubStaff.id));
+        const activeSubRowPos = activeSubStaffObj?.row_position ?? targetSubStaff.row_position;
+        const dayOffset = getDayOffset(subParams.anchor_date, dStr);
+        return getBaseLinkNumber(activeSubRowPos, dayOffset, subParams.cycle_length);
+      } catch (e) {
+        const dayOffset = getDayOffset(subParams.anchor_date, dStr);
+        return getBaseLinkNumber(targetSubStaff.row_position, dayOffset, subParams.cycle_length);
+      }
     };
 
     const pendingTaTasks = new Map<string, { year: number; month: number; staffId: number }>();
@@ -5888,7 +5933,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           // which generated AVAILABLE_FOR_BOOKING overrides on subsequent days:
           const catParams = getCategoryParamsForDate(category, dStr);
           const resetDayOffset = getDayOffset(catParams.anchor_date, dStr);
-          const resetOrigLink = getBaseLinkNumber(staff.row_position, resetDayOffset, catParams.cycle_length);
+          const resetOrigLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
           const resetLinkSet = getLinkSetDetails(staff.category_id, resetOrigLink);
           if (resetLinkSet && resetLinkSet.isFirstDayOfSet && resetLinkSet.remainingLinks.length > 0) {
             for (let k = 0; k < resetLinkSet.remainingLinks.length; k++) {
@@ -5974,8 +6019,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           } else {
             // staff_id was cyclic occupant of this link, relieve them as AVAILABLE_FOR_BOOKING at HQ
             const catParams = getCategoryParamsForDate(category, dStr);
-            const dayOffset = getDayOffset(catParams.anchor_date, dStr);
-            const origLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+            const origLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
             await run(
               `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, reason, target_category_id)
              VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?)
@@ -6010,7 +6054,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             if (subStaff) {
               const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
               const subParams = getCategoryParamsForDate(subCat, dStr);
-              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subParams.anchor_date, dStr), subParams.cycle_length);
+              const subOrigLink = await resolveSubOriginalLink(subStaff, dStr, subParams);
               const targetLinkVal = linkNum ? parseInt(linkNum, 10) : (existingOverride?.overridden_link_number || existingOverride?.original_link_number || null);
 
               await run(
@@ -6094,8 +6138,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         for (const dStr of datesToProcess) {
           const catParams = getCategoryParamsForDate(category, dStr);
-          const dayOffset = getDayOffset(catParams.anchor_date, dStr);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+          const originalLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
 
           const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
           const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
@@ -6184,7 +6227,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             if (subStaff) {
               const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
               const subParams = getCategoryParamsForDate(subCat, dStr);
-              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subParams.anchor_date, dStr), subParams.cycle_length);
+              const subOrigLink = await resolveSubOriginalLink(subStaff, dStr, subParams);
               const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
                 (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
                 (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
@@ -6317,8 +6360,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         for (const dStr of datesToProcess) {
           const catParams = getCategoryParamsForDate(category, dStr);
-          const dayOffset = getDayOffset(catParams.anchor_date, dStr);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+          const originalLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
 
           // Determine day-specific leave type and reason
           let dayLeaveType = effectiveLeaveType;
@@ -6451,7 +6493,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             if (subStaff) {
               const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
               const subParams = getCategoryParamsForDate(subCat, dStr);
-              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subParams.anchor_date, dStr), subParams.cycle_length);
+              const subOrigLink = await resolveSubOriginalLink(subStaff, dStr, subParams);
               const effectiveSlotLink = (datesToProcess.length === 1 && req.body.target_link ? parseInt(req.body.target_link, 10) : null) ||
                 (datesToProcess.length === 1 && req.body.link_number ? parseInt(req.body.link_number, 10) : null) ||
                 (existingOverride && existingOverride.overridden_link_number ? parseInt(existingOverride.overridden_link_number, 10) : null) ||
@@ -6541,8 +6583,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         if (action === 'LEAVE' || action === 'SICK' || action === 'CR' || action === 'REST') {
           const firstDate = datesToProcess[0];
           const lastDate = datesToProcess[datesToProcess.length - 1];
-          const firstDayOffset = getDayOffset(category.anchor_date, firstDate);
-          const firstOriginalLink = getBaseLinkNumber(staff.row_position, firstDayOffset, category.cycle_length);
+          const firstCatParams = getCategoryParamsForDate(category, firstDate);
+          const firstOriginalLink = await resolveStaffOriginalLink(staff, firstDate, firstCatParams, true);
           const linkSet = getLinkSetDetails(staff.category_id, firstOriginalLink);
 
           if (linkSet && linkSet.setLinks) {
@@ -6635,7 +6677,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 );
 
                 if (cachedSubStaff && cachedSubCat) {
-                  const subOrigLink = getBaseLinkNumber(cachedSubStaff.row_position, getDayOffset(cachedSubCat.anchor_date, remDateStr), cachedSubCat.cycle_length);
+                  const remCatParams = getCategoryParamsForDate(cachedSubCat, remDateStr);
+                  const subOrigLink = await resolveSubOriginalLink(cachedSubStaff, remDateStr, remCatParams);
                   const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
                   batchStatements.push(
                     `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
@@ -6736,8 +6779,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       if (action === 'CHANGED_LINK') {
         const targetLink = (new_link_number === '' || new_link_number === null || new_link_number === undefined) ? null : parseInt(new_link_number, 10);
         const linkStatus = targetLink === null ? 'REST' : 'CHANGED_LINK';
-        const dayOffset = getDayOffset(category.anchor_date, date);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const catParams = getCategoryParamsForDate(category, date);
+        const originalLink = await resolveStaffOriginalLink(staff, date, catParams, true);
 
         // Resolve target_category_id (never leave as 4 for LR staff when a link is assigned)
         let resolvedTargetCat = target_category_id ? parseInt(target_category_id, 10) : null;
@@ -6935,8 +6978,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
       }
 
       if (action === 'AVAILABLE_FOR_BOOKING' || action === 'REPORTED_FIT' || action === 'MARK_AVAILABLE' || action === 'REMOVE_FROM_LINK' || action === 'REMOVE') {
-        const dayOffset = getDayOffset(category.anchor_date, date);
-        const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+        const catParams = getCategoryParamsForDate(category, date);
+        const originalLink = await resolveStaffOriginalLink(staff, date, catParams, true);
         const isReportedFit = action === 'REPORTED_FIT' || (reason && /sick|fit/i.test(reason));
         const finalReason = reason || (isReportedFit
           ? 'Reported fit / came out of sick leave; spare at HQ GNT available for duty booking'
@@ -7010,8 +7053,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         for (const dStr of datesToProcess) {
           const catParams = getCategoryParamsForDate(category, dStr);
-          const dayOffset = getDayOffset(catParams.anchor_date, dStr);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+          const originalLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
 
           const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
           const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
@@ -7065,7 +7107,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             if (subStaff) {
               const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
               const subParams = getCategoryParamsForDate(subCat, dStr);
-              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subParams.anchor_date, dStr), subParams.cycle_length);
+              const subOrigLink = await resolveSubOriginalLink(subStaff, dStr, subParams);
               const slotReason = `Assigned to Link #${originalLink} (Substitute for upgraded staff ${staff.name})`;
 
               await run(
@@ -7162,8 +7204,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         for (const dStr of datesToProcess) {
           const catParams = getCategoryParamsForDate(category, dStr);
-          const dayOffset = getDayOffset(catParams.anchor_date, dStr);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, catParams.cycle_length);
+          const originalLink = await resolveStaffOriginalLink(staff, dStr, catParams, dStr === datesToProcess[0]);
 
           const existingMainOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
           const existingMainMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, dStr]);
@@ -7423,8 +7464,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
 
         // 1. If assigned to an advance link today, record that assignment
         if (advanceLinkNumber !== null) {
-          const dayOffset = getDayOffset(category.anchor_date, date);
-          const originalLink = getBaseLinkNumber(staff.row_position, dayOffset, category.cycle_length);
+          const catParams = getCategoryParamsForDate(category, date);
+          const originalLink = await resolveStaffOriginalLink(staff, date, catParams, true);
           await run(
             `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
            VALUES (?, ?, ?, ?, 'CHANGED_LINK', NULL, NULL, ?, ?)
@@ -7458,8 +7499,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           targetVacateDate = `${y}-${m}-${d}`;
         }
 
-        const vacateDayOffset = getDayOffset(category.anchor_date, targetVacateDate);
-        const vacateOrigLink = getBaseLinkNumber(staff.row_position, vacateDayOffset, category.cycle_length);
+        const vacateCatParams = getCategoryParamsForDate(category, targetVacateDate);
+        const vacateOrigLink = await resolveStaffOriginalLink(staff, targetVacateDate, vacateCatParams, false);
 
         const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
         const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, targetVacateDate]);
@@ -7498,7 +7539,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           const subStaff = await get('SELECT * FROM staff WHERE id = ?', [replacement_staff_id]);
           if (subStaff) {
             const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
-            const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subCat.anchor_date, targetVacateDate), subCat.cycle_length);
+            const subParams = getCategoryParamsForDate(subCat, targetVacateDate);
+            const subOrigLink = await resolveSubOriginalLink(subStaff, targetVacateDate, subParams);
             const subReason = `Substitute for ${staff.name} (Advance Booked Tr. ${advanceTrainNo || ''}) on Link #${vacateOrigLink}`;
 
             await run(
@@ -8354,7 +8396,7 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             if (subStaff) {
               const subCat = await get('SELECT * FROM categories WHERE id = ?', [subStaff.category_id]);
               const subParams = getCategoryParamsForDate(subCat, dStr);
-              const subOrigLink = getBaseLinkNumber(subStaff.row_position, getDayOffset(subParams.anchor_date, dStr), subParams.cycle_length);
+              const subOrigLink = await resolveSubOriginalLink(subStaff, dStr, subParams);
               const subReason = `Substitute for ${staff.name} (${shiftReason}) on Link #${originalLink}`;
 
               await run(
