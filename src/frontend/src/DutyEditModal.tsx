@@ -27,8 +27,7 @@ export const KNOWN_LINK_SETS = {
     [38, 39],
     [40, 41],
     [43, 44, 45],
-    [46, 47, 48],
-    [50, 51, 52]
+    [46, 47, 48]
   ],
   3: [
     [1, 2, 3],
@@ -40,6 +39,11 @@ export function getLinkSetDetails(categoryId, linkNumber) {
   const catId = parseInt(categoryId, 10);
   const linkNum = parseInt(linkNumber, 10);
   if (!catId || !linkNum) return null;
+
+  // Combined 3-day link (50, 51, 52): only Link 50 originates / appears in daily sheet
+  if (catId === 2 && (linkNum === 50 || linkNum === 51 || linkNum === 52)) {
+    return null;
+  }
 
   const sets = KNOWN_LINK_SETS[catId];
   if (sets) {

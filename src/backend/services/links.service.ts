@@ -294,15 +294,6 @@ export async function getLinks(query: any) {
       } else if (cat === 1 && num === 17) {
         const retT = is18048Day(date) ? '18048' : '17226';
         return { ...link, train_numbers: `${retT}, 57201` };
-      } else if (cat === 2 && num === 51) {
-        const d = new Date(date + (date.includes('T') ? '' : 'T00:00:00'));
-        const dow = d.getDay();
-        const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-        const retT = is18048Day(date) ? '18048' : '17226';
-        return { ...link, train_numbers: `${inT}, ${retT}` };
-      } else if (cat === 2 && num === 52) {
-        const retT = is18048Day(date) ? '18048' : '17226';
-        return { ...link, train_numbers: `${retT}, PILOT(12703)` };
       }
       return link;
     });

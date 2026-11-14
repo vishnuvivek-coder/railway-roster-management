@@ -772,15 +772,6 @@ function resolveLinkFromList(linksList: any[], categoryId: any, linkNumber: any,
       } else if (mCat === 1 && mNum === 17) {
         const retTrain = is18048Day(dateStr) ? '18048' : '17226';
         link.train_numbers = `${retTrain}, 57201`;
-      } else if (mCat === 2 && mNum === 51) {
-        const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-        const dow = d.getDay();
-        const inTrain = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-        link.train_numbers = `${inTrain}, ${retTrain}`;
-      } else if (mCat === 2 && mNum === 52) {
-        const retTrain = is18048Day(dateStr) ? '18048' : '17226';
-        link.train_numbers = `${retTrain}, PILOT(12703)`;
       }
     }
   }
@@ -913,8 +904,7 @@ const KNOWN_LINK_SETS = {
     [38, 39],
     [40, 41],
     [43, 44, 45],
-    [46, 47, 48],
-    [50, 51, 52]
+    [46, 47, 48]
   ],
   3: [
     [1, 2, 3],
@@ -926,6 +916,12 @@ function getLinkSetDetails(categoryId, linkNumber) {
   const catId = parseInt(categoryId, 10);
   const linkNum = parseInt(linkNumber, 10);
   if (!catId || !linkNum) return null;
+
+  // Combined 3-day link (50, 51, 52): when an employee is booked on Link 50,
+  // their name appears on that day only and does not propagate to the next links (51, 52).
+  if (catId === 2 && (linkNum === 50 || linkNum === 51 || linkNum === 52)) {
+    return null;
+  }
 
   const sets = KNOWN_LINK_SETS[catId];
   if (sets) {
@@ -4608,15 +4604,6 @@ app.get('/api/links', async (req, res) => {
         } else if (cat === 1 && num === 17) {
           const retT = is18048Day(date) ? '18048' : '17226';
           return { ...link, train_numbers: `${retT}, 57201` };
-        } else if (cat === 2 && num === 51) {
-          const d = new Date(date + (date.includes('T') ? '' : 'T00:00:00'));
-          const dow = d.getDay();
-          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-          const retT = is18048Day(date) ? '18048' : '17226';
-          return { ...link, train_numbers: `${inT}, ${retT}` };
-        } else if (cat === 2 && num === 52) {
-          const retT = is18048Day(date) ? '18048' : '17226';
-          return { ...link, train_numbers: `${retT}, PILOT(12703)` };
         }
         return link;
       });

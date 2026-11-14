@@ -1131,28 +1131,6 @@ export const NOV_2026_MASTER_DAILY_SLOTS = [
       { categoryId: 2, linkNum: 46, altLinkNums: [47, 48], firstCoach: 'SL', lastTrain: '17244', lastCoach: 'SL' }
     ]
   },
-  // 17. Train 07811 / 07812 [Page 111 Row 17]
-  {
-    slotId: 17,
-    page: 111,
-    firstTrain: '07811',
-    lastTrain: '07812',
-    title: '07811 / 07812 (Special Express)',
-    links: [
-      { categoryId: 2, linkNum: 51, firstCoach: 'AC', lastTrain: '07812', lastCoach: 'AC' }
-    ]
-  },
-  // 18. Train 17231 / 17232 [Page 111 Row 18]
-  {
-    slotId: 18,
-    page: 111,
-    firstTrain: '17231',
-    lastTrain: '17232',
-    title: '17231 / 17232 (Express)',
-    links: [
-      { categoryId: 2, linkNum: 52, firstCoach: 'AC + SL', lastTrain: '17232', lastCoach: 'AC + SL' }
-    ]
-  },
   // 19. Train 07487 / 07488 [Page 111 Row 19]
   {
     slotId: 19,
@@ -7024,6 +7002,10 @@ export default function App() {
                   if (d.shifted_place === 'NON_DAILY_RETURN') return true;
                   if (d.overrideReason && /day\s*2\s*return|return\s+of/i.test(d.overrideReason)) return true;
                   if (d.reason && /day\s*2\s*return|return\s+of/i.test(d.reason)) return true;
+                  // Combined 3-day link (50, 51, 52): Category 2 Links 51 & 52 are Day 2 and Day 3 return/circuit legs of Link 50
+                  const cId = parseInt(d.categoryId, 10);
+                  const lNum = parseInt(d.link_number, 10);
+                  if (cId === 2 && (lNum === 51 || lNum === 52)) return true;
                   return false;
                 };
 
@@ -7109,6 +7091,15 @@ export default function App() {
 
                     const dutiesInSlot = [];
                     slot.links.forEach(lDef => {
+                      const cId = parseInt(lDef.categoryId, 10);
+                      const lNum = parseInt(lDef.linkNum, 10);
+
+                      // Combined 3-day link (50, 51, 52): only Link 50 originates / appears in daily slots.
+                      // Links 51 & 52 are part of the continuous circuit beat and should not appear as separate daily slots.
+                      if (cId === 2 && (lNum === 51 || lNum === 52)) {
+                        return;
+                      }
+
                       const dutyKey = `slot_${slot.slotId}_link_${lDef.categoryId || 0}_${lDef.linkNum}`;
                       const customDuty = slotCustomizations[dutyKey] || {};
 
@@ -7121,8 +7112,6 @@ export default function App() {
                       let linkFirstTrain = '';
                       let linkLastTrain = '';
                       let linkCoach = '';
-                      const cId = parseInt(lDef.categoryId, 10);
-                      const lNum = parseInt(lDef.linkNum, 10);
                       const isDynamicAmaravatiSlot = (selectedDate < '2026-11-01' && cId === 1 && lNum === 15) || (cId === 2 && (lNum === 50 || lNum === 57));
                       if (isDynamicAmaravatiSlot) {
                         linkFirstTrain = is18047Day(selectedDate) ? '18047' : '17225';
@@ -7138,15 +7127,6 @@ export default function App() {
                         } else if (cId === 1 && lNum === 17 && selectedDate < '2026-11-01') {
                           const retT = is18048Day(selectedDate) ? '18048' : '17226';
                           dynamicTrainNums = `${retT}, 57201`;
-                        } else if (cId === 2 && lNum === 51) {
-                          const d = new Date(selectedDate + (selectedDate.includes('T') ? '' : 'T00:00:00'));
-                          const dow = d.getDay();
-                          const inT = (dow === 0 || dow === 2 || dow === 5) ? '17225' : '18047';
-                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
-                          dynamicTrainNums = `${inT}, ${retT}`;
-                        } else if (cId === 2 && lNum === 52) {
-                          const retT = is18048Day(selectedDate) ? '18048' : '17226';
-                          dynamicTrainNums = `${retT}, PILOT(12703)`;
                         } else if (cId === 2 && lNum === 38) {
                           dynamicTrainNums = '17281, 17282';
                         } else if (cId === 1 && lNum === 12) {
@@ -7686,6 +7666,7 @@ export default function App() {
                   d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                   (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
                   !isReturnDuty(d) &&
+                  !(parseInt(d.categoryId, 10) === 2 && (parseInt(d.link_number, 10) === 51 || parseInt(d.link_number, 10) === 52)) &&
                   (Boolean(d.train_out) || Boolean(d.extra_train_no))
                 );
 
@@ -13100,16 +13081,35 @@ export default function App() {
               const nums = parseTrainNumbers(link.train_numbers);
               const catObj = categories.find(c => String(c.id) === String(link.category_id));
               const categoryLabel = catObj ? catObj.name : (link.category_id === 1 ? 'Conductors (COR)' : link.category_id === 2 ? 'TTI / Sleeper' : link.category_id === 3 ? 'Ladies Staff' : 'Duty Link');
-              nums.forEach(num => {
+              
+              const rawFrom = link.from_station || '';
+              const rawTo = link.to_station || '';
+              const rawCoaches = link.coaches || '';
+
+              const fromParts = rawFrom.includes(',') ? rawFrom.split(',').map(s => s.trim()) : [];
+              const toParts = rawTo.includes(',') ? rawTo.split(',').map(s => s.trim()) : [];
+              const coachParts = rawCoaches.includes(',') ? rawCoaches.split(',').map(s => s.trim()) : [];
+
+              nums.forEach((num, numIdx) => {
+                const itemFrom = (fromParts.length === nums.length && fromParts[numIdx] && fromParts[numIdx] !== '--' && fromParts[numIdx] !== '---')
+                  ? fromParts[numIdx]
+                  : rawFrom;
+                const itemTo = (toParts.length === nums.length && toParts[numIdx] && toParts[numIdx] !== '--' && toParts[numIdx] !== '---')
+                  ? toParts[numIdx]
+                  : rawTo;
+                const itemCoach = (coachParts.length === nums.length && coachParts[numIdx])
+                  ? coachParts[numIdx]
+                  : (rawCoaches || '-');
+
                 trainRosterItems.push({
                   trainNumber: num,
                   linkNumber: link.link_number,
                   linkId: link.id,
-                  coaches: link.coaches || '-',
+                  coaches: itemCoach,
                   categoryName: categoryLabel,
                   categoryId: link.category_id,
-                  from_station: link.from_station || '',
-                  to_station: link.to_station || '',
+                  from_station: itemFrom,
+                  to_station: itemTo,
                   linkObj: link
                 });
               });
@@ -13148,7 +13148,10 @@ export default function App() {
                   <div>
                     <span>📌</span>
                     <strong> Displaying Published Train Links for:</strong> {activeDate} &nbsp;|&nbsp;
-                    <strong> Sleeper Schedule:</strong> {activeDate >= '2026-10-01' ? '🍁 October 2026 (Set #7 • 56 Links)' : '🍂 September 2026 (Set #2 • 63 Links • Image 3 Order)'}
+                    <strong> Sleeper Schedule:</strong> {(() => {
+                      const sleeperSet = (linkSetsList || []).find(s => String(s.id) === String(activePublishedSetByCat[2]));
+                      return sleeperSet ? `${sleeperSet.name} (Set #${sleeperSet.id})` : (activeDate >= '2026-11-01' ? '🍁 November 2026 (Set #12 • 56 Links)' : activeDate >= '2026-10-01' ? '🍁 October 2026 (Set #7 • 56 Links)' : '🍂 September 2026 (Set #2 • 63 Links • Image 3 Order)');
+                    })()}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span className="badge" style={{ background: 'var(--primary)', color: '#000', fontWeight: 700 }}>
