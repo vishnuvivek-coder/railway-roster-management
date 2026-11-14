@@ -6889,9 +6889,9 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
           remarks: musterRemark
         });
 
-        // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
-        // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
-        if (targetLink !== null) {
+        // Multi-Day Link Set Assignment:
+        // Only assign remaining links of multi-day sets if explicitly requested via assign_entire_set!
+        if (targetLink !== null && req.body.assign_entire_set === true) {
           const linkSet = getLinkSetDetails(resolvedTargetCat, targetLink);
           if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
             for (let k = 0; k < linkSet.remainingLinks.length; k++) {
@@ -7364,8 +7364,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
             }
           }
 
-          // Multi-Day Link Set check for targetLink:
-          if (targetLink !== null) {
+          // Multi-Day Link Set check for targetLink (only if explicitly requested via assign_entire_set):
+          if (targetLink !== null && req.body.assign_entire_set === true) {
             const linkSet = getLinkSetDetails(targetCatId, targetLink);
             if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
               for (let k = 0; k < linkSet.remainingLinks.length; k++) {
@@ -9147,9 +9147,9 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     );
 
     // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
-    // If assigned to a multi-day link set (2-day, 3-day, or 4-day link), assign to entire beat!
+    // Only assign remaining links of multi-day sets if explicitly requested via assign_entire_set!
     const affectedContinuationDates = [];
-    if (effectiveLink !== null) {
+    if (effectiveLink !== null && req.body.assign_entire_set === true) {
       const linkSet = getLinkSetDetails(effectiveTargetCat, effectiveLink);
       if (linkSet && linkSet.isFirstDayOfSet && linkSet.remainingLinks.length > 0) {
         for (let k = 0; k < linkSet.remainingLinks.length; k++) {
