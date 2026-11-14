@@ -1,27 +1,27 @@
 -- ============================================================================
 -- RAILWAY ROSTER MANAGER — COMPLETE DATABASE SNAPSHOT DUMP
--- Exported At: 2026-11-14T07:32:46.406Z
--- Source Database: defaultdb (mysql-b683003-railway-management.k.aivencloud.com)
+-- Exported At: 2026-11-14T15:15:46.224Z
+-- Source Database: railway (maglev.proxy.rlwy.net)
 -- ============================================================================
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS `actual_train_runs`;
-CREATE TABLE "actual_train_runs" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "train_no" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "run_date" date NOT NULL,
-  "station_code" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "sched_arr" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "sched_dep" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "act_arr" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "act_dep" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "delay_arr_mins" int DEFAULT '0',
-  "delay_dep_mins" int DEFAULT '0',
-  "source" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'NTES',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_train_run_station" ("train_no","run_date","station_code")
-);
+CREATE TABLE `actual_train_runs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `train_no` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `run_date` date NOT NULL,
+  `station_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sched_arr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sched_dep` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `act_arr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `act_dep` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delay_arr_mins` int DEFAULT '0',
+  `delay_dep_mins` int DEFAULT '0',
+  `source` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'NTES',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_train_run_station` (`train_no`,`run_date`,`station_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=14520 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `actual_train_runs` (`id`, `train_no`, `run_date`, `station_code`, `sched_arr`, `sched_dep`, `act_arr`, `act_dep`, `delay_arr_mins`, `delay_dep_mins`, `source`, `updated_at`) VALUES
 (4805, '17262', '2026-08-30', 'GNT', '07:20', '---', '07:20', '---', 0, 0, 'TA_SYNC', '2026-09-24 11:54:51'),
@@ -2447,18 +2447,18 @@ INSERT INTO `actual_train_runs` (`id`, `train_no`, `run_date`, `station_code`, `
 (14519, '12703', '2026-10-31', 'GNT', '07:15', '---', '07:15', '---', 0, 0, 'TA_SYNC', '2026-10-31 12:12:05');
 
 DROP TABLE IF EXISTS `audit_logs`;
-CREATE TABLE "audit_logs" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "user_role" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "action_type" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "description" text COLLATE utf8mb4_unicode_ci,
-  "timestamp" datetime DEFAULT CURRENT_TIMESTAMP,
-  "undo_data" longtext COLLATE utf8mb4_unicode_ci,
-  "is_undone" int DEFAULT '0',
-  PRIMARY KEY ("id"),
-  KEY "idx_audit_timestamp" ("timestamp"),
-  KEY "idx_audit_action" ("action_type")
-);
+CREATE TABLE `audit_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_role` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `action_type` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `timestamp` datetime DEFAULT CURRENT_TIMESTAMP,
+  `undo_data` longtext COLLATE utf8mb4_unicode_ci,
+  `is_undone` int DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_timestamp` (`timestamp`),
+  KEY `idx_audit_action` (`action_type`)
+) ENGINE=InnoDB AUTO_INCREMENT=2373 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `audit_logs` (`id`, `user_role`, `action_type`, `description`, `timestamp`, `undo_data`, `is_undone`) VALUES
 (1, 'Admin', 'DELETE_LINK', 'Deleted Link ID 1', '2026-07-26 09:49:52', NULL, 0),
@@ -4839,15 +4839,15 @@ INSERT INTO `audit_logs` (`id`, `user_role`, `action_type`, `description`, `time
 (2372, 'Admin', 'RESET_DUTY', 'Removed unintended multi-day cascading duty for ELN RAO on 2026-11-15. Retained only 2026-11-14 booking on Link #3.', '2026-11-14 07:17:27', NULL, 0);
 
 DROP TABLE IF EXISTS `categories`;
-CREATE TABLE "categories" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "code" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "cycle_length" int NOT NULL,
-  "anchor_date" date NOT NULL,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "code" ("code")
-);
+CREATE TABLE `categories` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cycle_length` int NOT NULL,
+  `anchor_date` date NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `categories` (`id`, `name`, `code`, `cycle_length`, `anchor_date`) VALUES
 (1, 'Conductors (COR)', 'COR', 21, '2026-10-01'),
@@ -4856,39 +4856,39 @@ INSERT INTO `categories` (`id`, `name`, `code`, `cycle_length`, `anchor_date`) V
 (4, 'Leave Reserve (LR) Staff', 'LR_STAFF', 22, '2026-09-01');
 
 DROP TABLE IF EXISTS `daily_earnings_entries`;
-CREATE TABLE "daily_earnings_entries" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "date" date NOT NULL,
-  "category_id" int DEFAULT NULL,
-  "staff_id" int NOT NULL,
-  "staff_name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "designation" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'TTI',
-  "depot_title" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT ATY-1D2',
-  "twt_nc" int DEFAULT '0',
-  "twt_fare" double DEFAULT '0',
-  "twt_penalty" double DEFAULT '0',
-  "ir_nc" int DEFAULT '0',
-  "ir_fare" double DEFAULT '0',
-  "ir_penalty" double DEFAULT '0',
-  "ubl_nc" int DEFAULT '0',
-  "ubl_amt" double DEFAULT '0',
-  "gst" double DEFAULT '0',
-  "z652_nc" int DEFAULT '0',
-  "z652_amt" double DEFAULT '0',
-  "oc_nc" int DEFAULT '0',
-  "oc_amt" double DEFAULT '0',
-  "duty" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "row_order" int DEFAULT '0',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_earnings_date_staff" ("date","staff_id"),
-  KEY "idx_earnings_date" ("date"),
-  KEY "fk_earnings_staff" ("staff_id"),
-  KEY "fk_earnings_category" ("category_id"),
-  CONSTRAINT "fk_earnings_category" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE SET NULL,
-  CONSTRAINT "fk_earnings_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `daily_earnings_entries` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `date` date NOT NULL,
+  `category_id` int DEFAULT NULL,
+  `staff_id` int NOT NULL,
+  `staff_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `designation` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'TTI',
+  `depot_title` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT ATY-1D2',
+  `twt_nc` int DEFAULT '0',
+  `twt_fare` double DEFAULT '0',
+  `twt_penalty` double DEFAULT '0',
+  `ir_nc` int DEFAULT '0',
+  `ir_fare` double DEFAULT '0',
+  `ir_penalty` double DEFAULT '0',
+  `ubl_nc` int DEFAULT '0',
+  `ubl_amt` double DEFAULT '0',
+  `gst` double DEFAULT '0',
+  `z652_nc` int DEFAULT '0',
+  `z652_amt` double DEFAULT '0',
+  `oc_nc` int DEFAULT '0',
+  `oc_amt` double DEFAULT '0',
+  `duty` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `row_order` int DEFAULT '0',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_earnings_date_staff` (`date`,`staff_id`),
+  KEY `idx_earnings_date` (`date`),
+  KEY `fk_earnings_staff` (`staff_id`),
+  KEY `fk_earnings_category` (`category_id`),
+  CONSTRAINT `fk_earnings_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_earnings_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=972 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `daily_earnings_entries` (`id`, `date`, `category_id`, `staff_id`, `staff_name`, `designation`, `depot_title`, `twt_nc`, `twt_fare`, `twt_penalty`, `ir_nc`, `ir_fare`, `ir_penalty`, `ubl_nc`, `ubl_amt`, `gst`, `z652_nc`, `z652_amt`, `oc_nc`, `oc_amt`, `duty`, `remarks`, `row_order`, `updated_at`) VALUES
 (1, '2026-09-01', 1, 7, 'CH RAMESH BABU', 'TTI', 'GNT ATY-1D2', 2, 800, 1000, 0, 0, 0, 0, 0, 50, 0, 0, 5, 2500, 'REST', 'Entered from employee page', 1, '2026-09-01 10:28:10'),
@@ -5775,34 +5775,34 @@ INSERT INTO `daily_earnings_entries` (`id`, `date`, `category_id`, `staff_id`, `
 (971, '2026-10-02', 2, 37, 'U RAMA KRISHNA', 'TTI', 'GNT ATY-1D2', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'Train 07535 / 12603', '', 0, '2026-10-29 17:50:05');
 
 DROP TABLE IF EXISTS `diary_entries`;
-CREATE TABLE "diary_entries" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "month_year" varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "date_str" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "dep_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "arr_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "eft_from" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "eft_to" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "total_issued" int DEFAULT NULL,
-  "no_of_cases" int DEFAULT NULL,
-  "collected_rs" double DEFAULT NULL,
-  "gst_cases" int DEFAULT NULL,
-  "gst_amount" double DEFAULT NULL,
-  "total_amount" double DEFAULT NULL,
-  "remit_station" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "remit_mr_no" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "remit_date" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "remit_amount" double DEFAULT NULL,
-  "row_order" int DEFAULT '0',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_diary_staff_month" ("staff_id","month_year"),
-  CONSTRAINT "fk_diary_entries_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `diary_entries` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `month_year` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `date_str` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `dep_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `arr_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `eft_from` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `eft_to` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `total_issued` int DEFAULT NULL,
+  `no_of_cases` int DEFAULT NULL,
+  `collected_rs` double DEFAULT NULL,
+  `gst_cases` int DEFAULT NULL,
+  `gst_amount` double DEFAULT NULL,
+  `total_amount` double DEFAULT NULL,
+  `remit_station` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `remit_mr_no` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `remit_date` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `remit_amount` double DEFAULT NULL,
+  `row_order` int DEFAULT '0',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_diary_staff_month` (`staff_id`,`month_year`),
+  CONSTRAINT `fk_diary_entries_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=224 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `diary_entries` (`id`, `staff_id`, `month_year`, `date_str`, `train_no`, `dep_time`, `arr_time`, `from_station`, `to_station`, `eft_from`, `eft_to`, `total_issued`, `no_of_cases`, `collected_rs`, `gst_cases`, `gst_amount`, `total_amount`, `remit_station`, `remit_mr_no`, `remit_date`, `remit_amount`, `row_order`, `updated_at`) VALUES
 (1, 1, '2026-08', '1/8/26', '17281', '17:46', '18:53', 'GNT', 'BZA', '', '', NULL, NULL, NULL, NULL, NULL, NULL, '', '', NULL, NULL, 1, '2026-08-31 06:25:05'),
@@ -5941,19 +5941,19 @@ INSERT INTO `diary_entries` (`id`, `staff_id`, `month_year`, `date_str`, `train_
 (223, 10, '2026-09', '30/9/26', '12734', '23:10', '---', 'GNT', '---', '', '', NULL, NULL, NULL, NULL, NULL, NULL, '', '', NULL, NULL, 46, '2026-09-26 03:14:14');
 
 DROP TABLE IF EXISTS `duty_register_entry`;
-CREATE TABLE "duty_register_entry" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "date" date NOT NULL,
-  "page_number" int DEFAULT NULL,
-  "train_out" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coach_out" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "train_return" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coach_return" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "duty_label" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "notes" text COLLATE utf8mb4_unicode_ci,
-  PRIMARY KEY ("id"),
-  KEY "idx_duty_reg_date" ("date")
-);
+CREATE TABLE `duty_register_entry` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `date` date NOT NULL,
+  `page_number` int DEFAULT NULL,
+  `train_out` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coach_out` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `train_return` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coach_return` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `duty_label` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_duty_reg_date` (`date`)
+) ENGINE=InnoDB AUTO_INCREMENT=1264 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `duty_register_entry` (`id`, `date`, `page_number`, `train_out`, `coach_out`, `train_return`, `coach_return`, `duty_label`, `notes`) VALUES
 (20, '2026-08-26', 158, '17253', 'AC-SL', '17252', 'AC-SL', '17253/17252 (GNT-DHNE-GNT)', ''),
@@ -7089,14 +7089,14 @@ INSERT INTO `duty_register_entry` (`id`, `date`, `page_number`, `train_out`, `co
 (1263, '2026-11-03', NULL, '08513', 'AC + SL', NULL, NULL, '08513', NULL);
 
 DROP TABLE IF EXISTS `duty_register_staff`;
-CREATE TABLE "duty_register_staff" (
-  "entry_id" int NOT NULL,
-  "staff_id" int NOT NULL,
-  PRIMARY KEY ("entry_id","staff_id"),
-  KEY "fk_drs_staff" ("staff_id"),
-  CONSTRAINT "fk_drs_entry" FOREIGN KEY ("entry_id") REFERENCES "duty_register_entry" ("id") ON DELETE CASCADE,
-  CONSTRAINT "fk_drs_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `duty_register_staff` (
+  `entry_id` int NOT NULL,
+  `staff_id` int NOT NULL,
+  PRIMARY KEY (`entry_id`,`staff_id`),
+  KEY `fk_drs_staff` (`staff_id`),
+  CONSTRAINT `fk_drs_entry` FOREIGN KEY (`entry_id`) REFERENCES `duty_register_entry` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_drs_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `duty_register_staff` (`entry_id`, `staff_id`) VALUES
 (97, 1),
@@ -8330,45 +8330,45 @@ INSERT INTO `duty_register_staff` (`entry_id`, `staff_id`) VALUES
 (1200, 135);
 
 DROP TABLE IF EXISTS `feedbacks`;
-CREATE TABLE "feedbacks" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "user_id" int DEFAULT NULL,
-  "user_name" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "role" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'Staff',
-  "category" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "subject" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "message" text COLLATE utf8mb4_unicode_ci NOT NULL,
-  "rating" int DEFAULT '5',
-  "contact_info" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "status" enum('OPEN','RESOLVED') COLLATE utf8mb4_unicode_ci DEFAULT 'OPEN',
-  "admin_response" text COLLATE utf8mb4_unicode_ci,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_feedbacks_status" ("status"),
-  KEY "idx_feedbacks_category" ("category")
-);
+CREATE TABLE `feedbacks` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `user_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `role` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'Staff',
+  `category` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `subject` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `rating` int DEFAULT '5',
+  `contact_info` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('OPEN','RESOLVED') COLLATE utf8mb4_unicode_ci DEFAULT 'OPEN',
+  `admin_response` text COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_feedbacks_status` (`status`),
+  KEY `idx_feedbacks_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `leave_requests`;
-CREATE TABLE "leave_requests" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "date" date NOT NULL,
-  "from_date" date DEFAULT NULL,
-  "to_date" date DEFAULT NULL,
-  "type" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "swap_staff_id" int DEFAULT NULL,
-  "status" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'PENDING',
-  "reason" text COLLATE utf8mb4_unicode_ci,
-  "approved_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "approved_at" datetime DEFAULT NULL,
-  PRIMARY KEY ("id"),
-  KEY "idx_leave_staff" ("staff_id"),
-  KEY "idx_leave_date" ("date"),
-  KEY "fk_leave_swap_staff" ("swap_staff_id"),
-  CONSTRAINT "fk_leave_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE,
-  CONSTRAINT "fk_leave_swap_staff" FOREIGN KEY ("swap_staff_id") REFERENCES "staff" ("id") ON DELETE SET NULL
-);
+CREATE TABLE `leave_requests` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `date` date NOT NULL,
+  `from_date` date DEFAULT NULL,
+  `to_date` date DEFAULT NULL,
+  `type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `swap_staff_id` int DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'PENDING',
+  `reason` text COLLATE utf8mb4_unicode_ci,
+  `approved_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_leave_staff` (`staff_id`),
+  KEY `idx_leave_date` (`date`),
+  KEY `fk_leave_swap_staff` (`swap_staff_id`),
+  CONSTRAINT `fk_leave_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_leave_swap_staff` FOREIGN KEY (`swap_staff_id`) REFERENCES `staff` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=245 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `leave_requests` (`id`, `staff_id`, `date`, `from_date`, `to_date`, `type`, `swap_staff_id`, `status`, `reason`, `approved_by`, `approved_at`) VALUES
 (1, 1, '2026-07-25', '2026-07-25', '2026-07-25', 'LEAVE', NULL, 'PENDING', 'Family Event', NULL, NULL),
@@ -8617,21 +8617,21 @@ INSERT INTO `leave_requests` (`id`, `staff_id`, `date`, `from_date`, `to_date`, 
 (244, 135, '2026-11-03', '2026-11-03', '2026-11-03', 'CL', NULL, 'APPROVED', 'Casual Leave', NULL, NULL);
 
 DROP TABLE IF EXISTS `link_sets`;
-CREATE TABLE "link_sets" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "category_id" int DEFAULT NULL,
-  "name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "status" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'published',
-  "effective_from" date DEFAULT NULL,
-  "effective_to" date DEFAULT '9999-12-31',
-  "cloned_from_id" int DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_link_sets_category" ("category_id"),
-  KEY "idx_link_sets_status" ("status"),
-  CONSTRAINT "fk_link_sets_category" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `link_sets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int DEFAULT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'published',
+  `effective_from` date DEFAULT NULL,
+  `effective_to` date DEFAULT '9999-12-31',
+  `cloned_from_id` int DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_link_sets_category` (`category_id`),
+  KEY `idx_link_sets_status` (`status`),
+  CONSTRAINT `fk_link_sets_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `link_sets` (`id`, `category_id`, `name`, `status`, `effective_from`, `effective_to`, `cloned_from_id`, `created_at`, `updated_at`) VALUES
 (1, 1, 'Conductors (COR) (July 2026 - Oct 2026)', 'draft', '2026-07-01', '2026-10-31', NULL, '2026-09-26 17:15:39', '2026-11-07 13:12:27'),
@@ -8645,27 +8645,27 @@ INSERT INTO `link_sets` (`id`, `category_id`, `name`, `status`, `effective_from`
 (13, 3, 'Ladies Staff / TTE (Effective Nov 1, 2026)', 'published', '2026-11-01', '9999-12-31', NULL, '2026-10-29 19:18:20', '2026-10-29 19:18:20');
 
 DROP TABLE IF EXISTS `links`;
-CREATE TABLE "links" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "category_id" int NOT NULL,
-  "link_set_id" int DEFAULT NULL,
-  "link_number" int NOT NULL,
-  "train_numbers" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coaches" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "is_rest" tinyint(1) DEFAULT '0',
-  "effective_from" date DEFAULT '2026-08-01',
-  "effective_to" date DEFAULT '9999-12-31',
-  "set_type" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '2-Day Set',
-  "set_name" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "status" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'published',
-  PRIMARY KEY ("id"),
-  KEY "idx_links_cat_num" ("category_id","link_number"),
-  KEY "idx_links_set" ("link_set_id"),
-  CONSTRAINT "fk_links_category" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE CASCADE,
-  CONSTRAINT "fk_links_set" FOREIGN KEY ("link_set_id") REFERENCES "link_sets" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `links` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int NOT NULL,
+  `link_set_id` int DEFAULT NULL,
+  `link_number` int NOT NULL,
+  `train_numbers` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coaches` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_rest` tinyint(1) DEFAULT '0',
+  `effective_from` date DEFAULT '2026-08-01',
+  `effective_to` date DEFAULT '9999-12-31',
+  `set_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '2-Day Set',
+  `set_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'published',
+  PRIMARY KEY (`id`),
+  KEY `idx_links_cat_num` (`category_id`,`link_number`),
+  KEY `idx_links_set` (`link_set_id`),
+  CONSTRAINT `fk_links_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_links_set` FOREIGN KEY (`link_set_id`) REFERENCES `link_sets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=661 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `links` (`id`, `category_id`, `link_set_id`, `link_number`, `train_numbers`, `from_station`, `to_station`, `coaches`, `is_rest`, `effective_from`, `effective_to`, `set_type`, `set_name`, `status`) VALUES
 (92, 4, 4, 1, 'LR-1 (TUE Rest)', 'GNT', 'GNT', 'Relief / LR', 0, '2020-01-01', '9999-12-31', 'Relief / LR', 'LR Link 1', 'published'),
@@ -8944,42 +8944,42 @@ INSERT INTO `links` (`id`, `category_id`, `link_set_id`, `link_number`, `train_n
 (660, 4, 4, 23, 'LR-23 (MON Rest)', 'GNT', 'GNT', 'Relief / LR', 0, '2020-01-01', '9999-12-31', 'Relief / LR', 'LR Link 23', 'published');
 
 DROP TABLE IF EXISTS `lr_duty_completions`;
-CREATE TABLE "lr_duty_completions" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "last_train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '---',
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT',
-  "arrival_date" date NOT NULL,
-  "arrival_time" varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "rest_hours_required" int DEFAULT '12',
-  "notes" text COLLATE utf8mb4_unicode_ci,
-  "updated_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_lr_completion" ("staff_id","arrival_date"),
-  KEY "idx_lrdc_arrival" ("arrival_date","arrival_time"),
-  CONSTRAINT "fk_lr_completion_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `lr_duty_completions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `last_train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT '---',
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT',
+  `arrival_date` date NOT NULL,
+  `arrival_time` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `rest_hours_required` int DEFAULT '12',
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `updated_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lr_completion` (`staff_id`,`arrival_date`),
+  KEY `idx_lrdc_arrival` (`arrival_date`,`arrival_time`),
+  CONSTRAINT `fk_lr_completion_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `lr_duty_completions` (`id`, `staff_id`, `last_train_no`, `from_station`, `to_station`, `arrival_date`, `arrival_time`, `rest_hours_required`, `notes`, `updated_by`, `updated_at`) VALUES
 (4, 97, '12733', '---', 'GNT', '2026-09-04', '01:32', 12, 'Test arrival 16 hours ago', 'Admin', '2026-09-04 12:02:09'),
 (7, 97, '17251', '---', 'GNT', '2026-09-28', '04:00', 8, 'Arrived at GNT HQ', 'Admin', '2026-09-13 05:42:30');
 
 DROP TABLE IF EXISTS `lr_sheet_records`;
-CREATE TABLE "lr_sheet_records" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "date" date NOT NULL,
-  "duty_code" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "updated_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_lr_sheet" ("staff_id","date"),
-  KEY "idx_lr_sheet_date" ("date"),
-  CONSTRAINT "fk_lr_sheet_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `lr_sheet_records` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `date` date NOT NULL,
+  `duty_code` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lr_sheet` (`staff_id`,`date`),
+  KEY `idx_lr_sheet_date` (`date`),
+  CONSTRAINT `fk_lr_sheet_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=104587 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`, `updated_by`, `updated_at`) VALUES
 (1, 97, '2026-09-01', '12603', '', 'SYSTEM_SEED', '2026-09-06 10:09:24'),
@@ -9000,32 +9000,32 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (24, 99, '2026-09-03', '17232', 'CHZ-BZA Exp (Arr 06:25)', 'Admin', '2026-10-21 18:02:22'),
 (25, 99, '2026-09-04', 'Link 10', 'SL Link #10 (Day 3 of 3-Day Set)', 'Admin', '2026-10-21 18:00:30'),
 (26, 99, '2026-09-05', '17232', 'Day 2 Return of 17231 (BZA-CHZ-BZA Exp) • CHZ ➔ BZA', 'Daily Duty Management', '2026-10-20 20:09:40'),
-(27, 99, '2026-09-06', '17032 / Pilot', 'Non-Daily Train 17032/Pilot (GNT-HYB-GNT)', 'Daily Duty Management', '2026-11-14 06:55:12'),
-(28, 99, '2026-09-07', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:13'),
-(29, 99, '2026-09-08', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:13'),
+(27, 99, '2026-09-06', '17032 / Pilot', 'Non-Daily Train 17032/Pilot (GNT-HYB-GNT)', 'Daily Duty Management', '2026-11-14 12:33:33'),
+(28, 99, '2026-09-07', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:33:35'),
+(29, 99, '2026-09-08', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:33:37'),
 (30, 99, '2026-09-09', 'CR', '', 'SYSTEM_SEED', '2026-09-06 10:09:24'),
-(31, 100, '2026-09-01', '17077 / 17078', 'Special Train 17077/17078 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 06:55:23'),
-(32, 100, '2026-09-02', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:24'),
+(31, 100, '2026-09-01', '17077 / 17078', 'Special Train 17077/17078 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 12:33:52'),
+(32, 100, '2026-09-02', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:33:54'),
 (33, 100, '2026-09-03', '17078', '', 'SYSTEM_SEED', '2026-09-06 10:09:24'),
-(34, 100, '2026-09-04', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 06:55:25'),
-(35, 100, '2026-09-05', 'Pilot / 12756', 'Special Train Pilot/12756', 'Daily Duty Management', '2026-11-14 06:55:26'),
+(34, 100, '2026-09-04', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 12:33:56'),
+(35, 100, '2026-09-05', 'Pilot / 12756', 'Special Train Pilot/12756', 'Daily Duty Management', '2026-11-14 12:33:58'),
 (36, 100, '2026-09-06', '17239', '', 'SYSTEM_SEED', '2026-09-06 10:09:24'),
-(37, 100, '2026-09-07', '17687 / 17688', 'Non-Daily Train 17687/17688 (GNT-DHNE-GNT)', 'Daily Duty Management', '2026-11-14 06:55:27'),
+(37, 100, '2026-09-07', '17687 / 17688', 'Non-Daily Train 17687/17688 (GNT-DHNE-GNT)', 'Daily Duty Management', '2026-11-14 12:34:00'),
 (38, 100, '2026-09-08', '17243', '', 'SYSTEM_SEED', '2026-09-06 10:09:24'),
-(39, 100, '2026-09-09', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 06:55:27'),
+(39, 100, '2026-09-09', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 12:34:01'),
 (40, 100, '2026-09-10', '22881', 'Day 2 of Link #53 (3-day link set)', 'Daily Duty Management', '2026-10-27 14:20:41'),
-(41, 100, '2026-09-11', '07025 / 07026', 'Special Train 07025/07026', 'Daily Duty Management', '2026-11-14 06:55:28'),
+(41, 100, '2026-09-11', '07025 / 07026', 'Special Train 07025/07026', 'Daily Duty Management', '2026-11-14 12:34:03'),
 (42, 100, '2026-09-12', '17239', '', 'SYSTEM_SEED', '2026-10-27 14:20:42'),
 (62, 103, '2026-09-01', '17637/38', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
-(63, 103, '2026-09-02', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:32'),
-(64, 103, '2026-09-03', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:32'),
-(65, 103, '2026-09-04', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:33'),
-(66, 103, '2026-09-05', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:33'),
-(67, 103, '2026-09-06', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 06:55:34'),
+(63, 103, '2026-09-02', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:34:14'),
+(64, 103, '2026-09-03', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:16'),
+(65, 103, '2026-09-04', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:34:17'),
+(66, 103, '2026-09-05', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:19'),
+(67, 103, '2026-09-06', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 12:34:20'),
 (68, 103, '2026-09-07', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:20'),
-(69, 103, '2026-09-08', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:55:35'),
-(70, 104, '2026-09-01', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:41'),
-(71, 104, '2026-09-02', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:41'),
+(69, 103, '2026-09-08', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:34:21'),
+(70, 104, '2026-09-01', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:34:39'),
+(71, 104, '2026-09-02', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:41'),
 (72, 104, '2026-09-03', '17070', 'Non-daily train 17070', 'Daily Duty Management', '2026-09-09 12:18:49'),
 (73, 104, '2026-09-04', 'R', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (74, 104, '2026-09-05', '17626', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
@@ -9033,29 +9033,29 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (76, 104, '2026-09-07', '17625', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (77, 104, '2026-09-08', '17243', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (78, 104, '2026-09-09', '17239', '', 'SYSTEM_SEED', '2026-10-27 14:20:42'),
-(79, 104, '2026-09-10', '07001 / 17070', 'Special Train 07001/17070', 'Daily Duty Management', '2026-11-14 06:55:42'),
+(79, 104, '2026-09-10', '07001 / 17070', 'Special Train 07001/17070', 'Daily Duty Management', '2026-11-14 12:34:43'),
 (80, 105, '2026-09-01', '12734', '', 'SYSTEM_SEED', '2026-10-27 14:20:42'),
 (81, 105, '2026-09-02', '20630', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
-(82, 105, '2026-09-03', '12755 / 17625', 'Non-Daily Train 12755/17625 (GNT-COA-GNT)', 'Daily Duty Management', '2026-11-14 06:55:45'),
-(83, 105, '2026-09-04', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:46'),
-(84, 105, '2026-09-05', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:47'),
-(85, 105, '2026-09-06', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 06:55:48'),
-(86, 105, '2026-09-07', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 06:55:48'),
+(82, 105, '2026-09-03', '12755 / 17625', 'Non-Daily Train 12755/17625 (GNT-COA-GNT)', 'Daily Duty Management', '2026-11-14 12:34:49'),
+(83, 105, '2026-09-04', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:34:51'),
+(84, 105, '2026-09-05', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:53'),
+(85, 105, '2026-09-06', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 12:34:54'),
+(86, 105, '2026-09-07', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 12:34:56'),
 (87, 106, '2026-09-01', '07198', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (88, 106, '2026-09-02', '22882', 'Non-daily train 22882', 'Daily Duty Management', '2026-09-15 06:30:17'),
-(89, 106, '2026-09-03', '17239 / 17240', 'Link #29 (17239/17240 AC+2S)', 'Daily Duty Management', '2026-11-14 06:55:53'),
-(90, 106, '2026-09-04', '07025 / 07026', 'Special Train 07025/07026', 'Daily Duty Management', '2026-11-14 06:55:53'),
-(91, 106, '2026-09-05', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:54'),
-(92, 106, '2026-09-06', '07227 / 07228', 'Special Train 07227/07228', 'Daily Duty Management', '2026-11-14 06:55:54'),
-(93, 106, '2026-09-07', '07228', 'Day 2 Return of 07227 (GNT-CHZ-GNT Spl) • CHZ ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:55'),
+(89, 106, '2026-09-03', '17239 / 17240', 'Link #29 (17239/17240 AC+2S)', 'Daily Duty Management', '2026-11-14 12:35:09'),
+(90, 106, '2026-09-04', '07025 / 07026', 'Special Train 07025/07026', 'Daily Duty Management', '2026-11-14 12:35:10'),
+(91, 106, '2026-09-05', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:35:12'),
+(92, 106, '2026-09-06', '07227 / 07228', 'Special Train 07227/07228', 'Daily Duty Management', '2026-11-14 12:35:14'),
+(93, 106, '2026-09-07', '07228', 'Day 2 Return of 07227 (GNT-CHZ-GNT Spl) • CHZ ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:16'),
 (94, 106, '2026-09-08', '07208', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (95, 107, '2026-09-01', 'R', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
-(96, 107, '2026-09-02', '17069 / 17262', 'Non-Daily Train 17069/17262 (GNT-KCG-GNT)', 'Daily Duty Management', '2026-11-14 06:56:02'),
-(97, 107, '2026-09-03', '17262', 'Day 2 Return of 17069 (GNT-TPTY / RU-GNT Exp (Link #55)) • RU/TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:03'),
-(98, 107, '2026-09-04', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 06:56:03'),
-(99, 107, '2026-09-05', '07193 / 07194', 'Special Train 07193/07194', 'Daily Duty Management', '2026-11-14 06:56:04'),
-(100, 107, '2026-09-06', '07194', 'Day 2 Return of 07193 (GNT-KPD-GNT Spl) • KPD ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:04'),
-(101, 107, '2026-09-07', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:05'),
+(96, 107, '2026-09-02', '17069 / 17262', 'Non-Daily Train 17069/17262 (GNT-KCG-GNT)', 'Daily Duty Management', '2026-11-14 12:35:36'),
+(97, 107, '2026-09-03', '17262', 'Day 2 Return of 17069 (GNT-TPTY / RU-GNT Exp (Link #55)) • RU/TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:38'),
+(98, 107, '2026-09-04', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 12:35:40'),
+(99, 107, '2026-09-05', '07193 / 07194', 'Special Train 07193/07194', 'Daily Duty Management', '2026-11-14 12:35:42'),
+(100, 107, '2026-09-06', '07194', 'Day 2 Return of 07193 (GNT-KPD-GNT Spl) • KPD ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:43'),
+(101, 107, '2026-09-07', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:35:45'),
 (102, 107, '2026-09-08', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-22 08:19:00'),
 (103, 108, '2026-09-01', 'CR 26/8', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (104, 108, '2026-09-02', 'R', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
@@ -9069,15 +9069,15 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (112, 108, '2026-09-10', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (113, 108, '2026-09-11', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (114, 108, '2026-09-12', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
-(115, 109, '2026-09-01', '17243 / 17244', 'Link #53 (17243/17244 SL)', 'Daily Duty Management', '2026-11-14 06:56:13'),
-(116, 109, '2026-09-02', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:14'),
-(117, 109, '2026-09-03', '20629 / 20630', 'Link #43 (20629/20630 SL)', 'Daily Duty Management', '2026-11-14 06:56:15'),
-(118, 109, '2026-09-04', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:15'),
-(119, 109, '2026-09-05', '17221 / 17222', 'Non-Daily Train 17221/17222 (GNT-LPI-GNT)', 'Daily Duty Management', '2026-11-14 06:56:16'),
-(120, 109, '2026-09-06', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:16'),
-(121, 109, '2026-09-07', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 06:56:17'),
-(122, 109, '2026-09-08', '17077 / 17078', 'Special Train 17077/17078 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 06:56:17'),
-(123, 109, '2026-09-09', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:18'),
+(115, 109, '2026-09-01', '17243 / 17244', 'Link #53 (17243/17244 SL)', 'Daily Duty Management', '2026-11-14 12:36:11'),
+(116, 109, '2026-09-02', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:36:12'),
+(117, 109, '2026-09-03', '20629 / 20630', 'Link #43 (20629/20630 SL)', 'Daily Duty Management', '2026-11-14 12:36:13'),
+(118, 109, '2026-09-04', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:15'),
+(119, 109, '2026-09-05', '17221 / 17222', 'Non-Daily Train 17221/17222 (GNT-LPI-GNT)', 'Daily Duty Management', '2026-11-14 12:36:16'),
+(120, 109, '2026-09-06', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:18'),
+(121, 109, '2026-09-07', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 12:36:19'),
+(122, 109, '2026-09-08', '17077 / 17078', 'Special Train 17077/17078 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 12:36:21'),
+(123, 109, '2026-09-09', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:22'),
 (124, 109, '2026-09-10', '17078', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (125, 110, '2026-09-01', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
 (126, 110, '2026-09-02', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:25'),
@@ -9097,250 +9097,250 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (140, 111, '2026-09-03', 'CR 28/8', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (141, 111, '2026-09-04', 'R', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (142, 111, '2026-09-05', 'CL', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(143, 111, '2026-09-06', '17253 / 17252', 'Link #1 (17253/17252 AC+SL)', 'Daily Duty Management', '2026-11-14 06:56:26'),
-(144, 111, '2026-09-07', '17240', 'Day 2 of Link #1 (2-day link set)', 'Daily Duty Management', '2026-11-14 06:56:27'),
+(143, 111, '2026-09-06', '17253 / 17252', 'Link #1 (17253/17252 AC+SL)', 'Daily Duty Management', '2026-11-14 12:36:47'),
+(144, 111, '2026-09-07', '17240', 'Day 2 of Link #1 (2-day link set)', 'Daily Duty Management', '2026-11-14 12:36:49'),
 (145, 111, '2026-09-08', '17041', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (146, 111, '2026-09-09', '12734', '', 'SYSTEM_SEED', '2026-10-27 14:20:42'),
-(147, 111, '2026-09-10', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 06:56:27'),
+(147, 111, '2026-09-10', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 12:36:50'),
 (148, 112, '2026-09-01', '17240', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (149, 112, '2026-09-02', 'CR 30/8', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(150, 112, '2026-09-03', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 06:56:33'),
-(151, 112, '2026-09-04', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:34'),
-(152, 112, '2026-09-05', '16358 / 12603', 'Non-Daily Train 16358/12603 (GNT-CAPE-GNT)', 'Daily Duty Management', '2026-11-14 06:56:35'),
-(153, 112, '2026-09-06', '12603', 'Day 2 Return of 16358 (GNT-MS-MAS-GNT Exp) • MS/MAS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:35'),
+(150, 112, '2026-09-03', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 12:37:06'),
+(151, 112, '2026-09-04', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:37:08'),
+(152, 112, '2026-09-05', '16358 / 12603', 'Non-Daily Train 16358/12603 (GNT-CAPE-GNT)', 'Daily Duty Management', '2026-11-14 12:37:09'),
+(153, 112, '2026-09-06', '12603', 'Day 2 Return of 16358 (GNT-MS-MAS-GNT Exp) • MS/MAS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:11'),
 (154, 112, '2026-09-07', '17646', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(155, 112, '2026-09-08', '17041 / 17042', 'Amrit Bharat Exp 17041/17042 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 06:56:36'),
-(156, 113, '2026-09-01', '17041 / 17042', 'Amrit Bharat Exp 17041/17042 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 06:56:42'),
-(157, 113, '2026-09-02', '17042', 'Day 2 Return of 17041 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:42'),
+(155, 112, '2026-09-08', '17041 / 17042', 'Amrit Bharat Exp 17041/17042 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 12:37:12'),
+(156, 113, '2026-09-01', '17041 / 17042', 'Amrit Bharat Exp 17041/17042 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 12:37:28'),
+(157, 113, '2026-09-02', '17042', 'Day 2 Return of 17041 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:30'),
 (158, 113, '2026-09-03', '17042', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(159, 113, '2026-09-04', '07195 / 20630', 'Special Train 07195/20630', 'Daily Duty Management', '2026-11-14 06:56:43'),
-(160, 113, '2026-09-05', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 06:56:43'),
-(161, 113, '2026-09-06', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:44'),
+(159, 113, '2026-09-04', '07195 / 20630', 'Special Train 07195/20630', 'Daily Duty Management', '2026-11-14 12:37:31'),
+(160, 113, '2026-09-05', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 12:37:33'),
+(161, 113, '2026-09-06', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:37:34'),
 (162, 113, '2026-09-07', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:22'),
 (163, 114, '2026-09-01', '12705', '', 'SYSTEM_SEED', '2026-10-27 14:20:42'),
 (164, 114, '2026-09-02', '17625', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(165, 114, '2026-09-03', '17281 / 17282', 'Link #45 (17281/17282 2S)', 'Daily Duty Management', '2026-11-14 06:56:53'),
+(165, 114, '2026-09-03', '17281 / 17282', 'Link #45 (17281/17282 2S)', 'Daily Duty Management', '2026-11-14 12:37:58'),
 (166, 114, '2026-09-04', '17243', 'Day 4 of Link #43 (4-day link set)', 'Daily Duty Management', '2026-10-10 07:40:37'),
 (167, 114, '2026-09-05', 'CR 29/8', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(168, 114, '2026-09-06', '02811 / 02812', 'Special Train 02811/02812 (GNT-BBS-GNT)', 'Daily Duty Management', '2026-11-14 06:56:53'),
-(169, 114, '2026-09-07', '02812', 'Day 2 Return of 02811 (GNT-DMM-BZA Spl) • DMM ➔ BZA', 'Daily Duty Management', '2026-11-14 06:56:54'),
+(168, 114, '2026-09-06', '02811 / 02812', 'Special Train 02811/02812 (GNT-BBS-GNT)', 'Daily Duty Management', '2026-11-14 12:38:00'),
+(169, 114, '2026-09-07', '02812', 'Day 2 Return of 02811 (GNT-DMM-BZA Spl) • DMM ➔ BZA', 'Daily Duty Management', '2026-11-14 12:38:01'),
 (170, 116, '2026-09-01', '12603', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (171, 116, '2026-09-02', 'R', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(172, 116, '2026-09-03', '07001 / 07002', 'Special Train 07001/07002', 'Daily Duty Management', '2026-11-14 06:57:01'),
-(173, 116, '2026-09-04', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:02'),
-(174, 116, '2026-09-05', '20629 / 07196', 'Special Train 20629/07196', 'Daily Duty Management', '2026-11-14 06:57:02'),
-(175, 116, '2026-09-06', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:03'),
-(176, 116, '2026-09-07', '17239 / 17240', 'Link #29 (17239/17240 AC+2S)', 'Daily Duty Management', '2026-11-14 06:57:04'),
-(177, 116, '2026-09-08', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:04'),
-(178, 116, '2026-09-09', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:05'),
+(172, 116, '2026-09-03', '07001 / 07002', 'Special Train 07001/07002', 'Daily Duty Management', '2026-11-14 12:38:22'),
+(173, 116, '2026-09-04', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:24'),
+(174, 116, '2026-09-05', '20629 / 07196', 'Special Train 20629/07196', 'Daily Duty Management', '2026-11-14 12:38:25'),
+(175, 116, '2026-09-06', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:27'),
+(176, 116, '2026-09-07', '17239 / 17240', 'Link #29 (17239/17240 AC+2S)', 'Daily Duty Management', '2026-11-14 12:38:28'),
+(177, 116, '2026-09-08', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:38:30'),
+(178, 116, '2026-09-09', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:38:31'),
 (179, 117, '2026-09-01', '07194', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (180, 117, '2026-09-02', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
 (181, 117, '2026-09-03', 'LAP', '', 'SYSTEM_SEED', '2026-09-06 10:09:26'),
-(182, 117, '2026-09-04', '18063 / 18064', 'Non-Daily Train 18063/18064 (GNT-BAM-GNT)', 'Daily Duty Management', '2026-11-14 06:57:12'),
-(183, 117, '2026-09-05', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:12'),
-(184, 117, '2026-09-06', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 06:57:13'),
-(185, 117, '2026-09-07', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:13'),
-(186, 117, '2026-09-08', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:57:14'),
-(187, 117, '2026-09-09', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:14'),
-(188, 117, '2026-09-10', '17281 / 17282', 'Link #45 (17281/17282 2S)', 'Daily Duty Management', '2026-11-14 06:57:15'),
-(209, 103, '2026-09-09', '17626 / 17625', 'Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 06:55:35'),
-(213, 107, '2026-09-09', '17221 / 17222', 'COA-LPI Exp 17221/17222 (GNT-WADI-GNT)', 'Daily Duty Management', '2026-11-14 06:56:05'),
-(767, 106, '2026-09-10', '17253 / 17252', 'Link #1 (17253/17252 AC+SL)', 'Daily Duty Management', '2026-11-14 06:55:55'),
-(768, 99, '2026-09-10', '17646 / 12796', 'Link #17 (17646/12796 AC+SL)', 'Daily Duty Management', '2026-11-14 06:55:14'),
-(769, 116, '2026-09-10', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 06:57:06'),
-(915, 113, '2026-09-10', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:56:45'),
-(919, 114, '2026-09-10', '12604 / 16357', 'Non-Daily Train 12604/16357', 'Daily Duty Management', '2026-11-14 06:56:55'),
+(182, 117, '2026-09-04', '18063 / 18064', 'Non-Daily Train 18063/18064 (GNT-BAM-GNT)', 'Daily Duty Management', '2026-11-14 12:38:46'),
+(183, 117, '2026-09-05', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:47'),
+(184, 117, '2026-09-06', '12795 / 17645', 'Link #47 (12795/17645 AC+2S)', 'Daily Duty Management', '2026-11-14 12:38:49'),
+(185, 117, '2026-09-07', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:38:51'),
+(186, 117, '2026-09-08', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:38:52'),
+(187, 117, '2026-09-09', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:54'),
+(188, 117, '2026-09-10', '17281 / 17282', 'Link #45 (17281/17282 2S)', 'Daily Duty Management', '2026-11-14 12:38:55'),
+(209, 103, '2026-09-09', '17626 / 17625', 'Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 12:34:24'),
+(213, 107, '2026-09-09', '17221 / 17222', 'COA-LPI Exp 17221/17222 (GNT-WADI-GNT)', 'Daily Duty Management', '2026-11-14 12:35:46'),
+(767, 106, '2026-09-10', '17253 / 17252', 'Link #1 (17253/17252 AC+SL)', 'Daily Duty Management', '2026-11-14 12:35:17'),
+(768, 99, '2026-09-10', '17646 / 12796', 'Link #17 (17646/12796 AC+SL)', 'Daily Duty Management', '2026-11-14 12:33:38'),
+(769, 116, '2026-09-10', '12805 / 12806', 'Link #19 (12805/12806 AC+2S)', 'Daily Duty Management', '2026-11-14 12:38:33'),
+(915, 113, '2026-09-10', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:37:38'),
+(919, 114, '2026-09-10', '12604 / 16357', 'Non-Daily Train 12604/16357', 'Daily Duty Management', '2026-11-14 12:38:06'),
 (920, 114, '2026-09-17', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:22'),
 (921, 114, '2026-09-24', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:22'),
-(924, 104, '2026-09-17', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 06:55:43'),
+(924, 104, '2026-09-17', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 12:34:46'),
 (925, 104, '2026-09-24', '17070', 'Non-daily train 17070', 'Daily Duty Management', '2026-09-09 12:18:50'),
-(935, 105, '2026-09-10', '07001 / 07002', 'Special Train 07001 Pilot / 07002', 'Daily Duty Management', '2026-11-14 06:55:49'),
-(936, 105, '2026-09-17', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:51'),
+(935, 105, '2026-09-10', '07001 / 07002', 'Special Train 07001 Pilot / 07002', 'Daily Duty Management', '2026-11-14 12:34:59'),
+(936, 105, '2026-09-17', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:35:04'),
 (937, 105, '2026-09-24', '07002', 'Non-daily train 07002', 'Daily Duty Management', '2026-09-09 12:19:15'),
 (1094, 104, '2026-09-13', '17282', 'Day 2 Return of 17081 (NS->GNT)', 'Admin', '2026-09-13 05:16:19'),
 (1095, 105, '2026-09-13', '02811 / 02812', '02811/02812', 'Admin', '2026-09-13 05:16:48'),
-(1096, 107, '2026-09-13', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 06:56:07'),
+(1096, 107, '2026-09-13', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 12:35:53'),
 (1097, 117, '2026-09-13', '12604 / 12603', 'Y.K. BABU (SL)', 'Admin', '2026-09-13 05:18:01'),
-(1098, 114, '2026-09-13', 'PILOT / 18047', 'Assigned to Link #57', 'Daily Duty Management', '2026-11-14 06:56:56'),
-(1300, 103, '2026-09-11', '20629 / 20630', 'Link #22 (20629/20630 SL)', 'Daily Duty Management', '2026-11-14 06:55:36'),
-(1301, 103, '2026-09-12', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:36'),
-(1302, 103, '2026-09-13', '20630', 'Day 3 of Link #22 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:37'),
-(1304, 114, '2026-09-14', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:57'),
+(1098, 114, '2026-09-13', 'PILOT / 18047', 'Assigned to Link #57', 'Daily Duty Management', '2026-11-14 12:38:08'),
+(1300, 103, '2026-09-11', '20629 / 20630', 'Link #22 (20629/20630 SL)', 'Daily Duty Management', '2026-11-14 12:34:25'),
+(1301, 103, '2026-09-12', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:27'),
+(1302, 103, '2026-09-13', '20630', 'Day 3 of Link #22 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:34:29'),
+(1304, 114, '2026-09-14', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:38:10'),
 (1305, 114, '2026-09-15', '18048 / PILOT', 'Day 3 of Link #57 (3-day link set)', 'Daily Duty Management', '2026-10-10 07:40:37'),
-(1370, 106, '2026-09-14', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:55:58'),
-(1371, 106, '2026-09-15', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:58'),
-(1372, 103, '2026-09-14', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:37'),
-(1373, 103, '2026-09-15', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:38'),
-(1374, 116, '2026-09-14', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:57:08'),
-(1375, 116, '2026-09-15', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:08'),
-(1377, 109, '2026-09-14', '17637 / 17638', 'Non-Daily Train 17637/17638', 'Daily Duty Management', '2026-11-14 06:56:19'),
+(1370, 106, '2026-09-14', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:35:24'),
+(1371, 106, '2026-09-15', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:35:26'),
+(1372, 103, '2026-09-14', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:34:30'),
+(1373, 103, '2026-09-15', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:32'),
+(1374, 116, '2026-09-14', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:38:37'),
+(1375, 116, '2026-09-15', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:38'),
+(1377, 109, '2026-09-14', '17637 / 17638', 'Non-Daily Train 17637/17638', 'Daily Duty Management', '2026-11-14 12:36:26'),
 (1378, 109, '2026-09-21', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:21'),
 (1379, 109, '2026-09-28', '17638', 'Non-daily train 17638', 'Daily Duty Management', '2026-09-13 06:32:38'),
 (1385, 97, '2026-09-14', '07227 / 07228', 'Special Train 07227/07228', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (1386, 97, '2026-09-21', '07227', 'Non-daily train 07227', 'Daily Duty Management', '2026-09-13 06:35:02'),
 (1387, 97, '2026-09-28', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-18 11:59:05'),
-(2570, 113, '2026-09-15', '17239 / 17240', 'Assigned to Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:56:48'),
-(2571, 113, '2026-09-16', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:48'),
-(2662, 105, '2026-09-16', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:55:50'),
-(2666, 104, '2026-09-16', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 06:55:43'),
-(2668, 106, '2026-09-16', '18047 / 18048', 'Link #57 (18047/18048 SL)', 'Daily Duty Management', '2026-11-14 06:55:59'),
+(2570, 113, '2026-09-15', '17239 / 17240', 'Assigned to Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:37:45'),
+(2571, 113, '2026-09-16', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:37:46'),
+(2662, 105, '2026-09-16', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:35:03'),
+(2666, 104, '2026-09-16', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 12:34:44'),
+(2668, 106, '2026-09-16', '18047 / 18048', 'Link #57 (18047/18048 SL)', 'Daily Duty Management', '2026-11-14 12:35:27'),
 (2669, 106, '2026-09-17', '18047 / 18048', 'Day 2 of Link #57 (3-day link set)', 'Daily Duty Management', '2026-10-10 07:40:36'),
 (2671, 106, '2026-09-09', '22882', 'Non-daily train 22882', 'Daily Duty Management', '2026-09-15 06:30:17'),
 (2673, 106, '2026-09-23', '22882', 'Non-daily train 22882', 'Daily Duty Management', '2026-09-15 06:30:17'),
 (2674, 106, '2026-09-30', '22882', 'Non-daily train 22882', 'Daily Duty Management', '2026-09-15 06:30:17'),
-(3170, 108, '2026-09-18', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:11'),
+(3170, 108, '2026-09-18', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:05'),
 (3171, 108, '2026-09-19', '17240', 'Assigned Link #30 (Day 2 of Link #29)', 'Daily Duty Management', '2026-09-22 05:57:30'),
-(3266, 106, '2026-09-18', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 06:55:59'),
+(3266, 106, '2026-09-18', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 12:35:29'),
 (3323, 97, '2026-09-26', '18047 / 18048', 'Assigned Link #51 (Day 2 of Link #50)', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (3382, 97, '2026-09-27', '18048 / PILOT', 'Assigned Link #52 (Day 3 of Link #50) - Rest day worked (CR credited for 27/09/2026)', 'Daily Duty Management', '2026-10-07 08:13:17'),
-(3390, 99, '2026-09-19', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:16'),
-(3391, 99, '2026-09-20', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:17'),
-(3392, 99, '2026-09-21', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:55:19'),
-(3393, 111, '2026-09-19', '20629 / 20630', 'Link #43 (20629/20630 SL-1)', 'Daily Duty Management', '2026-11-14 06:56:31'),
-(3395, 111, '2026-09-21', '17251 / 17254', 'Link #5 (17251/17254)', 'Daily Duty Management', '2026-11-14 06:56:32'),
+(3390, 99, '2026-09-19', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:33:47'),
+(3391, 99, '2026-09-20', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:33:48'),
+(3392, 99, '2026-09-21', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:33:50'),
+(3393, 111, '2026-09-19', '20629 / 20630', 'Link #43 (20629/20630 SL-1)', 'Daily Duty Management', '2026-11-14 12:37:01'),
+(3395, 111, '2026-09-21', '17251 / 17254', 'Link #5 (17251/17254)', 'Daily Duty Management', '2026-11-14 12:37:03'),
 (3397, 107, '2026-09-20', '18047 / 18048', 'Day 2 of Link #57 (3-day link set)', 'Daily Duty Management', '2026-10-10 07:40:36'),
-(3399, 107, '2026-09-21', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:10'),
-(3404, 100, '2026-09-19', '20629 / 20630', 'Link #43 (20629/20630 SL-2)', 'Daily Duty Management', '2026-11-14 06:55:30'),
-(3405, 100, '2026-09-20', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:31'),
-(3407, 103, '2026-09-19', '12734 / 17262', 'Assigned Link #18 (Narayanadri Exp 12734/17262)', 'Daily Duty Management', '2026-11-14 06:55:39'),
-(3408, 103, '2026-09-20', '12734 / 17262', 'Day 2 of Link #18 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:40'),
-(3872, 113, '2026-09-19', '12795 / 17645', 'Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 06:56:50'),
-(3873, 113, '2026-09-20', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:50'),
-(3877, 107, '2026-09-19', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 06:56:10'),
-(3970, 99, '2026-09-11', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 06:55:14'),
-(3974, 99, '2026-09-22', '12604 / 12603', 'Assigned Link #4 (Day 2 of Link #3)', 'Daily Duty Management', '2026-11-14 06:55:21'),
-(3980, 100, '2026-09-21', '17625 / 17646', 'Day 3 of Link #43 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:31'),
+(3399, 107, '2026-09-21', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:36:02'),
+(3404, 100, '2026-09-19', '20629 / 20630', 'Link #43 (20629/20630 SL-2)', 'Daily Duty Management', '2026-11-14 12:34:09'),
+(3405, 100, '2026-09-20', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:11'),
+(3407, 103, '2026-09-19', '12734 / 17262', 'Assigned Link #18 (Narayanadri Exp 12734/17262)', 'Daily Duty Management', '2026-11-14 12:34:35'),
+(3408, 103, '2026-09-20', '12734 / 17262', 'Day 2 of Link #18 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:34:36'),
+(3872, 113, '2026-09-19', '12795 / 17645', 'Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 12:37:51'),
+(3873, 113, '2026-09-20', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:37:52'),
+(3877, 107, '2026-09-19', '17225 / 18048', 'Link #57 (17225/18048 SL)', 'Daily Duty Management', '2026-11-14 12:36:00'),
+(3970, 99, '2026-09-11', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 12:33:40'),
+(3974, 99, '2026-09-22', '12604 / 12603', 'Assigned Link #4 (Day 2 of Link #3)', 'Daily Duty Management', '2026-11-14 12:33:51'),
+(3980, 100, '2026-09-21', '17625 / 17646', 'Day 3 of Link #43 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:34:12'),
 (3996, 103, '2026-09-10', '18047 / 18048', 'Day 2 of Link #50 (3-day link set)', 'Daily Duty Management', '2026-11-14 05:20:21'),
-(4004, 103, '2026-09-21', '17262', 'Day 3 of Link #18 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:55:40'),
-(4007, 104, '2026-09-18', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 06:55:44'),
-(4013, 106, '2026-09-11', '17240', 'Day 2 of Link #1 (2-day link set)', 'Daily Duty Management', '2026-11-14 06:55:56'),
+(4004, 103, '2026-09-21', '17262', 'Day 3 of Link #18 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:34:38'),
+(4007, 104, '2026-09-18', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 12:34:47'),
+(4013, 106, '2026-09-11', '17240', 'Day 2 of Link #1 (2-day link set)', 'Daily Duty Management', '2026-11-14 12:35:19'),
 (4018, 106, '2026-09-19', '17243', 'Day 4 of Link #43 (4-day link set)', 'Daily Duty Management', '2026-10-10 07:40:36'),
 (4027, 107, '2026-09-22', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-22 05:57:30'),
-(4036, 112, '2026-09-09', '17042', 'Day 2 Return of 17041 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:36'),
-(4038, 113, '2026-09-11', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:46'),
-(4043, 113, '2026-09-21', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:56:51'),
-(4052, 116, '2026-09-11', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 06:57:06'),
+(4036, 112, '2026-09-09', '17042', 'Day 2 Return of 17041 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:14'),
+(4038, 113, '2026-09-11', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:40'),
+(4043, 113, '2026-09-21', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:37:54'),
+(4052, 116, '2026-09-11', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 12:38:34'),
 (4055, 116, '2026-09-16', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:23'),
 (4060, 117, '2026-09-11', '17243', 'Day 4 of Link #43 (4-day link set)', 'Daily Duty Management', '2026-10-10 07:40:37'),
 (4061, 117, '2026-09-12', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:23'),
 (5299, 99, '2026-09-23', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-18 11:59:06'),
-(5333, 105, '2026-09-08', '07127 / 07128', 'Special Fare Exp 07127/07128 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 06:55:49'),
+(5333, 105, '2026-09-08', '07127 / 07128', 'Special Fare Exp 07127/07128 (GNT-RU-GNT)', 'Daily Duty Management', '2026-11-14 12:34:57'),
 (5350, 107, '2026-09-23', '17251', 'Assigned to Link #19', 'Daily Duty Management', '2026-09-24 11:28:55'),
 (5377, 116, '2026-09-17', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-18 11:59:08'),
-(6598, 106, '2026-09-20', '12795 / 17645', 'Assigned to Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 06:56:00'),
-(6599, 106, '2026-09-21', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:00'),
-(6601, 116, '2026-09-20', '17626 / 17625', 'Assigned to Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 06:57:10'),
+(6598, 106, '2026-09-20', '12795 / 17645', 'Assigned to Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 12:35:31'),
+(6599, 106, '2026-09-21', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:35:32'),
+(6601, 116, '2026-09-20', '17626 / 17625', 'Assigned to Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 12:38:43'),
 (6602, 116, '2026-09-21', '18047 / 18048', 'Day 2 of Link #50 (3-day link set)', 'Daily Duty Management', '2026-11-14 05:21:55'),
-(6604, 116, '2026-09-22', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:57:11'),
-(6612, 108, '2026-09-20', '02811 / 02812', 'Special Train 02811/02812 (GNT-BBS-GNT AC)', 'Daily Duty Management', '2026-11-14 06:56:12'),
+(6604, 116, '2026-09-22', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:38:44'),
+(6612, 108, '2026-09-20', '02811 / 02812', 'Special Train 02811/02812 (GNT-BBS-GNT AC)', 'Daily Duty Management', '2026-11-14 12:36:06'),
 (6720, 116, '2026-09-23', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-09-20 06:13:24'),
-(6811, 111, '2026-09-20', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:32'),
-(7318, 114, '2026-09-21', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 06:56:59'),
-(7319, 114, '2026-09-22', '12805', 'Assigned Link #18 (Day 2 of Link #17)', 'Daily Duty Management', '2026-11-14 06:57:00'),
-(7321, 112, '2026-09-10', '17225 / 18048', '17225/18048', 'Daily Duty Management', '2026-11-14 06:56:37'),
-(7322, 109, '2026-09-12', '17239 / 17240', 'Assigned to Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:56:18'),
-(7323, 107, '2026-09-12', '17646 / 12796', 'Assigned to Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 06:56:07'),
-(7324, 113, '2026-09-12', '12795 / 17645', 'Assigned to Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 06:56:47'),
-(7326, 99, '2026-09-12', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 06:55:15'),
-(7327, 106, '2026-09-12', '17646 / 17645', 'Extra Train 17646/17645', 'Daily Duty Management', '2026-11-14 06:55:57'),
-(7328, 112, '2026-09-12', '17221 / 17222', 'Non-Daily Train 17221/17222 (GNT-LPI-GNT)', 'Daily Duty Management', '2026-11-14 06:56:38'),
-(7329, 116, '2026-09-12', '16858 / 12603', 'Non-Daily Train 16858/12603', 'Daily Duty Management', '2026-11-14 06:57:07'),
-(7330, 100, '2026-09-15', '17626 / 17625', 'Assigned to Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 06:55:28'),
+(6811, 111, '2026-09-20', '07198', 'Day 2 Return of 20629 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:02'),
+(7318, 114, '2026-09-21', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 12:38:15'),
+(7319, 114, '2026-09-22', '12805', 'Assigned Link #18 (Day 2 of Link #17)', 'Daily Duty Management', '2026-11-14 12:38:17'),
+(7321, 112, '2026-09-10', '17225 / 18048', '17225/18048', 'Daily Duty Management', '2026-11-14 12:37:16'),
+(7322, 109, '2026-09-12', '17239 / 17240', 'Assigned to Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:36:23'),
+(7323, 107, '2026-09-12', '17646 / 12796', 'Assigned to Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 12:35:51'),
+(7324, 113, '2026-09-12', '12795 / 17645', 'Assigned to Link #47 (12795/17645)', 'Daily Duty Management', '2026-11-14 12:37:42'),
+(7326, 99, '2026-09-12', '17243 / 17244', 'Assigned Link #53 (Rayagada Exp 17243/17244)', 'Daily Duty Management', '2026-11-14 12:33:42'),
+(7327, 106, '2026-09-12', '17646 / 17645', 'Extra Train 17646/17645', 'Daily Duty Management', '2026-11-14 12:35:21'),
+(7328, 112, '2026-09-12', '17221 / 17222', 'Non-Daily Train 17221/17222 (GNT-LPI-GNT)', 'Daily Duty Management', '2026-11-14 12:37:18'),
+(7329, 116, '2026-09-12', '16858 / 12603', 'Non-Daily Train 16858/12603', 'Daily Duty Management', '2026-11-14 12:38:35'),
+(7330, 100, '2026-09-15', '17626 / 17625', 'Assigned to Link #50 (17626/17625 SL)', 'Daily Duty Management', '2026-11-14 12:34:04'),
 (7331, 99, '2026-09-15', '12755', 'Non-Daily Train 17041/17042', 'Admin', '2026-10-21 17:49:57'),
-(7333, 117, '2026-09-16', '22882 / 22881', 'BBS-PUNE Exp 22882/22881', 'Daily Duty Management', '2026-11-14 06:57:16'),
-(7334, 109, '2026-09-16', '17221 / 17222', 'COA-LPI Exp 17221/17222', 'Daily Duty Management', '2026-11-14 06:56:21'),
-(7335, 107, '2026-09-17', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:56:09'),
-(7336, 113, '2026-09-17', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:56:49'),
-(7337, 100, '2026-09-17', '12604 / 16357', 'Non-Daily Train 12604/16357', 'Daily Duty Management', '2026-11-14 06:55:29'),
-(7339, 108, '2026-09-17', '07001 / 07002', 'Special Train 07001/07002', 'Daily Duty Management', '2026-11-14 06:56:11'),
-(7340, 116, '2026-09-18', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 06:57:09'),
-(7341, 105, '2026-09-18', '17231 / 17232', 'Non-Daily Train 17231/17232', 'Daily Duty Management', '2026-11-14 06:55:51'),
-(7342, 114, '2026-09-18', '18063 / 18064', 'Non-Daily Train 18063/18064', 'Daily Duty Management', '2026-11-14 06:56:58'),
-(8360, 113, '2026-09-22', '17244', 'Assigned Link #48 (Day 2 of Link #47)', 'Daily Duty Management', '2026-11-14 06:56:51'),
-(8738, 112, '2026-09-21', '17253 / 17252', 'Link #1 (17253/17252)', 'Daily Duty Management', '2026-11-14 06:56:41'),
-(8739, 112, '2026-09-22', '17252', 'Substitute for P RAVI KUMAR (LAP) on Link 16', 'Daily Duty Management', '2026-11-14 06:56:41'),
-(8741, 111, '2026-09-22', '17244', 'Assigned Link #48 (Day 2 of Link #47)', 'Daily Duty Management', '2026-11-14 06:56:33'),
+(7333, 117, '2026-09-16', '22882 / 22881', 'BBS-PUNE Exp 22882/22881', 'Daily Duty Management', '2026-11-14 12:38:57'),
+(7334, 109, '2026-09-16', '17221 / 17222', 'COA-LPI Exp 17221/17222', 'Daily Duty Management', '2026-11-14 12:36:30'),
+(7335, 107, '2026-09-17', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:35:56'),
+(7336, 113, '2026-09-17', '12604 / 12603', 'Link #3 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:37:48'),
+(7337, 100, '2026-09-17', '12604 / 16357', 'Non-Daily Train 12604/16357', 'Daily Duty Management', '2026-11-14 12:34:06'),
+(7339, 108, '2026-09-17', '07001 / 07002', 'Special Train 07001/07002', 'Daily Duty Management', '2026-11-14 12:36:03'),
+(7340, 116, '2026-09-18', '17239 / 17240', 'Link #29 (17239/17240)', 'Daily Duty Management', '2026-11-14 12:38:40'),
+(7341, 105, '2026-09-18', '17231 / 17232', 'Non-Daily Train 17231/17232', 'Daily Duty Management', '2026-11-14 12:35:06'),
+(7342, 114, '2026-09-18', '18063 / 18064', 'Non-Daily Train 18063/18064', 'Daily Duty Management', '2026-11-14 12:38:13'),
+(8360, 113, '2026-09-22', '17244', 'Assigned Link #48 (Day 2 of Link #47)', 'Daily Duty Management', '2026-11-14 12:37:56'),
+(8738, 112, '2026-09-21', '17253 / 17252', 'Link #1 (17253/17252)', 'Daily Duty Management', '2026-11-14 12:37:26'),
+(8739, 112, '2026-09-22', '17252', 'Substitute for P RAVI KUMAR (LAP) on Link 16', 'Daily Duty Management', '2026-11-14 12:37:27'),
+(8741, 111, '2026-09-22', '17244', 'Assigned Link #48 (Day 2 of Link #47)', 'Daily Duty Management', '2026-11-14 12:37:05'),
 (10270, 107, '2026-09-24', '17254', 'Assigned Link #20 (Day 2 of Link #19)', 'Daily Duty Management', '2026-09-24 11:28:55'),
-(10281, 117, '2026-09-23', '17069', 'Assigned to Non-Daily Train 17069 (GNT ➔ RU)', 'Daily Duty Management', '2026-11-14 06:57:18'),
+(10281, 117, '2026-09-23', '17069', 'Assigned to Non-Daily Train 17069 (GNT ➔ RU)', 'Daily Duty Management', '2026-11-14 12:39:04'),
 (10754, 104, '2026-09-11', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:20'),
-(10847, 111, '2026-09-12', '12734 / 20630', 'Assigned Link #8 (Narayanadri Exp 12734/20630)', 'Daily Duty Management', '2026-11-14 06:56:29'),
-(10854, 112, '2026-09-15', '12805 / 12806', 'Assigned to Link #19 (12805/12806)', 'Daily Duty Management', '2026-11-14 06:56:39'),
-(10857, 111, '2026-09-15', '17077 / 17078', 'Special Train 17077/17078', 'Daily Duty Management', '2026-11-14 06:56:30'),
-(10862, 113, '2026-09-08', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 06:56:44'),
-(10864, 114, '2026-09-08', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 06:56:54'),
-(10875, 114, '2026-09-16', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 06:56:57'),
-(10881, 103, '2026-09-17', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 06:55:38'),
-(10902, 109, '2026-09-19', '16358 / 12603', 'Non-Daily Train 16358/12603', 'Daily Duty Management', '2026-11-14 06:56:22'),
-(10903, 117, '2026-09-19', '07193 / 07194', 'Special Train 07193/07194', 'Daily Duty Management', '2026-11-14 06:57:17'),
+(10847, 111, '2026-09-12', '12734 / 20630', 'Assigned Link #8 (Narayanadri Exp 12734/20630)', 'Daily Duty Management', '2026-11-14 12:36:53'),
+(10854, 112, '2026-09-15', '12805 / 12806', 'Assigned to Link #19 (12805/12806)', 'Daily Duty Management', '2026-11-14 12:37:23'),
+(10857, 111, '2026-09-15', '17077 / 17078', 'Special Train 17077/17078', 'Daily Duty Management', '2026-11-14 12:36:58'),
+(10862, 113, '2026-09-08', '17646 / 12796', 'Link #17 (17646/12796)', 'Daily Duty Management', '2026-11-14 12:37:36'),
+(10864, 114, '2026-09-08', '12604 / 12603', 'Link #31 (12604/12603 SL)', 'Daily Duty Management', '2026-11-14 12:38:03'),
+(10875, 114, '2026-09-16', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 12:38:11'),
+(10881, 103, '2026-09-17', '17281 / 17282', 'Link #45 (17281/17282)', 'Daily Duty Management', '2026-11-14 12:34:33'),
+(10902, 109, '2026-09-19', '16358 / 12603', 'Non-Daily Train 16358/12603', 'Daily Duty Management', '2026-11-14 12:36:35'),
+(10903, 117, '2026-09-19', '07193 / 07194', 'Special Train 07193/07194', 'Daily Duty Management', '2026-11-14 12:39:01'),
 (10934, 99, '2026-09-13', '22881', 'Day 2 of Link #53 (3-day link set)', 'Daily Duty Management', '2026-10-27 14:20:41'),
 (10935, 99, '2026-09-14', '22881', 'Day 3 of Link #53 (3-day link set)', 'Daily Duty Management', '2026-10-27 14:20:41'),
 (10945, 100, '2026-09-16', '18047 / 18048', 'Day 2 of Link #50 (3-day link set)', 'Daily Duty Management', '2026-11-14 05:20:14'),
 (10982, 103, '2026-09-18', '17243', 'Day 4 of Link #43 (4-day link set)', 'Daily Duty Management', '2026-10-10 07:40:35'),
 (10991, 104, '2026-09-19', '22881', 'Day 2 of Link #53 (3-day link set)', 'Daily Duty Management', '2026-10-27 14:20:41'),
 (10992, 104, '2026-09-20', '22881', 'Day 3 of Link #53 (3-day link set)', 'Daily Duty Management', '2026-10-27 14:20:41'),
-(11019, 107, '2026-09-18', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:09'),
-(11029, 109, '2026-09-13', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:19'),
-(11037, 111, '2026-09-13', '12734 / 20630', 'Day 2 of Link #8 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:29'),
-(11038, 111, '2026-09-14', '20630', 'Day 3 of Link #8 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:30'),
-(11047, 112, '2026-09-13', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:38'),
-(11049, 112, '2026-09-16', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 06:56:40'),
-(11053, 113, '2026-09-09', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 06:56:45'),
-(11057, 113, '2026-09-13', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:47'),
+(11019, 107, '2026-09-18', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:35:59'),
+(11029, 109, '2026-09-13', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:36:25'),
+(11037, 111, '2026-09-13', '12734 / 20630', 'Day 2 of Link #8 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:36:55'),
+(11038, 111, '2026-09-14', '20630', 'Day 3 of Link #8 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:36:56'),
+(11047, 112, '2026-09-13', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:20'),
+(11049, 112, '2026-09-16', '12806 / PILOT', 'Day 2 of Link #19 (2-day link set)', 'Daily Duty Management', '2026-11-14 12:37:24'),
+(11053, 113, '2026-09-09', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 12:37:37'),
+(11057, 113, '2026-09-13', '17244', 'Day 3 of Link #46 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:37:43'),
 (11058, 113, '2026-09-14', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-10-13 14:39:22'),
-(11062, 113, '2026-09-18', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:49'),
-(11068, 114, '2026-09-09', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:55'),
-(11089, 116, '2026-09-19', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:10'),
-(11403, 106, '2026-09-13', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 06:55:57'),
-(11471, 114, '2026-09-11', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:56'),
-(11504, 117, '2026-09-24', '17262', 'Day 2 Return of 17069 (GNT-TPTY / RU-GNT Exp (Link #55)) • RU/TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:19'),
-(11505, 117, '2026-09-25', 'AVL', 'Day 3: Arrived GNT 07:20 on 17262 • 8h HQ Rest till 15:20 • Available for duty', 'Daily Duty Management', '2026-11-14 06:57:20'),
-(11837, 99, '2026-09-16', '12756', 'Day 2 Return of 12755 (BZA-SC-BZA Exp) • SC ➔ BZA', 'Daily Duty Management', '2026-11-14 06:55:16'),
-(11852, 100, '2026-09-18', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:29'),
-(11922, 105, '2026-09-19', '17232', 'Day 2 Return of 17231 (BZA-CHZ-BZA Exp) • CHZ ➔ BZA', 'Daily Duty Management', '2026-11-14 06:55:52'),
-(11945, 107, '2026-09-10', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:06'),
-(11946, 107, '2026-09-11', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 06:56:06'),
-(11958, 108, '2026-09-21', '02812', 'Day 2 Return of 02811 (GNT-DMM-BZA Spl) • DMM ➔ BZA', 'Daily Duty Management', '2026-11-14 06:56:12'),
-(11971, 109, '2026-09-17', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:21'),
-(11972, 109, '2026-09-18', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 06:56:22'),
-(11974, 109, '2026-09-20', '12603', 'Day 2 Return of 16358 (GNT-MS-MAS-GNT Exp) • MS/MAS ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:23'),
-(11995, 112, '2026-09-14', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 06:56:39'),
-(12064, 117, '2026-09-17', '22881', 'Day 2 Return of 22882 (BBS-PUNE Exp (Link #53)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:16'),
-(12065, 117, '2026-09-18', 'AVL', 'Day 3: Arrived GNT 02:05 on 22881 • 8h HQ Rest till 10:05 • Available for duty', 'Daily Duty Management', '2026-11-14 06:57:17'),
-(12067, 117, '2026-09-20', '07194', 'Day 2 Return of 07193 (GNT-KPD-GNT Spl) • KPD ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:18'),
+(11062, 113, '2026-09-18', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:37:49'),
+(11068, 114, '2026-09-09', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:04'),
+(11089, 116, '2026-09-19', '17626 / 17625', 'Day 2 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:38:41'),
+(11403, 106, '2026-09-13', '17625', 'Day 2 Return of 17646 (GNT-SC-KCG-RAL Exp) • SC/KCG ➔ RAL', 'Daily Duty Management', '2026-11-14 12:35:22'),
+(11471, 114, '2026-09-11', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:07'),
+(11504, 117, '2026-09-24', '17262', 'Day 2 Return of 17069 (GNT-TPTY / RU-GNT Exp (Link #55)) • RU/TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:39:06'),
+(11505, 117, '2026-09-25', 'AVL', 'Day 3: Arrived GNT 07:20 on 17262 • 8h HQ Rest till 15:20 • Available for duty', 'Daily Duty Management', '2026-11-14 12:39:07'),
+(11837, 99, '2026-09-16', '12756', 'Day 2 Return of 12755 (BZA-SC-BZA Exp) • SC ➔ BZA', 'Daily Duty Management', '2026-11-14 12:33:45'),
+(11852, 100, '2026-09-18', '16357', 'Day 2 Return of 12604 (GNT-MAS-MS-GNT Exp) • MAS/MS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:34:08'),
+(11922, 105, '2026-09-19', '17232', 'Day 2 Return of 17231 (BZA-CHZ-BZA Exp) • CHZ ➔ BZA', 'Daily Duty Management', '2026-11-14 12:35:07'),
+(11945, 107, '2026-09-10', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:48'),
+(11946, 107, '2026-09-11', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 12:35:50'),
+(11958, 108, '2026-09-21', '02812', 'Day 2 Return of 02811 (GNT-DMM-BZA Spl) • DMM ➔ BZA', 'Daily Duty Management', '2026-11-14 12:36:07'),
+(11971, 109, '2026-09-17', '17222', 'Day 2 Return of 17221 (COA-LTT Exp (Link #54)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:31'),
+(11972, 109, '2026-09-18', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 12:36:33'),
+(11974, 109, '2026-09-20', '12603', 'Day 2 Return of 16358 (GNT-MS-MAS-GNT Exp) • MS/MAS ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:37'),
+(11995, 112, '2026-09-14', 'AVL', 'Day 3: Arrived GNT 08:15 on 17222 • 8h HQ Rest till 16:15 • Available for duty', 'Daily Duty Management', '2026-11-14 12:37:21'),
+(12064, 117, '2026-09-17', '22881', 'Day 2 Return of 22882 (BBS-PUNE Exp (Link #53)) • WADI ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:59'),
+(12065, 117, '2026-09-18', 'AVL', 'Day 3: Arrived GNT 02:05 on 22881 • 8h HQ Rest till 10:05 • Available for duty', 'Daily Duty Management', '2026-11-14 12:39:00'),
+(12067, 117, '2026-09-20', '07194', 'Day 2 Return of 07193 (GNT-KPD-GNT Spl) • KPD ➔ GNT', 'Daily Duty Management', '2026-11-14 12:39:03'),
 (14670, 104, '2026-09-12', '17081', '17081/17282 (GNT->NS)', 'Admin', '2026-09-22 13:06:03'),
 (15246, 97, '2026-09-15', '17261 / 12733', 'COR Link #4 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (15247, 97, '2026-09-16', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (15248, 97, '2026-09-17', '17261 / 12733', 'COR Link #6 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (15249, 97, '2026-09-18', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-10-07 08:13:17'),
 (15250, 97, '2026-09-19', 'AVL', 'Day 3: Arrived GNT 05:15 on 17070 • 8h HQ Rest till 13:15 • Available for duty', 'Daily Duty Management', '2026-10-07 08:13:17'),
-(15426, 110, '2026-09-20', '17261 / 12733', 'COR Link #4 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-11-14 06:56:23'),
-(15427, 110, '2026-09-21', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:24'),
-(15428, 110, '2026-09-22', '17261 / 12733', 'COR Link #6 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-11-14 06:56:24'),
-(15429, 110, '2026-09-23', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:25'),
-(15430, 110, '2026-09-24', 'AVL', 'Day 3: Arrived GNT 05:15 on 17070 • 8h HQ Rest till 13:15 • Available for duty', 'Daily Duty Management', '2026-11-14 06:56:26'),
-(15669, 105, '2026-09-11', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:55:50'),
-(15723, 109, '2026-09-15', '17638', 'Day 2 Return of 17637 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:20'),
-(15741, 111, '2026-09-16', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:31'),
-(17097, 106, '2026-09-25', '18063', 'Assigned to Non-Daily Train 18063 (GNT ➔ DMM)', 'Daily Duty Management', '2026-11-14 06:56:01'),
-(17098, 114, '2026-09-25', '17607', 'Assigned to Non-Daily Train 17607 (GNT ➔ RU)', 'Daily Duty Management', '2026-11-14 06:57:00'),
-(17252, 106, '2026-09-26', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:01'),
-(17362, 114, '2026-09-26', '17608', 'Day 2 Return of 17607 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 06:57:01'),
+(15426, 110, '2026-09-20', '17261 / 12733', 'COR Link #4 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-11-14 12:36:39'),
+(15427, 110, '2026-09-21', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:40'),
+(15428, 110, '2026-09-22', '17261 / 12733', 'COR Link #6 (17261/12733 Conductor Relief)', 'Daily Duty Management', '2026-11-14 12:36:42'),
+(15429, 110, '2026-09-23', '17070', 'Day 2 Return of 17261 (GNT-TPTY-RU-GNT Exp) • TPTY/RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:44'),
+(15430, 110, '2026-09-24', 'AVL', 'Day 3: Arrived GNT 05:15 on 17070 • 8h HQ Rest till 13:15 • Available for duty', 'Daily Duty Management', '2026-11-14 12:36:46'),
+(15669, 105, '2026-09-11', '07002', 'Day 2 Return of 07001 (GNT-TPTY-GNT Spl) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:01'),
+(15723, 109, '2026-09-15', '17638', 'Day 2 Return of 17637 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:28'),
+(15741, 111, '2026-09-16', '17078', 'Day 2 Return of 17077 (GNT-TPTY-GNT Exp) • TPTY ➔ GNT', 'Daily Duty Management', '2026-11-14 12:36:59'),
+(17097, 106, '2026-09-25', '18063', 'Assigned to Non-Daily Train 18063 (GNT ➔ DMM)', 'Daily Duty Management', '2026-11-14 12:35:33'),
+(17098, 114, '2026-09-25', '17607', 'Assigned to Non-Daily Train 17607 (GNT ➔ RU)', 'Daily Duty Management', '2026-11-14 12:38:18'),
+(17252, 106, '2026-09-26', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 12:35:35'),
+(17362, 114, '2026-09-26', '17608', 'Day 2 Return of 17607 (GNT-RU-GNT Exp) • RU ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:20'),
 (18663, 97, '2026-09-25', 'Link 50', 'Exchanged duty with AG KRISHNA', 'Universal Sync', '2026-09-25 09:08:17'),
-(19504, 112, '2026-09-11', '17607 / 17608', 'Non-Daily Train 17607/17608', 'Daily Duty Management', '2026-11-14 06:56:37'),
-(20172, 114, '2026-09-19', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 06:56:59'),
-(23265, 111, '2026-09-11', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:28'),
-(28730, 89, '2026-09-11', '17261 / 17262', 'Ladies Link #1 (17261/17262 SL)', 'Daily Duty Management', '2026-11-14 06:57:20'),
-(28731, 89, '2026-09-12', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:21'),
-(28732, 89, '2026-09-13', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:21'),
-(28733, 89, '2026-09-14', '17261 / 17262', 'Ladies Link #1 (17261/17262 SL)', 'Daily Duty Management', '2026-11-14 06:57:22'),
+(19504, 112, '2026-09-11', '17607 / 17608', 'Non-Daily Train 17607/17608', 'Daily Duty Management', '2026-11-14 12:37:17'),
+(20172, 114, '2026-09-19', '18064', 'Day 2 Return of 18063 (GNT-DMM-GNT Exp) • DMM ➔ GNT', 'Daily Duty Management', '2026-11-14 12:38:14'),
+(23265, 111, '2026-09-11', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:36:52'),
+(28730, 89, '2026-09-11', '17261 / 17262', 'Ladies Link #1 (17261/17262 SL)', 'Daily Duty Management', '2026-11-14 12:39:09'),
+(28731, 89, '2026-09-12', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:10'),
+(28732, 89, '2026-09-13', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:12'),
+(28733, 89, '2026-09-14', '17261 / 17262', 'Ladies Link #1 (17261/17262 SL)', 'Daily Duty Management', '2026-11-14 12:39:14'),
 (28734, 89, '2026-09-15', '17261 / 17262', 'Non-Daily Train 17261/17070', 'Admin', '2026-10-14 19:24:29'),
-(28735, 89, '2026-09-16', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:23'),
-(28736, 89, '2026-09-18', '17261 / 17262', 'Ladies Link #1 (17261/17262 S10-S14)', 'Daily Duty Management', '2026-11-14 06:57:23'),
-(28737, 89, '2026-09-19', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:24'),
-(28739, 89, '2026-09-21', '17261 / 17262', 'Ladies Link #1 (17261/17262 S10-S14)', 'Daily Duty Management', '2026-11-14 06:57:25'),
-(28740, 89, '2026-09-22', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:25'),
-(28741, 89, '2026-09-23', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:26'),
-(28742, 89, '2026-09-25', 'GNT', 'Shifted to Station Duty GNT', 'Daily Duty Management', '2026-11-14 06:57:27'),
+(28735, 89, '2026-09-16', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:15'),
+(28736, 89, '2026-09-18', '17261 / 17262', 'Ladies Link #1 (17261/17262 S10-S14)', 'Daily Duty Management', '2026-11-14 12:39:17'),
+(28737, 89, '2026-09-19', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:19'),
+(28739, 89, '2026-09-21', '17261 / 17262', 'Ladies Link #1 (17261/17262 S10-S14)', 'Daily Duty Management', '2026-11-14 12:39:22'),
+(28740, 89, '2026-09-22', '17261 / 17262', 'Day 2 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:23'),
+(28741, 89, '2026-09-23', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:25'),
+(28742, 89, '2026-09-25', 'GNT', 'Shifted to Station Duty GNT', 'Daily Duty Management', '2026-11-14 12:39:26'),
 (34267, 108, '2026-10-05', '17625', 'As per physical LR sheet photo (17625)', 'Admin', '2026-10-21 17:57:44'),
 (34268, 108, '2026-10-06', 'R', 'As per physical LR sheet photo (R)', 'Admin', '2026-10-21 17:57:44'),
 (34273, 104, '2026-10-05', 'R', 'As per physical LR sheet photo (R)', 'Admin', '2026-10-21 17:57:41'),
@@ -9361,7 +9361,7 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (35535, 108, '2026-10-09', '12705', 'As per physical LR sheet photo (SC)', 'Admin', '2026-10-27 14:20:42'),
 (35846, 110, '2026-10-08', 'Train 12604 / 16357', 'Utilised as per Daily Register', 'Admin', '2026-10-29 17:22:39'),
 (36467, 109, '2026-10-08', 'Train 12755 / Pilot', 'Pilot return to BZA', 'Admin', '2026-10-29 17:22:39'),
-(47354, 113, '2026-09-23', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:56:52'),
+(47354, 113, '2026-09-23', '17625 / 17646', 'Day 3 of Link #29 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:37:57'),
 (49699, 105, '2026-10-13', '17244', 'LR Assigned Train 17244 (As per physical LR sheet photo (17244))', 'Muster Roll Sync', '2026-10-28 14:43:20'),
 (49701, 109, '2026-10-13', 'Train 08063 / 08064', 'Utilised as per Daily Register', 'Muster Roll Sync', '2026-10-29 17:00:48'),
 (49702, 114, '2026-10-13', '12603', 'LR Assigned Train 12603 (As per physical LR sheet photo (12603))', 'Muster Roll Sync', '2026-10-28 14:43:27'),
@@ -9379,10 +9379,10 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (51172, 114, '2026-10-15', 'Train 17646 / 12796', 'Utilised as per Daily Register', 'Muster Roll Sync', '2026-10-29 16:35:07'),
 (51173, 117, '2026-10-05', '02812', 'As per physical LR sheet photo (02812)', 'Admin', '2026-10-21 17:57:48'),
 (51174, 117, '2026-10-06', 'Train 17646 / 12796', 'Utilised as per Daily Register', 'Admin', '2026-10-29 17:22:35'),
-(53065, 107, '2026-09-14', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:08'),
-(53074, 108, '2026-09-22', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:56:13'),
-(53207, 89, '2026-09-26', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 06:57:27'),
-(53996, 89, '2026-09-20', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 06:57:24'),
+(53065, 107, '2026-09-14', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:35:55'),
+(53074, 108, '2026-09-22', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:36:09'),
+(53207, 89, '2026-09-26', 'R', 'Scheduled Weekly Rest', 'Daily Duty Management', '2026-11-14 12:39:28'),
+(53996, 89, '2026-09-20', '17262', 'Day 3 of Link #1 (3-day link set)', 'Daily Duty Management', '2026-11-14 12:39:20'),
 (54002, 99, '2026-10-02', 'Train 17231 / 17232', 'Utilised as per Daily Register', 'Admin', '2026-10-29 17:50:05'),
 (54003, 99, '2026-10-03', '12705', 'As per physical LR sheet photo (SC)', 'Admin', '2026-10-27 14:20:42'),
 (54004, 99, '2026-10-08', 'Train 12805 / 12806', 'Utilised as per Daily Register', 'Admin', '2026-10-29 17:22:38'),
@@ -10155,19 +10155,19 @@ INSERT INTO `lr_sheet_records` (`id`, `staff_id`, `date`, `duty_code`, `remarks`
 (104359, 109, '2026-11-16', '07194', 'Day 2 Return of 07193 (07194 KPD ➔ GNT)', 'Universal Sync', '2026-11-14 06:32:43');
 
 DROP TABLE IF EXISTS `muster_records`;
-CREATE TABLE "muster_records" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "date" date NOT NULL,
-  "code" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "updated_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_muster_staff_date" ("staff_id","date"),
-  KEY "idx_muster_date" ("date"),
-  CONSTRAINT "fk_muster_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `muster_records` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `date` date NOT NULL,
+  `code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_muster_staff_date` (`staff_id`,`date`),
+  KEY `idx_muster_date` (`date`),
+  CONSTRAINT `fk_muster_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7171 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `muster_records` (`id`, `staff_id`, `date`, `code`, `remarks`, `updated_by`, `updated_at`) VALUES
 (25, 116, '2026-09-07', 'P', 'Assigned to Link #12', 'Admin', '2026-09-06 03:54:46'),
@@ -14700,25 +14700,25 @@ INSERT INTO `muster_records` (`id`, `staff_id`, `date`, `code`, `remarks`, `upda
 (7170, 91, '2026-11-16', 'P', 'Present at HQ (Available for booking - Came out of LEAVE on Link #4)', 'Admin', '2026-11-14 06:55:43');
 
 DROP TABLE IF EXISTS `nda_entries`;
-CREATE TABLE "nda_entries" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "month_year" varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "date_str" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "sched_dep" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "sched_arr" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "act_dep" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "act_arr" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "night_hours" double DEFAULT NULL,
-  "row_order" int DEFAULT '0',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_nda_staff_month" ("staff_id","month_year"),
-  CONSTRAINT "fk_nda_entries_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `nda_entries` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `month_year` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `date_str` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sched_dep` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sched_arr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `act_dep` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `act_arr` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `night_hours` double DEFAULT NULL,
+  `row_order` int DEFAULT '0',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_nda_staff_month` (`staff_id`,`month_year`),
+  CONSTRAINT `fk_nda_entries_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=9907 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `nda_entries` (`id`, `staff_id`, `month_year`, `date_str`, `train_no`, `sched_dep`, `sched_arr`, `act_dep`, `act_arr`, `from_station`, `to_station`, `night_hours`, `row_order`, `updated_at`) VALUES
 (287, 1, '2026-09', '30/8/26', '17262', '---', '06:55', '---', '07:20', '---', 'GNT', 8, 1, '2026-09-24 11:54:51'),
@@ -16122,91 +16122,101 @@ INSERT INTO `nda_entries` (`id`, `staff_id`, `month_year`, `date_str`, `train_no
 (9906, 89, '2026-10', '28/10/26', '17222', '', '', '23:00', '08:15', 'WADI', 'GNT', 7, 23, '2026-10-29 18:05:15');
 
 DROP TABLE IF EXISTS `non_daily_trains`;
-CREATE TABLE "non_daily_trains" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "day_of_week" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "train_number" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "last_day_train_number" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "departure_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "departure_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "arrival_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "arrival_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coaches" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'SL / AC',
-  "last_day_coaches" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'SL / AC',
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "assigned_staff_id" int DEFAULT NULL,
-  "assigned_staff_name" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "from_date" date DEFAULT NULL,
-  "to_date" date DEFAULT NULL,
-  PRIMARY KEY ("id"),
-  KEY "idx_non_daily_day" ("day_of_week"),
-  KEY "fk_non_daily_staff" ("assigned_staff_id"),
-  CONSTRAINT "fk_non_daily_staff" FOREIGN KEY ("assigned_staff_id") REFERENCES "staff" ("id") ON DELETE SET NULL
-);
+CREATE TABLE `non_daily_trains` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `day_of_week` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `train_number` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `last_day_train_number` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `departure_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `departure_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `arrival_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `arrival_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coaches` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'SL / AC',
+  `last_day_coaches` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'SL / AC',
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `assigned_staff_id` int DEFAULT NULL,
+  `assigned_staff_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_date` date DEFAULT NULL,
+  `to_date` date DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_non_daily_day` (`day_of_week`),
+  KEY `fk_non_daily_staff` (`assigned_staff_id`),
+  CONSTRAINT `fk_non_daily_staff` FOREIGN KEY (`assigned_staff_id`) REFERENCES `staff` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=117 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `non_daily_trains` (`id`, `day_of_week`, `train_number`, `last_day_train_number`, `departure_station`, `departure_time`, `arrival_station`, `arrival_time`, `coaches`, `last_day_coaches`, `remarks`, `assigned_staff_id`, `assigned_staff_name`, `created_at`, `from_date`, `to_date`) VALUES
-(71, 'SUNDAY', '17231', '17232', 'BZA', '13:50', 'CHZ', '20:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(72, 'SUNDAY', '02811', '02812', 'GNT', '08:30', 'DMM', '21:00', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', '2026-09-01', '2026-11-30'),
-(76, 'MONDAY', '17637', '17638', 'GNT', '07:00', 'RU', '14:30', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(79, 'TUESDAY', '17041', '17042', 'GNT', '12:20', 'RU', '19:20', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(81, 'TUESDAY', '17077', '17078', 'GNT', '00:00', 'TPTY', '8:50', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(82, 'WEDNESDAY', '22882', '22881', 'GNT', '10:35', 'WADI', '21:10', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(83, 'WEDNESDAY', '17221', '17222', 'GNT', '13:35', 'WADI', '00:05', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(84, 'WEDNESDAY', '17069', '17262', 'GNT', '22:40', 'RU', '07:15', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(85, 'THURSDAY', '12755', 'PILOT', 'BZA', '08:40', 'SC', '02:40', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(86, 'THURSDAY', '12604', '16357', 'GNT', '22:00', 'MAS', '05:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(87, 'THURSDAY', '07001', '17070', 'RU', '16:30', 'GNT', '03:50', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(88, 'THURSDAY', '07001', '07002', 'GNT', '16:30', 'TPTY', '03:50', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(89, 'FRIDAY', '17231', '17232', 'BZA', '13:50', 'CHZ', '20:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(90, 'FRIDAY', '18063', '18064', 'GNT', '09:45', 'DMM', '20:30', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(92, 'FRIDAY', '07191', '20630', 'GNT', '19:10', 'RU', '01:50', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(93, 'FRIDAY', '17607', '17608', 'GNT', '12:20', 'RU', '19:20', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(94, 'SATURDAY', '17221', '17222', 'GNT', '13:35', 'WADI', '00:05', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(95, 'SATURDAY', '17646', '12756', 'GNT', '13:35', 'SC', '00:05', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(96, 'SATURDAY', '07193', '07194', 'GNT', '05:30', 'KPD', '16:30', 'SL / AC', 'SL / AC', 'Runs SUN', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(97, 'SATURDAY', '16358', '07536', 'GNT', '14:00', 'MS', '22:55', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(98, 'SATURDAY', '20629', '07192', 'GNT', '19:10', 'RU', '01:50', 'SL / AC', 'SL / AC', '', NULL, NULL, '2026-09-23 12:34:49', NULL, NULL),
-(100, 'FRIDAY', '07535', '12603', 'GNT', '', 'MAS', '', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-11-08 07:32:11', NULL, NULL),
-(104, 'SUNDAY', '07193', '07194', '', '', '', '', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-11-14 06:31:54', NULL, NULL);
+INSERT INTO `non_daily_trains` (`id`, `day_of_week`, `train_number`, `last_day_train_number`, `departure_station`, `departure_time`, `arrival_station`, `arrival_time`, `coaches`, `last_day_coaches`, `remarks`, `assigned_staff_id`, `assigned_staff_name`, `from_date`, `to_date`, `created_at`) VALUES
+(71, 'SUNDAY', '17231', '17232', 'BZA', '13:50', 'CHZ', '20:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(72, 'SUNDAY', '02811', '02812', 'GNT', '08:30', 'DMM', '21:00', 'SL / AC', 'SL / AC', NULL, NULL, NULL, '2026-09-01', '2026-11-30', '2026-09-23 12:34:49'),
+(76, 'MONDAY', '17637', '17638', 'GNT', '07:00', 'RU', '14:30', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(79, 'TUESDAY', '17041', '17042', 'GNT', '12:20', 'RU', '19:20', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(81, 'TUESDAY', '17077', '17078', 'GNT', '00:00', 'TPTY', '8:50', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(82, 'WEDNESDAY', '22882', '22881', 'GNT', '10:35', 'WADI', '21:10', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(83, 'WEDNESDAY', '17221', '17222', 'GNT', '13:35', 'WADI', '00:05', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(84, 'WEDNESDAY', '17069', '17262', 'GNT', '22:40', 'RU', '07:15', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(85, 'THURSDAY', '12755', 'PILOT', 'BZA', '08:40', 'SC', '02:40', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(86, 'THURSDAY', '12604', '16357', 'GNT', '22:00', 'MAS', '05:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(87, 'THURSDAY', '07001', '17070', 'RU', '16:30', 'GNT', '03:50', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(88, 'THURSDAY', '07001', '07002', 'GNT', '16:30', 'TPTY', '03:50', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(89, 'FRIDAY', '17231', '17232', 'BZA', '13:50', 'CHZ', '20:40', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(90, 'FRIDAY', '18063', '18064', 'GNT', '09:45', 'DMM', '20:30', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(92, 'FRIDAY', '07191', '20630', 'GNT', '19:10', 'RU', '01:50', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(93, 'FRIDAY', '17607', '17608', 'GNT', '12:20', 'RU', '19:20', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(94, 'SATURDAY', '17221', '17222', 'GNT', '13:35', 'WADI', '00:05', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(95, 'SATURDAY', '17646', '12756', 'GNT', '13:35', 'SC', '00:05', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(97, 'SATURDAY', '16358', '07536', 'GNT', '14:00', 'MS', '22:55', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(98, 'SATURDAY', '20629', '07192', 'GNT', '19:10', 'RU', '01:50', 'SL / AC', 'SL / AC', '', NULL, NULL, NULL, NULL, '2026-09-23 12:34:49'),
+(100, 'FRIDAY', '07535', '12603', 'GNT', '', 'MAS', '', 'SL / AC', 'SL / AC', NULL, NULL, NULL, NULL, NULL, '2026-11-08 07:32:11'),
+(105, 'SATURDAY', '07193', '07194', 'GNT', '', 'PER', '', 'SL / AC', 'SL / AC', 'HYB-QLN Special • Beat: GNT-PER by GNT Divn. (04 Trips)', NULL, NULL, '2026-12-05', '2026-12-26', '2026-11-14 15:13:55'),
+(106, 'MONDAY', '07194', '07193', 'PER', '', 'GNT', '', 'SL / AC', 'SL / AC', 'QLN-HYB Special • Beat: PER-GNT by GNT Divn. (04 Trips)', NULL, NULL, '2026-12-07', '2026-12-28', '2026-11-14 15:13:56'),
+(107, 'FRIDAY', '07180', '07181', 'GNT', '', 'PER', '', 'SL / AC', 'SL / AC', 'CHZ-QLN Special • Beat: GNT-PER by GNT Divn. (06 Trips)', NULL, NULL, '2026-11-20', '2026-12-25', '2026-11-14 15:13:56'),
+(108, 'SUNDAY', '07181', '07180', 'PER', '', 'GNT', '', 'SL / AC', 'SL / AC', 'QLN-CHZ Special • Beat: PER-GNT by GNT Divn. (06 Trips)', NULL, NULL, '2026-11-22', '2026-12-27', '2026-11-14 15:13:57'),
+(109, 'SUNDAY', '07195', '07196', 'GNT', '', 'PER', '', 'SL / AC', 'SL / AC', 'CHZ-QLN Special • Beat: GNT-PER by GNT Divn. (09 Trips)', NULL, NULL, '2026-11-22', '2027-01-17', '2026-11-14 15:13:58'),
+(110, 'TUESDAY', '07196', '07195', 'PER', '', 'GNT', '', 'SL / AC', 'SL / AC', 'QLN-CHZ Special • Beat: PER-GNT by GNT Divn. (09 Trips)', NULL, NULL, '2026-11-24', '2027-01-19', '2026-11-14 15:13:59'),
+(111, 'WEDNESDAY', '07197', '07198', 'GNT', '', 'PER', '', 'SL / AC', 'SL / AC', 'CHZ-QLN Special • Beat: GNT-PER by GNT Divn. (04 Trips)', NULL, NULL, '2026-12-02', '2026-12-23', '2026-11-14 15:13:59'),
+(112, 'FRIDAY', '07198', '07197', 'PER', '', 'GNT', '', 'SL / AC', 'SL / AC', 'QLN-CHZ Special • Beat: PER-GNT by GNT Divn. (04 Trips)', NULL, NULL, '2026-12-04', '2026-12-25', '2026-11-14 15:14:00'),
+(113, 'WEDNESDAY', '07199', '07200', 'BZA', '', 'PER', '', 'SL / AC', 'SL / AC', 'CHZ-QLN Special • Beat: BZA-PER by BZA Divn. (03 Trips)', NULL, NULL, '2026-12-30', '2027-01-13', '2026-11-14 15:14:00'),
+(114, 'FRIDAY', '07200', '07199', 'PER', '', 'BZA', '', 'SL / AC', 'SL / AC', 'QLN-CHZ Special • Beat: PER-BZA by BZA Divn. (03 Trips)', NULL, NULL, '2027-01-01', '2027-01-15', '2026-11-14 15:14:01'),
+(115, 'SUNDAY', '07189', '07190', 'GNT', '', 'PER', '', 'SL / AC', 'SL / AC', 'NED-QLN Special • Beat: GNT-PER by GNT Divn. (01 Trip)', NULL, NULL, '2026-11-15', '2026-11-15', '2026-11-14 15:14:01'),
+(116, 'TUESDAY', '07190', '07189', 'PER', '', 'GNT', '', 'SL / AC', 'SL / AC', 'QLN-CHZ Special • Beat: PER-GNT by GNT Divn. (01 Trip)', NULL, NULL, '2026-11-17', '2026-11-17', '2026-11-14 15:14:02');
 
 DROP TABLE IF EXISTS `overrides`;
-CREATE TABLE "overrides" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "date" date NOT NULL,
-  "original_link_number" int DEFAULT NULL,
-  "overridden_link_number" int DEFAULT NULL,
-  "reason" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "created_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "status" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'DUTY',
-  "substitute_staff_id" int DEFAULT NULL,
-  "substitute_name" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "train_out" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coach_out" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "train_return" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "coach_return" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "duty_label" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "duty_type" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "notes" text COLLATE utf8mb4_unicode_ci,
-  "leave_type" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "advance_train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "is_advance_duty" tinyint(1) DEFAULT '0',
-  "target_category_id" int DEFAULT NULL,
-  "shifted_place" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "extra_train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "is_extra" tinyint(1) DEFAULT '0',
-  "shifted_from_link" int DEFAULT NULL,
-  "shifted_from_train" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_overrides_staff_date" ("staff_id","date"),
-  KEY "idx_overrides_date" ("date"),
-  KEY "idx_overrides_sub_date" ("substitute_staff_id","date"),
-  CONSTRAINT "fk_overrides_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `overrides` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `date` date NOT NULL,
+  `original_link_number` int DEFAULT NULL,
+  `overridden_link_number` int DEFAULT NULL,
+  `reason` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'DUTY',
+  `substitute_staff_id` int DEFAULT NULL,
+  `substitute_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `train_out` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coach_out` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `train_return` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `coach_return` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `duty_label` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `duty_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `leave_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `advance_train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_advance_duty` tinyint(1) DEFAULT '0',
+  `target_category_id` int DEFAULT NULL,
+  `shifted_place` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `extra_train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_extra` tinyint(1) DEFAULT '0',
+  `shifted_from_link` int DEFAULT NULL,
+  `shifted_from_train` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_overrides_staff_date` (`staff_id`,`date`),
+  KEY `idx_overrides_date` (`date`),
+  KEY `idx_overrides_sub_date` (`substitute_staff_id`,`date`),
+  CONSTRAINT `fk_overrides_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4738 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `overrides` (`id`, `staff_id`, `date`, `original_link_number`, `overridden_link_number`, `reason`, `created_by`, `created_at`, `status`, `substitute_staff_id`, `substitute_name`, `from_station`, `to_station`, `train_out`, `coach_out`, `train_return`, `coach_return`, `duty_label`, `duty_type`, `notes`, `leave_type`, `advance_train_no`, `is_advance_duty`, `target_category_id`, `shifted_place`, `extra_train_no`, `is_extra`, `shifted_from_link`, `shifted_from_train`) VALUES
 (1, 5, '2026-08-26', 5, 11, 'Manning 12734 as Ist COR (Page 159)', 'Daily Register Sync', '2026-08-25 14:49:37', 'DUTY', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, 0, NULL, NULL),
@@ -19235,42 +19245,42 @@ INSERT INTO `overrides` (`id`, `staff_id`, `date`, `original_link_number`, `over
 (4737, 91, '2026-11-16', 6, NULL, 'Available for Booking Duty at HQ (Came out of LEAVE on Link #4)', 'Admin', '2026-11-14 06:55:43', 'AVAILABLE_FOR_BOOKING', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 3, NULL, NULL, 0, NULL, NULL);
 
 DROP TABLE IF EXISTS `roster_versions`;
-CREATE TABLE "roster_versions" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "version_code" varchar(50) NOT NULL,
-  "name" varchar(255) NOT NULL,
-  "effective_from" date NOT NULL,
-  "effective_to" date DEFAULT NULL,
-  "status" varchar(50) NOT NULL DEFAULT 'published',
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "version_code" ("version_code"),
-  KEY "idx_rv_dates" ("effective_from","effective_to")
-);
+CREATE TABLE `roster_versions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `version_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `effective_from` date NOT NULL,
+  `effective_to` date DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'published',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `version_code` (`version_code`),
+  KEY `idx_rv_dates` (`effective_from`,`effective_to`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `roster_versions` (`id`, `version_code`, `name`, `effective_from`, `effective_to`, `status`, `created_at`) VALUES
 (1, 'OCT_2026', 'October 2026 Roster', '2026-10-01', '2026-10-31', 'published', '2026-11-01 10:39:59'),
 (2, 'NOV_2026', 'November 2026 Roster', '2026-11-01', NULL, 'published', '2026-11-01 10:39:59');
 
 DROP TABLE IF EXISTS `seniority_list`;
-CREATE TABLE "seniority_list" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "sl_no" int NOT NULL,
-  "name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "designation" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "cug_number" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "contact_number" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "pf_number" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "email" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "desg_rank" int DEFAULT NULL,
-  "hierarchy_tier" int DEFAULT NULL,
-  "working_designation" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "sl_no" ("sl_no"),
-  KEY "idx_seniority_sl" ("sl_no"),
-  KEY "idx_seniority_desg" ("designation")
-);
+CREATE TABLE `seniority_list` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `sl_no` int NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `designation` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cug_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `contact_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pf_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `email` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `desg_rank` int DEFAULT NULL,
+  `hierarchy_tier` int DEFAULT NULL,
+  `working_designation` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `sl_no` (`sl_no`),
+  KEY `idx_seniority_sl` (`sl_no`),
+  KEY `idx_seniority_desg` (`designation`)
+) ENGINE=InnoDB AUTO_INCREMENT=140 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `seniority_list` (`id`, `sl_no`, `name`, `designation`, `cug_number`, `contact_number`, `pf_number`, `email`, `desg_rank`, `hierarchy_tier`, `working_designation`, `created_at`) VALUES
 (1, 1, 'MV PRASAD', 'CTI', '9121272632', '9246484245', '24609272641', 'mvpcti@gmail.com', 1, 1, 'CTI', '2026-09-14 13:59:02'),
@@ -19414,15 +19424,15 @@ INSERT INTO `seniority_list` (`id`, `sl_no`, `name`, `designation`, `cug_number`
 (139, 139, 'B BUJJI BABU', 'CCTC', '--', '9677090521', '15660900908', 'bujjibabulocopilot@gmail.com', 9, 5, 'CCTC', '2026-09-14 13:59:04');
 
 DROP TABLE IF EXISTS `slot_customizations`;
-CREATE TABLE "slot_customizations" (
-  "custom_key" varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "first_train" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "last_train" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "first_coach" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "last_coach" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("custom_key")
-);
+CREATE TABLE `slot_customizations` (
+  `custom_key` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `first_train` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_train` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `first_coach` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_coach` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`custom_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `slot_customizations` (`custom_key`, `first_train`, `last_train`, `first_coach`, `last_coach`, `updated_at`) VALUES
 ('slot_10_link_1_1', '17225', '17226', 'AC', 'AC', '2026-10-07 07:33:10'),
@@ -19437,32 +19447,32 @@ INSERT INTO `slot_customizations` (`custom_key`, `first_train`, `last_train`, `f
 ('slot_9_link_2_36', '12733', '20630', 'S1-S4', 'S1-S4', '2026-11-09 01:59:32');
 
 DROP TABLE IF EXISTS `staff`;
-CREATE TABLE "staff" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "designation" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "category_id" int DEFAULT NULL,
-  "row_position" int NOT NULL,
-  "active" tinyint(1) DEFAULT '1',
-  "rest_day" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "pf_no" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "seniority_no" int DEFAULT NULL,
-  "join_date" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '2026-07-01',
-  "leave_date" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "bill_unit" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "pay_amount" int DEFAULT '68000',
-  "doa" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "hq_station" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT',
-  "t_code_no" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '7133',
-  "hrms_id" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '',
-  "pin_hash" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "is_relieved" tinyint(1) DEFAULT '0',
-  "relieved_note" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  PRIMARY KEY ("id"),
-  KEY "idx_staff_category" ("category_id"),
-  KEY "idx_staff_row_pos" ("row_position"),
-  CONSTRAINT "fk_staff_category" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `staff` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `designation` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `category_id` int DEFAULT NULL,
+  `row_position` int NOT NULL,
+  `active` tinyint(1) DEFAULT '1',
+  `rest_day` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pf_no` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `seniority_no` int DEFAULT NULL,
+  `join_date` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '2026-07-01',
+  `leave_date` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `bill_unit` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pay_amount` int DEFAULT '68000',
+  `doa` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `hq_station` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'GNT',
+  `t_code_no` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '7133',
+  `hrms_id` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '',
+  `pin_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_relieved` tinyint(1) DEFAULT '0',
+  `relieved_note` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_staff_category` (`category_id`),
+  KEY `idx_staff_row_pos` (`row_position`),
+  CONSTRAINT `fk_staff_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=138 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `staff` (`id`, `name`, `designation`, `category_id`, `row_position`, `active`, `rest_day`, `pf_no`, `seniority_no`, `join_date`, `leave_date`, `bill_unit`, `pay_amount`, `doa`, `hq_station`, `t_code_no`, `hrms_id`, `pin_hash`, `is_relieved`, `relieved_note`) VALUES
 (1, 'KAKI SRINIVASA RAO', 'CTI', 1, 20, 1, 'MON', '24105581102', 5, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', '$2b$10$AopSF0YioaxcHbh1qPV5PuIGJYiPDuzA/yFHU36tHm5k4sEQilpy2', 0, NULL),
@@ -19542,7 +19552,6 @@ INSERT INTO `staff` (`id`, `name`, `designation`, `category_id`, `row_position`,
 (82, 'SK JHA', 'TTI', 2, 3, 1, 'THU', '24602050031', 89, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
 (83, 'SH MADHU BABU', 'TTI', 2, 4, 1, 'WED', '2461J120120', 48, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
 (84, 'K KRANTHI KUMAR', 'TTI', 2, 5, 1, 'TUE', '24211110456', 85, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
-(85, 'V UMADEVI', 'TTI', 3, 3, 1, 'MON', '24609689606', 39, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
 (86, 'VS CHANDRIKA', 'TTI', 3, 4, 1, 'SUN', '24609921540', 2, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
 (87, 'M SIVA KUMARI', 'TTI', 3, 5, 1, 'SAT', '2461J110090', 46, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
 (88, 'K SIVA PARVATHI', 'SRCCTC', 3, 7, 1, 'FRI', '2461J050065', 106, '2026-07-01', NULL, '0910629', 68000, '05/08/2000', 'GNT', '7133', '', NULL, 0, NULL),
@@ -19577,17 +19586,17 @@ INSERT INTO `staff` (`id`, `name`, `designation`, `category_id`, `row_position`,
 (137, 'K DANIAL', 'CCTC', 4, 20, 1, 'MON', NULL, NULL, '2026-07-01', NULL, NULL, 68000, NULL, 'GNT', '7133', NULL, NULL, 0, NULL);
 
 DROP TABLE IF EXISTS `staff_pins`;
-CREATE TABLE "staff_pins" (
-  "pf_no" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "staff_id" int DEFAULT NULL,
-  "pin_hash" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "failed_attempts" int DEFAULT '0',
-  "locked_until" datetime DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("pf_no"),
-  KEY "idx_staff_pins_staff" ("staff_id")
-);
+CREATE TABLE `staff_pins` (
+  `pf_no` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `staff_id` int DEFAULT NULL,
+  `pin_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `failed_attempts` int DEFAULT '0',
+  `locked_until` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`pf_no`),
+  KEY `idx_staff_pins_staff` (`staff_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `staff_pins` (`pf_no`, `staff_id`, `pin_hash`, `failed_attempts`, `locked_until`, `created_at`, `updated_at`) VALUES
 ('24105581102', 1, '$2b$10$AopSF0YioaxcHbh1qPV5PuIGJYiPDuzA/yFHU36tHm5k4sEQilpy2', 0, NULL, '2026-10-29 13:18:27', '2026-10-29 13:18:27'),
@@ -19598,25 +19607,25 @@ INSERT INTO `staff_pins` (`pf_no`, `staff_id`, `pin_hash`, `failed_attempts`, `l
 ('2461j160038', 26, '$2b$12$T3YeUAj9vakqfu5a5Qx9QeI3CbA/zzD1ruPzSnOcjjPRLvFWX4Qhi', 0, NULL, '2026-10-29 13:27:38', '2026-10-29 13:27:39');
 
 DROP TABLE IF EXISTS `staff_roster_assignments`;
-CREATE TABLE "staff_roster_assignments" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "roster_version_id" int NOT NULL,
-  "staff_id" int DEFAULT NULL,
-  "category_id" int NOT NULL,
-  "row_position" int NOT NULL,
-  "staff_name" varchar(255) NOT NULL,
-  "designation" varchar(100) DEFAULT NULL,
-  "pf_no" varchar(50) DEFAULT NULL,
-  "rest_day" varchar(20) DEFAULT NULL,
-  "is_vacant" tinyint(1) DEFAULT '0',
-  "effective_from" date NOT NULL,
-  "effective_to" date DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_sra_cat_dates" ("category_id","effective_from","effective_to"),
-  KEY "idx_sra_staff_dates" ("staff_id","effective_from","effective_to"),
-  KEY "idx_sra_version_cat" ("roster_version_id","category_id","row_position")
-);
+CREATE TABLE `staff_roster_assignments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `roster_version_id` int NOT NULL,
+  `staff_id` int DEFAULT NULL,
+  `category_id` int NOT NULL,
+  `row_position` int NOT NULL,
+  `staff_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `designation` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pf_no` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `rest_day` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_vacant` tinyint(1) DEFAULT '0',
+  `effective_from` date NOT NULL,
+  `effective_to` date DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_sra_cat_dates` (`category_id`,`effective_from`,`effective_to`),
+  KEY `idx_sra_staff_dates` (`staff_id`,`effective_from`,`effective_to`),
+  KEY `idx_sra_version_cat` (`roster_version_id`,`category_id`,`row_position`)
+) ENGINE=InnoDB AUTO_INCREMENT=210 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `staff_roster_assignments` (`id`, `roster_version_id`, `staff_id`, `category_id`, `row_position`, `staff_name`, `designation`, `pf_no`, `rest_day`, `is_vacant`, `effective_from`, `effective_to`, `created_at`) VALUES
 (1, 1, 13, 1, 1, 'M KESHAVULU', 'CTI', '24604350017', 'WED', 0, '2026-10-01', '2026-10-31', '2026-11-01 10:40:57'),
@@ -19830,36 +19839,36 @@ INSERT INTO `staff_roster_assignments` (`id`, `roster_version_id`, `staff_id`, `
 (209, 2, 132, 4, 19, 'S HYMA TULASI', 'Sr.CCTC', '42429801728', 'THU', 0, '2026-11-01', NULL, '2026-11-01 10:41:13');
 
 DROP TABLE IF EXISTS `ta_approvals`;
-CREATE TABLE "ta_approvals" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "month_year" varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "duty_date" date NOT NULL,
-  "date_str" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "link_number" int DEFAULT NULL,
-  "train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "dep_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "arr_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "absence_hours" double DEFAULT NULL,
-  "ta_percentage" double DEFAULT NULL,
-  "da_rate" double DEFAULT '800',
-  "claim_amount" double DEFAULT NULL,
-  "status" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'PENDING',
-  "approved_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "approved_at" datetime DEFAULT NULL,
-  "rejection_reason" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "object_of_journey" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT 'MANNING AC COACHES',
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "row_order" int DEFAULT '0',
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_ta_app_staff_month" ("staff_id","month_year"),
-  KEY "idx_ta_app_status" ("status"),
-  KEY "idx_ta_approvals_staff_date" ("staff_id","duty_date"),
-  CONSTRAINT "fk_ta_approvals_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `ta_approvals` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `month_year` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `duty_date` date NOT NULL,
+  `date_str` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `link_number` int DEFAULT NULL,
+  `train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `dep_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `arr_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `absence_hours` double DEFAULT NULL,
+  `ta_percentage` double DEFAULT NULL,
+  `da_rate` double DEFAULT '800',
+  `claim_amount` double DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT 'PENDING',
+  `approved_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `rejection_reason` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `object_of_journey` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT 'MANNING AC COACHES',
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `row_order` int DEFAULT '0',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_ta_app_staff_month` (`staff_id`,`month_year`),
+  KEY `idx_ta_app_status` (`status`),
+  KEY `idx_ta_approvals_staff_date` (`staff_id`,`duty_date`),
+  CONSTRAINT `fk_ta_approvals_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=668245 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (74311, 2, '2026-07', '2026-07-01', '1/7/26', 3, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', '', 1, '2026-09-26 08:30:30'),
@@ -20434,62 +20443,34 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (333294, 90, '2026-08', '2026-08-29', '29/8/26', 3, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 25, '2026-10-19 11:35:20'),
 (333295, 90, '2026-08', '2026-08-30', '30/8/26', 4, '17261', 'GNT', 'TPTY', '16:30', '04:00', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-19 11:35:20'),
 (333296, 90, '2026-08', '2026-08-31', '31/8/26', 5, '17262', 'TPTY', '---', '19:30', '---', 19.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 27, '2026-10-19 11:35:20'),
-(333438, 55, '2026-08', '2026-08-11', '11/8/26', 11, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 14, '2026-10-19 11:36:26'),
 (333443, 55, '2026-08', '2026-08-01', '1/8/26', 1, '17239', 'GNT', 'VSKP', '08:00', '16:30', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 1, '2026-10-19 11:36:26'),
 (333445, 55, '2026-08', '2026-08-02', '2/8/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 2, '2026-10-19 11:36:26'),
-(333447, 55, '2026-08', '2026-08-12', '12/8/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 15, '2026-10-19 11:36:26'),
-(333453, 55, '2026-08', '2026-08-12', '12/8/26', 12, '17226', 'GTL', '---', '19:10', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 16, '2026-10-19 11:36:26'),
 (333454, 55, '2026-08', '2026-08-03', '3/8/26', 3, '12604', 'GNT', '---', '22:40', '---', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 3, '2026-10-19 11:36:26'),
-(333460, 55, '2026-08', '2026-08-13', '13/8/26', 13, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 17, '2026-10-19 11:36:26'),
 (333461, 55, '2026-08', '2026-08-04', '4/8/26', 4, '12604', '---', 'MAS', '---', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 4, '2026-10-19 11:36:26'),
-(333464, 55, '2026-08', '2026-08-13', '13/8/26', 13, '12703', 'BZA', 'GNT', '06:20', '07:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 18, '2026-10-19 11:36:26'),
 (333467, 55, '2026-08', '2026-08-04', '4/8/26', 4, '12603', 'MAS', 'GNT', '16:45', '23:50', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 5, '2026-10-19 11:36:26'),
-(333470, 55, '2026-08', '2026-08-15', '15/8/26', 15, '17253', 'GNT', 'DHNE', '06:15', '14:20', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 19, '2026-10-19 11:36:26'),
 (333471, 55, '2026-08', '2026-08-05', '5/8/26', 5, '17251', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 6, '2026-10-19 11:36:26'),
 (333476, 55, '2026-08', '2026-08-06', '6/8/26', 6, '17251', '---', 'DHNE', '---', '05:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 7, '2026-10-19 11:36:26'),
-(333479, 55, '2026-08', '2026-08-16', '16/8/26', 16, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 20, '2026-10-19 11:36:26'),
-(333483, 55, '2026-08', '2026-08-17', '17/8/26', 17, '17646', 'GNT', 'SC', '07:45', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 21, '2026-10-19 11:36:26'),
 (333485, 55, '2026-08', '2026-08-06', '6/8/26', 6, '17254', 'DHNE', 'GNT', '15:30', '23:10', 10.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 8, '2026-10-19 11:36:26'),
 (333490, 55, '2026-08', '2026-08-08', '8/8/26', 8, '12734', 'GNT', '---', '22:50', '---', 1.2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 9, '2026-10-19 11:36:26'),
-(333491, 55, '2026-08', '2026-08-17', '17/8/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 22, '2026-10-19 11:36:26'),
-(333495, 55, '2026-08', '2026-08-18', '18/8/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 23, '2026-10-19 11:36:26'),
 (333497, 55, '2026-08', '2026-08-09', '9/8/26', 9, '12734', '---', 'TPTY', '---', '06:05', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 10, '2026-10-19 11:36:26'),
-(333502, 55, '2026-08', '2026-08-19', '19/8/26', 19, '12805', 'GNT', 'SC', '07:05', '14:00', 16.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 24, '2026-10-19 11:36:26'),
 (333503, 55, '2026-08', '2026-08-09', '9/8/26', 9, '20630', 'TPTY', '---', '23:15', '---', 17.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 11, '2026-10-19 11:36:26'),
 (333507, 55, '2026-08', '2026-08-10', '10/8/26', 10, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 12, '2026-10-19 11:36:26'),
-(333509, 55, '2026-08', '2026-08-20', '20/8/26', 20, '12806', 'SC', 'BZA', '07:00', '13:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 25, '2026-10-19 11:36:26'),
 (333512, 55, '2026-08', '2026-08-11', '11/8/26', 11, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 13, '2026-10-19 11:36:26'),
-(333515, 55, '2026-08', '2026-08-20', '20/8/26', 20, '17240', 'BZA', 'GNT', '15:00', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-19 11:36:26'),
 (333519, 55, '2026-08', '2026-08-11', '11/8/26', 11, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 14, '2026-10-19 11:36:26'),
-(333521, 55, '2026-08', '2026-08-22', '22/8/26', 22, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 27, '2026-10-19 11:36:26'),
 (333526, 55, '2026-08', '2026-08-12', '12/8/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 15, '2026-10-19 11:36:26'),
-(333529, 55, '2026-08', '2026-08-23', '23/8/26', 23, '20629', '---', 'TPTY', '---', '01:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 28, '2026-10-19 11:36:26'),
 (333531, 55, '2026-08', '2026-08-12', '12/8/26', 12, '17226', 'GTL', '---', '19:10', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 16, '2026-10-19 11:36:26'),
-(333533, 55, '2026-08', '2026-08-23', '23/8/26', 23, '20630', 'TPTY', '---', '23:15', '---', 21.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 29, '2026-10-19 11:36:26'),
 (333537, 55, '2026-08', '2026-08-13', '13/8/26', 13, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 17, '2026-10-19 11:36:26'),
-(333540, 55, '2026-08', '2026-08-24', '24/8/26', 24, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 30, '2026-10-19 11:36:26'),
 (333544, 55, '2026-08', '2026-08-13', '13/8/26', 13, '12703', 'BZA', 'GNT', '06:20', '07:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 18, '2026-10-19 11:36:26'),
-(333546, 55, '2026-08', '2026-08-25', '25/8/26', 25, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 31, '2026-10-19 11:36:26'),
 (333549, 55, '2026-08', '2026-08-15', '15/8/26', 15, '17253', 'GNT', 'DHNE', '06:15', '14:20', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 19, '2026-10-19 11:36:26'),
-(333553, 55, '2026-08', '2026-08-25', '25/8/26', 25, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 32, '2026-10-19 11:36:26'),
-(333557, 55, '2026-08', '2026-08-26', '26/8/26', 26, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-10-19 11:36:26'),
 (333559, 55, '2026-08', '2026-08-16', '16/8/26', 16, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 20, '2026-10-19 11:36:26'),
 (333561, 55, '2026-08', '2026-08-17', '17/8/26', 17, '17646', 'GNT', 'SC', '07:45', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 21, '2026-10-19 11:36:26'),
-(333565, 55, '2026-08', '2026-08-26', '26/8/26', 26, '17226', 'GTL', '---', '19:10', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-19 11:36:26'),
 (333567, 55, '2026-08', '2026-08-17', '17/8/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 22, '2026-10-19 11:36:26'),
-(333571, 55, '2026-08', '2026-08-27', '27/8/26', 53, '17282', 'NS', 'GNT', '06:05', '10:50', 10.8, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Covering 18047/18048 SL with VAN Reddy (Page 160)', 35, '2026-10-19 11:36:26'),
 (333573, 55, '2026-08', '2026-08-18', '18/8/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 23, '2026-10-19 11:36:26'),
-(333577, 55, '2026-08', '2026-08-29', '29/8/26', 29, '17645', 'GNT', 'RAL', '07:30', '08:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-10-19 11:36:26'),
 (333579, 55, '2026-08', '2026-08-19', '19/8/26', 19, '12805', 'GNT', 'SC', '07:05', '14:00', 16.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 24, '2026-10-19 11:36:26'),
-(333581, 55, '2026-08', '2026-08-29', '29/8/26', 29, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 37, '2026-10-19 11:36:26'),
 (333585, 55, '2026-08', '2026-08-20', '20/8/26', 20, '12806', 'SC', 'BZA', '07:00', '13:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 25, '2026-10-19 11:36:26'),
-(333588, 55, '2026-08', '2026-08-30', '30/8/26', 30, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 38, '2026-10-19 11:36:26'),
 (333591, 55, '2026-08', '2026-08-20', '20/8/26', 20, '17240', 'BZA', 'GNT', '15:00', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-19 11:36:26'),
-(333594, 55, '2026-08', '2026-08-30', '30/8/26', 30, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-10-19 11:36:26'),
 (333598, 55, '2026-08', '2026-08-22', '22/8/26', 22, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 27, '2026-10-19 11:36:26'),
-(333600, 55, '2026-08', '2026-08-31', '31/8/26', 31, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 40, '2026-10-19 11:36:26'),
 (333601, 55, '2026-08', '2026-08-23', '23/8/26', 23, '20629', '---', 'TPTY', '---', '01:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 28, '2026-10-19 11:36:26'),
-(333607, 55, '2026-08', '2026-08-31', '31/8/26', 31, '17646', 'RAL', 'GNT', '05:55', '07:00', 1.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 41, '2026-10-19 11:36:26'),
 (333610, 55, '2026-08', '2026-08-23', '23/8/26', 23, '20630', 'TPTY', '---', '23:15', '---', 21.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 29, '2026-10-19 11:36:26'),
 (333615, 55, '2026-08', '2026-08-24', '24/8/26', 24, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 30, '2026-10-19 11:36:26'),
 (333618, 55, '2026-08', '2026-08-25', '25/8/26', 25, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 31, '2026-10-19 11:36:26'),
@@ -20863,9 +20844,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (414521, 67, '2026-09', '2026-09-26', '26/9/26', 6, '17251', '---', 'DHNE', '---', '05:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 30, '2026-10-27 14:21:57'),
 (414522, 67, '2026-09', '2026-09-26', '26/9/26', 6, '17254', 'DHNE', 'GNT', '15:30', '23:10', 10.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 31, '2026-10-27 14:21:57'),
 (414523, 67, '2026-09', '2026-09-28', '28/9/26', 8, '12734', 'GNT', '---', '22:50', '---', 1.2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 32, '2026-10-27 14:21:57'),
-(414524, 67, '2026-09', '2026-09-29', '29/9/26', 9, '12734', '---', 'TPTY', '---', '06:05', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-10-27 14:21:57');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(414524, 67, '2026-09', '2026-09-29', '29/9/26', 9, '12734', '---', 'TPTY', '---', '06:05', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-10-27 14:21:57'),
 (414525, 67, '2026-09', '2026-09-29', '29/9/26', 9, '20630', 'TPTY', '---', '23:15', '---', 17.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-27 14:21:57'),
 (414526, 67, '2026-09', '2026-09-30', '30/9/26', 10, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 35, '2026-10-27 14:21:57'),
 (414566, 69, '2026-09', '2026-09-01', '1/9/26', 43, '17645', 'GNT', 'RAL', '07:30', '08:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 1, '2026-10-27 14:21:57'),
@@ -20893,7 +20872,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (414588, 69, '2026-09', '2026-09-18', '18/9/26', 60, '22882', 'GNT', 'WADI', '10:35', '21:10', 13.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 23, '2026-10-27 14:21:58'),
 (414589, 69, '2026-09', '2026-09-19', '19/9/26', 61, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 24, '2026-10-27 14:21:58'),
 (414590, 69, '2026-09', '2026-09-20', '20/9/26', 62, '17069', 'GNT', 'RU', '22:40', '07:15', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 25, '2026-10-27 14:21:58'),
-(414591, 69, '2026-09', '2026-09-22', '22/9/26', 1, '17239', 'GNT', 'VSKP', '08:00', '16:30', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-27 14:21:58'),
+(414591, 69, '2026-09', '2026-09-22', '22/9/26', 1, '17239', 'GNT', 'VSKP', '08:00', '16:30', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-27 14:21:58');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (414592, 69, '2026-09', '2026-09-23', '23/9/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 27, '2026-10-27 14:21:58'),
 (414593, 69, '2026-09', '2026-09-24', '24/9/26', 3, '12604', 'GNT', '---', '22:11', '---', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 28, '2026-10-27 14:21:58'),
 (414594, 69, '2026-09', '2026-09-25', '25/9/26', 4, '12604', '---', 'MAS', '---', '05:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 29, '2026-10-27 14:21:58'),
@@ -21365,9 +21346,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (494683, 16, '2026-09', '2026-09-17', '17/9/26', 11, '12734', '---', 'TPTY', '---', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 28, '2026-10-29 18:04:11'),
 (494684, 16, '2026-09', '2026-09-17', '17/9/26', 11, '20630', 'TPTY', '---', '23:15', '---', 17.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 29, '2026-10-29 18:04:11'),
 (494685, 16, '2026-09', '2026-09-19', '19/9/26', 13, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Available for Booking at HQ (Took 1-day LEAVE on Link #12)', 30, '2026-10-29 18:04:11'),
-(494686, 16, '2026-09', '2026-09-19', '19/9/26', 13, '12604', 'GNT', '---', '22:00', '---', 2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Available for Booking at HQ (Took 1-day LEAVE on Link #12)', 31, '2026-10-29 18:04:11');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(494686, 16, '2026-09', '2026-09-19', '19/9/26', 13, '12604', 'GNT', '---', '22:00', '---', 2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Available for Booking at HQ (Took 1-day LEAVE on Link #12)', 31, '2026-10-29 18:04:11'),
 (494687, 16, '2026-09', '2026-09-21', '21/9/26', 57, 'PILOT(67230), 18047', 'GNT, BZA', 'BZA, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #57 (17225/18048 AC)', 32, '2026-10-29 18:04:11'),
 (494688, 16, '2026-09', '2026-09-22', '22/9/26', 16, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 33, '2026-10-29 18:04:11'),
 (494689, 16, '2026-09', '2026-09-22', '22/9/26', 16, '18048', 'GTL', '---', '14:30', '---', 9.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 34, '2026-10-29 18:04:11'),
@@ -21395,7 +21374,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (494711, 16, '2026-10', '2026-10-14', '14/10/26', 17, '17226', '---', 'BZA', '---', '03:55', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 10, '2026-10-29 18:04:11'),
 (494712, 16, '2026-10', '2026-10-14', '14/10/26', 17, '57201', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 11, '2026-10-29 18:04:11'),
 (494713, 16, '2026-10', '2026-10-15', '15/10/26', 18, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 12734 / 17262', 12, '2026-10-29 18:04:11'),
-(494714, 16, '2026-10', '2026-10-16', '16/10/26', 19, '12734', '---', 'TPTY', '---', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 13, '2026-10-29 18:04:11'),
+(494714, 16, '2026-10', '2026-10-16', '16/10/26', 19, '12734', '---', 'TPTY', '---', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 13, '2026-10-29 18:04:11');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (494715, 16, '2026-10', '2026-10-16', '16/10/26', 19, '17262', 'TPTY', '---', '19:30', '---', 13.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 14, '2026-10-29 18:04:11'),
 (494716, 16, '2026-10', '2026-10-17', '17/10/26', 20, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 15, '2026-10-29 18:04:11'),
 (494717, 16, '2026-10', '2026-10-19', '19/10/26', 1, '17281', 'GNT', 'BZA', '17:45', '18:50', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 17225 / 17226', 16, '2026-10-29 18:04:11'),
@@ -21867,9 +21848,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (495371, 4, '2026-09', '2026-09-14', '14/9/26', 17, '57201', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 23, '2026-10-29 18:04:18'),
 (495372, 4, '2026-09', '2026-09-15', '15/9/26', 18, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned to Link #18 (12734/17262 COR-2)', 24, '2026-10-29 18:04:18'),
 (495373, 4, '2026-09', '2026-09-16', '16/9/26', 19, '12734', '---', 'TPTY', '---', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 25, '2026-10-29 18:04:18'),
-(495374, 4, '2026-09', '2026-09-16', '16/9/26', 19, '17262', 'TPTY', '---', '19:30', '---', 13.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 26, '2026-10-29 18:04:18');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(495374, 4, '2026-09', '2026-09-16', '16/9/26', 19, '17262', 'TPTY', '---', '19:30', '---', 13.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 26, '2026-10-29 18:04:18'),
 (495375, 4, '2026-09', '2026-09-17', '17/9/26', 20, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 27, '2026-10-29 18:04:18'),
 (495376, 4, '2026-09', '2026-09-19', '19/9/26', 11, '12734', '---', 'TPTY', '---', '05:55', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #11 (17225/17226 AC)', 28, '2026-10-29 18:04:18'),
 (495377, 4, '2026-09', '2026-09-19', '19/9/26', 11, '20630', 'TPTY', '---', '23:15', '---', 17.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #11 (17225/17226 AC)', 29, '2026-10-29 18:04:18'),
@@ -21897,7 +21876,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (495399, 4, '2026-10', '2026-10-08', '8/10/26', 20, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', '17262', 6, '2026-10-29 18:04:18'),
 (495400, 4, '2026-10', '2026-10-09', '9/10/26', 21, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 20629 / 20630', 7, '2026-10-29 18:04:18'),
 (495401, 4, '2026-10', '2026-10-10', '10/10/26', 1, '17281', 'GNT', 'BZA', '17:45', '18:50', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 17225 / 17226', 8, '2026-10-29 18:04:18'),
-(495402, 4, '2026-10', '2026-10-10', '10/10/26', 1, '17225', 'BZA', '---', '19:45', '---', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 17225 / 17226', 9, '2026-10-29 18:04:18'),
+(495402, 4, '2026-10', '2026-10-10', '10/10/26', 1, '17225', 'BZA', '---', '19:45', '---', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 17225 / 17226', 9, '2026-10-29 18:04:18');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (495403, 4, '2026-10', '2026-10-12', '12/10/26', 3, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 10, '2026-10-29 18:04:18'),
 (495404, 4, '2026-10', '2026-10-12', '12/10/26', 3, '57210', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 11, '2026-10-29 18:04:18'),
 (495405, 4, '2026-10', '2026-10-13', '13/10/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Train 17261 / 12733', 12, '2026-10-29 18:04:18'),
@@ -22369,9 +22350,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (496082, 56, '2026-09', '2026-09-08', '8/9/26', 40, '12705', 'GNT', 'BZA', '15:30', '16:30', 8.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 10, '2026-10-29 18:04:25'),
 (496083, 56, '2026-09', '2026-09-09', '9/9/26', 43, '17645', 'GNT', 'RAL', '07:30', '08:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #43 (20629/20630 SL-2)', 11, '2026-10-29 18:04:25'),
 (496084, 56, '2026-09', '2026-09-09', '9/9/26', 43, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #43 (20629/20630 SL-2)', 12, '2026-10-29 18:04:25'),
-(496085, 56, '2026-09', '2026-09-10', '10/9/26', 44, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #44 (Set: 43->44->45)', 13, '2026-10-29 18:04:25');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(496085, 56, '2026-09', '2026-09-10', '10/9/26', 44, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #44 (Set: 43->44->45)', 13, '2026-10-29 18:04:25'),
 (496086, 56, '2026-09', '2026-09-10', '10/9/26', 44, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #44 (Set: 43->44->45)', 14, '2026-10-29 18:04:25'),
 (496087, 56, '2026-09', '2026-09-11', '11/9/26', 45, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #45 (Set: 43->44->45)', 15, '2026-10-29 18:04:25'),
 (496088, 56, '2026-09', '2026-09-11', '11/9/26', 45, '17646', 'RAL', 'GNT', '05:55', '07:00', 1.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #45 (Set: 43->44->45)', 16, '2026-10-29 18:04:25'),
@@ -22399,7 +22378,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (496110, 56, '2026-09', '2026-09-28', '28/9/26', 60, '22882', 'GNT', 'WADI', '10:35', '21:10', 13.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 38, '2026-10-29 18:04:25'),
 (496111, 56, '2026-09', '2026-09-29', '29/9/26', 61, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-10-29 18:04:25'),
 (496112, 56, '2026-09', '2026-09-30', '30/9/26', 62, '17069', 'GNT', 'RU', '22:40', '07:15', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 40, '2026-10-29 18:04:25'),
-(496113, 56, '2026-10', '2026-10-01', '1/10/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '17240', 1, '2026-10-29 18:04:25'),
+(496113, 56, '2026-10', '2026-10-01', '1/10/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '17240', 1, '2026-10-29 18:04:25');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (496114, 56, '2026-10', '2026-10-02', '2/10/26', 3, '12604', 'GNT', '---', '22:00', '---', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 12604 / 12603', 2, '2026-10-29 18:04:25'),
 (496115, 56, '2026-10', '2026-10-04', '4/10/26', 5, '17251', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17251 / 17254', 3, '2026-10-29 18:04:25'),
 (496116, 56, '2026-10', '2026-10-07', '7/10/26', 8, '12734', 'GNT', '---', '23:10', '---', 1.2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 12734 / 20630', 4, '2026-10-29 18:04:25'),
@@ -22871,9 +22852,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (496615, 51, '2026-09', '2026-09-01', '1/9/26', 50, '18047', 'BZA', '---', '20:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 2, '2026-10-29 18:04:30'),
 (496616, 51, '2026-09', '2026-09-02', '2/9/26', NULL, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'SL', 3, '2026-10-29 18:04:30'),
 (496617, 51, '2026-09', '2026-09-02', '2/9/26', NULL, '17646', 'RAL', 'GNT', '05:55', '07:00', 1.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'SL', 4, '2026-10-29 18:04:30'),
-(496618, 51, '2026-09', '2026-09-03', '3/9/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link (Non-Daily 16357)', 5, '2026-10-29 18:04:30');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(496618, 51, '2026-09', '2026-09-03', '3/9/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link (Non-Daily 16357)', 5, '2026-10-29 18:04:30'),
 (496619, 51, '2026-09', '2026-09-04', '4/9/26', 17, '17646', 'GNT', 'SC', '07:45', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #17 (17646/12796 AC+SL)', 6, '2026-10-29 18:04:30'),
 (496620, 51, '2026-09', '2026-09-04', '4/9/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #17 (17646/12796 AC+SL)', 7, '2026-10-29 18:04:30'),
 (496621, 51, '2026-09', '2026-09-05', '5/9/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #18 (Set: 17->18)', 8, '2026-10-29 18:04:30'),
@@ -22901,7 +22880,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (496643, 51, '2026-09', '2026-09-21', '21/9/26', 50, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 30, '2026-10-29 18:04:30'),
 (496644, 51, '2026-09', '2026-09-21', '21/9/26', 50, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 31, '2026-10-29 18:04:30'),
 (496645, 51, '2026-09', '2026-09-22', '22/9/26', 51, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #51 (Set: 50->51->52)', 32, '2026-10-29 18:04:30'),
-(496646, 51, '2026-09', '2026-09-22', '22/9/26', 51, '18048', 'GTL', '---', '14:30', '---', 9.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #51 (Set: 50->51->52)', 33, '2026-10-29 18:04:30'),
+(496646, 51, '2026-09', '2026-09-22', '22/9/26', 51, '18048', 'GTL', '---', '14:30', '---', 9.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #51 (Set: 50->51->52)', 33, '2026-10-29 18:04:30');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (496647, 51, '2026-09', '2026-09-23', '23/9/26', 52, '17226', '---', 'BZA', '---', '03:55', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #52 (Set: 50->51->52)', 34, '2026-10-29 18:04:30'),
 (496648, 51, '2026-09', '2026-09-23', '23/9/26', 52, '12703', 'BZA', 'GNT', '23:30', '00:15', 0.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #52 (Set: 50->51->52)', 35, '2026-10-29 18:04:30'),
 (496649, 51, '2026-09', '2026-09-24', '24/9/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-10-29 18:04:30'),
@@ -23373,9 +23354,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (497115, 75, '2026-09', '2026-09-07', '7/9/26', 50, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 8, '2026-10-29 18:04:34'),
 (497116, 75, '2026-09', '2026-09-08', '8/9/26', 51, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #51 (Set: 50->51->52)', 9, '2026-10-29 18:04:34'),
 (497117, 75, '2026-09', '2026-09-08', '8/9/26', 51, '18048', 'GTL', '---', '14:30', '---', 9.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #51 (Set: 50->51->52)', 10, '2026-10-29 18:04:34'),
-(497118, 75, '2026-09', '2026-09-09', '9/9/26', 60, '17069', 'GNT', 'RU', '22:40', '07:15', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Relieved from Link #62 by MSA RAJU', 11, '2026-10-29 18:04:34');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(497118, 75, '2026-09', '2026-09-09', '9/9/26', 60, '17069', 'GNT', 'RU', '22:40', '07:15', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Relieved from Link #62 by MSA RAJU', 11, '2026-10-29 18:04:34'),
 (497119, 75, '2026-09', '2026-09-10', '10/9/26', 61, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 12, '2026-10-29 18:04:34'),
 (497120, 75, '2026-09', '2026-09-11', '11/9/26', 1, '17239', 'GNT', 'VSKP', '08:00', '16:30', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #1 (17253/17252)', 13, '2026-10-29 18:04:34'),
 (497121, 75, '2026-09', '2026-09-12', '12/9/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #2 (Set: 1->2)', 14, '2026-10-29 18:04:34'),
@@ -23403,7 +23382,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (497143, 75, '2026-09', '2026-09-28', '28/9/26', 16, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-10-29 18:04:34'),
 (497144, 75, '2026-09', '2026-09-29', '29/9/26', 17, '17646', 'GNT', 'SC', '07:45', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 37, '2026-10-29 18:04:34'),
 (497145, 75, '2026-09', '2026-09-29', '29/9/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 38, '2026-10-29 18:04:34'),
-(497146, 75, '2026-09', '2026-09-30', '30/9/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-10-29 18:04:34'),
+(497146, 75, '2026-09', '2026-09-30', '30/9/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-10-29 18:04:34');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (497177, 76, '2026-09', '2026-09-01', '1/9/26', 53, '22882', 'GNT', 'WADI', '10:35', '21:10', 13.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 1, '2026-10-29 18:04:35'),
 (497178, 76, '2026-09', '2026-09-02', '2/9/26', 54, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 2, '2026-10-29 18:04:35'),
 (497179, 76, '2026-09', '2026-09-03', '3/9/26', 57, 'PILOT(67230), 18047', 'GNT, BZA', 'BZA, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #57 (17225/18048 SL)', 3, '2026-10-29 18:04:35'),
@@ -23875,9 +23856,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (497746, 22, '2026-09', '2026-09-08', '8/9/26', 8, '12734', 'GNT', '---', '22:50', '---', 1.2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #8 (12734/17262 SL)', 10, '2026-10-29 18:04:40'),
 (497747, 22, '2026-09', '2026-09-09', '9/9/26', 9, '12734', '---', 'TPTY', '---', '06:05', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #9 (Set: 8->9->10)', 11, '2026-10-29 18:04:40'),
 (497748, 22, '2026-09', '2026-09-09', '9/9/26', 9, '20630', 'TPTY', '---', '23:15', '---', 17.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #9 (Set: 8->9->10)', 12, '2026-10-29 18:04:40'),
-(497749, 22, '2026-09', '2026-09-10', '10/9/26', 10, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #10 (Set: 8->9->10)', 13, '2026-10-29 18:04:40');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(497749, 22, '2026-09', '2026-09-10', '10/9/26', 10, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #10 (Set: 8->9->10)', 13, '2026-10-29 18:04:40'),
 (497750, 22, '2026-09', '2026-09-11', '11/9/26', 11, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #11 (17225/17226 SL)', 14, '2026-10-29 18:04:40'),
 (497751, 22, '2026-09', '2026-09-11', '11/9/26', 11, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #11 (17225/17226 SL)', 15, '2026-10-29 18:04:40'),
 (497752, 22, '2026-09', '2026-09-12', '12/9/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #12 (Set: 11->12->13)', 16, '2026-10-29 18:04:40'),
@@ -23905,7 +23884,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (497774, 22, '2026-09', '2026-09-27', '27/9/26', 25, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 38, '2026-10-29 18:04:40'),
 (497775, 22, '2026-09', '2026-09-28', '28/9/26', 26, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-10-29 18:04:40'),
 (497776, 22, '2026-09', '2026-09-28', '28/9/26', 26, '17226', 'GTL', '---', '18:56', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 40, '2026-10-29 18:04:40'),
-(497777, 22, '2026-09', '2026-09-29', '29/9/26', 27, '17226', '---', 'BZA', '---', '03:42', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 41, '2026-10-29 18:04:40'),
+(497777, 22, '2026-09', '2026-09-29', '29/9/26', 27, '17226', '---', 'BZA', '---', '03:42', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 41, '2026-10-29 18:04:40');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (497778, 22, '2026-09', '2026-09-29', '29/9/26', 27, '12703', 'BZA', 'GNT', '06:20', '07:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 42, '2026-10-29 18:04:40'),
 (497779, 22, '2026-10', '2026-10-01', '1/10/26', 31, '17282', 'NS', 'GNT', '06:05', '10:50', 10.8, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17281 / 17282', 1, '2026-10-29 18:04:40'),
 (497780, 22, '2026-10', '2026-10-02', '2/10/26', 32, '17243', 'GNT', '---', '23:20', '---', 0.7, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17243 / 17244', 2, '2026-10-29 18:04:40'),
@@ -24377,9 +24358,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (498320, 31, '2026-09', '2026-09-02', '2/9/26', 11, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #11 (17225/17226 SL)', 3, '2026-10-29 18:04:46'),
 (498321, 31, '2026-09', '2026-09-03', '3/9/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #12 (Set: 11->12->13)', 4, '2026-10-29 18:04:46'),
 (498322, 31, '2026-09', '2026-09-03', '3/9/26', 12, '17226', 'GTL', '---', '19:10', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #12 (Set: 11->12->13)', 5, '2026-10-29 18:04:46'),
-(498323, 31, '2026-09', '2026-09-04', '4/9/26', 13, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #13 (Set: 11->12->13)', 6, '2026-10-29 18:04:46');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(498323, 31, '2026-09', '2026-09-04', '4/9/26', 13, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #13 (Set: 11->12->13)', 6, '2026-10-29 18:04:46'),
 (498324, 31, '2026-09', '2026-09-04', '4/9/26', 13, '12703', 'BZA', 'GNT', '06:20', '07:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #13 (Set: 11->12->13)', 7, '2026-10-29 18:04:46'),
 (498325, 31, '2026-09', '2026-09-05', '5/9/26', 50, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 8, '2026-10-29 18:04:46'),
 (498326, 31, '2026-09', '2026-09-05', '5/9/26', 50, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #50 (17626/17625 SL)', 9, '2026-10-29 18:04:46'),
@@ -24407,7 +24386,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (498348, 31, '2026-09', '2026-09-22', '22/9/26', 29, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 31, '2026-10-29 18:04:46'),
 (498349, 31, '2026-09', '2026-09-23', '23/9/26', 30, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 32, '2026-10-29 18:04:46'),
 (498350, 31, '2026-09', '2026-09-23', '23/9/26', 30, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-10-29 18:04:46'),
-(498351, 31, '2026-09', '2026-09-24', '24/9/26', 31, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-29 18:04:46'),
+(498351, 31, '2026-09', '2026-09-24', '24/9/26', 31, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-29 18:04:46');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (498352, 31, '2026-09', '2026-09-24', '24/9/26', 31, '17646', 'RAL', 'GNT', '05:55', '07:00', 1.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 35, '2026-10-29 18:04:46'),
 (498353, 31, '2026-09', '2026-09-25', '25/9/26', 32, '17243', 'GNT', '---', '23:20', '---', 0.7, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-10-29 18:04:46'),
 (498354, 31, '2026-09', '2026-09-26', '26/9/26', 33, '17243', '---', 'VSKP', '---', '09:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 37, '2026-10-29 18:04:46'),
@@ -24879,9 +24860,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (498876, 39, '2026-09', '2026-09-28', '28/9/26', 43, '17645', 'GNT', 'RAL', '07:30', '08:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 43, '2026-10-29 18:04:51'),
 (498877, 39, '2026-09', '2026-09-28', '28/9/26', 43, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 44, '2026-10-29 18:04:51'),
 (498878, 39, '2026-09', '2026-09-29', '29/9/26', 44, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 45, '2026-10-29 18:04:51'),
-(498879, 39, '2026-09', '2026-09-29', '29/9/26', 44, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 46, '2026-10-29 18:04:51');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(498879, 39, '2026-09', '2026-09-29', '29/9/26', 44, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 46, '2026-10-29 18:04:51'),
 (498880, 39, '2026-09', '2026-09-30', '30/9/26', 45, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 47, '2026-10-29 18:04:51'),
 (498881, 39, '2026-09', '2026-09-30', '30/9/26', 45, '17646', 'RAL', 'GNT', '05:55', '07:00', 1.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 48, '2026-10-29 18:04:51'),
 (498882, 39, '2026-10', '2026-10-01', '1/10/26', 48, '17244', '---', 'GNT', '---', '00:35', 0.6, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '17244', 1, '2026-10-29 18:04:51'),
@@ -24909,7 +24888,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (498904, 39, '2026-10', '2026-10-24', '24/10/26', 15, '17253', 'GNT', 'DHNE', '06:15', '14:20', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17253 / 17252', 23, '2026-10-29 18:04:51'),
 (498905, 39, '2026-10', '2026-10-25', '25/10/26', 16, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 24, '2026-10-29 18:04:51'),
 (498906, 39, '2026-10', '2026-10-26', '26/10/26', 17, '17646', 'GNT', 'SC', '07:15', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 25, '2026-10-29 18:04:51'),
-(498907, 39, '2026-10', '2026-10-26', '26/10/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-29 18:04:51'),
+(498907, 39, '2026-10', '2026-10-26', '26/10/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 26, '2026-10-29 18:04:51');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (498908, 39, '2026-10', '2026-10-27', '27/10/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 27, '2026-10-29 18:04:51'),
 (498909, 39, '2026-10', '2026-10-28', '28/10/26', 19, '12805', 'GNT', 'SC', '07:05', '14:00', 16.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 28, '2026-10-29 18:04:51'),
 (498910, 39, '2026-10', '2026-10-29', '29/10/26', 20, '12806', 'SC', 'BZA', '07:00', '13:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 29, '2026-10-29 18:04:51'),
@@ -25381,9 +25362,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (499376, 46, '2026-09', '2026-09-19', '19/9/26', 1, '17239', 'GNT', 'VSKP', '08:00', '16:30', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #1 (17253/17252)', 31, '2026-10-29 18:04:55'),
 (499377, 46, '2026-09', '2026-09-20', '20/9/26', 2, '17240', 'VSKP', 'GNT', '07:10', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #2 (Set: 1->2)', 32, '2026-10-29 18:04:55'),
 (499378, 46, '2026-09', '2026-09-21', '21/9/26', 43, '17645', 'GNT', 'RAL', '07:30', '08:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-10-29 18:04:55'),
-(499379, 46, '2026-09', '2026-09-21', '21/9/26', 43, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-29 18:04:55');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(499379, 46, '2026-09', '2026-09-21', '21/9/26', 43, '17626', 'RAL', '---', '22:40', '---', 13.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-29 18:04:55'),
 (499380, 46, '2026-09', '2026-09-22', '22/9/26', 44, '17626', '---', 'KCG', '---', '07:15', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 35, '2026-10-29 18:04:55'),
 (499381, 46, '2026-09', '2026-09-22', '22/9/26', 44, '17625', 'KCG', '---', '22:10', '---', 14.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-10-29 18:04:55'),
 (499382, 46, '2026-09', '2026-09-23', '23/9/26', 45, '17625', '---', 'RAL', '---', '04:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 37, '2026-10-29 18:04:55'),
@@ -25411,7 +25390,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (499404, 46, '2026-10', '2026-10-15', '15/10/26', 13, '12703', 'BZA', 'GNT', '23:30', '00:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Present', 11, '2026-10-29 18:04:55'),
 (499405, 46, '2026-10', '2026-10-17', '17/10/26', 15, '17253', 'GNT', 'DHNE', '06:15', '14:20', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17253 / 17252', 12, '2026-10-29 18:04:55'),
 (499406, 46, '2026-10', '2026-10-18', '18/10/26', 16, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 13, '2026-10-29 18:04:55'),
-(499407, 46, '2026-10', '2026-10-19', '19/10/26', 17, '17646', 'GNT', 'SC', '07:15', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17646 / 12796', 14, '2026-10-29 18:04:55'),
+(499407, 46, '2026-10', '2026-10-19', '19/10/26', 17, '17646', 'GNT', 'SC', '07:15', '14:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17646 / 12796', 14, '2026-10-29 18:04:55');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (499408, 46, '2026-10', '2026-10-19', '19/10/26', 17, '12796', 'SC', 'BZA', '17:30', '23:20', 3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 17646 / 12796', 15, '2026-10-29 18:04:55'),
 (499409, 46, '2026-10', '2026-10-20', '20/10/26', 18, '12805', 'BZA', 'GNT', '06:00', '07:00', 7, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 16, '2026-10-29 18:04:55'),
 (499410, 46, '2026-10', '2026-10-21', '21/10/26', 19, '12805', 'GNT', 'SC', '07:05', '14:00', 16.9, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Train 12805 / 12806', 17, '2026-10-29 18:04:55'),
@@ -25883,9 +25864,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (500077, 101, '2026-09', '2026-09-22', '22/9/26', NULL, '17638', 'RU', 'GNT', '07:15', '14:30', 14.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 27, '2026-10-29 18:05:02'),
 (500078, 101, '2026-10', '2026-10-01', '1/10/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 1, '2026-10-29 18:05:02'),
 (500079, 101, '2026-10', '2026-10-01', '1/10/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 7.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 2, '2026-10-29 18:05:02'),
-(500080, 101, '2026-10', '2026-10-02', '2/10/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 3, '2026-10-29 18:05:02');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(500080, 101, '2026-10', '2026-10-02', '2/10/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 3, '2026-10-29 18:05:02'),
 (500081, 101, '2026-10', '2026-10-03', '3/10/26', NULL, '17251', 'GNT', 'DHNE', '16:30', '05:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 4, '2026-10-29 18:05:02'),
 (500082, 101, '2026-10', '2026-10-03', '3/10/26', NULL, '17254', 'DHNE', 'GNT', '16:30', '23:45', 11.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 5, '2026-10-29 18:05:02'),
 (500083, 101, '2026-10', '2026-10-04', '4/10/26', NULL, '17254', 'DHNE', 'GNT', '16:30', '23:45', 23.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 6, '2026-10-29 18:05:02'),
@@ -25913,7 +25892,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (500105, 101, '2026-10', '2026-10-25', '25/10/26', NULL, '07437', 'GNT', '---', '17:45', '---', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 28, '2026-10-29 18:05:02'),
 (500106, 101, '2026-10', '2026-10-25', '25/10/26', NULL, '07438', 'GNT', '---', '17:45', '---', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 29, '2026-10-29 18:05:02'),
 (500107, 101, '2026-10', '2026-10-29', '29/10/26', NULL, '17239', 'GNT', 'BZA', '08:00', '09:00', 16, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 30, '2026-10-29 18:05:02'),
-(500108, 101, '2026-10', '2026-10-29', '29/10/26', NULL, '17240', 'BZA', 'GNT', '15:00', '15:40', 18, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 31, '2026-10-29 18:05:02'),
+(500108, 101, '2026-10', '2026-10-29', '29/10/26', NULL, '17240', 'BZA', 'GNT', '15:00', '15:40', 18, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 31, '2026-10-29 18:05:02');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (500109, 102, '2026-09', '2026-09-01', '1/9/26', NULL, '17225', 'GNT', '---', '17:45', '---', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 1, '2026-10-29 18:05:03'),
 (500110, 102, '2026-09', '2026-09-02', '2/9/26', NULL, '17226', 'GTL', 'BZA', '18:57', '03:55', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 2, '2026-10-29 18:05:03'),
 (500111, 102, '2026-09', '2026-09-02', '2/9/26', NULL, '57201', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 3, '2026-10-29 18:05:03'),
@@ -26385,9 +26366,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (500577, 110, '2026-10', '2026-10-10', '10/10/26', NULL, '17253', 'GNT', 'DHNE', '06:15', '14:20', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 13, '2026-10-29 18:05:08'),
 (500578, 110, '2026-10', '2026-10-10', '10/10/26', NULL, '17252', 'DHNE', 'GNT', '15:30', '23:10', 1.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 14, '2026-10-29 18:05:08'),
 (500579, 110, '2026-10', '2026-10-11', '11/10/26', NULL, '17252', 'DHNE', 'GNT', '15:30', '23:10', 23.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 15, '2026-10-29 18:05:08'),
-(500580, 110, '2026-10', '2026-10-13', '13/10/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 16, '2026-10-29 18:05:08');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(500580, 110, '2026-10', '2026-10-13', '13/10/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 16, '2026-10-29 18:05:08'),
 (500581, 110, '2026-10', '2026-10-13', '13/10/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 17, '2026-10-29 18:05:08'),
 (500582, 110, '2026-10', '2026-10-14', '14/10/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 23.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 18, '2026-10-29 18:05:08'),
 (500583, 110, '2026-10', '2026-10-15', '15/10/26', NULL, '07001', 'GNT', 'TPTY', '16:30', '23:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 19, '2026-10-29 18:05:08'),
@@ -26415,7 +26394,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (500605, 111, '2026-09', '2026-09-10', '10/9/26', NULL, '12703', 'BZA', 'GNT', '23:30', '00:15', 0.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 11, '2026-10-29 18:05:09'),
 (500606, 111, '2026-09', '2026-09-12', '12/9/26', NULL, '12734', 'GNT', 'TPTY', '23:10', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 12, '2026-10-29 18:05:09'),
 (500607, 111, '2026-09', '2026-09-12', '12/9/26', NULL, '20630', 'TPTY', 'GNT', '23:15', '05:47', 17.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 13, '2026-10-29 18:05:09'),
-(500608, 111, '2026-09', '2026-09-13', '13/9/26', NULL, '12734', 'GNT', 'TPTY', '22:55', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 14, '2026-10-29 18:05:09'),
+(500608, 111, '2026-09', '2026-09-13', '13/9/26', NULL, '12734', 'GNT', 'TPTY', '22:55', '06:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 14, '2026-10-29 18:05:09');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (500609, 111, '2026-09', '2026-09-13', '13/9/26', NULL, '20630', 'TPTY', 'GNT', '23:15', '05:30', 17.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 15, '2026-10-29 18:05:09'),
 (500610, 111, '2026-09', '2026-09-14', '14/9/26', NULL, '20630', 'TPTY', 'GNT', '23:15', '05:44', 5.5, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 16, '2026-10-29 18:05:09'),
 (500611, 111, '2026-09', '2026-09-15', '15/9/26', NULL, '17077', 'GNT', 'TPTY', '18:00', '01:30', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 17, '2026-10-29 18:05:09'),
@@ -26594,7 +26575,6 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (500784, 114, '2026-09', '2026-09-10', '10/9/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 13, '2026-10-29 18:05:11'),
 (500785, 114, '2026-09', '2026-09-10', '10/9/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 7.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 14, '2026-10-29 18:05:11'),
 (500786, 114, '2026-09', '2026-09-11', '11/9/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 15, '2026-10-29 18:05:11'),
-(500787, 114, '2026-09', '2026-09-13', '13/9/26', NULL, '67230', 'GNT', 'BZA', '17:45', '18:45', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 16, '2026-10-29 18:05:11'),
 (500788, 114, '2026-09', '2026-09-13', '13/9/26', NULL, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 17, '2026-10-29 18:05:11'),
 (500789, 114, '2026-09', '2026-09-13', '13/9/26', NULL, '18047', 'BZA', 'GTL', '20:45', '04:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 18, '2026-10-29 18:05:11'),
 (500790, 114, '2026-09', '2026-09-15', '15/9/26', NULL, '18048', 'GTL', 'BZA', '14:30', '22:45', 0, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 19, '2026-10-29 18:05:11'),
@@ -26887,9 +26867,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (543929, 55, '2026-09', '2026-09-03', '3/9/26', 36, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #36 (17626/17625 AC+SL)', 4, '2026-11-03 05:51:14'),
 (543936, 55, '2026-09', '2026-09-04', '4/9/26', 37, '20629', '---', 'TPTY', '---', '01:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #37 (Set: 36->37->38)', 5, '2026-11-03 05:51:14'),
 (543943, 55, '2026-09', '2026-09-04', '4/9/26', 37, '12733', 'TPTY', '---', '18:20', '---', 16.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #37 (Set: 36->37->38)', 6, '2026-11-03 05:51:14'),
-(543950, 55, '2026-09', '2026-09-05', '5/9/26', 38, '12733', '---', 'GNT', '---', '00:50', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #38 (Set: 36->37->38)', 7, '2026-11-03 05:51:14');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(543950, 55, '2026-09', '2026-09-05', '5/9/26', 38, '12733', '---', 'GNT', '---', '00:50', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #38 (Set: 36->37->38)', 7, '2026-11-03 05:51:14'),
 (543955, 55, '2026-09', '2026-09-05', '5/9/26', 38, '17281', 'GNT', 'NS', '17:45', '22:30', 6.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Return Leg of Multi-Day Link #38 (Set: 36->37->38)', 8, '2026-11-03 05:51:15'),
 (543961, 55, '2026-09', '2026-09-06', '6/9/26', 39, '17282', 'NS', 'GNT', '06:05', '10:50', 10.8, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Link #39 (17243/17244 AC+SL)', 9, '2026-11-03 05:51:15'),
 (543966, 55, '2026-09', '2026-09-07', '7/9/26', 38, '12733', '---', 'GNT', '---', '00:50', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 10, '2026-11-03 05:51:15'),
@@ -26918,7 +26896,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (544049, 55, '2026-09', '2026-09-23', '23/9/26', 54, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 33, '2026-11-03 05:51:19'),
 (544054, 55, '2026-09', '2026-09-24', '24/9/26', 55, '17069', 'GNT', 'RU', '22:40', '07:15', 1.3, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-11-03 05:51:19'),
 (544059, 55, '2026-09', '2026-09-26', '26/9/26', 57, 'PILOT(67230), 18047', 'GNT, BZA', 'BZA, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 35, '2026-11-03 05:51:20'),
-(544064, 55, '2026-09', '2026-09-27', '27/9/26', 58, '18047, 18048', '--, GTL', 'GTL, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-11-03 05:51:20'),
+(544064, 55, '2026-09', '2026-09-27', '27/9/26', 58, '18047, 18048', '--, GTL', 'GTL, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 36, '2026-11-03 05:51:20');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (544069, 55, '2026-09', '2026-09-28', '28/9/26', 59, '18048, PILOT(12703)', '--, BZA', 'BZA, GNT', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 37, '2026-11-03 05:51:20'),
 (544073, 55, '2026-09', '2026-09-29', '29/9/26', 60, '22882', 'GNT', 'WADI', '10:35', '21:10', 13.4, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 38, '2026-11-03 05:51:20'),
 (544078, 55, '2026-09', '2026-09-30', '30/9/26', 61, '17221', 'GNT', 'WADI', '13:35', '00:05', 10.4, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 39, '2026-11-03 05:51:20'),
@@ -27389,9 +27369,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (622306, 99, '2026-09', '2026-09-19', '19/9/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 24, '2026-11-08 06:18:27'),
 (622321, 99, '2026-09', '2026-09-20', '20/9/26', NULL, '16357', 'MAS', 'GNT', '13:00', '21:10', 21.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 25, '2026-11-08 06:18:27'),
 (622334, 99, '2026-09', '2026-09-21', '21/9/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 26, '2026-11-08 06:18:28'),
-(622348, 99, '2026-09', '2026-09-21', '21/9/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 27, '2026-11-08 06:18:28');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(622348, 99, '2026-09', '2026-09-21', '21/9/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 27, '2026-11-08 06:18:28'),
 (622364, 99, '2026-09', '2026-09-22', '22/9/26', NULL, '12604', 'GNT', 'MAS', '22:00', '05:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 28, '2026-11-08 06:18:28'),
 (622378, 99, '2026-09', '2026-09-22', '22/9/26', NULL, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', '', 29, '2026-11-08 06:18:28'),
 (623766, 101, '2026-11', '2026-11-03', '3/11/26', 11, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 1, '2026-11-08 06:21:05'),
@@ -27420,7 +27398,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (626944, 90, '2026-09', '2026-09-19', '19/9/26', 3, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 16, '2026-11-08 06:33:40'),
 (626949, 90, '2026-09', '2026-09-20', '20/9/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Assigned to Link #4 (17261/12733 COR-2)', 17, '2026-11-08 06:33:40'),
 (626954, 90, '2026-09', '2026-09-21', '21/9/26', 5, '17262', 'TPTY', '---', '19:30', '---', 19.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 18, '2026-11-08 06:33:40'),
-(626959, 90, '2026-09', '2026-09-22', '22/9/26', 6, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 19, '2026-11-08 06:33:40'),
+(626959, 90, '2026-09', '2026-09-22', '22/9/26', 6, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 19, '2026-11-08 06:33:40');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (626964, 90, '2026-09', '2026-09-24', '24/9/26', 1, '17261', 'GNT', 'TPTY', '16:30', '04:00', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 20, '2026-11-08 06:33:40'),
 (626970, 90, '2026-09', '2026-09-25', '25/9/26', 2, '17262', 'TPTY', '---', '19:30', '---', 19.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 21, '2026-11-08 06:33:41'),
 (626977, 90, '2026-09', '2026-09-26', '26/9/26', 3, '17262', '---', 'GNT', '---', '06:55', 6.9, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 22, '2026-11-08 06:33:41'),
@@ -27524,24 +27504,14 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (638382, 31, '2026-11', '2026-11-06', '6/11/26', 20, '12806', 'SC', 'BZA', '07:00', '13:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 6, '2026-11-08 08:04:37'),
 (638383, 31, '2026-11', '2026-11-06', '6/11/26', 20, '17240', 'BZA', 'GNT', '15:00', '15:40', 15.7, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 7, '2026-11-08 08:04:37'),
 (638384, 31, '2026-11', '2026-11-08', '8/11/26', 22, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 8, '2026-11-08 08:04:37'),
-(639517, 10, '2026-09', '2026-09-09', '9/9/26', 18, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #18 (12734/17262 COR-II)', 8, '2026-11-08 09:30:50'),
 (639518, 10, '2026-09', '2026-09-03', '3/9/26', 12, '20630', '---', 'GNT', '---', '05:40', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #12 (12604/12603 AC)', 1, '2026-11-08 09:30:50'),
-(639519, 10, '2026-09', '2026-09-11', '11/9/26', 8, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #8 (20629/12733 COR-1)', 9, '2026-11-08 09:30:50'),
-(639520, 10, '2026-09', '2026-09-12', '12/9/26', 10, '20629', '---', 'TPTY', '---', '01:20', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #9 (Day 2 of Link #8) - Rest day worked (CR credited for 12/09/2026)', 10, '2026-11-08 09:30:50'),
 (639521, 10, '2026-09', '2026-09-03', '3/9/26', 12, '12604', 'GNT', '---', '22:10', '---', 2, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #12 (12604/12603 AC)', 2, '2026-11-08 09:30:50'),
-(639522, 10, '2026-09', '2026-09-12', '12/9/26', 10, '12733', 'TPTY', '---', '18:30', '---', 16.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #9 (Day 2 of Link #8) - Rest day worked (CR credited for 12/09/2026)', 11, '2026-11-08 09:30:51'),
 (639523, 10, '2026-09', '2026-09-06', '6/9/26', 57, 'PILOT(67230), 18047', 'GNT, BZA', 'BZA, --', '17:45', '---', 17.8, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #57 (18047/17226 AC)', 3, '2026-11-08 09:30:51'),
-(639524, 10, '2026-09', '2026-09-13', '13/9/26', 10, '12733', '---', 'GNT', '---', '00:50', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #10 (Day 3 of Link #8)', 12, '2026-11-08 09:30:51'),
 (639525, 10, '2026-09', '2026-09-07', '7/9/26', 5, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned to Link #3', 4, '2026-11-08 09:30:51'),
-(639526, 10, '2026-09', '2026-09-13', '13/9/26', 10, '12734', 'GNT', '---', '22:00', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #10 (Day 3 of Link #8)', 13, '2026-11-08 09:30:51'),
 (639527, 10, '2026-09', '2026-09-07', '7/9/26', 5, '57210', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned to Link #3', 5, '2026-11-08 09:30:51'),
-(639528, 10, '2026-09', '2026-09-14', '14/9/26', 12, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #12 (12604/12603 AC)', 14, '2026-11-08 09:30:51'),
 (639529, 10, '2026-09', '2026-09-08', '8/9/26', 6, '17226', '---', 'BZA', '---', '03:55', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned to Link #3', 6, '2026-11-08 09:30:51'),
-(639530, 10, '2026-09', '2026-09-15', '15/9/26', 13, '12604', '---', 'MAS', '---', '05:40', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Working as substitute for VAN REDDY on Link #13', 15, '2026-11-08 09:30:51'),
 (639531, 10, '2026-09', '2026-09-08', '8/9/26', 6, '57210', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned to Link #3', 7, '2026-11-08 09:30:51'),
-(639532, 10, '2026-09', '2026-09-15', '15/9/26', 13, '12603', 'MAS', 'GNT', '16:51', '23:29', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Working as substitute for VAN REDDY on Link #13', 16, '2026-11-08 09:30:51'),
 (639533, 10, '2026-09', '2026-09-09', '9/9/26', 18, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #18 (12734/17262 COR-II)', 8, '2026-11-08 09:30:52'),
-(639534, 10, '2026-09', '2026-09-16', '16/9/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #4 (17261/12733 COR-1)', 17, '2026-11-08 09:30:52'),
 (639535, 10, '2026-09', '2026-09-11', '11/9/26', 8, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #8 (20629/12733 COR-1)', 9, '2026-11-08 09:30:52'),
 (639536, 10, '2026-09', '2026-09-12', '12/9/26', 10, '20629', '---', 'TPTY', '---', '01:20', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #9 (Day 2 of Link #8) - Rest day worked (CR credited for 12/09/2026)', 10, '2026-11-08 09:30:52'),
 (639537, 10, '2026-09', '2026-09-12', '12/9/26', 10, '12733', 'TPTY', '---', '18:30', '---', 16.5, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #9 (Day 2 of Link #8) - Rest day worked (CR credited for 12/09/2026)', 11, '2026-11-08 09:30:52'),
@@ -27627,9 +27597,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (645344, 9, '2026-09', '2026-09-14', '14/9/26', 11, '20630', 'TPTY', '---', '23:15', '---', 17.3, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #11 (17225/17226 AC)', 5, '2026-11-09 01:51:58'),
 (645345, 9, '2026-09', '2026-09-17', '17/9/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #4 (17261/12733 COR-1)', 6, '2026-11-09 01:51:58'),
 (645346, 9, '2026-09', '2026-09-21', '21/9/26', 8, '20629', 'GNT', '---', '19:10', '---', 4.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #8 (20629/12733 COR-1)', 7, '2026-11-09 01:51:58'),
-(646739, 3, '2026-09', '2026-09-08', '8/9/26', 10, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #10 (12734/20630 COR-II)', 4, '2026-11-09 08:53:33'),
 (646740, 3, '2026-09', '2026-09-02', '2/9/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #4 (17261/12733 COR-1)', 1, '2026-11-09 08:53:33'),
-(646741, 3, '2026-09', '2026-09-16', '16/9/26', 18, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #18 (12734/17262 AC)', 5, '2026-11-09 08:53:34'),
 (646742, 3, '2026-09', '2026-09-06', '6/9/26', 4, '17261', 'GNT', '---', '16:30', '---', 7.5, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #4 (20629/12733 COR-1)', 2, '2026-11-09 08:53:34'),
 (646743, 3, '2026-09', '2026-09-08', '8/9/26', 10, '12733', '---', 'GNT', '---', '00:50', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #10 (12734/20630 COR-II)', 3, '2026-11-09 08:53:34'),
 (646744, 3, '2026-09', '2026-09-08', '8/9/26', 10, '12734', 'GNT', '---', '23:10', '---', 0.8, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'COR Link #10 (12734/20630 COR-II)', 4, '2026-11-09 08:53:34'),
@@ -27891,9 +27859,7 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (661444, 22, '2026-11', '2026-11-05', '5/11/26', 10, '20630', '---', 'GNT', '---', '05:55', 5.9, 0.3, 800, 240, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 4, '2026-11-14 03:49:48'),
 (661445, 22, '2026-11', '2026-11-06', '6/11/26', 11, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 5, '2026-11-14 03:49:48'),
 (661446, 22, '2026-11', '2026-11-06', '6/11/26', 11, '17225', 'BZA', '---', '19:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 6, '2026-11-14 03:49:49'),
-(661447, 22, '2026-11', '2026-11-07', '7/11/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 7, '2026-11-14 03:49:49');
-
-INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
+(661447, 22, '2026-11', '2026-11-07', '7/11/26', 12, '17225', '---', 'GTL', '---', '05:10', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 7, '2026-11-14 03:49:49'),
 (661448, 22, '2026-11', '2026-11-07', '7/11/26', 12, '17226', 'GTL', '---', '19:10', '---', 14, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 8, '2026-11-14 03:49:49'),
 (661449, 22, '2026-11', '2026-11-08', '8/11/26', 13, '17226', '---', 'BZA', '---', '03:50', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 9, '2026-11-14 03:49:49'),
 (661450, 22, '2026-11', '2026-11-08', '8/11/26', 13, '12703', 'BZA', 'GNT', '06:20', '07:15', 7.3, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 10, '2026-11-14 03:49:49'),
@@ -27934,7 +27900,9 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (662419, 10, '2026-11', '2026-11-06', '6/11/26', 13, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Assigned Link #13 (Day 5 of Link #9)', 11, '2026-11-14 04:55:52'),
 (662427, 10, '2026-11', '2026-11-08', '8/11/26', 15, '67230', 'GNT', 'BZA', '16:25', '18:10', 1.1, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 12, '2026-11-14 04:55:52'),
 (662435, 10, '2026-11', '2026-11-08', '8/11/26', 15, '18047', 'BZA', '---', '20:45', '---', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 13, '2026-11-14 04:55:53'),
-(662443, 10, '2026-11', '2026-11-09', '9/11/26', 16, '18047', '---', 'GTL', '---', '04:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 14, '2026-11-14 04:55:53'),
+(662443, 10, '2026-11', '2026-11-09', '9/11/26', 16, '18047', '---', 'GTL', '---', '04:00', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 14, '2026-11-14 04:55:53');
+
+INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `link_number`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `absence_hours`, `ta_percentage`, `da_rate`, `claim_amount`, `status`, `approved_by`, `approved_at`, `rejection_reason`, `object_of_journey`, `remarks`, `row_order`, `created_at`) VALUES
 (662451, 10, '2026-11', '2026-11-09', '9/11/26', 16, '17226', 'GTL', '---', '19:10', '---', 15.2, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 15, '2026-11-14 04:55:53'),
 (662458, 10, '2026-11', '2026-11-10', '10/11/26', 17, '18048', '---', 'BZA', '---', '22:45', 0, NULL, 800, 0, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 16, '2026-11-14 04:55:53'),
 (662463, 10, '2026-11', '2026-11-10', '10/11/26', 17, '57201', 'BZA', 'GNT', '06:20', '07:35', 7.6, 0.7, 800, 560, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 17, '2026-11-14 04:55:53'),
@@ -28187,30 +28155,30 @@ INSERT INTO `ta_approvals` (`id`, `staff_id`, `month_year`, `duty_date`, `date_s
 (668244, 3, '2026-11', '2026-11-13', '13/11/26', 13, '12603', 'MAS', 'GNT', '16:45', '23:30', 11, 1, 800, 800, 'APPROVED', NULL, NULL, NULL, 'MANNING AC COACHES', 'Regular Cyclic Duty', 17, '2026-11-14 06:58:52');
 
 DROP TABLE IF EXISTS `ta_entries`;
-CREATE TABLE "ta_entries" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "staff_id" int NOT NULL,
-  "month_year" varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "duty_date" date DEFAULT NULL,
-  "date_str" varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "train_no" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "from_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "to_station" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "dep_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "arr_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "ta_a1" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "ta_a" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "ta_b1" varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "days_claiming_ta" double DEFAULT NULL,
-  "object_of_journey" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT 'MANNING AC COACHES',
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "row_order" int DEFAULT '0',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  KEY "idx_ta_staff_month" ("staff_id","month_year"),
-  KEY "idx_ta_duty_date" ("duty_date"),
-  CONSTRAINT "fk_ta_entries_staff" FOREIGN KEY ("staff_id") REFERENCES "staff" ("id") ON DELETE CASCADE
-);
+CREATE TABLE `ta_entries` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `staff_id` int NOT NULL,
+  `month_year` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `duty_date` date DEFAULT NULL,
+  `date_str` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `train_no` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `from_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `to_station` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `dep_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `arr_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ta_a1` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ta_a` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ta_b1` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `days_claiming_ta` double DEFAULT NULL,
+  `object_of_journey` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT 'MANNING AC COACHES',
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `row_order` int DEFAULT '0',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_ta_staff_month` (`staff_id`,`month_year`),
+  KEY `idx_ta_duty_date` (`duty_date`),
+  CONSTRAINT `fk_ta_entries_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7580 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `ta_entries` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str`, `train_no`, `from_station`, `to_station`, `dep_time`, `arr_time`, `ta_a1`, `ta_a`, `ta_b1`, `days_claiming_ta`, `object_of_journey`, `remarks`, `row_order`, `updated_at`) VALUES
 (2464, 1, '2026-09', '2026-08-30', '30/8/26', 'SPARE ', 'GNT', '---', '17:45', '---', '', '', '0.7', 0.7, 'MANNING AC COACHES', '', 1, '2026-10-15 10:21:42'),
@@ -30669,26 +30637,26 @@ INSERT INTO `ta_entries` (`id`, `staff_id`, `month_year`, `duty_date`, `date_str
 (7579, 30, '2026-10', '2026-10-31', '31/10/26', '12703', 'BZA', 'GNT', '06:20', '07:15', '', '', '0.7', 0.7, 'MANNING SLEEPER COACHES', 'Regular Cyclic Duty', 34, '2026-10-31 12:12:02');
 
 DROP TABLE IF EXISTS `train_ta_nda_rules`;
-CREATE TABLE "train_ta_nda_rules" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "category_id" int NOT NULL,
-  "link_number" int NOT NULL,
-  "train_number" varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "ta_percentage" double DEFAULT '0.7',
-  "ta_amount" int DEFAULT '560',
-  "nda_hours" double DEFAULT '0',
-  "nda_amount" int DEFAULT '0',
-  "absence_hours" double DEFAULT '0',
-  "remarks" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "actual_arr_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "sched_arr_time" varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "extra_next_day_ta" double DEFAULT '0',
-  "ntes_status" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "updated_by" varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
-  "updated_at" datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "uq_ta_nda_rule" ("category_id","link_number","train_number")
-);
+CREATE TABLE `train_ta_nda_rules` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int NOT NULL,
+  `link_number` int NOT NULL,
+  `train_number` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `ta_percentage` double DEFAULT '0.7',
+  `ta_amount` int DEFAULT '560',
+  `nda_hours` double DEFAULT '0',
+  `nda_amount` int DEFAULT '0',
+  `absence_hours` double DEFAULT '0',
+  `remarks` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `actual_arr_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sched_arr_time` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `extra_next_day_ta` double DEFAULT '0',
+  `ntes_status` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'Admin',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ta_nda_rule` (`category_id`,`link_number`,`train_number`)
+) ENGINE=InnoDB AUTO_INCREMENT=315 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `train_ta_nda_rules` (`id`, `category_id`, `link_number`, `train_number`, `ta_percentage`, `ta_amount`, `nda_hours`, `nda_amount`, `absence_hours`, `remarks`, `actual_arr_time`, `sched_arr_time`, `extra_next_day_ta`, `ntes_status`, `updated_by`, `updated_at`) VALUES
 (2, 1, 10, '12734', 0.3, 240, 0, 0, 0, NULL, NULL, NULL, 0, NULL, '12345', '2026-09-27 03:21:00'),
@@ -30778,28 +30746,28 @@ INSERT INTO `train_ta_nda_rules` (`id`, `category_id`, `link_number`, `train_num
 (314, 2, 31, '17625', 0, 0, 0, 0, 0, NULL, NULL, NULL, 0, NULL, '12345', '2026-11-08 03:22:24');
 
 DROP TABLE IF EXISTS `users`;
-CREATE TABLE "users" (
-  "id" int NOT NULL AUTO_INCREMENT,
-  "username" varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "name" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "email" varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "password_hash" varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  "pin_hash" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  "role" enum('Admin','Staff','Viewer','Employee') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Employee',
-  "status" enum('PENDING','APPROVED','REJECTED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'APPROVED',
-  "staff_id" int DEFAULT NULL,
-  "created_at" datetime DEFAULT CURRENT_TIMESTAMP,
-  "approved_at" datetime DEFAULT NULL,
-  "approved_by" varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  PRIMARY KEY ("id"),
-  UNIQUE KEY "username" ("username"),
-  UNIQUE KEY "email" ("email"),
-  KEY "idx_users_role" ("role"),
-  KEY "idx_users_status" ("status")
-);
+CREATE TABLE `users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `username` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `email` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `pin_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `role` enum('Admin','Staff','Viewer','Employee') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Employee',
+  `status` enum('PENDING','APPROVED','REJECTED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'APPROVED',
+  `staff_id` int DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `approved_at` datetime DEFAULT NULL,
+  `approved_by` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `email` (`email`),
+  KEY `idx_users_role` (`role`),
+  KEY `idx_users_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=113 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `users` (`id`, `username`, `name`, `email`, `password_hash`, `pin_hash`, `role`, `status`, `staff_id`, `created_at`, `approved_at`, `approved_by`) VALUES
-(1, '12345', 'Railway Officer / Administrator', 'admin12345@railway.gov.in', '$2b$10$LesxgbAwL8XOlVMVb8Ya2udslmllTM7ZGJEOrdMmLgSmd92WNUZ..', NULL, 'Admin', 'APPROVED', NULL, '2026-10-30 14:09:05', '2026-10-30 14:09:05', 'SYSTEM'),
+(1, '12345', 'Railway Officer / Administrator', 'admin12345@railway.gov.in', '$2b$10$AKSJZu87j2/0/Klx8wxIGODjmN7Z/.29N4lUg4fhRV5/Q4npL/w/u', NULL, 'Admin', 'APPROVED', NULL, '2026-10-30 14:09:05', '2026-10-30 14:09:05', 'SYSTEM'),
 (4, 'staff_test_1787498991782', 'Test Staff Member', 'staff_test_1787498991782@railway.gov', '$2b$10$aiDOHOzUnycaXm6aiPSo2us1Epos6OAhWY.L/KMm4B8ZmJlONhKcW', NULL, 'Staff', 'PENDING', NULL, '2026-08-23 15:29:51', NULL, NULL),
 (5, 'staff_test_1787499002049', 'Test Staff Member', 'staff_test_1787499002049@railway.gov', '$2b$10$odJe.dp01IY7cLmH2HUk7.aS8CE/8P33F6Qv3ZoVx/je6wcLf6.KK', NULL, 'Staff', 'APPROVED', NULL, '2026-08-23 15:30:02', '2026-10-22 18:42:06', '12345'),
 (6, 'staff_test_1787499009363', 'Test Staff Member', 'staff_test_1787499009363@railway.gov', '$2b$10$eIt2QHypTIqLJ8TWIYF2SOQobmYx7L1IDQBaiR7svz1gkFfasVzf6', NULL, 'Staff', 'APPROVED', NULL, '2026-08-23 15:30:09', '2026-08-23 15:30:09', 'admin'),
@@ -30810,7 +30778,7 @@ INSERT INTO `users` (`id`, `username`, `name`, `email`, `password_hash`, `pin_ha
 (11, 'staff_test_1787646122006', 'Test Staff Member', 'staff_test_1787646122006@railway.gov', '$2b$10$UNX3qN7bMPtwY9G6qlJ2K.muuZSjTYq/zhi65ZzOx3fZS.MoHvHDi', NULL, 'Staff', 'APPROVED', NULL, '2026-08-25 08:22:02', '2026-08-25 08:22:02', 'admin'),
 (13, '24609276830', 'K RAMANAIAH', NULL, '$2b$10$Ip6TktiMtlsGNcu8hSoRr.9ItrCqpw9LHvdCrY0zBwmdGrVr3N3CK', NULL, 'Employee', 'APPROVED', 2, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
 (14, '2461k080054', 'I DASARADHI', NULL, '$2b$10$6MkTykjvItHgAuefhvtgXe63Pa9ZO65i3f5TvrTFEV/BZkTqGZdIy', NULL, 'Employee', 'APPROVED', 3, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
-(15, '2461j150018', 'BP RAJA KUMAR', NULL, '$2b$10$fiuhXuoegD3XGVSgLkIhH.p1COpZyJGEx0SClgqp27WndWpQMt1ca', NULL, 'Employee', 'APPROVED', 68, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
+(15, '2461j150018', 'BP RAJA KUMAR', NULL, '$2b$10$fiuhXuoegD3XGVSgLkIhH.p1COpZyJGEx0SClgqp27WndWpQMt1ca', NULL, 'Employee', 'APPROVED', 4, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
 (16, '246fz070093', 'KRM REDDY', NULL, '$2b$10$LXu0ea6XkL.St0ibCoCQOOhiwkpwWaBl54TOQKhrQKTSx07YgZkve', NULL, 'Employee', 'APPROVED', 6, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
 (17, '24609889577', 'CH RAMESH BABU', NULL, '$2b$10$do9YU0LkZT5f1kbN6GMqBuYHW5NBrPyZLkffU1WuPesN5hC5f3e9.', NULL, 'Employee', 'APPROVED', 7, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),
 (18, '24605571637', 'M SRINIVASULU', NULL, '$2b$10$qLUr7CPqBm9p0/XQABy8peLO0gSzpOFHFBFjDUUtcXTnPYRwbUYUy', NULL, 'Employee', 'APPROVED', 8, '2026-10-22 19:46:17', '2026-10-22 19:46:17', 'System PF Auto-Provision'),

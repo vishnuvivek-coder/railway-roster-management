@@ -1182,12 +1182,22 @@ const NON_DAILY_PAIRS_MAP = {
   // FRIDAY
   '18063': { returnTrain: '18064', serviceName: 'GNT-DMM-GNT Exp', from: 'GNT', via: 'DMM', to: 'GNT', depTime: '09:45', retDepTime: '08:15', arrHqTime: '19:25', totalDays: 2, restTill: '03:25', coaches: 'SL / AC' },
   '07125': { returnTrain: '07126', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '17:40', retDepTime: '01:10', arrHqTime: '01:10', totalDays: 2, restTill: '09:10', coaches: 'SL / AC' },
-  '07195': { returnTrain: '20630', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '19:10', retDepTime: '01:50', arrHqTime: '01:50', totalDays: 2, restTill: '09:50', coaches: 'SL / AC' },
+  '07180': { returnTrain: '07181', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
+  '07198': { returnTrain: '07197', serviceName: 'QLN-CHZ Spl (PER-GNT)', from: 'PER', via: 'GNT', to: 'GNT', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
+  '07200': { returnTrain: '07199', serviceName: 'QLN-CHZ Spl (PER-BZA)', from: 'PER', via: 'BZA', to: 'BZA', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
   '17607': { returnTrain: '17608', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '19:20', arrHqTime: '19:20', totalDays: 2, restTill: '03:20', coaches: 'SL / AC' },
 
   // SATURDAY
-  '07193': { returnTrain: '07194', serviceName: 'GNT-KPD-GNT Spl', from: 'GNT', via: 'KPD', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
-  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' }
+  '07193': { returnTrain: '07194', serviceName: 'HYB-QLN-HYB Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
+  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' },
+
+  // SUNDAY
+  '07189': { returnTrain: '07190', serviceName: 'NED-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
+  '07195': { returnTrain: '07196', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
+
+  // WEDNESDAY
+  '07197': { returnTrain: '07198', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' },
+  '07199': { returnTrain: '07200', serviceName: 'CHZ-QLN-CHZ Spl (BZA-PER)', from: 'BZA', via: 'PER', to: 'BZA', depTime: '', retDepTime: '', arrHqTime: '06:00', totalDays: 2, restTill: '14:00', coaches: 'SL / AC' }
 };
 
 function getMultiDayNonDailyMatch(trainCodeOrReason) {
@@ -1410,6 +1420,78 @@ const NON_DAILY_MULTI_DAY_SERVICES = [
     legs: [
       { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '17425', from: 'GNT', to: 'SC', depTime: '10:40', arrTime: '16:00', coaches: 'SL / AC', dutyCode: '17425', remarks: 'GNT-SC Exp' },
       { dayIndex: 2, dayLabel: 'Day 2 (MON)', train: '17426', from: 'SC', to: 'GNT', depTime: '11:40', arrTime: '17:10', coaches: 'SL / AC', dutyCode: '17426', remarks: 'SC-GNT Exp' }
+    ]
+  },
+  {
+    id: '07193_07194',
+    name: 'HYB-QLN-HYB Special (GNT-PER)',
+    linkNumber: null,
+    serviceDays: ['SAT'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SAT)', train: '07193', from: 'GNT', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07193', remarks: 'HYB-QLN Spl • Beat: GNT-PER (GNT Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (MON)', train: '07194', from: 'PER', to: 'GNT', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07194', remarks: 'QLN-HYB Spl • Beat: PER-GNT (GNT Divn)' }
+    ]
+  },
+  {
+    id: '07180_07181',
+    name: 'CHZ-QLN-CHZ Special (GNT-PER)',
+    linkNumber: null,
+    serviceDays: ['FRI'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (FRI)', train: '07180', from: 'GNT', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07180', remarks: 'CHZ-QLN Spl • Beat: GNT-PER (GNT Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (SUN)', train: '07181', from: 'PER', to: 'GNT', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07181', remarks: 'QLN-CHZ Spl • Beat: PER-GNT (GNT Divn)' }
+    ]
+  },
+  {
+    id: '07195_07196',
+    name: 'CHZ-QLN-CHZ Special (GNT-PER)',
+    linkNumber: null,
+    serviceDays: ['SUN'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '07195', from: 'GNT', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07195', remarks: 'CHZ-QLN Spl • Beat: GNT-PER (GNT Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (TUE)', train: '07196', from: 'PER', to: 'GNT', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07196', remarks: 'QLN-CHZ Spl • Beat: PER-GNT (GNT Divn)' }
+    ]
+  },
+  {
+    id: '07197_07198',
+    name: 'CHZ-QLN-CHZ Special (GNT-PER)',
+    linkNumber: null,
+    serviceDays: ['WED'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (WED)', train: '07197', from: 'GNT', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07197', remarks: 'CHZ-QLN Spl • Beat: GNT-PER (GNT Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (FRI)', train: '07198', from: 'PER', to: 'GNT', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07198', remarks: 'QLN-CHZ Spl • Beat: PER-GNT (GNT Divn)' }
+    ]
+  },
+  {
+    id: '07199_07200',
+    name: 'CHZ-QLN-CHZ Special (BZA-PER)',
+    linkNumber: null,
+    serviceDays: ['WED'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (WED)', train: '07199', from: 'BZA', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07199', remarks: 'CHZ-QLN Spl • Beat: BZA-PER (BZA Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (FRI)', train: '07200', from: 'PER', to: 'BZA', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07200', remarks: 'QLN-CHZ Spl • Beat: PER-BZA (BZA Divn)' }
+    ]
+  },
+  {
+    id: '07189_07190',
+    name: 'NED-QLN-CHZ Special (GNT-PER)',
+    linkNumber: null,
+    serviceDays: ['SUN'],
+    totalDays: 2,
+    coaches: 'SL / AC',
+    legs: [
+      { dayIndex: 1, dayLabel: 'Day 1 (SUN)', train: '07189', from: 'GNT', to: 'PER', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07189', remarks: 'NED-QLN Spl • Beat: GNT-PER (GNT Divn)' },
+      { dayIndex: 2, dayLabel: 'Day 2 (TUE)', train: '07190', from: 'PER', to: 'GNT', depTime: '', arrTime: '', coaches: 'SL / AC', dutyCode: '07190', remarks: 'QLN-CHZ Spl • Beat: PER-GNT (GNT Divn)' }
     ]
   }
 ];
