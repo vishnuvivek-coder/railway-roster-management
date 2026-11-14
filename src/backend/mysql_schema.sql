@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS staff (
   t_code_no VARCHAR(50) DEFAULT '7133',
   hrms_id VARCHAR(50) DEFAULT '',
   pin_hash VARCHAR(255) DEFAULT NULL,
+  is_relieved TINYINT(1) DEFAULT 0,
+  relieved_note TEXT DEFAULT NULL,
   INDEX idx_staff_category (category_id),
   INDEX idx_staff_row_pos (row_position),
   CONSTRAINT fk_staff_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE

@@ -102,6 +102,8 @@ async function migrate() {
     'links',
     'slot_customizations',
     'staff',
+    'staff_pins',
+    'staff_roster_assignments',
     'overrides',
     'leave_requests',
     'audit_logs',
@@ -119,7 +121,8 @@ async function migrate() {
     'feedbacks',
     'ta_approvals',
     'non_daily_trains',
-    'seniority_list'
+    'seniority_list',
+    'roster_versions'
   ];
 
   await rootConn.query('SET FOREIGN_KEY_CHECKS = 0');

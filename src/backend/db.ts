@@ -218,7 +218,7 @@ async function initDbInternal() {
     const localCaPath = path.join(__dirname, 'aiven-ca.pem');
     if (process.env.MYSQL_SSL_CA) {
       sslConfig = { ca: process.env.MYSQL_SSL_CA, rejectUnauthorized: true };
-    } else if (fs.existsSync(localCaPath)) {
+    } else if (fs.existsSync(localCaPath) && host.includes('aiven')) {
       sslConfig = { ca: fs.readFileSync(localCaPath, 'utf8'), rejectUnauthorized: true };
     } else if (isProduction) {
       // No custom CA provided but we are in production: still enforce TLS
