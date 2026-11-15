@@ -111,6 +111,9 @@ const {
 } = require('./endpoint_registry');
 
 const {
+  isAndroidGatewayConfigured,
+  getAndroidGatewayConfigStatus,
+  getAndroidGatewayDevices,
   isTwilioConfigured,
   getTwilioConfigStatus,
   generateDailySmsPreview,
@@ -13436,16 +13439,28 @@ app.get('/api/reports/daily-view', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// DAILY DUTY SMS NOTIFICATION API (Twilio Integration)
+// DAILY DUTY SMS NOTIFICATION API (Android SIM Gateway)
+// Powered by open-source capcom6/android-sms-gateway
+// Sends SMS directly from personal Android phone SIM card
 // ----------------------------------------------------
 
-// 1. Get Twilio Gateway Configuration Status
-app.get('/api/sms/config', (req, res) => {
+// 1. Get Android Gateway Configuration Status
+app.get('/api/sms/config', async (req, res) => {
   try {
-    const status = getTwilioConfigStatus();
+    const status = await getAndroidGatewayConfigStatus();
     res.json({ success: true, ...status });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 1b. Get Connected Android Phone Devices
+app.get('/api/sms/devices', async (req, res) => {
+  try {
+    const result = await getAndroidGatewayDevices();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -13461,9 +13476,9 @@ app.get('/api/sms/preview', async (req, res) => {
       success: true,
       date,
       totalWorking: previews.length,
-      validPhoneCount: previews.filter(p => p.phoneValid).length,
-      hasChangesCount: previews.filter(p => p.hasChanges).length,
-      isSimulatedMode: !isTwilioConfigured(),
+      validPhoneCount: previews.filter((p: any) => p.phoneValid).length,
+      hasChangesCount: previews.filter((p: any) => p.hasChanges).length,
+      isSimulatedMode: !isAndroidGatewayConfigured(),
       previews
     });
   } catch (err: any) {
@@ -13472,8 +13487,25 @@ app.get('/api/sms/preview', async (req, res) => {
   }
 });
 
+// Helper: Require Admin or Allow in Dev/Simulation
+function requireSmsAdmin(req: any, res: any, next: any) {
+  // If user is authenticated as admin, allow
+  if (req.user && (req.user.role || '').toLowerCase() === 'admin') {
+    return next();
+  }
+  // In development/test mode, allow if no token header passed
+  const authHeader = req.headers['authorization'];
+  if (!authHeader && process.env.NODE_ENV !== 'production') {
+    return next();
+  }
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required: Please log in as Administrator to dispatch SMS notifications.' });
+  }
+  return res.status(403).json({ error: 'Permission denied: Administrator privileges required to dispatch SMS notifications.' });
+}
+
 // 3. Send Daily SMS Messages to All (or Selected) Working Staff
-app.post('/api/sms/send-daily', async (req, res) => {
+app.post('/api/sms/send-daily', requireSmsAdmin, async (req, res) => {
   try {
     const { date, staffIds, force } = req.body;
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -13499,7 +13531,7 @@ app.post('/api/sms/send-daily', async (req, res) => {
 });
 
 // 4. Send Individual SMS to a Staff Member
-app.post('/api/sms/send-single', async (req, res) => {
+app.post('/api/sms/send-single', requireSmsAdmin, async (req, res) => {
   try {
     const {
       staffId,

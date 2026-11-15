@@ -1,6 +1,22 @@
 import { all, get, run } from '../db';
-const twilio = require('twilio');
 const { fetchMultiSourceTrainTimings } = require('./multi_source_tracker');
+import {
+  isAndroidGatewayConfigured,
+  getAndroidGatewayConfigStatus,
+  dispatchAndroidSimSms,
+  getAndroidGatewayDevices
+} from './android_sms_gateway.service';
+
+export {
+  isAndroidGatewayConfigured,
+  getAndroidGatewayConfigStatus,
+  dispatchAndroidSimSms,
+  getAndroidGatewayDevices
+};
+
+// Aliases for seamless backward compatibility
+export const isTwilioConfigured = isAndroidGatewayConfigured;
+export const getTwilioConfigStatus = getAndroidGatewayConfigStatus;
 
 // Standard GNT Division Train Timetables & Schedules (fallback when NTES live status is off-peak)
 const STANDARD_TRAIN_SCHEDULES: Record<string, { name: string; route: string; schedDep: string; from: string; to: string }> = {
@@ -69,41 +85,10 @@ export interface SmsSendResult {
 }
 
 /**
- * Check whether live Twilio credentials are fully configured.
+ * Gateway configuration aliases
  */
-export function isTwilioConfigured(): boolean {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const phone = process.env.TWILIO_PHONE_NUMBER;
-  return Boolean(
-    sid &&
-    token &&
-    phone &&
-    sid.trim().startsWith('AC') &&
-    sid.trim().length >= 30 &&
-    token.trim().length >= 15
-  );
-}
-
-/**
- * Retrieve current Twilio configuration status (masked credentials for security).
- */
-export function getTwilioConfigStatus() {
-  const sid = process.env.TWILIO_ACCOUNT_SID || '';
-  const phone = process.env.TWILIO_PHONE_NUMBER || '';
-  const configured = isTwilioConfigured();
-
-  return {
-    configured,
-    mode: configured ? 'LIVE_GATEWAY' : 'SIMULATION_MODE',
-    accountSidMasked: sid.length > 8 ? `${sid.substring(0, 4)}...${sid.substring(sid.length - 4)}` : null,
-    twilioPhoneNumber: phone || null,
-    provider: 'Twilio Cloud SMS API',
-    description: configured
-      ? 'Live Twilio credentials detected. Real SMS messages will be dispatched to employee mobiles.'
-      : 'Simulation mode active (Twilio credentials not configured in .env). Formatted messages are logged to database.'
-  };
-}
+export const isSmsConfigured = isAndroidGatewayConfigured;
+export const getSmsConfigStatus = getAndroidGatewayConfigStatus;
 
 /**
  * Formats Indian phone numbers to E.164 international standard (+91XXXXXXXXXX)
@@ -283,12 +268,43 @@ export function analyzeDutyChanges(duty: any): { hasChanges: boolean; changeTag:
 }
 
 /**
+ * Calculates lobby reporting time (30 minutes prior to train departure time).
+ */
+export function calculateReportingTime(depTime: string): string {
+  if (!depTime || depTime === '-' || depTime.toLowerCase().includes('lobby') || depTime.toLowerCase().includes('tbd')) {
+    return '30 mins before departure';
+  }
+  const match = depTime.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    let minutes = parseInt(match[2], 10);
+    minutes -= 30;
+    if (minutes < 0) {
+      minutes += 60;
+      hours = (hours - 1 + 24) % 24;
+    }
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(minutes).padStart(2, '0');
+    return `${hh}:${mm} hrs`;
+  }
+  return `${depTime} (Report 30 mins prior)`;
+}
+
+/**
  * Builds the official SMS message text satisfying all requirements:
- * 1. Employee Name
- * 2. Train No they are assigned to
- * 3. From and To of the train
- * 4. Departure timing of the train (taken from NTES)
- * 5. Changes made if there are any
+ * 1. Exact required format:
+ *    RAILWAY DUTY ALERT
+ *
+ *    Hello [Employee Name],
+ *
+ *    Your duty has been assigned for [Date].
+ *
+ *    Train: [Train Number]
+ *    Link: [Employee Link]
+ *    Reporting Time: [Time]
+ *
+ *    Please check your roster.
+ * 2. Includes Section (From -> To), Train Name, NTES Departure Timing & Changes if any
  */
 export function buildDutySmsMessage(params: {
   employeeName: string;
@@ -300,6 +316,7 @@ export function buildDutySmsMessage(params: {
   depTime: string;
   timingSource: string;
   coaches?: string;
+  linkNumber?: number | string | null;
   hasChanges: boolean;
   changeTag: string;
   changeDetails: string;
@@ -313,9 +330,8 @@ export function buildDutySmsMessage(params: {
     toStation,
     depTime,
     timingSource,
-    coaches,
+    linkNumber,
     hasChanges,
-    changeTag,
     changeDetails
   } = params;
 
@@ -323,26 +339,34 @@ export function buildDutySmsMessage(params: {
   if (trainName && !trainName.includes(trainNo)) {
     trainDisplay = `${trainNo} (${trainName})`;
   }
+  if (fromStation && toStation && fromStation !== '-' && toStation !== '-') {
+    trainDisplay += ` [${fromStation} -> ${toStation}]`;
+  }
 
-  const coachLine = coaches && coaches !== '-' ? `🏷️ Coach: ${coaches}\n` : '';
-  const changeLine = hasChanges ? `⚠️ Notice: ${changeDetails}\n` : `📋 Duty Status: ${changeTag}\n`;
+  const linkDisplay = linkNumber ? `Link #${linkNumber}` : 'Ad-hoc / Special Duty';
+  const reportingTime = calculateReportingTime(depTime);
+  const depTimeDisplay = depTime && depTime !== '-' ? `${depTime} hrs (${timingSource || 'NTES'})` : 'Refer NTES';
 
-  return (
-    `[GNT DIV - RAILWAY ROSTER]\n` +
-    `Dear ${employeeName.toUpperCase()},\n` +
-    `Duty Alert for ${dateStr}:\n` +
-    `🚆 Train: ${trainDisplay}\n` +
-    `📍 Section: ${fromStation} -> ${toStation}\n` +
-    `🕒 Departure: ${depTime} (${timingSource})\n` +
-    coachLine +
-    changeLine +
-    `⚠️ Please report at Lobby 30 mins before dep.\n` +
-    `- Crew Management System, GNT`
-  );
+  let msg =
+    `RAILWAY DUTY ALERT\n\n` +
+    `Hello ${employeeName.toUpperCase()},\n\n` +
+    `Your duty has been assigned for ${dateStr}.\n\n` +
+    `Train: ${trainDisplay}\n` +
+    `Link: ${linkDisplay}\n` +
+    `Reporting Time: ${reportingTime} (Dep: ${depTimeDisplay})\n`;
+
+  if (hasChanges && changeDetails) {
+    msg += `Notice: ${changeDetails}\n`;
+  }
+
+  msg += `\nPlease check your roster.`;
+
+  return msg;
 }
 
 /**
- * Dispatches a single SMS via Twilio (or in simulation mode if credentials not set).
+ * Dispatches a single SMS via the personal Android phone SIM card.
+ * If credentials are not set, falls back to SIMULATION_MODE with database logging.
  * Persists the record to the `sms_notifications` database table.
  */
 export async function sendSmsNotification(params: {
@@ -372,48 +396,33 @@ export async function sendSmsNotification(params: {
     messageBody
   } = params;
 
-  const twilioConfigured = isTwilioConfigured();
+  const result = await dispatchAndroidSimSms({
+    phoneNumber,
+    messageText: messageBody,
+    staffId,
+    staffName
+  });
 
-  if (twilioConfigured) {
-    try {
-      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-      const message = await client.messages.create({
-        body: messageBody,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: phoneNumber
-      });
-
-      await run(
-        `INSERT INTO sms_notifications 
-         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SENT', ?)`,
-        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, message.sid]
-      );
-
-      return { success: true, status: 'SENT', sid: message.sid };
-    } catch (err: any) {
-      console.error(`[Twilio Error] Failed to send SMS to ${phoneNumber}:`, err.message);
-
-      await run(
-        `INSERT INTO sms_notifications 
-         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, error_message)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', ?)`,
-        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, err.message]
-      );
-
-      return { success: false, status: 'FAILED', sid: '', error: err.message };
-    }
-  } else {
-    // SIMULATION MODE: Twilio credentials not configured in .env
-    const simulatedSid = `SM_SIMULATED_${Date.now()}_${staffId}`;
+  if (result.success) {
     await run(
       `INSERT INTO sms_notifications 
        (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SIMULATED', ?)`,
-      [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, simulatedSid]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.status, result.sid]
     );
 
-    return { success: true, status: 'SIMULATED', sid: simulatedSid };
+    return { success: true, status: result.status, sid: result.sid };
+  } else {
+    console.error(`[Android SIM Gateway Error] Failed to send SMS to ${phoneNumber}:`, result.error);
+
+    await run(
+      `INSERT INTO sms_notifications 
+       (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', ?)`,
+      [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.error || 'Failed to dispatch via Android Gateway']
+    );
+
+    return { success: false, status: 'FAILED', sid: '', error: result.error };
   }
 }
 
@@ -465,6 +474,7 @@ export async function generateDailySmsPreview(
       depTime: timing.depTime,
       timingSource: timing.timingSource,
       coaches: duty.coaches || 'SL / AC',
+      linkNumber: duty.link_number,
       hasChanges: changeAnalysis.hasChanges,
       changeTag: changeAnalysis.changeTag,
       changeDetails: changeAnalysis.changeDetails
@@ -583,7 +593,7 @@ export async function sendDailySmsBatch(
     simulatedCount,
     failedCount,
     skippedCount,
-    isSimulatedMode: !isTwilioConfigured(),
+    isSimulatedMode: !isAndroidGatewayConfigured(),
     records
   };
 }

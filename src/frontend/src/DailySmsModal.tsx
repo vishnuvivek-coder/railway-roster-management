@@ -125,6 +125,14 @@ export default function DailySmsModal({
     );
   };
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   const handleSendDailySms = async () => {
     if (selectedStaffIds.length === 0) {
       alert('Please select at least one employee with a valid phone number.');
@@ -135,7 +143,7 @@ export default function DailySmsModal({
     try {
       const res = await fetch(`${API_BASE}/sms/send-daily`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           date: selectedDate,
           staffIds: selectedStaffIds.map(Number),
@@ -167,7 +175,7 @@ export default function DailySmsModal({
     try {
       const res = await fetch(`${API_BASE}/sms/send-single`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           staffId: item.staffId,
           staffName: item.staffName,
@@ -236,28 +244,42 @@ export default function DailySmsModal({
                 <h2 className="text-lg font-bold text-slate-100 tracking-wide">
                   Daily Duty SMS Notifications
                 </h2>
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                  Twilio & NTES
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  Android SIM Gateway
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Automated Everyday Duty Messaging with Live NTES Departure Times & Change Notices
+                Direct SMS from your personal phone SIM card with Live NTES Departure Times & Change Notices
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Twilio Status Badge */}
+            {/* Android SIM Gateway Status Badge */}
             <div
               className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 border ${
-                gatewayConfig?.configured
+                gatewayConfig?.connected
                   ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-950/40 text-amber-300 border-amber-500/30'
+                  : gatewayConfig?.configured
+                  ? 'bg-amber-950/40 text-amber-300 border-amber-500/30'
+                  : 'bg-slate-800/60 text-slate-300 border-slate-700'
               }`}
               title={gatewayConfig?.description}
             >
-              <span className={`w-2 h-2 rounded-full animate-pulse ${gatewayConfig?.configured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              <span>{gatewayConfig?.configured ? 'Twilio Live Gateway' : 'Simulation Mode (Logged to DB)'}</span>
+              <span className={`w-2 h-2 rounded-full animate-pulse ${
+                gatewayConfig?.connected
+                  ? 'bg-emerald-400'
+                  : gatewayConfig?.configured
+                  ? 'bg-amber-400'
+                  : 'bg-yellow-400'
+              }`} />
+              <span>
+                {gatewayConfig?.connected
+                  ? `SIM Online: ${gatewayConfig.activeDevice?.name || 'Phone Connected'}`
+                  : gatewayConfig?.configured
+                  ? 'Phone Disconnected / Offline'
+                  : 'Simulation Mode (Logged to DB)'}
+              </span>
             </div>
 
             <button
@@ -269,6 +291,30 @@ export default function DailySmsModal({
             </button>
           </div>
         </div>
+
+        {/* Gateway Info Banner */}
+        {!gatewayConfig?.connected && (
+          <div className="px-6 py-2.5 bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 border-b border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-slate-300">
+              <span className="text-base">📱</span>
+              <span>
+                {gatewayConfig?.configured ? (
+                  <><strong>Phone not detected:</strong> Open the Android SMS Gateway app on your phone to connect.</>
+                ) : (
+                  <><strong>Personal SIM Gateway:</strong> Uses open-source <strong>Android SMS Gateway (capcom6)</strong> in Cloud Mode to send real SMS from your SIM. Add <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">ANDROID_SMS_GATEWAY_LOGIN</code> and <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">ANDROID_SMS_GATEWAY_PASSWORD</code> to Railway to go live.</>
+                )}
+              </span>
+            </div>
+            <a
+              href="https://github.com/capcom6/android-sms-gateway/releases"
+              target="_blank"
+              rel="noreferrer"
+              className="text-amber-400 hover:text-amber-300 underline font-medium text-[11px]"
+            >
+              Get Android APK ↗
+            </a>
+          </div>
+        )}
 
         {/* Date Selector & Stats Toolbar */}
         <div className="px-6 py-3.5 bg-[#14161a] border-b border-[#242730] flex flex-wrap items-center justify-between gap-4">
@@ -662,8 +708,8 @@ export default function DailySmsModal({
               <span>{sending ? '⏳ Sending...' : '📱'}</span>
               <span>
                 {sending
-                  ? 'Dispatching SMS...'
-                  : `Send Daily SMS (${selectedStaffIds.length} Staff)`}
+                  ? 'Dispatching SMS via Android SIM...'
+                  : `Send Daily SMS via Android SIM (${selectedStaffIds.length} Staff)`}
               </span>
             </button>
           </div>
