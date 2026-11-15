@@ -471,7 +471,7 @@ export async function generateDailySmsPreview(
     });
 
     previews.push({
-      staffId: duty.staffId,
+      staffId: Number(duty.staffId),
       staffName: duty.name,
       designation: duty.designation,
       phoneNumber: formattedPhone,
@@ -502,13 +502,17 @@ export async function generateDailySmsPreview(
 export async function sendDailySmsBatch(
   targetDateStr: string,
   staffDutiesList: any[],
-  filterStaffIds?: number[],
+  filterStaffIds?: (number | string)[],
   forceResend = false
 ): Promise<SmsSendResult> {
   const previews = await generateDailySmsPreview(targetDateStr, staffDutiesList);
 
-  const targets = filterStaffIds && filterStaffIds.length > 0
-    ? previews.filter(p => filterStaffIds.includes(p.staffId))
+  const filterSet = (filterStaffIds && filterStaffIds.length > 0)
+    ? new Set(filterStaffIds.map(id => String(id).trim()))
+    : null;
+
+  const targets = filterSet
+    ? previews.filter(p => filterSet.has(String(p.staffId).trim()))
     : previews;
 
   let sentCount = 0;

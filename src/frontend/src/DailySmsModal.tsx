@@ -84,7 +84,7 @@ export default function DailySmsModal({
       if (data.success && Array.isArray(data.previews)) {
         setPreviews(data.previews);
         // By default select all staff with valid phone numbers
-        const validIds = data.previews.filter((p: SmsRecipientPreview) => p.phoneValid).map((p: SmsRecipientPreview) => p.staffId);
+        const validIds = data.previews.filter((p: SmsRecipientPreview) => p.phoneValid).map((p: SmsRecipientPreview) => Number(p.staffId));
         setSelectedStaffIds(validIds);
       } else {
         setPreviews([]);
@@ -110,7 +110,7 @@ export default function DailySmsModal({
   };
 
   const handleSelectAll = () => {
-    const validFilteredIds = filteredPreviews.filter(p => p.phoneValid).map(p => p.staffId);
+    const validFilteredIds = filteredPreviews.filter(p => p.phoneValid).map(p => Number(p.staffId));
     setSelectedStaffIds(validFilteredIds);
   };
 
@@ -118,9 +118,10 @@ export default function DailySmsModal({
     setSelectedStaffIds([]);
   };
 
-  const toggleSelectStaff = (staffId: number) => {
+  const toggleSelectStaff = (staffId: number | string) => {
+    const numId = Number(staffId);
     setSelectedStaffIds(prev =>
-      prev.includes(staffId) ? prev.filter(id => id !== staffId) : [...prev, staffId]
+      prev.includes(numId) ? prev.filter(id => id !== numId) : [...prev, numId]
     );
   };
 
@@ -130,12 +131,6 @@ export default function DailySmsModal({
       return;
     }
 
-    const confirmMsg = gatewayConfig?.configured
-      ? `Send real SMS to ${selectedStaffIds.length} employees for date ${selectedDate} via Twilio?`
-      : `Dispatch ${selectedStaffIds.length} duty SMS in Simulation Mode (logged to database)?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
     setSending(true);
     try {
       const res = await fetch(`${API_BASE}/sms/send-daily`, {
@@ -143,15 +138,15 @@ export default function DailySmsModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: selectedDate,
-          staffIds: selectedStaffIds,
+          staffIds: selectedStaffIds.map(Number),
           force: forceResend
         })
       });
       const data = await res.json();
       if (data.success) {
         setSendResult(data.result);
-        fetchPreview(selectedDate);
-        fetchHistory(selectedDate);
+        await fetchPreview(selectedDate);
+        await fetchHistory(selectedDate);
       } else {
         alert(`Error sending SMS: ${data.error || 'Unknown error'}`);
       }
@@ -345,15 +340,22 @@ export default function DailySmsModal({
 
           {/* Send Result Banner */}
           {sendResult && (
-            <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/40 text-emerald-200 flex items-start justify-between">
+            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-emerald-200 flex items-start justify-between">
               <div>
                 <h4 className="font-bold text-sm text-emerald-300 flex items-center gap-2">
-                  <span>✅</span> SMS Dispatch Completed Successfully
+                  <span>✅</span> SMS Dispatch Processed Successfully
                 </h4>
                 <p className="text-xs text-slate-300 mt-1">
-                  Dispatched: <strong>{sendResult.sentCount || sendResult.simulatedCount}</strong> messages ({sendResult.isSimulatedMode ? 'Simulation Mode' : 'Live Gateway'}).
-                  Skipped: {sendResult.skippedCount}. Failed: {sendResult.failedCount}.
+                  Dispatched: <strong>{(sendResult.sentCount || 0) + (sendResult.simulatedCount || 0)}</strong> messages ({sendResult.isSimulatedMode ? 'Simulation Mode - Logged to Database' : 'Live Gateway'}).
+                  Skipped: {sendResult.skippedCount || 0}. Failed: {sendResult.failedCount || 0}.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('HISTORY')}
+                  className="mt-2 text-xs font-bold px-3 py-1 bg-amber-500 text-slate-950 rounded-lg hover:bg-amber-400 transition cursor-pointer"
+                >
+                  📜 View Dispatched SMS Logs in History Tab ({historyLogs.length}) →
+                </button>
               </div>
               <button
                 onClick={() => setSendResult(null)}
@@ -432,10 +434,10 @@ export default function DailySmsModal({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredPreviews.map((item) => {
-                    const isSelected = selectedStaffIds.includes(item.staffId);
+                    const isSelected = selectedStaffIds.includes(Number(item.staffId));
                     return (
                       <div
-                        key={item.staffId}
+                        key={String(item.staffId)}
                         className={`p-4 rounded-xl border transition-all ${
                           isSelected
                             ? 'bg-[#1a1d24] border-amber-500/50 shadow-md'
