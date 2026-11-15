@@ -5376,6 +5376,14 @@ export default function App() {
             <span>📋</span> Daily Summary Table
           </li>
           <li 
+            className="nav-item"
+            onClick={() => { setDailySmsModalOpen(true); setIsMobileMenuOpen(false); }}
+            style={{ color: '#fbbf24', fontWeight: 700 }}
+            title="Send Daily Duty SMS Alerts to Working Staff"
+          >
+            <span>📱</span> Send Daily SMS
+          </li>
+          <li 
             className={`nav-item ${activeTab === 'roster' ? 'active' : ''}`}
             onClick={() => { setActiveTab('roster'); setIsMobileMenuOpen(false); }}
             title="Path: /roster"
@@ -5634,6 +5642,27 @@ export default function App() {
                   }}
                 >
                   <span>💬</span> Feedback
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDailySmsModalOpen(true)}
+                  title="Send Daily Duty SMS Alerts with Live NTES Departure Timings & Change Notices to Working Staff"
+                  style={{
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    padding: '4px 12px',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)'
+                  }}
+                >
+                  <span>📱</span> Send Daily SMS
                 </button>
               </div>
             </div>
@@ -5937,6 +5966,27 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setDailySmsModalOpen(true)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        borderRadius: '8px',
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        border: 'none',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)'
+                      }}
+                      title="Send Daily Duty SMS Alerts with Live NTES Departure Timings & Change Notices to Working Staff"
+                    >
+                      <span>📱</span> Send Daily SMS
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleSaveDailyRoster}
                       style={{
                         padding: '6px 14px',
@@ -6046,6 +6096,28 @@ export default function App() {
               </div>
               {isAdmin && (
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setDailySmsModalOpen(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.84rem',
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.35)'
+                    }}
+                    title="Send Daily Duty SMS Alerts with Live NTES Departure Timings & Change Notices to Working Staff"
+                  >
+                    <span>📱</span> Send Daily SMS
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary"
