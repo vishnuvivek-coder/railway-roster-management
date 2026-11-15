@@ -581,5 +581,30 @@ CREATE TABLE IF NOT EXISTS staff_roster_assignments (
   INDEX idx_sra_version_cat (roster_version_id, category_id, row_position)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- 27. SMS NOTIFICATIONS TABLE (Daily Duty Twilio Dispatches & Logs)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sms_notifications (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  staff_id INT DEFAULT NULL,
+  staff_name VARCHAR(255) NOT NULL,
+  phone_number VARCHAR(50) NOT NULL,
+  duty_date DATE NOT NULL,
+  train_no VARCHAR(50) NOT NULL,
+  route VARCHAR(100) DEFAULT NULL,
+  dep_time VARCHAR(50) DEFAULT NULL,
+  timing_source VARCHAR(100) DEFAULT 'NTES',
+  has_changes TINYINT(1) DEFAULT 0,
+  change_details TEXT DEFAULT NULL,
+  message_body TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'SENT', -- 'SENT', 'SIMULATED', 'FAILED'
+  gateway_sid VARCHAR(100) DEFAULT NULL,
+  error_message TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sms_date (duty_date),
+  INDEX idx_sms_staff (staff_id),
+  INDEX idx_sms_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Re-enable foreign key constraints
 SET FOREIGN_KEY_CHECKS = 1;

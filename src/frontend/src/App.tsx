@@ -56,6 +56,7 @@ import IndividualMusterDocument from './IndividualMusterDocument';
 import DailyAmenityBookingDocument from './DailyAmenityBookingDocument';
 import DutyEditModal, { isHqArrivalDuty } from './DutyEditModal';
 import NonDailyTrainModal from './NonDailyTrainModal';
+import DailySmsModal from './DailySmsModal';
 import MusterRoll from './MusterRoll';
 import LRList from './LRList';
 import AvailabilitySheet from './AvailabilitySheet';
@@ -1661,6 +1662,7 @@ export default function App() {
   const [nonDailySelectedDay, setNonDailySelectedDay] = useState('ALL'); // 'ALL' or 'SUNDAY'..'SATURDAY'
   const [nonDailyList, setNonDailyList] = useState([]);
   const [nonDailyModalOpen, setNonDailyModalOpen] = useState(false);
+  const [dailySmsModalOpen, setDailySmsModalOpen] = useState(false);
   const [editingNonDailyTrain, setEditingNonDailyTrain] = useState(null);
   const [nonDailyInitialDay, setNonDailyInitialDay] = useState('SUNDAY');
   const [nonDailySubTab, setNonDailySubTab] = useState('today'); // 'today' | 'all'
@@ -7917,6 +7919,23 @@ export default function App() {
                           title="Download Direct PDF"
                         >
                           📄 Download PDF
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => setDailySmsModalOpen(true)}
+                          style={{
+                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 700,
+                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)'
+                          }}
+                          title="Send Daily Duty SMS Alerts with Live NTES Departure Timings & Change Notices to Working Staff"
+                        >
+                          📱 Send Daily SMS
                         </button>
                       </div>
                     </div>
@@ -14280,6 +14299,7 @@ export default function App() {
                             <th style={{ width: '100px' }}>Coach (last day) ✏️</th>
                             <th style={{ width: '100px' }}>Departure</th>
                             <th style={{ width: '100px' }}>Arrival</th>
+                            <th style={{ width: '170px' }}>Validity (JCO Dates)</th>
                             <th>Assigned Staff / Relief Crew</th>
                             <th>Remarks</th>
                             {isAdmin && <th style={{ width: '120px' }}>Actions</th>}
@@ -14346,6 +14366,22 @@ export default function App() {
                                   <td style={{ verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                                     <strong style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)' }}>{item.arrival_station || '-'}</strong>
                                     {item.arrival_time && <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.82rem', marginLeft: '5px', fontWeight: 600 }}>({item.arrival_time})</span>}
+                                  </td>
+                                  <td style={{ textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                                    {item.from_date || item.to_date ? (
+                                      <span className="badge" style={{
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        color: '#fbbf24',
+                                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                                        fontSize: '0.74rem',
+                                        padding: '3px 8px',
+                                        fontWeight: 700
+                                      }}>
+                                        📅 {String(item.from_date || '').substring(0, 10)} ➔ {String(item.to_date || '').substring(0, 10)}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.78rem' }}>Permanent / Regular</span>
+                                    )}
                                   </td>
                                   <td style={{ verticalAlign: 'middle' }}>
                                     {staffDisplay ? (
@@ -16563,6 +16599,16 @@ export default function App() {
           />
         );
       })()}
+
+      {/* Daily Duty SMS Dispatch Modal */}
+      {dailySmsModalOpen && (
+        <DailySmsModal
+          isOpen={dailySmsModalOpen}
+          onClose={() => setDailySmsModalOpen(false)}
+          targetDate={selectedDate || new Date().toISOString().split('T')[0]}
+          API_BASE={API_BASE}
+        />
+      )}
 
       {/* ---------------------------------------------------- */}
       {/* GLOBAL SHIFT CONFIRMATION MODAL                      */}

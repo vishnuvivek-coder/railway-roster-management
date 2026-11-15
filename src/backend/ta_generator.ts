@@ -75,12 +75,22 @@ const NON_DAILY_PAIRS_MAP = {
   // FRIDAY
   '18063': { returnTrain: '18064', serviceName: 'GNT-DMM-GNT Exp', from: 'GNT', via: 'DMM', to: 'GNT', depTime: '09:45', retDepTime: '08:15', arrHqTime: '19:25', totalDays: 2, restTill: '03:25', coaches: 'SL / AC' },
   '07125': { returnTrain: '07126', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '17:40', retDepTime: '01:10', arrHqTime: '01:10', totalDays: 2, restTill: '09:10', coaches: 'SL / AC' },
-  '07195': { returnTrain: '20630', serviceName: 'GNT-RU-GNT Spl', from: 'GNT', via: 'RU', to: 'GNT', depTime: '19:10', retDepTime: '01:50', arrHqTime: '01:50', totalDays: 2, restTill: '09:50', coaches: 'SL / AC' },
+  '07180': { returnTrain: '07181', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '01:50', retDepTime: '22:15', arrHqTime: '07:15', totalDays: 2, restTill: '15:15', coaches: 'SL / AC' },
+  '07198': { returnTrain: '07197', serviceName: 'QLN-CHZ Spl (PER-GNT)', from: 'PER', via: 'GNT', to: 'GNT', depTime: '02:45', retDepTime: '12:45', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
+  '07200': { returnTrain: '07199', serviceName: 'QLN-CHZ Spl (PER-BZA)', from: 'PER', via: 'BZA', to: 'BZA', depTime: '02:45', retDepTime: '12:45', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
   '17607': { returnTrain: '17608', serviceName: 'GNT-RU-GNT Exp', from: 'GNT', via: 'RU', to: 'GNT', depTime: '12:20', retDepTime: '19:20', arrHqTime: '19:20', totalDays: 2, restTill: '03:20', coaches: 'SL / AC' },
 
   // SATURDAY
-  '07193': { returnTrain: '07194', serviceName: 'GNT-KPD-GNT Spl', from: 'GNT', via: 'KPD', to: 'GNT', depTime: '05:30', retDepTime: '01:00', arrHqTime: '10:40', totalDays: 2, restTill: '18:40', coaches: 'SL / AC' },
-  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' }
+  '07193': { returnTrain: '07194', serviceName: 'HYB-QLN-HYB Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '05:40', retDepTime: '22:15', arrHqTime: '07:15', totalDays: 2, restTill: '15:15', coaches: 'SL / AC' },
+  '16358': { returnTrain: '12603', serviceName: 'GNT-MS-MAS-GNT Exp', from: 'GNT', via: 'MS/MAS', to: 'GNT', depTime: '14:00', retDepTime: '16:45', arrHqTime: '23:25', totalDays: 2, restTill: '07:25', coaches: 'SL / AC' },
+
+  // SUNDAY
+  '07189': { returnTrain: '07190', serviceName: 'NED-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '01:50', retDepTime: '22:15', arrHqTime: '07:15', totalDays: 2, restTill: '15:15', coaches: 'SL / AC' },
+  '07195': { returnTrain: '07196', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '12:45', retDepTime: '02:45', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
+
+  // WEDNESDAY
+  '07197': { returnTrain: '07198', serviceName: 'CHZ-QLN-CHZ Spl (GNT-PER)', from: 'GNT', via: 'PER', to: 'GNT', depTime: '12:45', retDepTime: '02:45', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' },
+  '07199': { returnTrain: '07200', serviceName: 'CHZ-QLN-CHZ Spl (BZA-PER)', from: 'BZA', via: 'PER', to: 'BZA', depTime: '12:45', retDepTime: '02:45', arrHqTime: '17:40', totalDays: 2, restTill: '01:40', coaches: 'SL / AC' }
 };
 
 function getMultiDayNonDailyMatch(trainCodeOrReason) {
@@ -1021,13 +1031,40 @@ function resolveDutyCodeToRows(dutyCode) {
     return [{ train_no: '18064', from: 'DMM', to: 'GNT', dep: '08:15', arr: '19:25', ta: 0.7 }];
   }
   if (code.includes('07193') && !code.includes('07194')) {
-    return [{ train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '14:30', ta: 0.7 }];
+    return [{ train_no: '07193', from: 'GNT', to: 'PER', dep: '05:40', arr: '14:00', ta: 0.7 }];
   }
   if (code.includes('07194')) {
-    return [
-      { train_no: '07194', from: 'KPD', to: '---', dep: '01:00', arr: '---', ta: 1.0 },
-      { train_no: '07194', from: '---', to: 'GNT', dep: '---', arr: '10:40', ta: 0.7 }
-    ];
+    return [{ train_no: '07194', from: 'PER', to: 'GNT', dep: '22:15', arr: '07:15', ta: 0.7 }];
+  }
+  if (code.includes('07180') && !code.includes('07181')) {
+    return [{ train_no: '07180', from: 'GNT', to: 'PER', dep: '01:50', arr: '10:40', ta: 0.7 }];
+  }
+  if (code.includes('07181')) {
+    return [{ train_no: '07181', from: 'PER', to: 'GNT', dep: '22:15', arr: '07:15', ta: 0.7 }];
+  }
+  if (code.includes('07195') && !code.includes('07196')) {
+    return [{ train_no: '07195', from: 'GNT', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7 }];
+  }
+  if (code.includes('07196')) {
+    return [{ train_no: '07196', from: 'PER', to: 'GNT', dep: '02:45', arr: '17:40', ta: 0.7 }];
+  }
+  if (code.includes('07197') && !code.includes('07198')) {
+    return [{ train_no: '07197', from: 'GNT', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7 }];
+  }
+  if (code.includes('07198')) {
+    return [{ train_no: '07198', from: 'PER', to: 'GNT', dep: '02:45', arr: '17:40', ta: 0.7 }];
+  }
+  if (code.includes('07199') && !code.includes('07200')) {
+    return [{ train_no: '07199', from: 'BZA', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7 }];
+  }
+  if (code.includes('07200')) {
+    return [{ train_no: '07200', from: 'PER', to: 'BZA', dep: '02:45', arr: '17:40', ta: 0.7 }];
+  }
+  if (code.includes('07189') && !code.includes('07190')) {
+    return [{ train_no: '07189', from: 'GNT', to: 'PER', dep: '01:50', arr: '10:40', ta: 0.7 }];
+  }
+  if (code.includes('07190')) {
+    return [{ train_no: '07190', from: 'PER', to: 'GNT', dep: '22:15', arr: '07:15', ta: 0.7 }];
   }
   if (code.includes('16358') && !code.includes('12603')) {
     return [{ train_no: '16358', from: 'GNT', to: 'MS', dep: '14:00', arr: '23:00', ta: 0.7 }];
@@ -1372,11 +1409,23 @@ function getDutyRowsForLrTrain(trainStr, dateStr, allLinks = [], remarks = '') {
   if (c.includes('20629') && (c.includes('20630') || c.includes('12733') || c.includes('07196'))) {
     return [{ train_no: '20629', from: 'GNT', to: 'TPTY', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
   }
-  if (c.includes('07195') && c.includes('20630')) {
-    return [{ train_no: '07195', from: 'GNT', to: 'RU', dep: '19:10', arr: '01:50', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];
+  if (c.includes('07195') && c.includes('07196')) {
+    return [{ train_no: '07195', from: 'GNT', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
   }
   if (c.includes('07193') && c.includes('07194')) {
-    return [{ train_no: '07193', from: 'GNT', to: 'KPD', dep: '05:30', arr: '14:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+    return [{ train_no: '07193', from: 'GNT', to: 'PER', dep: '05:40', arr: '14:00', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07180') && c.includes('07181')) {
+    return [{ train_no: '07180', from: 'GNT', to: 'PER', dep: '01:50', arr: '10:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07197') && c.includes('07198')) {
+    return [{ train_no: '07197', from: 'GNT', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07199') && c.includes('07200')) {
+    return [{ train_no: '07199', from: 'BZA', to: 'PER', dep: '12:45', arr: '20:30', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
+  }
+  if (c.includes('07189') && c.includes('07190')) {
+    return [{ train_no: '07189', from: 'GNT', to: 'PER', dep: '01:50', arr: '10:40', ta: 0.7, days_claiming_ta: 0.7, ta_percentage: 0.7, ta_b1: '0.7' }];
   }
   if (c.includes('17069') && c.includes('17262')) {
     return [{ train_no: '17069', from: 'GNT', to: 'RU', dep: '22:40', arr: '07:15', ta: 0.3, days_claiming_ta: 0.3, ta_percentage: 0.3, ta_b1: '0.3' }];

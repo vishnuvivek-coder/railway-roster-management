@@ -110,6 +110,15 @@ const {
   dataFlowTraceMiddleware
 } = require('./endpoint_registry');
 
+const {
+  isTwilioConfigured,
+  getTwilioConfigStatus,
+  generateDailySmsPreview,
+  sendDailySmsBatch,
+  sendSmsNotification,
+  startDailySmsScheduler
+} = require('./services/sms_service');
+
 const app = express();
 const PORT = process.env.PORT && !isNaN(parseInt(process.env.PORT, 10))
   ? parseInt(process.env.PORT, 10)
@@ -158,6 +167,21 @@ initDb().then(async () => {
     console.log(`   Database     : ${typeof getDbEngine === 'function' ? getDbEngine().toUpperCase() : 'CONNECTED'}`);
     console.log(`================================================================\n`);
   });
+
+  // Start automated everyday SMS scheduler in background once DB and server are online
+  setTimeout(() => {
+    try {
+      startDailySmsScheduler(async (targetDateStr: string) => {
+        if (typeof (global as any).buildDailyViewPayload === 'function') {
+          const dailyData = await (global as any).buildDailyViewPayload(targetDateStr);
+          return dailyData.categories.flatMap((cat: any) => cat.staff);
+        }
+        return [];
+      }, 6, 0);
+    } catch (schedErr: any) {
+      console.warn('[SMS Scheduler] Failed to initialize daily scheduler:', schedErr.message);
+    }
+  }, 3000);
 
   // Run post-startup housekeeping and sync tasks in the background without blocking the open port
   (async () => {
@@ -12482,24 +12506,18 @@ app.get('/api/reports/what-is-person-working', async (req, res) => {
 //   • Auto-Syncs To   : None
 //   • Summary         : Computes the complete Daily Summary / Daily Movement sheet for a selected date by combining base links, overrides, Muster Roll, LR Sheet, and Non-Daily assignments.
 // ============================================================================
-app.get('/api/reports/daily-view', async (req, res) => {
-  const { date } = req.query;
-  if (!date || typeof date !== 'string') return res.status(400).json({ error: 'Date is required' });
-
-  try {
-    const toDateKey = (val: any) => {
-      if (!val) return '';
-      if (val instanceof Date) {
-        const y = val.getFullYear();
-        const m = String(val.getMonth() + 1).padStart(2, '0');
-        const d = String(val.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-      }
-      const s = String(val).trim();
-      return s.length >= 10 ? s.substring(0, 10) : s;
-    };
-
-    const targetDateStr = date;
+async function buildDailyViewPayload(targetDateStr: string) {
+  const toDateKey = (val: any) => {
+    if (!val) return '';
+    if (val instanceof Date) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(val).trim();
+    return s.length >= 10 ? s.substring(0, 10) : s;
+  };
     const dTarget = new Date(targetDateStr + 'T12:00:00');
     const dMinus1 = new Date(dTarget);
     dMinus1.setDate(dMinus1.getDate() - 1);
@@ -13401,12 +13419,150 @@ app.get('/api/reports/daily-view', async (req, res) => {
       }
     };
 
-    res.json({ date: targetDateStr, dayOfWeek: currentDayName, categories: result, nonDailyTrains, tally_summary: tallySummary });
+    return { date: targetDateStr, dayOfWeek: currentDayName, categories: result, nonDailyTrains, tally_summary: tallySummary };
+}
+
+app.get('/api/reports/daily-view', async (req, res) => {
+  const { date } = req.query;
+  if (!date || typeof date !== 'string') return res.status(400).json({ error: 'Date is required' });
+
+  try {
+    const payload = await buildDailyViewPayload(date);
+    res.json(payload);
   } catch (err: any) {
     console.error('Error fetching daily-view:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// ----------------------------------------------------
+// DAILY DUTY SMS NOTIFICATION API (Twilio Integration)
+// ----------------------------------------------------
+
+// 1. Get Twilio Gateway Configuration Status
+app.get('/api/sms/config', (req, res) => {
+  try {
+    const status = getTwilioConfigStatus();
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Preview Daily SMS Messages for all Working Staff
+app.get('/api/sms/preview', async (req, res) => {
+  try {
+    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const dailyData = await buildDailyViewPayload(date);
+    const flatDuties = dailyData.categories.flatMap((cat: any) => cat.staff);
+    const previews = await generateDailySmsPreview(date, flatDuties);
+
+    res.json({
+      success: true,
+      date,
+      totalWorking: previews.length,
+      validPhoneCount: previews.filter(p => p.phoneValid).length,
+      hasChangesCount: previews.filter(p => p.hasChanges).length,
+      isSimulatedMode: !isTwilioConfigured(),
+      previews
+    });
+  } catch (err: any) {
+    console.error('Error generating SMS preview:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Send Daily SMS Messages to All (or Selected) Working Staff
+app.post('/api/sms/send-daily', async (req, res) => {
+  try {
+    const { date, staffIds, force } = req.body;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const dailyData = await buildDailyViewPayload(targetDate);
+    const flatDuties = dailyData.categories.flatMap((cat: any) => cat.staff);
+
+    const result = await sendDailySmsBatch(
+      targetDate,
+      flatDuties,
+      Array.isArray(staffIds) ? staffIds : undefined,
+      Boolean(force)
+    );
+
+    res.json({
+      success: true,
+      date: targetDate,
+      result
+    });
+  } catch (err: any) {
+    console.error('Error dispatching daily SMS:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Send Individual SMS to a Staff Member
+app.post('/api/sms/send-single', async (req, res) => {
+  try {
+    const {
+      staffId,
+      staffName,
+      phoneNumber,
+      dutyDate,
+      trainNo,
+      route,
+      depTime,
+      timingSource,
+      hasChanges,
+      changeDetails,
+      messageBody
+    } = req.body;
+
+    if (!phoneNumber || !messageBody) {
+      return res.status(400).json({ error: 'phoneNumber and messageBody are required' });
+    }
+
+    const result = await sendSmsNotification({
+      staffId: Number(staffId) || 0,
+      staffName: staffName || 'Staff Member',
+      phoneNumber,
+      dutyDate: dutyDate || new Date().toISOString().split('T')[0],
+      trainNo: trainNo || 'Duty Train',
+      route: route || 'GNT',
+      depTime: depTime || '---',
+      timingSource: timingSource || 'NTES',
+      hasChanges: Boolean(hasChanges),
+      changeDetails: changeDetails || '',
+      messageBody
+    });
+
+    res.json({ success: result.success, ...result });
+  } catch (err: any) {
+    console.error('Error sending single SMS:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Query SMS Notifications Dispatch History / Audit Log
+app.get('/api/sms/history', async (req, res) => {
+  try {
+    const { date, limit } = req.query;
+    let sql = 'SELECT * FROM sms_notifications';
+    const params: any[] = [];
+    if (date && typeof date === 'string') {
+      sql += ' WHERE duty_date = ?';
+      params.push(date);
+    }
+    sql += ' ORDER BY created_at DESC, id DESC LIMIT ?';
+    params.push(Number(limit) || 100);
+
+    const rows = await all(sql, params);
+    res.json({ success: true, count: rows.length, history: rows });
+  } catch (err: any) {
+    console.error('Error fetching SMS history:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export for post-startup SMS scheduler
+(global as any).buildDailyViewPayload = buildDailyViewPayload;
 
 // ----------------------------------------------------
 // STAFF AVAILABILITY SHEET API

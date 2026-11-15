@@ -281,6 +281,7 @@ async function initDbInternal() {
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN from_date DATE DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN to_date DATE DEFAULT NULL"); } catch (_) {}
 
+      console.log('[DB Engine] Checking admin user...');
       // Ensure Admin 12345 / CLICKME exists (upsert — never overwrites other users)
       const clickmeHash = await bcrypt.hash('CLICKME', 10);
       const primaryAdmin = await get("SELECT * FROM users WHERE username = '12345'");
@@ -299,7 +300,9 @@ async function initDbInternal() {
       }
 
       // Sync staff PF accounts (creates missing entries only, never overwrites)
+      console.log('[DB Engine] Syncing staff PF accounts...');
       await syncStaffPfAccounts(run, all, get);
+      console.log('[DB Engine] Staff PF accounts synced.');
 
       const staffCount = await get("SELECT COUNT(*) as count FROM staff");
       if (!staffCount || staffCount.count === 0) {
@@ -826,6 +829,27 @@ async function initDbInternal() {
       row_order INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(staff_id, duty_date, train_no, from_station, to_station)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS sms_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      staff_id INTEGER,
+      staff_name TEXT NOT NULL,
+      phone_number TEXT NOT NULL,
+      duty_date TEXT NOT NULL,
+      train_no TEXT NOT NULL,
+      route TEXT,
+      dep_time TEXT,
+      timing_source TEXT DEFAULT 'NTES',
+      has_changes INTEGER DEFAULT 0,
+      change_details TEXT,
+      message_body TEXT NOT NULL,
+      status TEXT DEFAULT 'SENT',
+      gateway_sid TEXT,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -1731,8 +1755,10 @@ async function initDbInternal() {
       console.error('Failed to seed seniority_list:', e.message);
     }
   } else {
-    // Backfill any null desg_rank or hierarchy_tier in existing table
+    // Backfill any null desg_rank or hierarchy_tier in existing table (only if needed)
     try {
+      const nullRank = await get("SELECT COUNT(*) as count FROM seniority_list WHERE desg_rank IS NULL");
+      if (nullRank && nullRank.count > 0) {
       const tierMap = { 'CTI': 1, 'TTI': 2, 'SRTE': 3, 'Sr.CCTC': 4, 'SRCCTC': 4, 'CCTC': 5 };
       const allRows = await all("SELECT id, designation, sl_no, name FROM seniority_list ORDER BY sl_no ASC");
       const counters = {};
@@ -1742,6 +1768,7 @@ async function initDbInternal() {
         const tier = tierMap[d] || 999;
         const workingDesg = (r.name && r.name.includes('CHANDRIKA')) ? 'TTI' : d;
         await run("UPDATE seniority_list SET desg_rank = ?, hierarchy_tier = ?, working_designation = ? WHERE id = ?", [counters[d], tier, workingDesg, r.id]);
+      }
       }
     } catch (e) {
       console.error('Failed to backfill desg_rank in seniority_list:', e.message);
@@ -1883,6 +1910,13 @@ async function syncStaffPfAccounts(runFn, allFn, getFn) {
       await runFn("UPDATE staff SET pf_no = NULL WHERE (name LIKE '%VACANT%' OR designation = '') AND pf_no = '07323475'");
       await runFn("DELETE FROM users WHERE username = '07323475' OR name LIKE '%VACANT%'");
     } catch (cleanErr) { }
+
+    // Fast-path check: if staff user accounts are already provisioned, skip redundant network updates
+    const userCount = await getFn("SELECT COUNT(*) as count FROM users WHERE role = 'Employee'");
+    if (userCount && userCount.count >= 50) {
+      console.log(`[Auth Provisioning] Staff PF accounts already synchronized (${userCount.count} accounts).`);
+      return;
+    }
 
     const staffList = await allFn("SELECT id, name, pf_no, designation, pin_hash FROM staff WHERE pf_no IS NOT NULL AND TRIM(pf_no) != '' AND name NOT LIKE '%VACANT%'");
     if (!staffList || staffList.length === 0) return;
