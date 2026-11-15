@@ -333,27 +333,108 @@ export const STANDARD_TRAIN_SCHEDULES: Record<string, StandardTrainSchedule> = {
 };
 
 /**
+ * Known Trains Starting from Headquarters (HQ - GNT)
+ */
+export const HQ_STARTING_TRAINS = new Set([
+  '12734', '20629', '12604', '17251', '17253', '17239', '17243', '17281', '17261',
+  '17646', '17626', '12805', '12795', '17069', '67230', '12705', '18047', '17225',
+  '22882', '17221', '07193', '07180', '07195', '07197', '07189'
+]);
+
+/**
+ * Known Trains Reaching / Arriving at Headquarters (HQ - GNT)
+ */
+export const HQ_REACHING_TRAINS = new Set([
+  '12603', '17252', '20630', '12733', '17070', '17216', '17262', '57210', '57201',
+  '17244', '17282', '17227', '17254', '12748', '17202', '17645', '17625', '12806',
+  '12796', '18048', '17226', '22881', '17222', '12703', '07610', '17426', '17042',
+  '18064', '07002', '07128', '08520', '07194', '07181', '07196', '07198', '07190'
+]);
+
+/**
+ * Extracts pure numeric train digits from a train number string (e.g. "PILOT(67230)" => "67230")
+ */
+export function extractTrainDigits(trainNumber: string | number): string {
+  if (!trainNumber) return '';
+  const match = String(trainNumber).match(/\d+/);
+  return match ? match[0] : String(trainNumber).trim();
+}
+
+/**
+ * Detects whether a train movement represents staff starting from Headquarters (HQ - GNT) on an outward run
+ */
+export function isTrainStartingFromHq(trainNumber: string | number, fromStation: string = '', toStation: string = ''): boolean {
+  const num = extractTrainDigits(trainNumber);
+  if (HQ_STARTING_TRAINS.has(num)) return true;
+  if (HQ_REACHING_TRAINS.has(num)) return false;
+
+  const from = String(fromStation || '').toUpperCase().trim();
+  if (from.includes('GNT') || from === 'HEADQUARTERS' || from.startsWith('GNT/') || from.startsWith('GNT,')) {
+    return true;
+  }
+
+  const std = STANDARD_TRAIN_SCHEDULES[num];
+  if (std && !std.isReturnToHq && std.route && std.route.toUpperCase().includes('GNT')) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Detects whether a train movement represents staff reaching Headquarters (HQ - GNT) on a return run
  */
 export function isReturnTrainReachingHq(trainNumber: string | number, toStation: string = '', fromStation: string = ''): boolean {
-  const tNum = String(trainNumber || '').trim();
+  const num = extractTrainDigits(trainNumber);
+  if (HQ_REACHING_TRAINS.has(num)) return true;
+  if (HQ_STARTING_TRAINS.has(num)) return false;
+
   const to = String(toStation || '').toUpperCase().trim();
-  
   if (to.includes('GNT') || to === 'HEADQUARTERS' || to.endsWith('/GNT') || to.endsWith(', GNT')) {
     return true;
   }
   
-  const std = STANDARD_TRAIN_SCHEDULES[tNum];
+  const std = STANDARD_TRAIN_SCHEDULES[num];
   if (std && std.isReturnToHq) {
     return true;
   }
-  
-  const gntReturnTrains = [
-    '12603', '17252', '20630', '12733', '17070', '17216', '17262', '57210', '57201',
-    '17244', '17282', '17227', '17254', '12748', '17202', '17645', '07610', '17426',
-    '17042', '18064', '12703', '22881'
-  ];
-  return gntReturnTrains.includes(tNum);
+  return false;
+}
+
+/**
+ * Reorders two trains of a duty link so that the train starting from Headquarters (HQ - GNT)
+ * is always the outward train (Train No 1st day), and the train reaching HQ is the return train (Train No last day).
+ */
+export function orderLinkTrainsForHq(trainA: string, trainB: string, fromStation: string = '', toStation: string = ''): [string, string] {
+  if (!trainA) return [trainB || '', ''];
+  if (!trainB) return [trainA, ''];
+
+  const fromParts = String(fromStation || '').split(/[/,]+/).map(s => s.trim());
+  const toParts = String(toStation || '').split(/[/,]+/).map(s => s.trim());
+
+  const fromA = fromParts[0] || fromStation;
+  const fromB = fromParts[1] || (fromParts.length === 1 ? '' : fromStation);
+  const toA = toParts[0] || toStation;
+  const toB = toParts[1] || (toParts.length === 1 ? '' : toStation);
+
+  const isRetA = isReturnTrainReachingHq(trainA, toA, fromA);
+  const isRetB = isReturnTrainReachingHq(trainB, toB, fromB);
+  const isStartA = isTrainStartingFromHq(trainA, fromA, toA);
+  const isStartB = isTrainStartingFromHq(trainB, fromB, toB);
+
+  // If trainA reaches HQ and trainB starts from HQ -> swap so train starting from HQ is first
+  if (isRetA && isStartB) {
+    return [trainB, trainA];
+  }
+  // If trainA reaches HQ and trainB does NOT reach HQ -> swap
+  if (isRetA && !isRetB) {
+    return [trainB, trainA];
+  }
+  // If trainB starts from HQ and trainA does NOT start from HQ -> swap
+  if (isStartB && !isStartA) {
+    return [trainB, trainA];
+  }
+
+  return [trainA, trainB];
 }
 
 /**

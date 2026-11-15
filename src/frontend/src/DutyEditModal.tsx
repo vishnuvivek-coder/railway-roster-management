@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
+import { orderLinkTrainsForHq } from './trainTaNdaCalculator';
 
 // Multi-day link sets for Indian Railways train roster
 export const KNOWN_LINK_SETS = {
@@ -423,16 +424,31 @@ export default function DutyEditModal({
   const [shiftedNonDailyTrainNo, setShiftedNonDailyTrainNo] = useState('');
   const [shiftedNonDailyDayFilter, setShiftedNonDailyDayFilter] = useState('AUTO'); // 'AUTO' | 'ALL' | 'SUNDAY' ... 'SATURDAY'
 
+  // Helper to extract outward train starting from HQ
+  const resolveStartingTrain = (duty) => {
+    if (!duty) return '';
+    if (duty.firstTrain) return duty.firstTrain;
+    if (duty.dutyTrain) return duty.dutyTrain;
+    if (duty.train_numbers) {
+      const parts = String(duty.train_numbers).split(/[/,]+/).map(s => s.trim()).filter(Boolean);
+      if (parts.length === 2) {
+        return orderLinkTrainsForHq(parts[0], parts[1], duty.from_station || duty.from, duty.to_station || duty.to)[0];
+      }
+      return parts[0] || '';
+    }
+    return '';
+  };
+
   // Train Running Late inputs
   const [lateTrainNo, setLateTrainNo] = useState(() => {
-    return dutyModal.firstTrain || dutyModal.dutyTrain || (dutyModal.train_numbers ? String(dutyModal.train_numbers).split(/[\s,/]+/)[0] : '');
+    return resolveStartingTrain(dutyModal);
   });
   const [lateRemarks, setLateRemarks] = useState('Train running late - removed from duty');
   const [lateStaffAction, setLateStaffAction] = useState('SPARE_HQ'); // 'SPARE_HQ' | 'REST'
 
   // Train Cancelled inputs
   const [cancelledTrainNo, setCancelledTrainNo] = useState(() => {
-    return dutyModal.firstTrain || dutyModal.dutyTrain || (dutyModal.train_numbers ? String(dutyModal.train_numbers).split(/[\s,/]+/)[0] : '');
+    return resolveStartingTrain(dutyModal);
   });
   const [cancelledReason, setCancelledReason] = useState('Train cancelled by administration');
   const [cancelledAction, setCancelledAction] = useState('REMOVE'); // 'REMOVE' | 'ALLOT_ANOTHER'

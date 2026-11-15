@@ -848,6 +848,9 @@ async function getStaffForDate(categoryId: any, dateStr: string | null) {
         COALESCE(s.hq_station, 'GNT') as hq_station,
         s.t_code_no,
         s.hrms_id,
+        s.cug_number,
+        s.contact_number,
+        s.email,
         s.pin_hash
       FROM staff_roster_assignments sra
       LEFT JOIN staff s ON sra.staff_id = s.id
@@ -3817,6 +3820,9 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
     const targetDesg = designation !== undefined ? designation.trim() : currentStaff.designation;
     const targetHrms = hrms_id !== undefined ? hrms_id.trim() : currentStaff.hrms_id;
     const targetPf = pf_no !== undefined ? pf_no.trim() : currentStaff.pf_no;
+    const targetCug = cug_number !== undefined ? (cug_number ? String(cug_number).trim() : null) : currentStaff.cug_number;
+    const targetContact = contact_number !== undefined ? (contact_number ? String(contact_number).trim() : null) : currentStaff.contact_number;
+    const targetEmail = email !== undefined ? (email ? String(email).trim() : null) : currentStaff.email;
 
     await run(
       `UPDATE staff 
@@ -3832,9 +3838,12 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
            hq_station = COALESCE(?, hq_station),
            rest_day = COALESCE(?, rest_day),
            hrms_id = ?,
+           cug_number = ?,
+           contact_number = ?,
+           email = ?,
            seniority_no = COALESCE(?, seniority_no)
        WHERE id = ?`,
-      [targetName, targetDesg, targetCatId || null, row_position || null, active !== undefined ? active : null, targetPf, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, seniority_no || null, id]
+      [targetName, targetDesg, targetCatId || null, row_position || null, active !== undefined ? active : null, targetPf, bill_unit || null, pay_amount || null, doa || null, hq_station || null, rest_day || null, targetHrms, targetCug, targetContact, targetEmail, seniority_no || null, id]
     );
 
     // Sync seniority_list if matching pf_no or seniority_no exists
@@ -3843,17 +3852,89 @@ app.put('/api/staff/:id', requireAdmin, async (req, res) => {
         await run(`UPDATE seniority_list 
                    SET name = ?,
                        designation = ?,
+                       cug_number = COALESCE(?, cug_number),
+                       contact_number = COALESCE(?, contact_number),
+                       email = COALESCE(?, email),
                        pf_number = ?
                    WHERE sl_no = ? OR pf_number = ? OR pf_number = ?`,
-          [targetName, targetDesg, targetPf, currentStaff.seniority_no, currentStaff.pf_no, targetPf]
+          [targetName, targetDesg, targetCug, targetContact, targetEmail, targetPf, currentStaff.seniority_no, currentStaff.pf_no, targetPf]
         );
       }
     } catch (e) { }
 
     const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
-    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${targetName}, PF: ${targetPf}, Desg: ${targetDesg}, HRMS: ${targetHrms})`);
+    await logAudit('Admin', 'UPDATE_STAFF', `Updated staff member ID ${id} (${targetName}, PF: ${targetPf}, Desg: ${targetDesg}, HRMS: ${targetHrms}, CUG: ${targetCug || '-'})`);
     res.json({ message: 'Staff updated successfully', staff: updated });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// [ENDPOINT DATA-FLOW] PUT /api/staff/:id/details
+//   • Module          : Employee Contact & Official Details
+//   • Frontend Caller : App.tsx -> Employee Details Column Table (Admin Only)
+//   • Reads From DB   : staff
+//   • Saves To DB     : staff, seniority_list, staff_roster_assignments
+//   • Summary         : Updates CUG phone, contact phone, email, PF number, HRMS ID, desg, name
+// ============================================================================
+app.put('/api/staff/:id/details', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, designation, cug_number, contact_number, email, pf_no, hrms_id } = req.body;
+  try {
+    const current = await get('SELECT * FROM staff WHERE id = ?', [id]);
+    if (!current) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    const cleanName = (name !== undefined && name !== null && String(name).trim() !== '') ? String(name).trim() : current.name;
+    const cleanDesg = (designation !== undefined && designation !== null && String(designation).trim() !== '') ? String(designation).trim() : current.designation;
+    const cleanCug = (cug_number !== undefined && cug_number !== null) ? (String(cug_number).trim() === '' ? null : String(cug_number).trim()) : current.cug_number;
+    const cleanContact = (contact_number !== undefined && contact_number !== null) ? (String(contact_number).trim() === '' ? null : String(contact_number).trim()) : current.contact_number;
+    const cleanEmail = (email !== undefined && email !== null) ? (String(email).trim() === '' ? null : String(email).trim()) : current.email;
+    const cleanPf = (pf_no !== undefined && pf_no !== null && String(pf_no).trim() !== '') ? String(pf_no).trim() : current.pf_no;
+    const cleanHrms = (hrms_id !== undefined && hrms_id !== null) ? String(hrms_id).trim() : current.hrms_id;
+
+    await run(
+      `UPDATE staff SET
+         name = ?,
+         designation = ?,
+         cug_number = ?,
+         contact_number = ?,
+         email = ?,
+         pf_no = ?,
+         hrms_id = ?
+       WHERE id = ?`,
+      [cleanName, cleanDesg, cleanCug, cleanContact, cleanEmail, cleanPf, cleanHrms, id]
+    );
+
+    // Sync to staff_roster_assignments if exists
+    try {
+      await run('UPDATE staff_roster_assignments SET staff_name = ?, designation = ?, pf_no = ? WHERE staff_id = ?', [cleanName, cleanDesg, cleanPf, id]);
+    } catch (e) {}
+
+    // Sync to seniority_list if matched
+    try {
+      if (cleanPf || current.seniority_no) {
+        await run(`UPDATE seniority_list SET
+          name = ?,
+          designation = ?,
+          cug_number = COALESCE(?, cug_number),
+          contact_number = COALESCE(?, contact_number),
+          email = COALESCE(?, email),
+          pf_number = ?
+          WHERE pf_number = ? OR sl_no = ?`,
+          [cleanName, cleanDesg, cleanCug, cleanContact, cleanEmail, cleanPf, cleanPf || current.pf_no, current.seniority_no]
+        );
+      }
+    } catch (e) {}
+
+    const updated = await get('SELECT * FROM staff WHERE id = ?', [id]);
+    await logAudit('Admin', 'UPDATE_STAFF_DETAILS', `Updated contact & official details for ${cleanName} (ID: ${id}, CUG: ${cleanCug || '-'}, Contact: ${cleanContact || '-'}, Email: ${cleanEmail || '-'}, PF: ${cleanPf || '-'}, HRMS: ${cleanHrms || '-'})`);
+
+    res.json({ success: true, message: 'Employee details updated successfully', staff: updated });
+  } catch (err: any) {
+    console.error('Error updating staff details:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -12877,6 +12958,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
             staffId: staff.id,
             name: staff.name,
             designation: staff.designation,
+            cug_number: staff.cug_number || null,
+            contact_number: staff.contact_number || null,
+            email: staff.email || null,
+            pf_no: staff.pf_no || null,
+            hrms_id: staff.hrms_id || null,
             rowPosition: staff.row_position,
             categoryId: cat.id,
             categoryName: cat.name,
@@ -13166,6 +13252,11 @@ app.get('/api/reports/daily-view', async (req, res) => {
           staffId: staff.id,
           name: staff.name,
           designation: staff.designation,
+          cug_number: staff.cug_number || null,
+          contact_number: staff.contact_number || null,
+          email: staff.email || null,
+          pf_no: staff.pf_no || null,
+          hrms_id: staff.hrms_id || null,
           rowPosition: staff.row_position,
           categoryId: cat.id,
           categoryName: cat.name,
@@ -13783,6 +13874,11 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           staffId: staff.id,
           name: staff.name,
           designation: staff.designation,
+          cug_number: staff.cug_number || null,
+          contact_number: staff.contact_number || null,
+          email: staff.email || null,
+          pf_no: staff.pf_no || null,
+          hrms_id: staff.hrms_id || null,
           rowPosition: staff.row_position,
           categoryId: cat.id,
           categoryName: cat.name,

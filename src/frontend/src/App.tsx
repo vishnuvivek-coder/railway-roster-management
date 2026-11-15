@@ -63,6 +63,7 @@ import UpgradeToCorModal from './UpgradeToCorModal';
 import TaApprovals from './TaApprovals';
 import SeniorityList from './SeniorityList';
 import FeedbackModal from './FeedbackModal';
+import { StaffDetailsModal } from './StaffDetailsModal';
 import {
   parseRouteFromPathname,
   getCanonicalPathForTab
@@ -80,6 +81,8 @@ import {
   STANDARD_TRAIN_SCHEDULES,
   evaluateNtesTaRule,
   isReturnTrainReachingHq,
+  isTrainStartingFromHq,
+  orderLinkTrainsForHq,
   calculateReturnTrainHqTa,
   calculateDynamicTaFromTimings,
   DEFAULT_DA_RATE,
@@ -859,16 +862,16 @@ export const OCT_2026_MASTER_DAILY_SLOTS = [
       { categoryId: 2, linkNum: 50, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
     ]
   },
-  // 12. Train 17645, 17626 / 17625, 17646 (Circar & KCG Express: GNT - RAL - SC) [Page 48/50/52 Row 12]
+  // 12. Train 17646 / 17645 (Circar & KCG Express: GNT - RAL - SC) [Page 48/50/52 Row 12]
   {
     slotId: 12,
     page: 172,
-    firstTrain: '17645',
-    lastTrain: '17646',
-    title: '17645 / 17626 / 17625 / 17646 (Circar & KCG Express: GNT ➔ RAL ➔ SC)',
+    firstTrain: '17646',
+    lastTrain: '17645',
+    title: '17646 / 17626 / 17625 / 17645 (Circar & KCG Express: GNT ➔ RAL ➔ SC)',
     links: [
-      { categoryId: 2, linkNum: 29, firstCoach: 'AC + SL', lastTrain: '17646', lastCoach: 'AC + SL' },
-      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S5', lastTrain: '17646', lastCoach: 'S1-S5' }
+      { categoryId: 2, linkNum: 29, firstCoach: 'AC + SL', lastTrain: '17645', lastCoach: 'AC + SL' },
+      { categoryId: 2, linkNum: 43, firstCoach: 'S1-S5', lastTrain: '17645', lastCoach: 'S1-S5' }
     ]
   },
   // 13. Train 12604 / 12603 (Chennai Express: GNT - MAS - GNT) [Page 49/51/53 Row 1]
@@ -1239,12 +1242,12 @@ export const LEGACY_MASTER_DAILY_SLOTS = [
       { categoryId: 2, linkNum: 57, firstCoach: 'SL', lastTrain: '18048', lastCoach: 'SL' }
     ]
   },
-  // 8. Train 17645 / 17646 (Circar & KCG Exp GNT - RAL - KCG - SC - RAL - GNT)
+  // 8. Train 17646 / 17645 (Circar & KCG Exp GNT - RAL - KCG - SC - RAL - GNT)
   {
     slotId: 8,
     page: 172,
-    firstTrain: '17645',
-    lastTrain: '17646',
+    firstTrain: '17646',
+    lastTrain: '17645',
     links: [
       { categoryId: 2, linkNum: 36, firstCoach: 'AC+SL', lastCoach: 'AC+SL' },
       { categoryId: 2, linkNum: 50, firstCoach: 'S1-S5', lastCoach: 'S1-S5' }
@@ -1684,6 +1687,8 @@ export default function App() {
   const [removingStaff, setRemovingStaff] = useState(false);
   const [upgradeCorModalOpen, setUpgradeCorModalOpen] = useState(false);
   const [upgradeCorCandidate, setUpgradeCorCandidate] = useState(null);
+  // Employee Details (Phone, Email, PF, HRMS) Modal
+  const [staffDetailsTarget, setStaffDetailsTarget] = useState<any>(null);
   const [staffForm, setStaffForm] = useState({
     name: '', designation: '', row_position: '', rest_day: ''
   });
@@ -7075,8 +7080,14 @@ export default function App() {
                             if (!dynamicSlotLast) dynamicSlotLast = '12603';
                           } else {
                             const parts = matched.train_numbers.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
-                            if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
-                            if (parts.length > 1 && !dynamicSlotLast) dynamicSlotLast = parts[parts.length - 1];
+                            if (parts.length === 2) {
+                              const [ordFirst, ordLast] = orderLinkTrainsForHq(parts[0], parts[1], matched.from_station, matched.to_station);
+                              if (!dynamicSlotFirst) dynamicSlotFirst = ordFirst;
+                              if (!dynamicSlotLast) dynamicSlotLast = ordLast;
+                            } else {
+                              if (parts.length > 0 && !dynamicSlotFirst) dynamicSlotFirst = parts[0];
+                              if (parts.length > 1 && !dynamicSlotLast) dynamicSlotLast = parts[parts.length - 1];
+                            }
                           }
                         }
                       }
@@ -7138,8 +7149,14 @@ export default function App() {
                         }
 
                         const parts = dynamicTrainNums.split(/[/,]+/).map(s => s.trim()).filter(Boolean);
-                        if (parts.length > 0) linkFirstTrain = parts[0];
-                        if (parts.length > 1) linkLastTrain = parts[parts.length - 1];
+                        if (parts.length === 2) {
+                          const [ordFirst, ordLast] = orderLinkTrainsForHq(parts[0], parts[1], matchedLink?.from_station, matchedLink?.to_station);
+                          linkFirstTrain = ordFirst;
+                          linkLastTrain = ordLast;
+                        } else {
+                          if (parts.length > 0) linkFirstTrain = parts[0];
+                          if (parts.length > 1) linkLastTrain = parts[parts.length - 1];
+                        }
                       }
                       if (matchedLink && matchedLink.coaches && matchedLink.coaches.trim()) {
                         linkCoach = matchedLink.coaches.trim();
@@ -7690,8 +7707,21 @@ export default function App() {
                 const groupedSpecial = new Map();
                 unplacedTrainStaff.forEach(s => {
                   activeWorkedStaffIds.add(s.staffId);
-                  const tOut = s.train_out || (s.train_numbers ? s.train_numbers.split(/[/,]+/)[0].trim() : 'SPECIAL');
-                  const tRet = s.train_return || (s.train_numbers && s.train_numbers.includes('/') ? s.train_numbers.split('/')[1].trim() : '');
+                  let tOut = s.train_out || '';
+                  let tRet = s.train_return || '';
+                  if (!tOut && s.train_numbers) {
+                    const parts = s.train_numbers.split(/[/,]+/).map(str => str.trim()).filter(Boolean);
+                    if (parts.length === 2) {
+                      [tOut, tRet] = orderLinkTrainsForHq(parts[0], parts[1], s.from_station, s.to_station);
+                    } else if (parts.length > 0) {
+                      tOut = parts[0];
+                      tRet = parts[parts.length - 1] || '';
+                    }
+                  }
+                  if (!tOut) tOut = 'SPECIAL';
+                  if (!tRet && s.train_numbers && s.train_numbers.includes('/')) {
+                    tRet = s.train_numbers.split('/')[1].trim();
+                  }
                   const groupKey = `${tOut}_${tRet}`;
                   if (!groupedSpecial.has(groupKey)) {
                     groupedSpecial.set(groupKey, {
@@ -8481,6 +8511,32 @@ export default function App() {
                                               <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
                                                 ({d.designation || '-'})
                                               </span>
+                                              {!isSlotVacant && !d.name.includes('VACANT') && (
+                                                <button
+                                                  type="button"
+                                                  className="btn no-print"
+                                                  onClick={(e) => { e.stopPropagation(); setStaffDetailsTarget(d); }}
+                                                  style={{
+                                                    padding: '1px 6px',
+                                                    fontSize: '0.72rem',
+                                                    fontWeight: 700,
+                                                    borderRadius: '5px',
+                                                    background: 'rgba(59, 130, 246, 0.15)',
+                                                    color: '#60a5fa',
+                                                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '3px',
+                                                    marginLeft: '6px',
+                                                    verticalAlign: 'middle'
+                                                  }}
+                                                  title={`View & Edit ${d.name}'s Details (Phone, Email, PF, HRMS)`}
+                                                >
+                                                  <span>🪪</span>
+                                                  <span>Details</span>
+                                                </button>
+                                              )}
                                               {activeMovingStaff && isStaffDraggable && activeMovingStaff.staffId !== d.staffId && (
                                                 <button
                                                   type="button"
@@ -9382,6 +9438,32 @@ export default function App() {
                                                 <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>
                                                   ({d.designation || '-'})
                                                 </span>
+                                                {!isSlotVacant && !d.name.includes('VACANT') && (
+                                                  <button
+                                                    type="button"
+                                                    className="btn no-print"
+                                                    onClick={(e) => { e.stopPropagation(); setStaffDetailsTarget(d); }}
+                                                    style={{
+                                                      padding: '1px 6px',
+                                                      fontSize: '0.72rem',
+                                                      fontWeight: 700,
+                                                      borderRadius: '5px',
+                                                      background: 'rgba(59, 130, 246, 0.15)',
+                                                      color: '#60a5fa',
+                                                      border: '1px solid rgba(59, 130, 246, 0.35)',
+                                                      cursor: 'pointer',
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: '3px',
+                                                      marginLeft: '6px',
+                                                      verticalAlign: 'middle'
+                                                    }}
+                                                    title={`View & Edit ${d.name}'s Details (Phone, Email, PF, HRMS)`}
+                                                  >
+                                                    <span>🪪</span>
+                                                    <span>Details</span>
+                                                  </button>
+                                                )}
                                                 {activeMovingStaff && isStaffDraggable && activeMovingStaff.staffId !== d.staffId && (
                                                   <button
                                                     type="button"
@@ -11550,6 +11632,34 @@ export default function App() {
                                 <strong style={{ color: isNameMatched ? 'var(--primary)' : 'inherit' }}>
                                   {row.staffName || '(VACANT)'}
                                 </strong>
+                                {!isVacantRow && (
+                                  <button
+                                    type="button"
+                                    className="btn no-print"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setStaffDetailsTarget({ id: row.staffId, name: row.staffName, designation: row.designation });
+                                    }}
+                                    style={{
+                                      padding: '1px 5px',
+                                      fontSize: '0.68rem',
+                                      fontWeight: 700,
+                                      borderRadius: '4px',
+                                      background: 'rgba(59, 130, 246, 0.15)',
+                                      color: '#60a5fa',
+                                      border: '1px solid rgba(59, 130, 246, 0.35)',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                      marginLeft: '6px',
+                                      verticalAlign: 'middle'
+                                    }}
+                                    title={`View & Edit ${row.staffName}'s Details`}
+                                  >
+                                    <span>🪪</span>
+                                  </button>
+                                )}
                               </td>
                               <td className="freeze-col freeze-col-desg" style={{ color: isDesgMatched ? 'var(--primary)' : 'var(--color-text-secondary)', fontWeight: isDesgMatched ? 700 : 400 }}>
                                 {row.designation || '-'}
@@ -14729,6 +14839,11 @@ export default function App() {
                       <th>SL NO (Row)</th>
                       <th>Name</th>
                       <th>Designation</th>
+                      <th>CUG Number</th>
+                      <th>Contact Number</th>
+                      <th>Email ID</th>
+                      <th>PF Number</th>
+                      <th>HRMS ID</th>
                       <th>Weekly Rest Day</th>
                       <th>CR Available</th>
                       <th>Active Status</th>
@@ -14755,12 +14870,80 @@ export default function App() {
                             {person.name === '(VACANT)' ? (
                               <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>(VACANT Slot)</span>
                             ) : (
-                              <strong style={{ color: staffSearchQuery && person.name.toLowerCase().includes(staffSearchQuery.toLowerCase().trim()) ? 'var(--primary)' : 'inherit' }}>
-                                {person.name}
-                              </strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <strong style={{ color: staffSearchQuery && person.name.toLowerCase().includes(staffSearchQuery.toLowerCase().trim()) ? 'var(--primary)' : 'inherit' }}>
+                                  {person.name}
+                                </strong>
+                                <button
+                                  type="button"
+                                  className="btn no-print"
+                                  onClick={() => setStaffDetailsTarget(person)}
+                                  style={{
+                                    padding: '1px 6px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    borderRadius: '4px',
+                                    background: 'rgba(59, 130, 246, 0.15)',
+                                    color: '#60a5fa',
+                                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                  title={`View & Edit ${person.name}'s Details (Phone, Email, PF, HRMS)`}
+                                >
+                                  <span>🪪</span> Details
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td>{person.designation || '-'}</td>
+                          <td>
+                            {person.cug_number ? (
+                              <a href={`tel:${person.cug_number}`} style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}>
+                                📱 {person.cug_number}
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
+                            )}
+                          </td>
+                          <td>
+                            {person.contact_number ? (
+                              <a href={`tel:${person.contact_number}`} style={{ color: 'var(--color-text-primary)', textDecoration: 'none' }}>
+                                📞 {person.contact_number}
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
+                            )}
+                          </td>
+                          <td>
+                            {person.email ? (
+                              <a href={`mailto:${person.email}`} style={{ color: '#34d399', textDecoration: 'none', fontSize: '0.8rem' }}>
+                                ✉️ {person.email}
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
+                            )}
+                          </td>
+                          <td>
+                            {person.pf_no || person.pf_number ? (
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.82rem' }}>
+                                {person.pf_no || person.pf_number}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
+                            )}
+                          </td>
+                          <td>
+                            {person.hrms_id ? (
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.82rem', color: 'var(--primary)' }}>
+                                {person.hrms_id}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-secondary)', opacity: 0.4 }}>-</span>
+                            )}
+                          </td>
                           <td>
                             {person.rest_day && person.rest_day !== '-' ? (
                               <span className="badge" style={{
@@ -16292,6 +16475,25 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {/* Employee Phone / Email / PF / HRMS Contact Details Table Modal */}
+      {staffDetailsTarget && (
+        <StaffDetailsModal
+          isOpen={!!staffDetailsTarget}
+          staff={staffDetailsTarget}
+          allStaffList={allStaffList}
+          isAdmin={isAdmin}
+          authToken={authToken}
+          API_BASE={API_BASE}
+          onClose={() => setStaffDetailsTarget(null)}
+          onStaffUpdated={(updated) => {
+            setAllStaffList(prev => prev.map(s => String(s.id) === String(updated.id) ? { ...s, ...updated } : s));
+            setStaffList(prev => prev.map(s => String(s.id) === String(updated.id) ? { ...s, ...updated } : s));
+            if (activeTab === 'daily-summary' || activeTab === 'daily') fetchDailyDuties();
+            if (activeTab === 'staff') fetchStaff();
+          }}
+        />
       )}
 
       {/* Cadre Upgrade to Conductors (COR) Modal */}

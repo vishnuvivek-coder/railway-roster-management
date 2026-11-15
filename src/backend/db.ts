@@ -273,6 +273,9 @@ async function initDbInternal() {
       try { await mysqlPool.query("ALTER TABLE users MODIFY COLUMN role ENUM('Admin','Staff','Viewer','Employee') NOT NULL DEFAULT 'Employee'"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE users ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN cug_number VARCHAR(50) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN contact_number VARCHAR(50) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN email VARCHAR(100) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_train_number VARCHAR(100) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches VARCHAR(100) DEFAULT 'SL / AC'"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN from_date DATE DEFAULT NULL"); } catch (_) {}
@@ -489,6 +492,17 @@ async function initDbInternal() {
 
   try {
     await run(`ALTER TABLE staff ADD COLUMN rest_day TEXT`);
+  } catch (e) {
+    // Ignore if column already exists
+  }
+  try {
+    await run(`ALTER TABLE staff ADD COLUMN cug_number TEXT`);
+  } catch (e) {}
+  try {
+    await run(`ALTER TABLE staff ADD COLUMN contact_number TEXT`);
+  } catch (e) {}
+  try {
+    await run(`ALTER TABLE staff ADD COLUMN email TEXT`);
   } catch (e) {
     // Ignore if column already exists
   }

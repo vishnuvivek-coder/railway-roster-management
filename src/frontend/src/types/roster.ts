@@ -6,12 +6,15 @@ export interface Staff {
   id: number;
   name: string;
   pf_number?: string | null;
+  pf_no?: string | null;
   hrms_id?: string | null;
   designation?: string | null;
   category_id: number;
   row_position: number;
   rest_day?: string | null;
   phone?: string | null;
+  cug_number?: string | null;
+  contact_number?: string | null;
   email?: string | null;
   station?: string | null;
   is_active?: number;
@@ -136,6 +139,11 @@ export interface DutyItem {
   original_link_number?: number | null;
   calculatedLinkNumber?: number | null;
   train_numbers?: string;
+  cug_number?: string | null;
+  contact_number?: string | null;
+  email?: string | null;
+  pf_no?: string | null;
+  hrms_id?: string | null;
   firstTrain?: string;
   firstCoaches?: string;
   lastTrain?: string;
