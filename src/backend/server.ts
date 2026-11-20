@@ -240,6 +240,16 @@ initDb().then(async () => {
     } catch (e) {
       try { await run("ALTER TABLE staff ADD COLUMN relieved_note TEXT DEFAULT NULL"); } catch (err) {}
     }
+    try {
+      await run("ALTER TABLE staff ADD COLUMN signature_data MEDIUMTEXT DEFAULT NULL");
+    } catch (e) {
+      try { await run("ALTER TABLE staff ADD COLUMN signature_data TEXT DEFAULT NULL"); } catch (err) {}
+    }
+    try {
+      await run("ALTER TABLE staff ADD COLUMN signature_updated_at VARCHAR(50) DEFAULT NULL");
+    } catch (e) {
+      try { await run("ALTER TABLE staff ADD COLUMN signature_updated_at TEXT DEFAULT NULL"); } catch (err) {}
+    }
 
     // Ensure VACANT placeholder duties never hold real employee PF numbers
     try {
@@ -4038,6 +4048,54 @@ app.post('/api/staff/delete', requireAdmin, async (req, res) => {
   const staffId = parseInt(req.body.staff_id || req.body.id, 10);
   if (!staffId) return res.status(400).json({ error: 'staff_id is required' });
   await executeDeleteStaff(staffId, res);
+});
+
+// Digital Signature Endpoints
+app.get('/api/staff/:id/signature', authenticateToken, async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const row = await get('SELECT id, name, pf_no, designation, signature_data, signature_updated_at FROM staff WHERE id = ?', [staffId]);
+    if (!row) return res.status(404).json({ error: 'Staff member not found' });
+    res.json({
+      success: true,
+      signature_data: row.signature_data || null,
+      signature_updated_at: row.signature_updated_at || null,
+      name: row.name,
+      designation: row.designation,
+      pf_no: row.pf_no
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/staff/:id/signature', authenticateToken, requireAdminOrSelfStaff('id'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    const { signature_data } = req.body;
+    const nowIso = new Date().toISOString();
+    
+    await run(
+      'UPDATE staff SET signature_data = ?, signature_updated_at = ? WHERE id = ?',
+      [signature_data || null, signature_data ? nowIso : null, staffId]
+    );
+
+    const staff = await get('SELECT id, name, pf_no, designation, signature_data, signature_updated_at FROM staff WHERE id = ?', [staffId]);
+    await logAudit(
+      req.user?.name || req.user?.username || 'Staff',
+      'UPDATE_SIGNATURE',
+      signature_data ? `Updated digital signature for ${staff?.name || 'Staff'}` : `Cleared digital signature for ${staff?.name || 'Staff'}`
+    );
+
+    res.json({
+      success: true,
+      message: signature_data ? 'Digital signature saved successfully!' : 'Digital signature removed.',
+      signature_data: staff?.signature_data || null,
+      signature_updated_at: staff?.signature_updated_at || null
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Helper: Formula for COR rest day by row position
@@ -14714,7 +14772,7 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
 
     // Update employee profile metadata if provided
     if (employee_meta) {
-      const { name, designation, pay, pf_no, bill_unit, bill_unit_no, doa, hq } = employee_meta;
+      const { name, designation, pay, pf_no, bill_unit, bill_unit_no, doa, hq, signature_data } = employee_meta;
       const cleanPf = (pf_no && pf_no !== '07323475') ? String(pf_no).trim() : null;
       const rawBillUnit = bill_unit || bill_unit_no;
       const cleanBillUnit = (rawBillUnit && rawBillUnit !== '0910629') ? String(rawBillUnit).trim() : null;
@@ -14725,6 +14783,10 @@ app.post('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaf
       }
       if (designation) {
         await run('UPDATE staff SET designation = ? WHERE id = ?', [designation, staffId]);
+      }
+      if (signature_data !== undefined) {
+        const sigNow = new Date().toISOString();
+        await run('UPDATE staff SET signature_data = ?, signature_updated_at = ? WHERE id = ?', [signature_data || null, signature_data ? sigNow : null, staffId]);
       }
       await run(
         `UPDATE staff SET pay_amount = ?, pf_no = COALESCE(?, pf_no), bill_unit = ?, doa = ?, hq_station = ? WHERE id = ?`,

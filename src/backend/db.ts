@@ -276,6 +276,8 @@ async function initDbInternal() {
       try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN cug_number VARCHAR(50) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN contact_number VARCHAR(50) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN email VARCHAR(100) DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN signature_data MEDIUMTEXT DEFAULT NULL"); } catch (_) {}
+      try { await mysqlPool.query("ALTER TABLE staff ADD COLUMN signature_updated_at VARCHAR(50) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_train_number VARCHAR(100) DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches VARCHAR(100) DEFAULT 'SL / AC'"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN from_date DATE DEFAULT NULL"); } catch (_) {}
@@ -509,6 +511,12 @@ async function initDbInternal() {
   } catch (e) {
     // Ignore if column already exists
   }
+  try {
+    await run(`ALTER TABLE staff ADD COLUMN signature_data TEXT`);
+  } catch (e) {}
+  try {
+    await run(`ALTER TABLE staff ADD COLUMN signature_updated_at TEXT`);
+  } catch (e) {}
 
   await run(`
     CREATE TABLE IF NOT EXISTS overrides (

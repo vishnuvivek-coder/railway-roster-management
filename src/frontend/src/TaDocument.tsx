@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
+import DigitalSignatureModal from './DigitalSignatureModal';
 import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
@@ -192,8 +193,21 @@ export default function TaDocument({
     doa: '',
     full_name_sign: 'K V RAMANA RAO',
     designation_sign: '(CTI/SL/GNT)',
-    vertical_object_text: (String(selectedCatId) === '1' || !selectedCatId) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES'
+    vertical_object_text: (String(selectedCatId) === '1' || !selectedCatId) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES',
+    signature_data: null as string | null,
+    signature_updated_at: null as string | null
   });
+
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+
+  const handleSignatureSaved = (newSig: string | null) => {
+    setEditableMeta(prev => ({
+      ...prev,
+      signature_data: newSig,
+      signature_updated_at: newSig ? new Date().toISOString() : null
+    }));
+    setHasUnsavedChanges(true);
+  };
 
   const selectedStaffObj = staffList.find(s => s.id?.toString() === selectedStaffId?.toString());
   const isCorStaff = Boolean(
@@ -365,7 +379,9 @@ export default function TaDocument({
               designation_sign: `(${empDesig}/SL/GNT)`,
               vertical_object_text: (data.employee.category_id === 1 || data.employee.category_code === 'COR' || (data.employee.category_name && data.employee.category_name.toUpperCase().includes('COR')) || String(selectedCatId) === '1')
                 ? 'MANNING AC COACHES'
-                : 'MANNING SLEEPER COACHES'
+                : 'MANNING SLEEPER COACHES',
+              signature_data: data.employee.signature_data || null,
+              signature_updated_at: data.employee.signature_updated_at || null
             }));
           }
         } else if (data && data.notFound) {
@@ -1174,6 +1190,26 @@ export default function TaDocument({
               title="Revert manual edits back to auto-generated master roster schedule"
             >
               {resetting ? 'Resetting...' : 'Reset to Auto'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSignatureModal(true)}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.84rem',
+                padding: '8px 16px',
+                background: editableMeta.signature_data ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                border: editableMeta.signature_data ? '1px solid #22c55e' : '1px solid #3b82f6',
+                color: editableMeta.signature_data ? '#16a34a' : '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600
+              }}
+              title="Add, draw, type, or upload employee digital signature"
+            >
+              <span>✍️</span>
+              {editableMeta.signature_data ? 'Signature (Signed ✓)' : 'Digital Signature'}
             </button>
             <button
               onClick={handleSave}
@@ -1992,7 +2028,7 @@ export default function TaDocument({
               alignItems: 'flex-end',
               fontSize: '10.5px',
               fontWeight: 'bold',
-              paddingTop: '20px',
+              paddingTop: '10px',
               paddingBottom: '2px'
             }}>
               <div style={{ textAlign: 'center' }}>
@@ -2005,8 +2041,45 @@ export default function TaDocument({
                 <div>Head of the Office</div>
               </div>
 
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ height: '18px' }}></div>
+              <div
+                style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}
+                onClick={() => setShowSignatureModal(true)}
+                title="Click to manage or change digital signature"
+              >
+                {editableMeta.signature_data ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '40px', marginBottom: '2px' }}>
+                    <img
+                      src={editableMeta.signature_data}
+                      alt="Digital Signature"
+                      style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                    />
+                    <div style={{ fontSize: '7.5px', color: '#15803d', fontWeight: 'bold', letterSpacing: '0.4px', lineHeight: 1 }}>
+                      ✓ DIGITALLY SIGNED
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="no-print" style={{ height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowSignatureModal(true); }}
+                        style={{
+                          fontSize: '9px',
+                          padding: '3px 10px',
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px dashed #3b82f6',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: '600'
+                        }}
+                      >
+                        ✍️ Add Signature
+                      </button>
+                    </div>
+                    <div className="print-only" style={{ height: '36px' }}></div>
+                  </>
+                )}
                 <input
                   type="text"
                   value={editableMeta.full_name_sign}
@@ -2338,7 +2411,7 @@ export default function TaDocument({
                 alignItems: 'flex-end',
                 fontSize: '10.5px',
                 fontWeight: 'bold',
-                paddingTop: '16px',
+                paddingTop: '10px',
                 paddingBottom: '2px'
               }}>
                 <div style={{ textAlign: 'center' }}>
@@ -2351,8 +2424,45 @@ export default function TaDocument({
                   <div>Head of the Office</div>
                 </div>
 
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ height: '18px' }}></div>
+                <div
+                  style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}
+                  onClick={() => setShowSignatureModal(true)}
+                  title="Click to manage or change digital signature"
+                >
+                  {editableMeta.signature_data ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '40px', marginBottom: '2px' }}>
+                      <img
+                        src={editableMeta.signature_data}
+                        alt="Digital Signature"
+                        style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                      />
+                      <div style={{ fontSize: '7.5px', color: '#15803d', fontWeight: 'bold', letterSpacing: '0.4px', lineHeight: 1 }}>
+                        ✓ DIGITALLY SIGNED
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="no-print" style={{ height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowSignatureModal(true); }}
+                          style={{
+                            fontSize: '9px',
+                            padding: '3px 10px',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px dashed #3b82f6',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: '600'
+                          }}
+                        >
+                          ✍️ Add Signature
+                        </button>
+                      </div>
+                      <div className="print-only" style={{ height: '36px' }}></div>
+                    </>
+                  )}
                   <input
                     type="text"
                     value={editableMeta.full_name_sign}
@@ -2459,6 +2569,19 @@ export default function TaDocument({
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+      )}
+      {showSignatureModal && selectedStaffId && (
+        <DigitalSignatureModal
+          isOpen={showSignatureModal}
+          onClose={() => setShowSignatureModal(false)}
+          staffId={selectedStaffId}
+          staffName={editableMeta.full_name_sign || editableMeta.name || ''}
+          designation={editableMeta.designation_sign || editableMeta.designation || ''}
+          pfNo={editableMeta.pf_no || ''}
+          currentSignature={editableMeta.signature_data}
+          authToken={authToken}
+          onSaveSignature={handleSignatureSaved}
+        />
       )}
     </div>
   );

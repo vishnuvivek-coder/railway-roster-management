@@ -1156,7 +1156,7 @@ export async function changeDutyStatus(data: any, currentUser: string = 'Admin')
 
         // Multi-Day Link Set Assignment:
         // Only assign remaining links of multi-day sets if explicitly requested via assign_entire_set!
-        if (targetLink !== null && (req as any)?.body?.assign_entire_set === true) {
+        if (targetLink !== null && (data as any)?.assign_entire_set === true) {
           const linkSet = getLinkSetDetails(resolvedTargetCat, targetLink);
           if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
             for (let k = 0; k < linkSet.remainingLinks.length; k++) {
@@ -1624,7 +1624,7 @@ export async function changeDutyStatus(data: any, currentUser: string = 'Admin')
           }
 
           // Multi-Day Link Set check for targetLink (only if explicitly requested via assign_entire_set):
-          if (targetLink !== null && (req as any)?.body?.assign_entire_set === true) {
+          if (targetLink !== null && (data as any)?.assign_entire_set === true) {
             const linkSet = getLinkSetDetails(targetCatId, targetLink);
             if (linkSet && linkSet.remainingLinks && linkSet.remainingLinks.length > 0) {
               for (let k = 0; k < linkSet.remainingLinks.length; k++) {
@@ -2762,7 +2762,7 @@ export async function dragAssignTrain(data: any, currentUser: string = 'Admin') 
 
     // Multi-Day Link Set Assignment for ALL staff (Categories 1, 2, 3, 4):
     // Only assign remaining links of multi-day sets if explicitly requested via assign_entire_set!
-    if (effectiveLink !== null && (req as any)?.body?.assign_entire_set === true) {
+    if (effectiveLink !== null && (data as any)?.assign_entire_set === true) {
       const linkSet = getLinkSetDetails(effectiveTargetCat, effectiveLink);
       if (linkSet && linkSet.isFirstDayOfSet && linkSet.remainingLinks.length > 0) {
         for (let k = 0; k < linkSet.remainingLinks.length; k++) {

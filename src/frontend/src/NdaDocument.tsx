@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
+import DigitalSignatureModal from './DigitalSignatureModal';
 import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
@@ -262,8 +263,21 @@ export default function NdaDocument({
     bill_unit: '',
     pf_no: '',
     full_name_sign: 'K V RAMANA RAO',
-    designation_sign: '(CTI/SL/GNT)'
+    designation_sign: '(CTI/SL/GNT)',
+    signature_data: null as string | null,
+    signature_updated_at: null as string | null
   });
+
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+
+  const handleSignatureSaved = (newSig: string | null) => {
+    setEditableMeta(prev => ({
+      ...prev,
+      signature_data: newSig,
+      signature_updated_at: newSig ? new Date().toISOString() : null
+    }));
+    setHasUnsavedChanges(true);
+  };
 
   // Auto-initialize selectedCatId if categories are loaded and selectedCatId is empty
   useEffect(() => {
@@ -333,7 +347,9 @@ export default function NdaDocument({
               bill_unit: (data.employee.bill_unit && data.employee.bill_unit !== '0910629') ? data.employee.bill_unit : '',
               pf_no: (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : '',
               full_name_sign: empName,
-              designation_sign: `(${empDesig}/SL/GNT)`
+              designation_sign: `(${empDesig}/SL/GNT)`,
+              signature_data: data.employee.signature_data || null,
+              signature_updated_at: data.employee.signature_updated_at || null
             });
           }
         } else if (data && data.notFound) {
@@ -884,6 +900,26 @@ export default function NdaDocument({
               title="Revert manual edits back to auto-generated master roster schedule"
             >
               {resetting ? 'Resetting...' : 'Reset to Auto'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSignatureModal(true)}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.84rem',
+                padding: '8px 16px',
+                background: editableMeta.signature_data ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                border: editableMeta.signature_data ? '1px solid #22c55e' : '1px solid #3b82f6',
+                color: editableMeta.signature_data ? '#16a34a' : '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600
+              }}
+              title="Add, draw, type, or upload employee digital signature"
+            >
+              <span>✍️</span>
+              {editableMeta.signature_data ? 'Signature (Signed ✓)' : 'Digital Signature'}
             </button>
             <button
               onClick={handleSave}
@@ -1812,7 +1848,7 @@ export default function NdaDocument({
               alignItems: 'flex-end',
               fontSize: '11px',
               fontWeight: 'bold',
-              paddingTop: '28px',
+              paddingTop: '12px',
               paddingBottom: '8px',
               color: '#000',
               fontFamily: 'Arial, sans-serif'
@@ -1827,8 +1863,45 @@ export default function NdaDocument({
                 <span>Head of the office</span>
               </div>
 
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ height: '24px' }}></div>
+              <div
+                style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}
+                onClick={() => setShowSignatureModal(true)}
+                title="Click to manage or change digital signature"
+              >
+                {editableMeta.signature_data ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '40px', marginBottom: '2px' }}>
+                    <img
+                      src={editableMeta.signature_data}
+                      alt="Digital Signature"
+                      style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                    />
+                    <div style={{ fontSize: '7.5px', color: '#15803d', fontWeight: 'bold', letterSpacing: '0.4px', lineHeight: 1 }}>
+                      ✓ DIGITALLY SIGNED
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="no-print" style={{ height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowSignatureModal(true); }}
+                        style={{
+                          fontSize: '9px',
+                          padding: '3px 10px',
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px dashed #3b82f6',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: '600'
+                        }}
+                      >
+                        ✍️ Add Signature
+                      </button>
+                    </div>
+                    <div className="print-only" style={{ height: '36px' }}></div>
+                  </>
+                )}
                 <div>
                   <input
                     type="text"
@@ -1935,6 +2008,19 @@ export default function NdaDocument({
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+      )}
+      {showSignatureModal && selectedStaffId && (
+        <DigitalSignatureModal
+          isOpen={showSignatureModal}
+          onClose={() => setShowSignatureModal(false)}
+          staffId={selectedStaffId}
+          staffName={editableMeta.full_name_sign || editableMeta.name || ''}
+          designation={editableMeta.designation_sign || editableMeta.designation || ''}
+          pfNo={editableMeta.pf_no || ''}
+          currentSignature={editableMeta.signature_data}
+          authToken={authToken}
+          onSaveSignature={handleSignatureSaved}
+        />
       )}
     </div>
   );

@@ -2981,7 +2981,9 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       doa: (staff.doa && staff.doa !== '05/08/2000') ? String(staff.doa) : '',
       category_id: staff.category_id,
       category_name: category.name,
-      category_code: category.code
+      category_code: category.code,
+      signature_data: staff.signature_data || null,
+      signature_updated_at: staff.signature_updated_at || null
     },
     start_date: actualStart,
     end_date: actualEnd,
