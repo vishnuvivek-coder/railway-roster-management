@@ -416,9 +416,29 @@ export default function NdaDocument({
 
   // Universal Cell Edit Handler
   const handleCellChange = (index, field, value) => {
-    if (!journalData || !journalData.rows) return;
+    if (!journalData) return;
     setHasUnsavedChanges(true);
-    const updatedRows = [...journalData.rows];
+    const updatedRows = [...(journalData.rows || [])];
+
+    // Ensure array is large enough if editing a padded blank row
+    while (updatedRows.length <= index) {
+      updatedRows.push({
+        id: null,
+        row_order: updatedRows.length + 1,
+        link_number: 1,
+        date_str: '',
+        date_iso: '',
+        train_no: '',
+        sched_dep: '',
+        sched_arr: '',
+        act_dep: '',
+        act_arr: '',
+        from_station: '',
+        to_station: '',
+        night_hours: null
+      });
+    }
+
     const currentRow = { ...updatedRows[index] };
 
     let processedValue = value;
@@ -698,7 +718,7 @@ export default function NdaDocument({
   const handlePrint = () => {
     printElement('.nda-document-container', {
       title: `NDA_Statement_${journalData?.employee?.name || 'Staff'}_${journalData?.month_name || month}_${year}`,
-      orientation: 'landscape',
+      orientation: 'portrait',
       pageFormat: 'legal'
     });
   };
@@ -708,7 +728,7 @@ export default function NdaDocument({
     setStatusMsg('Generating and downloading NDA Statement PDF...');
     try {
       await downloadPdfFromElement('.nda-document-container', `NDA_Statement_${journalData?.employee?.name || 'Staff'}_${journalData?.month_name || month}_${year}`, {
-        orientation: 'landscape',
+        orientation: 'portrait',
         format: 'legal',
         margin: [4, 4, 4, 4]
       });
@@ -722,8 +742,58 @@ export default function NdaDocument({
     }
   };
 
+  // 2-Page Layout Configuration (ALWAYS 2 PAGES: Page 1 Front, Page 2 Back)
+  const [pageSplitMode, setPageSplitMode] = useState<'STANDARD' | 'BALANCED'>('STANDARD');
+  const PAGE1_NDA_LIMIT = 26;
+  const PAGE2_NDA_TOTAL_ROWS = 26;
+
   const rawRows = journalData?.rows || [];
-  const totalNightHours = rawRows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
+  const p1Limit = (pageSplitMode === 'BALANCED' && rawRows.length > 0)
+    ? Math.max(1, Math.ceil(rawRows.length / 2))
+    : PAGE1_NDA_LIMIT;
+
+  const page1Rows = rawRows.slice(0, p1Limit);
+  const page2Rows = rawRows.slice(p1Limit);
+
+  // Pad Page 1 up to 26 rows so every employee's sheet has full ruling
+  const page1Padded = [...page1Rows];
+  while (page1Padded.length < PAGE1_NDA_LIMIT) {
+    page1Padded.push({
+      isPlaceholder: true,
+      row_order: page1Padded.length + 1,
+      date_str: '',
+      train_no: '',
+      sched_dep: '',
+      sched_arr: '',
+      act_dep: '',
+      act_arr: '',
+      from_station: '',
+      to_station: '',
+      night_hours: null
+    });
+  }
+
+  // Pad Page 2 up to 26 rows (ALWAYS present)
+  const page2Padded = [...page2Rows];
+  while (page2Padded.length < PAGE2_NDA_TOTAL_ROWS) {
+    page2Padded.push({
+      isPlaceholder: true,
+      row_order: p1Limit + page2Padded.length + 1,
+      date_str: '',
+      train_no: '',
+      sched_dep: '',
+      sched_arr: '',
+      act_dep: '',
+      act_arr: '',
+      from_station: '',
+      to_station: '',
+      night_hours: null
+    });
+  }
+
+  const page1Subtotal = page1Rows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
+  const page2Subtotal = page2Rows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
+  const totalNightHours = page1Subtotal + page2Subtotal;
 
   const cellInputStyle = {
     width: '100%',
@@ -1082,6 +1152,37 @@ export default function NdaDocument({
             <span style={{ color: 'var(--color-text-muted)' }}>•</span>
             <span>Total Night Duty: <strong style={{ color: '#fbbf24' }}>{totalNightHours} Hours</strong></span>
           </div>
+
+          {/* 2-Page Always Guarantee & Split Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>📄 Print Layout:</span>
+              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
+                ✓ Always 2 Pages (Page 1 Front / Page 2 Back)
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Row Split:</span>
+              <button
+                type="button"
+                onClick={() => setPageSplitMode('STANDARD')}
+                className={`btn btn-xs ${pageSplitMode === 'STANDARD' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.72rem', padding: '3px 8px', fontWeight: pageSplitMode === 'STANDARD' ? 'bold' : 'normal' }}
+                title="Fill Page 1 with up to 26 rows, Page 2 with continuation & back certification"
+              >
+                Standard (26 Front / Rest Back)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPageSplitMode('BALANCED')}
+                className={`btn btn-xs ${pageSplitMode === 'BALANCED' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.72rem', padding: '3px 8px', fontWeight: pageSplitMode === 'BALANCED' ? 'bold' : 'normal' }}
+                title="Split rows evenly across Page 1 and Page 2"
+              >
+                Balanced 50/50 ({page1Rows.length} on P1 / {page2Rows.length} on P2)
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Status / Unsaved indicator */}
@@ -1191,14 +1292,18 @@ export default function NdaDocument({
 
       {/* ----------------------------------------------------
          OFFICIAL LEGAL PORTRAIT NIGHT DUTY ALLOWANCE (NDA) SHEET
+         ALWAYS 2 PAGES (PAGE 1 FRONT / PAGE 2 BACK)
          ---------------------------------------------------- */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-secondary)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '10px' }}></div>
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⏳</div>
           Generating Night Duty Allowance (NDA) Journal...
         </div>
       ) : journalData ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px' }}>
+          {/* ====================================================
+             PAGE 1 OF 2 (FRONT SIDE)
+             ==================================================== */}
           <div className="nda-page-sheet nda-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
@@ -1311,7 +1416,7 @@ export default function NdaDocument({
               <span>⇄ Swipe horizontally to view full table</span>
             </div>
 
-            {/* Official NDA 9-Column Table */}
+            {/* Official NDA 9-Column Table (Page 1) */}
             <div className="nda-table-wrapper document-table-scroll">
               <table className="nda-document-table" style={{
                 width: '100%',
@@ -1346,20 +1451,20 @@ export default function NdaDocument({
                   </tr>
                 </thead>
                 <tbody>
-                  {(journalData.rows || []).map((row, idx) => {
+                  {page1Padded.map((row, p1Idx) => {
                     const isDitto = row.date_str === '"' || row.is_same_date_as_prev;
                     const displayDate = isDitto ? '"' : (row.date_str || '');
                     const displayHours = (row.night_hours !== null && row.night_hours !== undefined && row.night_hours !== '') ? row.night_hours : '';
-                    const clean = (val) => (!val || val === '---' || val === '--') ? '' : val;
+                    const clean = (val: any) => (!val || val === '---' || val === '--') ? '' : val;
 
                     return (
-                      <tr key={idx} style={{ height: '24px' }}>
+                      <tr key={`p1_${p1Idx}`} style={{ height: '24px' }}>
                         {/* 0. DATE */}
                         <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle', fontWeight: isDitto ? 'normal' : 'bold' }}>
                           <input
                             type="text"
                             value={displayDate}
-                            onChange={(e) => handleCellChange(idx, 'date_str', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'date_str', e.target.value)}
                             style={{ ...cellInputStyle, fontWeight: isDitto ? 'normal' : 'bold' }}
                           />
                         </td>
@@ -1369,7 +1474,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.train_no)}
-                            onChange={(e) => handleCellChange(idx, 'train_no', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'train_no', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1379,7 +1484,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.sched_dep)}
-                            onChange={(e) => handleCellChange(idx, 'sched_dep', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'sched_dep', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1389,7 +1494,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.sched_arr)}
-                            onChange={(e) => handleCellChange(idx, 'sched_arr', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'sched_arr', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1399,7 +1504,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.act_dep)}
-                            onChange={(e) => handleCellChange(idx, 'act_dep', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'act_dep', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1409,7 +1514,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.act_arr)}
-                            onChange={(e) => handleCellChange(idx, 'act_arr', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'act_arr', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1419,7 +1524,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.from_station)}
-                            onChange={(e) => handleCellChange(idx, 'from_station', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'from_station', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1429,7 +1534,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={clean(row.to_station)}
-                            onChange={(e) => handleCellChange(idx, 'to_station', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'to_station', e.target.value)}
                             style={cellInputStyle}
                           />
                         </td>
@@ -1439,7 +1544,7 @@ export default function NdaDocument({
                           <input
                             type="text"
                             value={displayHours}
-                            onChange={(e) => handleCellChange(idx, 'night_hours', e.target.value)}
+                            onChange={(e) => handleCellChange(p1Idx, 'night_hours', e.target.value)}
                             style={{ ...cellInputStyle, fontWeight: displayHours ? 'bold' : 'normal' }}
                           />
                         </td>
@@ -1448,10 +1553,235 @@ export default function NdaDocument({
                   })}
                 </tbody>
 
-                {/* Total Row */}
+                {/* Sub-Total Row for Page 1 */}
                 <tfoot>
                   <tr style={{ background: '#ffffff', fontWeight: 'bold', borderTop: '1.5px solid #000', height: '26px' }}>
-                    <td colSpan="8" style={{ border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>
+                    <td colSpan={8} style={{ border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>
+                      SUB-TOTAL C/F TO PAGE 02:
+                    </td>
+                    <td style={{ border: '1px solid #000', fontSize: '11.5px', fontWeight: 'bold', textAlign: 'center' }}>
+                      {page1Subtotal > 0 ? page1Subtotal : ''}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Page 1 of 2 Footer Tag */}
+            <div style={{ textAlign: 'center', fontSize: '9px', color: '#555', marginTop: '10px', letterSpacing: '0.5px' }}>
+              — PAGE 01 OF 02 (FRONT SIDE) —
+            </div>
+          </div>
+
+
+          {/* ====================================================
+             PAGE 2 OF 2 (BACK SIDE) - ALWAYS RENDERED
+             ==================================================== */}
+          <div className="nda-page-sheet nda-document-paper printable-document-sheet" style={{
+            background: '#ffffff',
+            color: '#000000',
+            width: '100%',
+            maxWidth: '215.9mm',
+            padding: '12px 14px 14px 14px',
+            borderRadius: '4px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.6)',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '10px',
+            lineHeight: 1.25,
+            boxSizing: 'border-box',
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {/* Header Title Section (Page 2 Continuation) */}
+            <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+              <h1 style={{
+                margin: '0',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase',
+                color: '#000',
+                fontFamily: 'Arial, sans-serif'
+              }}>
+                NDA PARTICULARS FOR THE MONTH OF {journalData.month_name} - {journalData.year} (CONTINUATION &amp; SUMMARY)
+              </h1>
+            </div>
+
+            {/* Compact Metadata Sub-header on Page 2 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontWeight: 'bold',
+              fontSize: '11px',
+              color: '#000',
+              fontFamily: 'Arial, sans-serif',
+              borderBottom: '1.5px solid #000',
+              paddingBottom: '4px',
+              marginBottom: '10px',
+              flexWrap: 'wrap',
+              gap: '6px'
+            }}>
+              <div>NAME: <span style={{ textTransform: 'uppercase' }}>{editableMeta.name || journalData.employee?.name}</span></div>
+              <div>DESIG: <span>{editableMeta.designation || journalData.employee?.designation}</span></div>
+              <div>BILL UNIT: <span>{editableMeta.bill_unit || journalData.employee?.bill_unit || '0905218'}</span></div>
+              <div>PF NO: <span>{editableMeta.pf_no || journalData.employee?.pf_no}</span></div>
+            </div>
+
+            {/* Official NDA 9-Column Table (Page 2) */}
+            <div className="nda-table-wrapper document-table-scroll">
+              <table className="nda-document-table" style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                border: '1.5px solid #000',
+                textAlign: 'center',
+                fontSize: '11px',
+                fontFamily: 'Arial, sans-serif',
+                color: '#000',
+                background: '#ffffff'
+              }}>
+                <thead>
+                  <tr style={{ background: '#ffffff', borderBottom: '1px solid #000', fontWeight: 'bold', height: '24px' }}>
+                    <th rowSpan={2} style={{ border: '1px solid #000', padding: '3px 2px', width: '8%', verticalAlign: 'middle', fontWeight: 'bold' }}>DATE</th>
+                    <th rowSpan={2} style={{ border: '1px solid #000', padding: '3px 2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>TRAIN NO</th>
+                    <th colSpan={2} style={{ border: '1px solid #000', padding: '3px 2px', width: '18%', verticalAlign: 'middle', fontWeight: 'bold' }}>SCHEDULE</th>
+                    <th colSpan={2} style={{ border: '1px solid #000', padding: '3px 2px', width: '18%', verticalAlign: 'middle', fontWeight: 'bold' }}>ACTUAL</th>
+                    <th colSpan={2} style={{ border: '1px solid #000', padding: '3px 2px', width: '18%', verticalAlign: 'middle', fontWeight: 'bold' }}>STATIONS</th>
+                    <th rowSpan={2} style={{ border: '1px solid #000', padding: '2px 4px', width: '29%', verticalAlign: 'middle', fontWeight: 'bold', lineHeight: '1.25' }}>
+                      TOTAL HOURS<br />
+                      WORKED BETWEEN<br />
+                      22:00 &amp; 06:00 HRS
+                    </th>
+                  </tr>
+                  <tr style={{ background: '#ffffff', borderBottom: '1.5px solid #000', fontWeight: 'bold', height: '20px' }}>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>DEP.</th>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>ARR.</th>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>DEP.</th>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>ARR.</th>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>FROM</th>
+                    <th style={{ border: '1px solid #000', padding: '2px', width: '9%', verticalAlign: 'middle', fontWeight: 'bold' }}>TO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* B/F from Page 01 Row */}
+                  <tr style={{ height: '22px', background: 'rgba(0,0,0,0.02)', fontWeight: 'bold' }}>
+                    <td colSpan={8} style={{ border: '1px solid #000', textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                      B/F FROM PAGE 01
+                    </td>
+                    <td style={{ border: '1px solid #000', fontSize: '11px', fontWeight: 'bold', textAlign: 'center' }}>
+                      {page1Subtotal > 0 ? page1Subtotal : ''}
+                    </td>
+                  </tr>
+
+                  {/* Page 2 Continuation Rows & Ruled Blank Lines */}
+                  {page2Padded.map((row, p2Idx) => {
+                    const globalIdx = p1Limit + p2Idx;
+                    const isDitto = row.date_str === '"' || row.is_same_date_as_prev;
+                    const displayDate = isDitto ? '"' : (row.date_str || '');
+                    const displayHours = (row.night_hours !== null && row.night_hours !== undefined && row.night_hours !== '') ? row.night_hours : '';
+                    const clean = (val: any) => (!val || val === '---' || val === '--') ? '' : val;
+
+                    return (
+                      <tr key={`p2_${p2Idx}`} style={{ height: '24px' }}>
+                        {/* 0. DATE */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle', fontWeight: isDitto ? 'normal' : 'bold' }}>
+                          <input
+                            type="text"
+                            value={displayDate}
+                            onChange={(e) => handleCellChange(globalIdx, 'date_str', e.target.value)}
+                            style={{ ...cellInputStyle, fontWeight: isDitto ? 'normal' : 'bold' }}
+                          />
+                        </td>
+
+                        {/* 1. TRAIN NO */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.train_no)}
+                            onChange={(e) => handleCellChange(globalIdx, 'train_no', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 2. SCHEDULE DEP */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.sched_dep)}
+                            onChange={(e) => handleCellChange(globalIdx, 'sched_dep', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 3. SCHEDULE ARR */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.sched_arr)}
+                            onChange={(e) => handleCellChange(globalIdx, 'sched_arr', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 4. ACTUAL DEP */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.act_dep)}
+                            onChange={(e) => handleCellChange(globalIdx, 'act_dep', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 5. ACTUAL ARR */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.act_arr)}
+                            onChange={(e) => handleCellChange(globalIdx, 'act_arr', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 6. FROM */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.from_station)}
+                            onChange={(e) => handleCellChange(globalIdx, 'from_station', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 7. TO */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={clean(row.to_station)}
+                            onChange={(e) => handleCellChange(globalIdx, 'to_station', e.target.value)}
+                            style={cellInputStyle}
+                          />
+                        </td>
+
+                        {/* 8. TOTAL HOURS WORKED BETWEEN 22:00 & 06:00 HRS */}
+                        <td className="nda-cell" style={{ border: '1px solid #000', padding: 0, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <input
+                            type="text"
+                            value={displayHours}
+                            onChange={(e) => handleCellChange(globalIdx, 'night_hours', e.target.value)}
+                            style={{ ...cellInputStyle, fontWeight: displayHours ? 'bold' : 'normal' }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+
+                {/* Final Total Row on Page 2 */}
+                <tfoot>
+                  <tr style={{ background: '#ffffff', fontWeight: 'bold', borderTop: '1.5px solid #000', height: '26px' }}>
+                    <td colSpan={8} style={{ border: '1px solid #000', textAlign: 'center', fontWeight: 'bold', fontSize: '11px', letterSpacing: '0.5px' }}>
                       TOTAL NO OF HOURS:
                     </td>
                     <td style={{ border: '1px solid #000', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
@@ -1462,6 +1792,19 @@ export default function NdaDocument({
               </table>
             </div>
 
+            {/* Official Indian Railways Certification Box */}
+            <div style={{
+              marginTop: '10px',
+              border: '1px solid #000',
+              padding: '6px 10px',
+              fontSize: '9.5px',
+              lineHeight: 1.35,
+              color: '#000',
+              fontFamily: 'Arial, sans-serif'
+            }}>
+              <strong>CERTIFICATE:</strong> Certified that the railway servant(s) whose names are mentioned above was/were actually deployed during night hours as claimed above and no night allowance has previously been drawn for the same period.
+            </div>
+
             {/* Bottom Signatures */}
             <div style={{
               display: 'flex',
@@ -1469,7 +1812,7 @@ export default function NdaDocument({
               alignItems: 'flex-end',
               fontSize: '11px',
               fontWeight: 'bold',
-              paddingTop: '32px',
+              paddingTop: '28px',
               paddingBottom: '8px',
               color: '#000',
               fontFamily: 'Arial, sans-serif'
@@ -1503,6 +1846,11 @@ export default function NdaDocument({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Page 2 of 2 Footer Tag */}
+            <div style={{ textAlign: 'center', fontSize: '9px', color: '#555', marginTop: '10px', letterSpacing: '0.5px' }}>
+              — PAGE 02 OF 02 (BACK SIDE) —
             </div>
 
           </div>

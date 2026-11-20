@@ -3798,7 +3798,7 @@ app.post('/api/staff/reorder', requireAdmin, async (req, res) => {
 // ============================================================================
 app.put('/api/staff/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, designation, category_id, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no } = req.body;
+  const { name, designation, category_id, row_position, active, pf_no, bill_unit, pay_amount, doa, hq_station, rest_day, hrms_id, seniority_no, cug_number, contact_number, email } = req.body;
   try {
     const currentStaff = await get('SELECT * FROM staff WHERE id = ?', [id]);
     if (!currentStaff) {
@@ -6825,12 +6825,8 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                 });
               }
 
-              // Batch execute multi-statement SQL writes for all remaining days in a single network round trip
-              const batchStatements = [];
-              const batchParams = [];
-
               for (const { remLink, remDateStr } of remDates) {
-                batchStatements.push(
+                await run(
                   `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                    VALUES (?, ?, ?, NULL, 'AVAILABLE_FOR_BOOKING', ?, ?, ?, ?)
                    ON CONFLICT(staff_id, date) DO UPDATE SET
@@ -6839,38 +6835,38 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                      substitute_staff_id = excluded.substitute_staff_id,
                      substitute_name = excluded.substitute_name,
                      reason = excluded.reason,
-                     target_category_id = excluded.target_category_id`
-                );
-                batchParams.push(
-                  staff_id,
-                  remDateStr,
-                  remLink,
-                  replacement_staff_id || null,
-                  finalSubstituteName || null,
-                  `Available for Booking Duty at HQ (Came out of ${action} on Link #${firstOriginalLink})`,
-                  staff.category_id
+                     target_category_id = excluded.target_category_id`,
+                  [
+                    staff_id,
+                    remDateStr,
+                    remLink,
+                    replacement_staff_id || null,
+                    finalSubstituteName || null,
+                    `Available for Booking Duty at HQ (Came out of ${action} on Link #${firstOriginalLink})`,
+                    staff.category_id
+                  ]
                 );
 
-                batchStatements.push(
+                await run(
                   `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                    VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                    ON CONFLICT(staff_id, date) DO UPDATE SET
                      code = 'P',
                      remarks = excluded.remarks,
                      updated_by = excluded.updated_by,
-                     updated_at = CURRENT_TIMESTAMP`
-                );
-                batchParams.push(
-                  staff_id,
-                  remDateStr,
-                  `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
+                     updated_at = CURRENT_TIMESTAMP`,
+                  [
+                    staff_id,
+                    remDateStr,
+                    `Present at HQ (Available for booking - Came out of ${action} on Link #${firstOriginalLink})`
+                  ]
                 );
 
                 if (cachedSubStaff && cachedSubCat) {
                   const remCatParams = getCategoryParamsForDate(cachedSubCat, remDateStr);
                   const subOrigLink = await resolveSubOriginalLink(cachedSubStaff, remDateStr, remCatParams);
                   const subReason = `Substitute for ${staff.name} on return Link #${remLink}`;
-                  batchStatements.push(
+                  await run(
                     `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
                      VALUES (?, ?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
                      ON CONFLICT(staff_id, date) DO UPDATE SET
@@ -6879,32 +6875,32 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                        substitute_staff_id = excluded.substitute_staff_id,
                        substitute_name = excluded.substitute_name,
                        reason = excluded.reason,
-                       target_category_id = excluded.target_category_id`
-                  );
-                  batchParams.push(
-                    cachedSubStaff.id,
-                    remDateStr,
-                    subOrigLink,
-                    remLink,
-                    staff.id,
-                    staff.name,
-                    subReason,
-                    staff.category_id
+                       target_category_id = excluded.target_category_id`,
+                    [
+                      cachedSubStaff.id,
+                      remDateStr,
+                      subOrigLink,
+                      remLink,
+                      staff.id,
+                      staff.name,
+                      subReason,
+                      staff.category_id
+                    ]
                   );
 
-                  batchStatements.push(
+                  await run(
                     `INSERT INTO muster_records (staff_id, date, code, remarks, updated_by, updated_at)
                      VALUES (?, ?, 'P', ?, 'Admin', CURRENT_TIMESTAMP)
                      ON CONFLICT(staff_id, date) DO UPDATE SET
                        code = 'P',
                        remarks = excluded.remarks,
                        updated_by = excluded.updated_by,
-                       updated_at = CURRENT_TIMESTAMP`
-                  );
-                  batchParams.push(
-                    cachedSubStaff.id,
-                    remDateStr,
-                    `Working as substitute for ${staff.name} on Link #${remLink}`
+                       updated_at = CURRENT_TIMESTAMP`,
+                    [
+                      cachedSubStaff.id,
+                      remDateStr,
+                      `Working as substitute for ${staff.name} on Link #${remLink}`
+                    ]
                   );
 
                   if (cachedSubStaff.category_id === 4) {
@@ -6917,10 +6913,6 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
                     }
                   }
                 }
-              }
-
-              if (batchStatements.length > 0) {
-                await run(batchStatements.join(';\n'), batchParams);
               }
             }
           }
@@ -14073,7 +14065,6 @@ app.get('/api/reports/availability-sheet', async (req, res) => {
           categoryCode: cat.code,
           target_category_id: override?.target_category_id || cat.id,
           rest_day: staff.rest_day,
-          pf_no: staff.pf_no,
           is_vacant: vacant,
           is_available: isAvailable,
           dot_status: dotStatus,

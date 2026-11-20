@@ -1021,11 +1021,18 @@ export default function TaDocument({
     }
   };
 
-  // Page 1: Exact 45 data rows matching the Excel sheet
+  // 2-Page Layout Configuration (ALWAYS 2 PAGES: Page 1 Front, Page 2 Back)
+  const [pageSplitMode, setPageSplitMode] = useState<'STANDARD' | 'BALANCED'>('STANDARD');
   const PAGE1_ROW_LIMIT = 45;
+  const PAGE2_TOTAL_ROWS = 45;
   const allRows = journalData?.rows || [];
-  const page1Rows = allRows.slice(0, PAGE1_ROW_LIMIT);
-  const page2Rows = allRows.slice(PAGE1_ROW_LIMIT);
+  
+  const p1Limit = (pageSplitMode === 'BALANCED' && allRows.length > 0)
+    ? Math.max(1, Math.ceil(allRows.length / 2))
+    : PAGE1_ROW_LIMIT;
+
+  const page1Rows = allRows.slice(0, p1Limit);
+  const page2Rows = allRows.slice(p1Limit);
 
   // Pad Page 1 up to 45 rows so every employee's sheet has full ruling
   const page1Padded = [...page1Rows];
@@ -1047,8 +1054,7 @@ export default function TaDocument({
     });
   }
 
-  // Page 2: 45 ruled rows matching Excel sheet
-  const PAGE2_TOTAL_ROWS = 45;
+  // Page 2: 45 ruled rows matching Excel sheet (ALWAYS present)
   const page2Padded = [...page2Rows];
   while (page2Padded.length < PAGE2_TOTAL_ROWS) {
     page2Padded.push({
@@ -1450,6 +1456,37 @@ export default function TaDocument({
               Period: <strong>{startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</strong> | Total TA Claim: <strong>{grandTotalDays || page1Total || 0} DAYS</strong>
             </div>
           )}
+
+          {/* 2-Page Always Guarantee & Split Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', flexWrap: 'wrap', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>📄 Print Layout:</span>
+              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
+                ✓ Always 2 Pages (Page 1 Front / Page 2 Back)
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Row Split:</span>
+              <button
+                type="button"
+                onClick={() => setPageSplitMode('STANDARD')}
+                className={`btn btn-xs ${pageSplitMode === 'STANDARD' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.72rem', padding: '3px 8px', fontWeight: pageSplitMode === 'STANDARD' ? 'bold' : 'normal' }}
+                title="Fill Page 1 with up to 45 rows, Page 2 with continuation & back certification"
+              >
+                Standard (45 Front / Rest Back)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPageSplitMode('BALANCED')}
+                className={`btn btn-xs ${pageSplitMode === 'BALANCED' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.72rem', padding: '3px 8px', fontWeight: pageSplitMode === 'BALANCED' ? 'bold' : 'normal' }}
+                title="Split rows evenly across Page 1 and Page 2"
+              >
+                Balanced 50/50 ({page1Rows.length} on P1 / {page2Rows.length} on P2)
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* TA Acceptance Notice Banner */}
@@ -1559,8 +1596,7 @@ export default function TaDocument({
             overflow: visible !important;
           }
           .ta-page-sheet:last-child,
-          .ta-page-sheet:last-of-type,
-          .ta-page-sheet.single-sheet {
+          .ta-page-sheet:last-of-type {
             page-break-after: auto !important;
             break-after: auto !important;
           }
@@ -1595,7 +1631,7 @@ export default function TaDocument({
           {/* ====================================================
              PAGE 1 OF 2 (EXACT REPLICA OF EXCEL SHEET 1)
              ==================================================== */}
-          <div className={`ta-page-sheet ta-document-paper printable-document-sheet ${page2Rows.length === 0 ? 'single-sheet' : ''}`} style={{
+          <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
             width: '100%',
@@ -1988,13 +2024,17 @@ export default function TaDocument({
               </div>
             </div>
 
+            {/* Page 1 of 2 Footer Tag */}
+            <div style={{ textAlign: 'center', fontSize: '9px', color: '#555', marginTop: '8px', letterSpacing: '0.5px' }}>
+              — PAGE 01 OF 02 (FRONT SIDE) —
+            </div>
+
           </div>
 
 
           {/* ====================================================
-             PAGE 2 OF 2 (EXACT REPLICA OF EXCEL SHEET 2)
+             PAGE 2 OF 2 (EXACT REPLICA OF EXCEL SHEET 2) - ALWAYS RENDERED
              ==================================================== */}
-          {page2Rows.length > 0 && (
           <div className="ta-page-sheet ta-document-paper printable-document-sheet" style={{
             background: '#ffffff',
             color: '#000000',
@@ -2070,7 +2110,9 @@ export default function TaDocument({
                     <td colSpan="8" style={{ border: '1px solid #000', textAlign: 'center', fontSize: '9.5px' }}>
                       B/F FROM PAGE 01
                     </td>
-                    <td style={{ border: '1px solid #000' }}></td>
+                    <td style={{ border: '1px solid #000', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>
+                      {page1Total > 0 ? page1Total : ''}
+                    </td>
                     <td style={{ border: '1px solid #000' }}></td>
                     
                     {/* Vertical Object of Journey text spanning Page 2 */}
@@ -2115,7 +2157,8 @@ export default function TaDocument({
 
                   {/* Page 2 Continuation Rows & Ruled Blank Lines */}
                   {page2Padded.map((row, p2Idx) => {
-                    const isTotalRow = (p2Idx === 11); // Row 80 in Excel is summary row
+                    const totalRowIdx = Math.max(11, page2Rows.length);
+                    const isTotalRow = (p2Idx === totalRowIdx);
 
                     if (isTotalRow) {
                       return (
@@ -2328,8 +2371,12 @@ export default function TaDocument({
               </div>
             </div>
 
+            {/* Page 2 of 2 Footer Tag */}
+            <div style={{ textAlign: 'center', fontSize: '9px', color: '#555', marginTop: '8px', letterSpacing: '0.5px' }}>
+              — PAGE 02 OF 02 (BACK SIDE) —
+            </div>
+
           </div>
-          )}
 
         </div>
       ) : (
