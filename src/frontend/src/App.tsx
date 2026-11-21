@@ -8309,7 +8309,7 @@ export default function App() {
                     )}
 
                     {/* Daily Train Slots Table */}
-                    <div className="table-responsive" style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-glass)', marginBottom: '24px' }}>
+                    <div style={{ background: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-glass)', marginBottom: '24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8323,27 +8323,28 @@ export default function App() {
                           Official Daily Roster (Pages 172 & 173)
                         </span>
                       </div>
-                      <table className="roster-table" style={{ width: '100%' }}>
-                        <thead>
-                          <tr>
-                            <th style={{ width: '50px', textAlign: 'center' }}>S.No</th>
-                            <th style={{ width: '280px' }}>Name of Employee</th>
-                            <th style={{ width: '100px', textAlign: 'center' }}>Link No</th>
-                            <th style={{ width: '140px', textAlign: 'center' }}>
-                              Train No (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
-                            </th>
-                            <th style={{ width: '140px', textAlign: 'center' }}>
-                              Coach (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
-                            </th>
-                            <th style={{ width: '160px', textAlign: 'center' }}>
-                              Train No (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
-                            </th>
-                            <th style={{ textAlign: 'center' }}>
-                              Coach (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
-                            </th>
-                            {isAdmin && <th style={{ width: '90px', textAlign: 'center' }}>Action</th>}
-                          </tr>
-                        </thead>
+                      <div style={{ width: '100%', overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-glass, rgba(255, 255, 255, 0.12))', background: '#12161f' }}>
+                        <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.88rem' }}>
+                          <thead>
+                            <tr style={{ background: '#181d28' }}>
+                              <th style={{ width: '55px', minWidth: '55px', textAlign: 'center', padding: '10px 6px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>S.No</th>
+                              <th style={{ minWidth: '330px', textAlign: 'left', padding: '10px 14px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Name of Employee</th>
+                              <th style={{ width: '90px', minWidth: '85px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Link No</th>
+                              <th style={{ width: '145px', minWidth: '140px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+                                Train No (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                              </th>
+                              <th style={{ width: '125px', minWidth: '120px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+                                Coach (1st day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                              </th>
+                              <th style={{ width: '150px', minWidth: '145px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+                                Train No (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                              </th>
+                              <th style={{ width: '125px', minWidth: '120px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+                                Coach (last day) {isAdmin && <span title="Editable: Click any cell to customize" style={{ fontSize: '0.8rem', cursor: 'pointer' }}>✏️</span>}
+                              </th>
+                              {isAdmin && <th style={{ width: '135px', minWidth: '130px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Action</th>}
+                            </tr>
+                          </thead>
                         <tbody>
                           {(() => {
                             const filteredActiveSlotRows = !dailyStaffSearch.trim()
@@ -8442,8 +8443,10 @@ export default function App() {
                                               verticalAlign: 'middle',
                                               color: 'var(--color-text-secondary)',
                                               fontWeight: 700,
-                                              borderRight: '1px solid var(--border-glass)',
-                                              borderBottom: !hasExtraRow ? '2px solid var(--border-glass)' : '1px solid var(--border-glass)'
+                                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                                              borderBottom: !hasExtraRow ? '2px solid var(--border-glass)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                              background: 'rgba(255, 255, 255, 0.02)',
+                                              padding: '8px 4px'
                                             }}
                                           >
                                             {groupIndex + 1}
@@ -8451,7 +8454,7 @@ export default function App() {
                                         )}
 
                                         {/* Name of Employee */}
-                                        <td style={{ padding: '8px 14px', verticalAlign: 'middle' }}>
+                                        <td style={{ padding: '8px 12px', verticalAlign: 'middle', border: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'left' }}>
                                           <div style={{
                                             display: 'flex',
                                             alignItems: 'center',
@@ -8837,7 +8840,7 @@ export default function App() {
                                         </td>
 
                                         {/* Link No */}
-                                        <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                           <span style={{ 
                                             fontWeight: 700, 
                                             borderRadius: '6px', 
@@ -8877,7 +8880,8 @@ export default function App() {
                                             fontWeight: 800,
                                             fontSize: '1.05rem',
                                             color: 'var(--primary)',
-                                            cursor: isAdmin ? 'pointer' : 'default'
+                                            cursor: isAdmin ? 'pointer' : 'default',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
                                           }}
                                         >
                                           <span>{d.firstTrain || group.firstTrain}</span>
@@ -8908,7 +8912,8 @@ export default function App() {
                                             padding: '8px 6px', 
                                             textAlign: 'center',
                                             verticalAlign: 'middle',
-                                            cursor: isAdmin ? 'pointer' : 'default'
+                                            cursor: isAdmin ? 'pointer' : 'default',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
                                           }}
                                         >
                                           <span>{d.firstCoaches}</span>
@@ -8940,7 +8945,8 @@ export default function App() {
                                             textAlign: 'center',
                                             verticalAlign: 'middle',
                                             fontWeight: 'bold',
-                                            cursor: isAdmin ? 'pointer' : 'default'
+                                            cursor: isAdmin ? 'pointer' : 'default',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
                                           }}
                                         >
                                           <span>{d.lastTrain}</span>
@@ -8971,7 +8977,8 @@ export default function App() {
                                             padding: '8px 6px', 
                                             textAlign: 'center',
                                             verticalAlign: 'middle',
-                                            cursor: isAdmin ? 'pointer' : 'default'
+                                            cursor: isAdmin ? 'pointer' : 'default',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
                                           }}
                                         >
                                           <span>{d.lastCoaches}</span>
@@ -8980,7 +8987,7 @@ export default function App() {
 
                                         {/* Actions (if admin) */}
                                         {isAdmin && (
-                                          <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '8px 6px' }}>
+                                          <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '8px 6px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                             {isSlotVacant ? (
                                               <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                                                 <button
@@ -9145,13 +9152,17 @@ export default function App() {
                                       key={`${group.slotId || groupIndex}-extra-drop`}
                                       className="no-print"
                                       style={{
-                                        borderBottom: '2px solid var(--border-glass)',
                                         backgroundColor: isSlotHighlighted ? 'rgba(16, 185, 129, 0.08)' : 'transparent'
                                       }}
                                     >
                                       <td
                                         colSpan={isAdmin ? 8 : 7}
-                                        style={{ padding: '6px 12px' }}
+                                        style={{
+                                          padding: '6px 12px',
+                                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                                          borderBottom: '2px solid var(--border-glass, rgba(255, 255, 255, 0.16))',
+                                          background: 'rgba(255, 255, 255, 0.015)'
+                                        }}
                                       >
                                          <div
                                            onDragOver={(e) => {
@@ -9254,7 +9265,7 @@ export default function App() {
                           })()}
                         {activeSlotRows.length === 0 && (
                           <tr>
-                            <td colSpan={isAdmin ? "8" : "7"} style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+                            <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '16px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                               No active worked duties found for this date.
                             </td>
                           </tr>
@@ -9262,6 +9273,7 @@ export default function App() {
                       </tbody>
                       </table>
                     </div>
+                  </div>
 
                     {/* Non-Daily Links Roster Section (Links #53, #54, #55 from 01/10/2026) */}
                     {(() => {
@@ -9309,61 +9321,62 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="table-responsive" style={{ background: 'rgba(0, 0, 0, 0.12)', borderRadius: '10px', padding: '12px', border: '1px solid var(--border-glass)' }}>
-                            <table className="roster-table" style={{ width: '100%' }}>
-                              <thead>
-                                <tr>
-                                  <th style={{ width: '50px', textAlign: 'center' }}>S.No</th>
-                                  <th style={{ width: '280px' }}>Name of Employee</th>
-                                  <th style={{ width: '100px', textAlign: 'center' }}>Link No</th>
-                                  <th style={{ width: '140px', textAlign: 'center' }}>Train No (1st day)</th>
-                                  <th style={{ width: '140px', textAlign: 'center' }}>Coach (1st day)</th>
-                                  <th style={{ width: '160px', textAlign: 'center' }}>Train No (last day)</th>
-                                  <th style={{ textAlign: 'center' }}>Coach (last day)</th>
-                                  {isAdmin && <th style={{ width: '90px', textAlign: 'center' }}>Action</th>}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {filteredNonDailySlotRows.map((group, groupIndex) => {
-                                  return (
-                                     <tr 
-                                       key={group.slotId || groupIndex} 
-                                       onDragOver={(e) => {
-                                         e.preventDefault();
-                                         e.dataTransfer.dropEffect = 'move';
-                                         if (!e.currentTarget.classList.contains('drag-slot-over')) {
-                                           e.currentTarget.classList.add('drag-slot-over');
-                                         }
-                                       }}
-                                       onDragLeave={(e) => {
-                                         if (e.currentTarget.contains(e.relatedTarget)) return;
-                                         e.currentTarget.classList.remove('drag-slot-over');
-                                       }}
-                                       onDrop={(e) => {
-                                         e.preventDefault();
-                                         e.stopPropagation();
-                                         e.currentTarget.classList.remove('drag-slot-over');
-                                         clearAllDragHighlights();
-                                         let dragData = null;
-                                         try {
-                                           const raw = e.dataTransfer.getData('text/plain');
-                                           if (raw) dragData = JSON.parse(raw);
-                                         } catch (err) {}
-                                         if (!dragData && draggedStaff) dragData = draggedStaff;
-                                         if (!dragData) return;
-                                         handleDragDropOnTrain(dragData, group);
-                                       }}
-                                       style={{ 
-                                         borderBottom: '2px solid var(--border-glass)',
-                                         backgroundColor: 'transparent',
-                                         outline: 'none',
-                                         transition: 'background-color 0.15s ease'
-                                       }}
-                                     >
-                                      <td style={{ textAlign: 'center', verticalAlign: 'middle', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                                        {groupIndex + 1}
-                                      </td>
-                                      <td style={{ padding: '0px' }}>
+                          <div style={{ background: 'rgba(0, 0, 0, 0.12)', borderRadius: '10px', padding: '12px', border: '1px solid var(--border-glass)' }}>
+                            <div style={{ width: '100%', overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-glass, rgba(255, 255, 255, 0.12))', background: '#12161f' }}>
+                              <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.88rem' }}>
+                                <thead>
+                                  <tr style={{ background: '#181d28' }}>
+                                    <th style={{ width: '55px', minWidth: '55px', textAlign: 'center', padding: '10px 6px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>S.No</th>
+                                    <th style={{ minWidth: '330px', textAlign: 'left', padding: '10px 14px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Name of Employee</th>
+                                    <th style={{ width: '90px', minWidth: '85px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Link No</th>
+                                    <th style={{ width: '145px', minWidth: '140px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Train No (1st day)</th>
+                                    <th style={{ width: '125px', minWidth: '120px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Coach (1st day)</th>
+                                    <th style={{ width: '150px', minWidth: '145px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Train No (last day)</th>
+                                    <th style={{ width: '125px', minWidth: '120px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Coach (last day)</th>
+                                    {isAdmin && <th style={{ width: '135px', minWidth: '130px', textAlign: 'center', padding: '10px 8px', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--color-text-primary)', fontWeight: 700 }}>Action</th>}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredNonDailySlotRows.map((group, groupIndex) => {
+                                    return (
+                                       <tr 
+                                         key={group.slotId || groupIndex} 
+                                         onDragOver={(e) => {
+                                           e.preventDefault();
+                                           e.dataTransfer.dropEffect = 'move';
+                                           if (!e.currentTarget.classList.contains('drag-slot-over')) {
+                                             e.currentTarget.classList.add('drag-slot-over');
+                                           }
+                                         }}
+                                         onDragLeave={(e) => {
+                                           if (e.currentTarget.contains(e.relatedTarget)) return;
+                                           e.currentTarget.classList.remove('drag-slot-over');
+                                         }}
+                                         onDrop={(e) => {
+                                           e.preventDefault();
+                                           e.stopPropagation();
+                                           e.currentTarget.classList.remove('drag-slot-over');
+                                           clearAllDragHighlights();
+                                           let dragData = null;
+                                           try {
+                                             const raw = e.dataTransfer.getData('text/plain');
+                                             if (raw) dragData = JSON.parse(raw);
+                                           } catch (err) {}
+                                           if (!dragData && draggedStaff) dragData = draggedStaff;
+                                           if (!dragData) return;
+                                           handleDragDropOnTrain(dragData, group);
+                                         }}
+                                         style={{ 
+                                           borderBottom: '2px solid var(--border-glass)',
+                                           backgroundColor: 'transparent',
+                                           outline: 'none',
+                                           transition: 'background-color 0.15s ease'
+                                         }}
+                                       >
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle', color: 'var(--color-text-secondary)', fontWeight: 700, padding: '10px 6px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                          {groupIndex + 1}
+                                        </td>
+                                        <td style={{ padding: '0px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                         {group.duties.map((d, dIdx) => {
                                           const isSick = d.status === 'SICK' || d.isSick;
                                           const isLeave = d.status === 'LEAVE' || d.isLeave;
@@ -9822,7 +9835,7 @@ export default function App() {
                                           </div>
                                         )}
                                       </td>
-                                      <td style={{ padding: '0px', textAlign: 'center' }}>
+                                      <td style={{ padding: '0px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                         {group.duties.map((d, dIdx) => {
                                           return (
                                             <div key={`${d.staffId || 'nd'}-${dIdx}`} style={{ 
@@ -9872,13 +9885,14 @@ export default function App() {
                                       fontWeight: 800, 
                                       fontSize: '1.05rem', 
                                       color: group.isRestLink ? '#9ca3af' : 'var(--primary)',
-                                      cursor: isAdmin ? 'pointer' : 'default'
+                                      cursor: isAdmin ? 'pointer' : 'default',
+                                      border: '1px solid rgba(255, 255, 255, 0.08)'
                                     }}
                                   >
                                     <span>{group.firstTrain}</span>
                                     {isAdmin && <span className="train-coach-edit-icon">✏️</span>}
                                   </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                  <td style={{ padding: '0px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                     {group.duties.map((d, dIdx) => (
                                       <div 
                                         key={`${d.staffId || 'nd'}-${dIdx}`} 
@@ -9915,7 +9929,7 @@ export default function App() {
                                       </div>
                                     ))}
                                   </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                  <td style={{ padding: '0px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                     {group.duties.map((d, dIdx) => (
                                       <div 
                                         key={`${d.staffId || 'nd'}-${dIdx}`} 
@@ -9954,7 +9968,7 @@ export default function App() {
                                       </div>
                                     ))}
                                   </td>
-                                  <td style={{ padding: '0px', textAlign: 'center' }}>
+                                  <td style={{ padding: '0px', textAlign: 'center', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                     {group.duties.map((d, dIdx) => (
                                       <div 
                                         key={`${d.staffId || 'nd'}-${dIdx}`} 
@@ -9992,7 +10006,7 @@ export default function App() {
                                     ))}
                                   </td>
                                   {isAdmin && (
-                                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                        <td style={{ textAlign: 'center', verticalAlign: 'middle', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                           {group.duties.map((d, dIdx) => {
                                             const isSlotVacant = d.isVacantUpgrade || d.isVacantShifted || d.isVacantAdvance || d.isVacantAvailableReturn || d.isVacantMarkLater || d.isVacant || (d.name && (d.name.includes('VACANT') || d.name.includes('SHIFTED') || d.name.includes('UPGRADED')));
 
@@ -10181,7 +10195,7 @@ export default function App() {
                                 })}
                                 {filteredNonDailySlotRows.length === 0 && (
                                   <tr>
-                                    <td colSpan={isAdmin ? "8" : "7"} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '16px' }}>
+                                    <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '16px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                                       No non-daily links matching current filter.
                                     </td>
                                   </tr>
@@ -10190,6 +10204,7 @@ export default function App() {
                             </table>
                           </div>
                         </div>
+                      </div>
                       );
                     })()}
 
@@ -17685,128 +17700,6 @@ export default function App() {
           onSave={handleSaveLinkDetailsModal}
         />
       )}
-  
-      {/* Universal Floating Save & Database Sync Dock across ALL screens */}
-      {(() => {
-        let dockTitle = 'Database Auto-Save Active';
-        let buttonLabel = '💾 Save Changes';
-        let onSaveAction = async () => {
-          await notifyAllModulesUpdated('universal_save');
-          showGlobalSaveNotice('✓ All changes and data synced permanently to database.');
-        };
-
-        if (activeTab === 'daily' || activeTab === 'daily-summary') {
-          dockTitle = 'Daily Roster Database Sync';
-          buttonLabel = '💾 Save Daily Roster';
-          onSaveAction = handleSaveDailyRoster;
-        } else if (activeTab === 'roster') {
-          dockTitle = 'Monthly Roster Database Sync';
-          buttonLabel = '💾 Save Monthly Roster';
-          onSaveAction = handleSaveRosterGrid;
-        } else if (activeTab === 'links') {
-          dockTitle = 'Train Links Database Sync';
-          buttonLabel = '💾 Save Links';
-          onSaveAction = handleSaveLinks;
-        } else if (activeTab === 'muster') {
-          dockTitle = 'Muster Roll Database Sync';
-          buttonLabel = '💾 Save Muster';
-          onSaveAction = handleSaveMusterRoll;
-        } else if (activeTab === 'staff') {
-          dockTitle = 'Staff Roster Database Sync';
-          buttonLabel = '💾 Save Staff Order';
-          onSaveAction = handleSaveStaffRoster;
-        } else if (activeTab === 'lr-list') {
-          dockTitle = 'Leave Reserve Database Sync';
-          buttonLabel = '💾 Save LR Sheet';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('lr_manual_save');
-            showGlobalSaveNotice('✓ Leave Reserve (LR) sheet saved and synced to database.');
-          };
-        } else if (activeTab === 'leaves') {
-          dockTitle = 'Leave Management Database Sync';
-          buttonLabel = '💾 Save Leaves';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('leaves_manual_save');
-            showGlobalSaveNotice('✓ Leave and swap requests synced permanently to database.');
-          };
-        } else if (activeTab === 'ta-approvals') {
-          dockTitle = 'TA Approvals Database Sync';
-          buttonLabel = '💾 Sync TA Approvals';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('ta_manual_save');
-            showGlobalSaveNotice('✓ TA approvals synced permanently to database.');
-          };
-        } else if (activeTab === 'documents') {
-          dockTitle = 'Documents Database Sync';
-          buttonLabel = '💾 Save Document Data';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('documents_manual_save');
-            showGlobalSaveNotice('✓ Employee journal documents synced permanently.');
-          };
-        } else if (activeTab === 'seniority') {
-          dockTitle = 'Seniority List Database Sync';
-          buttonLabel = '💾 Sync Seniority';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('seniority_manual_save');
-            showGlobalSaveNotice('✓ Seniority lists synced permanently.');
-          };
-        } else if (activeTab === 'availability') {
-          dockTitle = 'Staff Availability Sync';
-          buttonLabel = '💾 Sync Availability';
-          onSaveAction = async () => {
-            await notifyAllModulesUpdated('avail_manual_save');
-            showGlobalSaveNotice('✓ Staff availability synced permanently.');
-          };
-        }
-
-        return (
-          <div className="no-print" style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 1100,
-            background: 'rgba(18, 24, 38, 0.95)',
-            backdropFilter: 'blur(10px)',
-            border: '1.5px solid var(--border-gold, #d4a15c)',
-            borderRadius: '12px',
-            padding: '10px 16px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.1rem' }}>💾</span>
-              <div>
-                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--primary, #d4a15c)' }}>
-                  {dockTitle}
-                </div>
-                <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
-                  ● All edits saved permanently
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onSaveAction}
-              style={{
-                padding: '6px 14px',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
-              }}
-            >
-              {buttonLabel}
-            </button>
-          </div>
-        );
-      })()}
 
       {/* Duplicate Link Set Modal */}
       {duplicateModal && (
