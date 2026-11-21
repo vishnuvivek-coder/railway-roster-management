@@ -253,7 +253,7 @@ export default function DailySmsModal({
   const alreadySentCount = previews.filter(p => p.alreadySent).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto" style={{ zIndex: 99999 }}>
       <div className="bg-[#121316] border border-[#2a2d35] text-slate-100 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
         
         {/* Top Header */}
