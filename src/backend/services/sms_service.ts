@@ -1,4 +1,5 @@
 import { all, get, run } from '../db';
+const twilio = require('twilio');
 const { fetchMultiSourceTrainTimings } = require('./multi_source_tracker');
 import {
   isAndroidGatewayConfigured,
@@ -7,16 +8,51 @@ import {
   getAndroidGatewayDevices
 } from './android_sms_gateway.service';
 
+/**
+ * Check whether live Twilio credentials are configured in environment variables.
+ */
+export function isTwilioConfigured(): boolean {
+  const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const token = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+  const phone = (process.env.TWILIO_PHONE_NUMBER || '').trim();
+  return Boolean(
+    sid &&
+    token &&
+    phone &&
+    sid.startsWith('AC') &&
+    sid.length >= 20 &&
+    token.length >= 10
+  );
+}
+
+/**
+ * Retrieve current Twilio configuration status for UI display.
+ */
+export function getTwilioConfigStatus() {
+  const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const phone = (process.env.TWILIO_PHONE_NUMBER || '').trim();
+  const configured = isTwilioConfigured();
+
+  return {
+    success: true,
+    configured,
+    connected: configured,
+    mode: configured ? 'LIVE_TWILIO' : 'SIMULATION_MODE',
+    provider: 'Twilio Cloud SMS API',
+    accountSidMasked: sid.length > 8 ? `${sid.substring(0, 4)}...${sid.substring(sid.length - 4)}` : null,
+    twilioPhoneNumber: phone || null,
+    description: configured
+      ? `Twilio Cloud SMS is active and connected. Real SMS alerts will be sent to staff from ${phone}.`
+      : 'Simulation mode active. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to Railway environment variables to send live SMS.'
+  };
+}
+
 export {
   isAndroidGatewayConfigured,
   getAndroidGatewayConfigStatus,
   dispatchAndroidSimSms,
   getAndroidGatewayDevices
 };
-
-// Aliases for seamless backward compatibility
-export const isTwilioConfigured = isAndroidGatewayConfigured;
-export const getTwilioConfigStatus = getAndroidGatewayConfigStatus;
 
 // Standard GNT Division Train Timetables & Schedules (fallback when NTES live status is off-peak)
 const STANDARD_TRAIN_SCHEDULES: Record<string, { name: string; route: string; schedDep: string; from: string; to: string }> = {
@@ -365,7 +401,8 @@ export function buildDutySmsMessage(params: {
 }
 
 /**
- * Dispatches a single SMS via the personal Android phone SIM card.
+ * Dispatches a single SMS notification.
+ * Supports Twilio Cloud SMS and Android SIM Gateway.
  * If credentials are not set, falls back to SIMULATION_MODE with database logging.
  * Persists the record to the `sms_notifications` database table.
  */
@@ -396,34 +433,80 @@ export async function sendSmsNotification(params: {
     messageBody
   } = params;
 
-  const result = await dispatchAndroidSimSms({
-    phoneNumber,
-    messageText: messageBody,
-    staffId,
-    staffName
-  });
+  // 1. Prioritize Twilio Cloud SMS if credentials are set
+  if (isTwilioConfigured()) {
+    try {
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const message = await client.messages.create({
+        body: messageBody,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: phoneNumber
+      });
 
-  if (result.success) {
-    await run(
-      `INSERT INTO sms_notifications 
-       (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.status, result.sid]
-    );
+      await run(
+        `INSERT INTO sms_notifications 
+         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SENT', ?)`,
+        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, message.sid]
+      );
 
-    return { success: true, status: result.status, sid: result.sid };
-  } else {
-    console.error(`[Android SIM Gateway Error] Failed to send SMS to ${phoneNumber}:`, result.error);
+      return { success: true, status: 'SENT', sid: message.sid };
+    } catch (err: any) {
+      console.error(`[Twilio Error] Failed to send SMS to ${phoneNumber}:`, err.message);
 
-    await run(
-      `INSERT INTO sms_notifications 
-       (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, error_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', ?)`,
-      [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.error || 'Failed to dispatch via Android Gateway']
-    );
+      await run(
+        `INSERT INTO sms_notifications 
+         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, error_message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', ?)`,
+        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, err.message]
+      );
 
-    return { success: false, status: 'FAILED', sid: '', error: result.error };
+      return { success: false, status: 'FAILED', sid: '', error: err.message };
+    }
   }
+
+  // 2. Next, check Android SIM Gateway if configured
+  if (isAndroidGatewayConfigured()) {
+    const result = await dispatchAndroidSimSms({
+      phoneNumber,
+      messageText: messageBody,
+      staffId,
+      staffName
+    });
+
+    if (result.success) {
+      await run(
+        `INSERT INTO sms_notifications 
+         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.status, result.sid]
+      );
+
+      return { success: true, status: result.status, sid: result.sid };
+    } else {
+      console.error(`[Android SIM Gateway Error] Failed to send SMS to ${phoneNumber}:`, result.error);
+
+      await run(
+        `INSERT INTO sms_notifications 
+         (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, error_message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', ?)`,
+        [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, result.error || 'Failed to dispatch via Android Gateway']
+      );
+
+      return { success: false, status: 'FAILED', sid: '', error: result.error };
+    }
+  }
+
+  // 3. Fallback to SIMULATION MODE
+  const simulatedSid = `SM_SIMULATED_${Date.now()}_${staffId || '0'}`;
+  await run(
+    `INSERT INTO sms_notifications 
+     (staff_id, staff_name, phone_number, duty_date, train_no, route, dep_time, timing_source, has_changes, change_details, message_body, status, gateway_sid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SIMULATED', ?)`,
+    [staffId, staffName, phoneNumber, dutyDate, trainNo, route, depTime, timingSource, hasChanges ? 1 : 0, changeDetails, messageBody, simulatedSid]
+  );
+
+  return { success: true, status: 'SIMULATED', sid: simulatedSid };
 }
 
 /**

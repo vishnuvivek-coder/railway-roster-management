@@ -267,40 +267,34 @@ export default function DailySmsModal({
                 <h2 className="text-lg font-bold text-slate-100 tracking-wide">
                   Daily Duty SMS Notifications
                 </h2>
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  Android SIM Gateway
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  {gatewayConfig?.provider || 'Twilio Cloud SMS'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Direct SMS from your personal phone SIM card with Live NTES Departure Times & Change Notices
+                Automated duty notification alerts with live NTES departure timings & change notices
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Android SIM Gateway Status Badge */}
+            {/* SMS Gateway Status Badge */}
             <div
               className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 border ${
-                gatewayConfig?.connected
+                gatewayConfig?.configured
                   ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                  : gatewayConfig?.configured
-                  ? 'bg-amber-950/40 text-amber-300 border-amber-500/30'
                   : 'bg-slate-800/60 text-slate-300 border-slate-700'
               }`}
               title={gatewayConfig?.description}
             >
               <span className={`w-2 h-2 rounded-full animate-pulse ${
-                gatewayConfig?.connected
+                gatewayConfig?.configured
                   ? 'bg-emerald-400'
-                  : gatewayConfig?.configured
-                  ? 'bg-amber-400'
                   : 'bg-yellow-400'
               }`} />
               <span>
-                {gatewayConfig?.connected
-                  ? `SIM Online: ${gatewayConfig.activeDevice?.name || 'Phone Connected'}`
-                  : gatewayConfig?.configured
-                  ? 'Phone Disconnected / Offline'
+                {gatewayConfig?.configured
+                  ? (gatewayConfig?.twilioPhoneNumber ? `Twilio Live: ${gatewayConfig.twilioPhoneNumber}` : 'Twilio Connected')
                   : 'Simulation Mode (Logged to DB)'}
               </span>
             </div>
@@ -316,25 +310,21 @@ export default function DailySmsModal({
         </div>
 
         {/* Gateway Info Banner */}
-        {!gatewayConfig?.connected && (
+        {!gatewayConfig?.configured && (
           <div className="px-6 py-2.5 bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 border-b border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-slate-300">
-              <span className="text-base">📱</span>
+              <span className="text-base">⚡</span>
               <span>
-                {gatewayConfig?.configured ? (
-                  <><strong>Phone not detected:</strong> Open the Android SMS Gateway app on your phone to connect.</>
-                ) : (
-                  <><strong>Personal SIM Gateway:</strong> Uses open-source <strong>Android SMS Gateway (capcom6)</strong> in Cloud Mode to send real SMS from your SIM. Add <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">ANDROID_SMS_GATEWAY_LOGIN</code> and <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">ANDROID_SMS_GATEWAY_PASSWORD</code> to Railway to go live.</>
-                )}
+                <strong>Twilio Cloud SMS:</strong> Add <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">TWILIO_ACCOUNT_SID</code>, <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">TWILIO_AUTH_TOKEN</code>, and <code className="text-amber-400 bg-black/40 px-1 py-0.5 rounded">TWILIO_PHONE_NUMBER</code> to Railway environment variables to send live SMS directly to employee mobiles.
               </span>
             </div>
             <a
-              href="https://github.com/capcom6/android-sms-gateway/releases"
+              href="https://console.twilio.com"
               target="_blank"
               rel="noreferrer"
               className="text-amber-400 hover:text-amber-300 underline font-medium text-[11px]"
             >
-              Get Android APK ↗
+              Twilio Console ↗
             </a>
           </div>
         )}
@@ -731,8 +721,8 @@ export default function DailySmsModal({
               <span>{sending ? '⏳ Sending...' : '📱'}</span>
               <span>
                 {sending
-                  ? 'Dispatching SMS via Android SIM...'
-                  : `Send Daily SMS via Android SIM (${selectedStaffIds.length} Staff)`}
+                  ? 'Dispatching SMS via Twilio...'
+                  : `Send Daily SMS via Twilio (${selectedStaffIds.length} Staff)`}
               </span>
             </button>
           </div>

@@ -13558,11 +13558,18 @@ app.get('/api/reports/daily-view', async (req, res) => {
 // Sends SMS directly from personal Android phone SIM card
 // ----------------------------------------------------
 
-// 1. Get Android Gateway Configuration Status
+// 1. Get SMS Configuration Status (Twilio Cloud SMS & Android Gateway)
 app.get('/api/sms/config', async (req, res) => {
   try {
-    const status = await getAndroidGatewayConfigStatus();
-    res.json({ success: true, ...status });
+    const twilioStatus = getTwilioConfigStatus();
+    if (twilioStatus.configured) {
+      return res.json({ success: true, ...twilioStatus });
+    }
+    const androidStatus = await getAndroidGatewayConfigStatus();
+    if (androidStatus.configured) {
+      return res.json({ success: true, ...androidStatus });
+    }
+    res.json({ success: true, ...twilioStatus });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -13593,7 +13600,7 @@ app.get('/api/sms/preview', async (req, res) => {
       totalWorking: previews.length,
       validPhoneCount: previews.filter((p: any) => p.phoneValid).length,
       hasChangesCount: previews.filter((p: any) => p.hasChanges).length,
-      isSimulatedMode: !isAndroidGatewayConfigured(),
+      isSimulatedMode: !isTwilioConfigured() && !isAndroidGatewayConfigured(),
       previews
     });
   } catch (err: any) {
