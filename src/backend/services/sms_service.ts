@@ -10,19 +10,37 @@ import {
 
 /**
  * Check whether live Twilio credentials are configured in environment variables.
+ * Supports standard Account SID + Auth Token OR Account SID + API Key (SK...) + Secret.
  */
 export function isTwilioConfigured(): boolean {
-  const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
-  const token = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+  const accountSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const apiKey = (process.env.TWILIO_API_KEY || '').trim();
+  const apiSecret = (process.env.TWILIO_API_SECRET || '').trim();
+  const authToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
   const phone = (process.env.TWILIO_PHONE_NUMBER || '').trim();
-  return Boolean(
-    sid &&
-    token &&
-    phone &&
-    sid.startsWith('AC') &&
-    sid.length >= 20 &&
-    token.length >= 10
-  );
+
+  const hasValidAuth = (apiKey.startsWith('SK') && apiSecret.length >= 10 && accountSid.startsWith('AC')) ||
+                       (accountSid.startsWith('AC') && authToken.length >= 10);
+
+  return Boolean(hasValidAuth && phone && phone.length >= 10);
+}
+
+/**
+ * Creates an authorized Twilio SDK client using either standard Auth Token or API Key.
+ */
+export function getTwilioClient(): any {
+  const accountSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+  const apiKey = (process.env.TWILIO_API_KEY || '').trim();
+  const apiSecret = (process.env.TWILIO_API_SECRET || '').trim();
+  const authToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+
+  if (apiKey.startsWith('SK') && apiSecret && accountSid.startsWith('AC')) {
+    return twilio(apiKey, apiSecret, { accountSid });
+  }
+  if (accountSid.startsWith('AC') && authToken) {
+    return twilio(accountSid, authToken);
+  }
+  return null;
 }
 
 /**
@@ -436,7 +454,10 @@ export async function sendSmsNotification(params: {
   // 1. Prioritize Twilio Cloud SMS if credentials are set
   if (isTwilioConfigured()) {
     try {
-      const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      const client = getTwilioClient();
+      if (!client) {
+        throw new Error('Twilio client initialization failed. Please check credentials.');
+      }
       const message = await client.messages.create({
         body: messageBody,
         from: process.env.TWILIO_PHONE_NUMBER,
