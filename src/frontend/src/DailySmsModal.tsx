@@ -29,13 +29,33 @@ export interface DailySmsModalProps {
   API_BASE?: string;
 }
 
+function formatToIsoDate(val?: string): string {
+  if (!val) return new Date().toISOString().split('T')[0];
+  const str = String(val).trim();
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (ddmmyyyy) {
+    const d = ddmmyyyy[1].padStart(2, '0');
+    const m = ddmmyyyy[2].padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+  const yyyymmdd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return str;
+}
+
 export default function DailySmsModal({
   isOpen,
   onClose,
   targetDate: initialDate,
   API_BASE = '/api'
 }: DailySmsModalProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(initialDate || new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(formatToIsoDate(initialDate));
   const [loading, setLoading] = useState<boolean>(false);
   const [sending, setSending] = useState<boolean>(false);
   const [previews, setPreviews] = useState<SmsRecipientPreview[]>([]);
@@ -50,7 +70,7 @@ export default function DailySmsModal({
 
   useEffect(() => {
     if (initialDate) {
-      setSelectedDate(initialDate);
+      setSelectedDate(formatToIsoDate(initialDate));
     }
   }, [initialDate]);
 
@@ -76,10 +96,11 @@ export default function DailySmsModal({
   };
 
   const fetchPreview = async (dateStr: string) => {
+    const cleanDate = formatToIsoDate(dateStr);
     setLoading(true);
     setSendResult(null);
     try {
-      const res = await fetch(`${API_BASE}/sms/preview?date=${dateStr}`);
+      const res = await fetch(`${API_BASE}/sms/preview?date=${cleanDate}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.previews)) {
         setPreviews(data.previews);
@@ -98,8 +119,9 @@ export default function DailySmsModal({
   };
 
   const fetchHistory = async (dateStr: string) => {
+    const cleanDate = formatToIsoDate(dateStr);
     try {
-      const res = await fetch(`${API_BASE}/sms/history?date=${dateStr}`);
+      const res = await fetch(`${API_BASE}/sms/history?date=${cleanDate}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.history)) {
         setHistoryLogs(data.history);
@@ -141,11 +163,12 @@ export default function DailySmsModal({
 
     setSending(true);
     try {
+      const cleanDate = formatToIsoDate(selectedDate);
       const res = await fetch(`${API_BASE}/sms/send-daily`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          date: selectedDate,
+          date: cleanDate,
           staffIds: selectedStaffIds.map(Number),
           force: forceResend
         })
@@ -153,8 +176,8 @@ export default function DailySmsModal({
       const data = await res.json();
       if (data.success) {
         setSendResult(data.result);
-        await fetchPreview(selectedDate);
-        await fetchHistory(selectedDate);
+        await fetchPreview(cleanDate);
+        await fetchHistory(cleanDate);
       } else {
         alert(`Error sending SMS: ${data.error || 'Unknown error'}`);
       }
