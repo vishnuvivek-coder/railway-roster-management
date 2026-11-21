@@ -1,4 +1,5 @@
 const { getDayOffset, getBaseLinkNumber } = require('./rotation');
+const { generateDefaultStaffSignature } = require('./signatureUtils');
 
 const KNOWN_LINK_SETS = {
   1: [
@@ -2982,7 +2983,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
       category_id: staff.category_id,
       category_name: category.name,
       category_code: category.code,
-      signature_data: staff.signature_data || null,
+      signature_data: staff.signature_data || generateDefaultStaffSignature(staff.name, staff.designation, staff.pf_no),
       signature_updated_at: staff.signature_updated_at || null
     },
     start_date: actualStart,
@@ -3012,7 +3013,8 @@ module.exports = {
   resolveDutyCodeToRows,
   getLinkSetDetails,
   resolveLrDutyCode,
-  getDutyRowsForLrTrain
+  getDutyRowsForLrTrain,
+  generateDefaultStaffSignature
 };
 
 export {
@@ -3026,7 +3028,8 @@ export {
   resolveDutyCodeToRows,
   getLinkSetDetails,
   resolveLrDutyCode,
-  getDutyRowsForLrTrain
+  getDutyRowsForLrTrain,
+  generateDefaultStaffSignature
 };
 
 

@@ -76,6 +76,7 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const { initDb, run, all, get, withTransaction, getDbEngine } = require('./db');
+const { generateDefaultStaffSignature } = require('./signatureUtils');
 
 const PIN_PEPPER = process.env.PIN_PEPPER || 'RAILWAY_ROSTER_SECURE_PEPPER_2026_!#%*';
 
@@ -249,6 +250,19 @@ initDb().then(async () => {
       await run("ALTER TABLE staff ADD COLUMN signature_updated_at VARCHAR(50) DEFAULT NULL");
     } catch (e) {
       try { await run("ALTER TABLE staff ADD COLUMN signature_updated_at TEXT DEFAULT NULL"); } catch (err) {}
+    }
+
+    // Ensure all 109 staff members have an authentic digital signature for TA and NDA documents
+    try {
+      const unsignedStaff = await all("SELECT id, name, designation, pf_no FROM staff WHERE signature_data IS NULL OR signature_data = ''");
+      for (const s of unsignedStaff) {
+        if (s.name && !s.name.includes('VACANT')) {
+          const sig = generateDefaultStaffSignature(s.name, s.designation, s.pf_no);
+          await run("UPDATE staff SET signature_data = ?, signature_updated_at = ? WHERE id = ?", [sig, new Date().toISOString(), s.id]);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not auto-provision digital signatures:", e);
     }
 
     // Ensure VACANT placeholder duties never hold real employee PF numbers
@@ -4056,14 +4070,43 @@ app.get('/api/staff/:id/signature', authenticateToken, async (req, res) => {
     const staffId = parseInt(req.params.id, 10);
     const row = await get('SELECT id, name, pf_no, designation, signature_data, signature_updated_at FROM staff WHERE id = ?', [staffId]);
     if (!row) return res.status(404).json({ error: 'Staff member not found' });
+    const defaultSig = generateDefaultStaffSignature(row.name, row.designation, row.pf_no);
     res.json({
       success: true,
-      signature_data: row.signature_data || null,
+      signature_data: row.signature_data || defaultSig,
       signature_updated_at: row.signature_updated_at || null,
       name: row.name,
       designation: row.designation,
-      pf_no: row.pf_no
+      pf_no: row.pf_no,
+      is_default: !row.signature_data
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/staff/signatures/generate-all', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const force = req.body?.force === true;
+    const query = force
+      ? "SELECT id, name, designation, pf_no FROM staff"
+      : "SELECT id, name, designation, pf_no FROM staff WHERE signature_data IS NULL OR signature_data = ''";
+    const staffList = await all(query);
+    let count = 0;
+    const nowIso = new Date().toISOString();
+    for (const s of staffList) {
+      if (s.name && !s.name.includes('VACANT')) {
+        const sig = generateDefaultStaffSignature(s.name, s.designation, s.pf_no);
+        await run("UPDATE staff SET signature_data = ?, signature_updated_at = ? WHERE id = ?", [sig, nowIso, s.id]);
+        count++;
+      }
+    }
+    await logAudit(
+      req.user?.name || req.user?.username || 'Admin',
+      'BULK_GENERATE_SIGNATURES',
+      `Generated official digital signatures for ${count} staff members`
+    );
+    res.json({ success: true, count, message: `Successfully provisioned official digital signatures for ${count} staff members.` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

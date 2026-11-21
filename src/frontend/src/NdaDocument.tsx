@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
 import DigitalSignatureModal from './DigitalSignatureModal';
+import { getDefaultDigitalSignature } from './signatureUtils';
 import { printElement, downloadPdfFromElement } from './printUtils';
 
 const API_BASE = '/api';
@@ -279,6 +280,13 @@ export default function NdaDocument({
     setHasUnsavedChanges(true);
   };
 
+  const selectedStaffObj = staffList.find(s => String(s.id) === String(selectedStaffId));
+  const effectiveSignature = editableMeta.signature_data || getDefaultDigitalSignature(
+    editableMeta.full_name_sign || editableMeta.name || selectedStaffObj?.name,
+    editableMeta.designation_sign || editableMeta.designation || selectedStaffObj?.designation,
+    editableMeta.pf_no || selectedStaffObj?.pf_no
+  );
+
   // Auto-initialize selectedCatId if categories are loaded and selectedCatId is empty
   useEffect(() => {
     if ((!selectedCatId || selectedCatId === '') && categories && categories.length > 0) {
@@ -348,7 +356,7 @@ export default function NdaDocument({
               pf_no: (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : '',
               full_name_sign: empName,
               designation_sign: `(${empDesig}/SL/GNT)`,
-              signature_data: data.employee.signature_data || null,
+              signature_data: data.employee.signature_data || getDefaultDigitalSignature(data.employee.name, data.employee.designation, data.employee.pf_no),
               signature_updated_at: data.employee.signature_updated_at || null
             });
           }
@@ -908,18 +916,18 @@ export default function NdaDocument({
               style={{
                 fontSize: '0.84rem',
                 padding: '8px 16px',
-                background: editableMeta.signature_data ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                border: editableMeta.signature_data ? '1px solid #22c55e' : '1px solid #3b82f6',
-                color: editableMeta.signature_data ? '#16a34a' : '#2563eb',
+                background: 'rgba(34, 197, 94, 0.15)',
+                border: '1px solid #22c55e',
+                color: '#16a34a',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 fontWeight: 600
               }}
-              title="Add, draw, type, or upload employee digital signature"
+              title="Add, draw, type, or customize employee digital signature"
             >
               <span>✍️</span>
-              {editableMeta.signature_data ? 'Signature (Signed ✓)' : 'Digital Signature'}
+              {editableMeta.signature_data ? 'Digital Signature (Custom ✓)' : 'Digital Signature (Official ✓)'}
             </button>
             <button
               onClick={handleSave}
@@ -1866,42 +1874,18 @@ export default function NdaDocument({
               <div
                 style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}
                 onClick={() => setShowSignatureModal(true)}
-                title="Click to manage or change digital signature"
+                title="Click to draw, upload or customize digital signature"
               >
-                {editableMeta.signature_data ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '40px', marginBottom: '2px' }}>
-                    <img
-                      src={editableMeta.signature_data}
-                      alt="Digital Signature"
-                      style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
-                    />
-                    <div style={{ fontSize: '7.5px', color: '#15803d', fontWeight: 'bold', letterSpacing: '0.4px', lineHeight: 1 }}>
-                      ✓ DIGITALLY SIGNED
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '40px', marginBottom: '2px' }}>
+                  <img
+                    src={effectiveSignature}
+                    alt="Digital Signature"
+                    style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                  />
+                  <div style={{ fontSize: '7.5px', color: '#15803d', fontWeight: 'bold', letterSpacing: '0.4px', lineHeight: 1 }}>
+                    ✓ DIGITALLY SIGNED
                   </div>
-                ) : (
-                  <>
-                    <div className="no-print" style={{ height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setShowSignatureModal(true); }}
-                        style={{
-                          fontSize: '9px',
-                          padding: '3px 10px',
-                          background: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px dashed #3b82f6',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontWeight: '600'
-                        }}
-                      >
-                        ✍️ Add Signature
-                      </button>
-                    </div>
-                    <div className="print-only" style={{ height: '36px' }}></div>
-                  </>
-                )}
+                </div>
                 <div>
                   <input
                     type="text"

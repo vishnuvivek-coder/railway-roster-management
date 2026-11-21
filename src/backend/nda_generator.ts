@@ -1,4 +1,4 @@
-const { generateStaffTaJournal } = require('./ta_generator');
+const { generateStaffTaJournal, generateDefaultStaffSignature } = require('./ta_generator');
 
 /**
  * Helper to parse time strings like '17:45', '5:10', '00:50', '23:30' into minutes from 00:00 (0..1439)
@@ -343,8 +343,14 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
 
   const totalHours = rows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
 
+  const emp = taJournal.employee || staff || {};
+  const sig = emp.signature_data || staff?.signature_data || generateDefaultStaffSignature(emp.name || staff?.name, emp.designation || staff?.designation, emp.pf_no || staff?.pf_no);
+
   return {
-    employee: taJournal.employee || staff,
+    employee: {
+      ...emp,
+      signature_data: sig
+    },
     month_year: monthYearStr,
     month_name: taJournal.month_name || '',
     period_label: taJournal.period_label || '',
