@@ -606,5 +606,20 @@ CREATE TABLE IF NOT EXISTS sms_notifications (
   INDEX idx_sms_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- 28. GENERAL SUMMARY CUM REMITTANCE TABLE (Monthly EFT & Cash Remittance)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS general_summary_remittance (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  staff_id INT NOT NULL,
+  month_year VARCHAR(10) NOT NULL,
+  data_json LONGTEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_gsr_staff_month (staff_id, month_year),
+  INDEX idx_gsr_staff (staff_id),
+  INDEX idx_gsr_month (month_year)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Re-enable foreign key constraints
 SET FOREIGN_KEY_CHECKS = 1;

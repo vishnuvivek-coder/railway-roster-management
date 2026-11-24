@@ -16125,6 +16125,217 @@ app.delete('/api/documents/diary/:staffId', authenticateToken, requireAdminOrSel
 });
 
 // ==========================================
+// GENERAL SUMMARY CUM REMITTANCE DOCUMENT
+// ==========================================
+
+// GET /api/documents/remittance/:staffId?year=2026&month=11
+app.get('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    let year = parseInt(req.query.year as string, 10);
+    let month = parseInt(req.query.month as string, 10);
+    if (req.query.month && String(req.query.month).includes('-')) {
+      const parts = String(req.query.month).split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    }
+    if (!year) year = new Date().getFullYear();
+    if (!month) month = new Date().getMonth() + 1;
+    const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
+
+    // 1. Fetch staff metadata
+    const staffRow = await get(
+      'SELECT id, name, designation, hq_station, pf_no, bill_unit, signature_data, signature_updated_at FROM staff WHERE id = ?',
+      [staffId]
+    );
+    if (!staffRow) {
+      return res.status(404).json({ error: 'Staff member not found.' });
+    }
+
+    // 2. Check if a saved document exists
+    const existing = await get(
+      'SELECT data_json, updated_at FROM general_summary_remittance WHERE staff_id = ? AND month_year = ?',
+      [staffId, monthYearStr]
+    );
+
+    if (existing && existing.data_json) {
+      try {
+        const parsed = JSON.parse(existing.data_json);
+        if (!parsed.employeeMeta) parsed.employeeMeta = {};
+        parsed.employeeMeta.name = parsed.employeeMeta.name || staffRow.name;
+        parsed.employeeMeta.designation = parsed.employeeMeta.designation || staffRow.designation;
+        parsed.employeeMeta.hqStation = parsed.employeeMeta.hqStation || staffRow.hq_station || 'GNT';
+        parsed.employeeMeta.pfNo = parsed.employeeMeta.pfNo || staffRow.pf_no || '';
+        parsed.employeeMeta.signatureData = staffRow.signature_data;
+        parsed.isCustom = true;
+        parsed.updatedAt = existing.updated_at;
+        return res.json(parsed);
+      } catch (e) {
+        console.error('Error parsing saved remittance document JSON:', e);
+      }
+    }
+
+    // 3. Auto-generate defaults from Diary and Daily Duties for this staff & month
+    const diaryRows = await all(
+      `SELECT duty_date, train_no, from_station, to_station, eft_cases, eft_amount, efts_collected, mr_number, remitted_station
+       FROM diary_entries
+       WHERE staff_id = ? AND month_year = ?
+       ORDER BY duty_date`,
+      [staffId, monthYearStr]
+    );
+
+    const cashRemittanceRows = [];
+    const maxCashRows = Math.max(14, diaryRows.length);
+    for (let i = 0; i < maxCashRows; i++) {
+      const entry = diaryRows[i];
+      cashRemittanceRows.push({
+        slNo: i + 1,
+        mrNumber: entry?.mr_number || '',
+        date: entry?.duty_date ? entry.duty_date.split('-').reverse().join('-') : '',
+        rmtdStn: entry?.remitted_station || (entry?.to_station ? entry.to_station : (staffRow.hq_station || 'GNT')),
+        totalAmount: entry?.eft_amount ? String(entry.eft_amount) : ''
+      });
+    }
+
+    const eftFoilsRows = [
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' }
+    ];
+
+    const cancelledFoilsRows = [
+      { from: '', to: 'NIL', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' },
+      { from: '', to: '', total: '' }
+    ];
+
+    const otherZoneRows = [
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' },
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' },
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' },
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' },
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' },
+      { date: '', trNo: '', from: '', to: '', noOfEfts: '', amount: '', mrNoRStn: '' }
+    ];
+
+    const enclosures = {
+      comT12: '',
+      noOfMrs: '',
+      comR19: '',
+      otherEnclosures: '--'
+    };
+
+    let initialEftCash = 0;
+    cashRemittanceRows.forEach(r => {
+      const val = parseFloat(r.totalAmount);
+      if (!isNaN(val)) initialEftCash += val;
+    });
+
+    const amounts = {
+      eftCash: initialEftCash > 0 ? String(initialEftCash) : '',
+      otherCash: '',
+      total: initialEftCash > 0 ? String(initialEftCash) : '0'
+    };
+
+    const monthNames = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ];
+    const monthName = monthNames[month - 1] || '';
+
+    const payload = {
+      staffId,
+      year,
+      month,
+      monthName,
+      monthYear: monthYearStr,
+      employeeMeta: {
+        name: staffRow.name,
+        designation: staffRow.designation,
+        hqStation: staffRow.hq_station || 'GNT',
+        pfNo: staffRow.pf_no || '',
+        billUnit: staffRow.bill_unit || '',
+        designationSign: `${staffRow.designation || 'CTI'}/SL/${staffRow.hq_station || 'GNT'}`,
+        signatureData: staffRow.signature_data
+      },
+      cashRemittanceRows,
+      eftFoilsRows,
+      cancelledFoilsRows,
+      otherZoneRows,
+      enclosures,
+      amounts,
+      isCustom: false
+    };
+
+    res.json(payload);
+  } catch (err: any) {
+    console.error('Error fetching remittance document:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/documents/remittance/:staffId
+app.post('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const { month_year, data, employee_meta } = req.body;
+
+    if (!month_year || !data) {
+      return res.status(400).json({ error: 'month_year and data are required.' });
+    }
+
+    if (employee_meta) {
+      const { name, designation, signature_data } = employee_meta;
+      await run(
+        `UPDATE staff 
+         SET name = COALESCE(?, name),
+             designation = COALESCE(?, designation),
+             signature_data = COALESCE(?, signature_data),
+             signature_updated_at = CASE WHEN ? IS NOT NULL THEN NOW() ELSE signature_updated_at END
+         WHERE id = ?`,
+        [name, designation, signature_data, signature_data, staffId]
+      );
+    }
+
+    const jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
+
+    await run(
+      `INSERT INTO general_summary_remittance (staff_id, month_year, data_json, updated_at)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE data_json = VALUES(data_json), updated_at = NOW()`,
+      [staffId, month_year, jsonStr]
+    );
+
+    res.json({ success: true, message: 'General Summary Cum Remittance document saved successfully.' });
+  } catch (err: any) {
+    console.error('Error saving remittance document:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/documents/remittance/:staffId?year=2026&month=11
+app.delete('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const year = parseInt(req.query.year as string, 10) || new Date().getFullYear();
+    const month = parseInt(req.query.month as string, 10) || (new Date().getMonth() + 1);
+    const monthYearStr = `${year}-${String(month).padStart(2, '0')}`;
+
+    await run('DELETE FROM general_summary_remittance WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
+    res.json({ success: true, message: 'Remittance document reset to auto-generated state.' });
+  } catch (err: any) {
+    console.error('Error resetting remittance document:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // DAILY AMENITY STAFF BOOKING / DAILY SUMMARY CHART
 // ==========================================
 const { generateDailyBookingChart } = require('./daily_booking_generator');

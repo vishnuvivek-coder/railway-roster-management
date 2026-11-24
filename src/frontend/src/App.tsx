@@ -52,6 +52,7 @@ import TaDocument from './TaDocument';
 import NdaDocument from './NdaDocument';
 import DiaryDocument from './DiaryDocument';
 import DailyEarningsDocument from './DailyEarningsDocument';
+import RemittanceDocument from './RemittanceDocument';
 import IndividualMusterDocument from './IndividualMusterDocument';
 import DailyAmenityBookingDocument from './DailyAmenityBookingDocument';
 import DutyEditModal, { isHqArrivalDuty } from './DutyEditModal';
@@ -16324,6 +16325,28 @@ export default function App() {
                 💰 Daily Earnings
               </button>
 
+              <button
+                type="button"
+                onClick={() => setDocSubTab('remittance')}
+                className="btn"
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '20px',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  background: docSubTab === 'remittance'
+                    ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                    : 'rgba(255,255,255,0.03)',
+                  color: docSubTab === 'remittance' ? '#0D0D0F' : 'var(--color-text-secondary)',
+                  border: docSubTab === 'remittance' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                  boxShadow: docSubTab === 'remittance' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                💵 General Summary (Remittance)
+              </button>
+
               {!isEmployee && (
                 <>
                 <button
@@ -16477,12 +16500,64 @@ export default function App() {
               />
             </div>
 
+            <div style={{ display: docSubTab === 'remittance' ? 'block' : 'none' }}>
+              <RemittanceDocument
+                authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
+                categories={categories}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
+                setSelectedCatId={setSelectedCatId}
+                selectedStaffId={docStaffId}
+                setSelectedStaffId={(id) => {
+                  setDocStaffId(id);
+                  try { localStorage.setItem('railway_doc_staff_id', id); } catch (e) {}
+                }}
+                year={docYear}
+                setYear={(y) => {
+                  setDocYear(y);
+                  try { localStorage.setItem('railway_doc_year', y); } catch (e) {}
+                }}
+                month={docMonth}
+                setMonth={(m) => {
+                  setDocMonth(m);
+                  try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
+                }}
+              />
+            </div>
+
             <div style={{ display: docSubTab === 'muster' ? 'block' : 'none' }}>
               <IndividualMusterDocument
                 authToken={authToken}
                 isAdmin={isAdmin}
                 categories={categories}
                 selectedCatId={selectedCatId}
+                setSelectedCatId={setSelectedCatId}
+                selectedStaffId={docStaffId}
+                setSelectedStaffId={(id) => {
+                  setDocStaffId(id);
+                  try { localStorage.setItem('railway_doc_staff_id', id); } catch (e) {}
+                }}
+                year={docYear}
+                setYear={(y) => {
+                  setDocYear(y);
+                  try { localStorage.setItem('railway_doc_year', y); } catch (e) {}
+                }}
+                month={docMonth}
+                setMonth={(m) => {
+                  setDocMonth(m);
+                  try { localStorage.setItem('railway_doc_month', m); } catch (e) {}
+                }}
+              />
+            </div>
+
+            <div style={{ display: docSubTab === 'remittance' ? 'block' : 'none' }}>
+              <RemittanceDocument
+                authToken={authToken}
+                isEmployee={isEmployee}
+                lockedStaffId={currentUser?.staff_id}
+                categories={categories}
+                selectedCatId={isEmployee && currentUser?.category_id ? String(currentUser.category_id) : selectedCatId}
                 setSelectedCatId={setSelectedCatId}
                 selectedStaffId={docStaffId}
                 setSelectedStaffId={(id) => {

@@ -282,6 +282,21 @@ async function initDbInternal() {
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN last_day_coaches VARCHAR(100) DEFAULT 'SL / AC'"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN from_date DATE DEFAULT NULL"); } catch (_) {}
       try { await mysqlPool.query("ALTER TABLE non_daily_trains ADD COLUMN to_date DATE DEFAULT NULL"); } catch (_) {}
+      try {
+        await mysqlPool.query(`
+          CREATE TABLE IF NOT EXISTS general_summary_remittance (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            staff_id INT NOT NULL,
+            month_year VARCHAR(10) NOT NULL,
+            data_json LONGTEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_gsr_staff_month (staff_id, month_year),
+            INDEX idx_gsr_staff (staff_id),
+            INDEX idx_gsr_month (month_year)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+      } catch (_) {}
 
       console.log('[DB Engine] Checking admin user...');
       // Ensure Admin 12345 / CLICKME exists (upsert — never overwrites other users)
@@ -858,6 +873,18 @@ async function initDbInternal() {
       gateway_sid TEXT,
       error_message TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS general_summary_remittance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      staff_id INTEGER NOT NULL,
+      month_year TEXT NOT NULL,
+      data_json TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(staff_id, month_year)
     )
   `);
 
