@@ -43,27 +43,47 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
     return 8;
   }
 
+  // Night window intervals across multi-day timeline:
+  // Day -1 Night: 22:00 to 24:00 (-120 to 0)
+  // Day 0 Early Morning: 00:00 to 06:00 (0 to 360)
+  // Day 0 Night: 22:00 to 24:00 (1320 to 1440)
+  // Day 1 Early Morning: 00:00 to 06:00 (1440 to 1800)
+  // Day 1 Night: 22:00 to 24:00 (2760 to 2880)
+  // Day 2 Early Morning: 00:00 to 06:00 (2880 to 3240)
+  const nightIntervals = [
+    [-120, 0],
+    [0, 360],
+    [1320, 1440],
+    [1440, 1800],
+    [2760, 2880],
+    [2880, 3240]
+  ];
+
+  const getNightOverlap = (start, end) => {
+    let overlap = 0;
+    for (const [wStart, wEnd] of nightIntervals) {
+      const oStart = Math.max(start, wStart);
+      const oEnd = Math.min(end, wEnd);
+      if (oEnd > oStart) {
+        overlap += (oEnd - oStart);
+      }
+    }
+    return overlap;
+  };
+
   // 1. Both Departure and Arrival are known
   if (depMins !== null && arrMins !== null) {
-    if (arrMins >= depMins) {
-      // Same calendar day journey
-      let nightMins = 0;
-      // Overlap with early morning 00:00 - 06:00 (0..360)
-      nightMins += Math.max(0, Math.min(arrMins, 360) - Math.max(depMins, 0));
-      // Overlap with late night 22:00 - 24:00 (1320..1440)
-      nightMins += Math.max(0, Math.min(arrMins, 1440) - Math.max(depMins, 1320));
-      if (nightMins <= 0) return null;
-      return Math.round(nightMins / 60);
-    } else {
-      // Overnight journey crossing midnight
-      // Day 1: 22:00 to 24:00 (1320..1440)
-      const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
-      // Day 2: 00:00 to 06:00 (0..360)
-      const day2Night = Math.max(0, Math.min(arrMins, 360) - 0);
-      const totalMins = day1Night + day2Night;
-      if (totalMins <= 0) return null;
-      return Math.round(totalMins / 60);
+    // Add 30 mins preparatory duty before departure and 30 mins closing duty after arrival
+    const dutyStart = depMins - 30;
+    let dutyEnd = arrMins + 30;
+    if (arrMins < depMins) {
+      // Overnight crossing midnight: arrival is on next day
+      dutyEnd = 1440 + arrMins + 30;
     }
+
+    const nightMins = getNightOverlap(dutyStart, dutyEnd);
+    if (nightMins <= 0) return null;
+    return Math.round(nightMins / 60);
   }
 
   // 2. Arrival only (e.g. arrival on start of period from overnight journey)
@@ -79,15 +99,19 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
     else if (trainNo === '12604') priorNight = 80;
     else priorNight = 120;
 
-    const morningMins = Math.min(arrMins, 360);
+    // Add 30 mins after actual arrival
+    const dutyEnd = arrMins + 30;
+    const morningMins = Math.max(0, Math.min(dutyEnd, 360));
     const totalNight = priorNight + morningMins;
     if (totalNight <= 0) return null;
     return Math.round(totalNight / 60);
   }
 
-  // 3. Departure only (e.g. departure on last day of period continuing into next day)
+  // 3. Departure only (departure on last day of period continuing into next day)
   if (depMins !== null && arrMins === null) {
-    const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
+    // Add 30 mins before scheduled departure
+    const dutyStart = depMins - 30;
+    const day1Night = getNightOverlap(dutyStart, 1440);
     let morningMins = 360;
     if (trainNo === '12604') morningMins = 345;
     else if (trainNo === '17251') morningMins = 300;
@@ -299,6 +323,8 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
 
     let actDep = m.act_dep;
     let actArr = m.act_arr;
+    let schedDep = m.sched_dep || '';
+    let schedArr = m.sched_arr || '';
     let fromStn = m.from_station;
     let toStn = m.to_station;
     let nightHours = m.night_hours;
@@ -308,6 +334,12 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
     if (saved) {
       if (saved.night_hours !== null && saved.night_hours !== undefined) {
         nightHours = parseFloat(saved.night_hours);
+      }
+      if (saved.sched_dep && saved.sched_dep !== '---') {
+        schedDep = saved.sched_dep;
+      }
+      if (saved.sched_arr && saved.sched_arr !== '---') {
+        schedArr = saved.sched_arr;
       }
       if (saved.act_dep && saved.act_dep !== '---') {
         actDep = saved.act_dep;
@@ -321,6 +353,13 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
       if (saved.to_station && saved.to_station !== '---') {
         toStn = saved.to_station;
       }
+
+      // If night_hours was not explicitly overridden or needs recalculation based on updated timings:
+      if (saved.night_hours === null || saved.night_hours === undefined) {
+        const depToCheck = (schedDep && schedDep !== '---') ? schedDep : actDep;
+        const arrToCheck = (actArr && actArr !== '---') ? actArr : schedArr;
+        nightHours = calculateNightDutyHours(depToCheck, arrToCheck, fromStn, toStn, trainNo);
+      }
     }
 
     rows.push({
@@ -331,8 +370,8 @@ async function generateStaffNdaJournal(db, staffId, year, month, startDate = nul
       date_iso: dateIso,
       is_same_date_as_prev: rows.length > 0 && rows[rows.length - 1].date_str === dateStr,
       train_no: trainNo,
-      sched_dep: '', // Left blank in official document
-      sched_arr: '', // Left blank in official document
+      sched_dep: schedDep,
+      sched_arr: schedArr,
       act_dep: actDep,
       act_arr: actArr,
       from_station: fromStn,

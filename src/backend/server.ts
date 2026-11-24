@@ -16176,13 +16176,13 @@ app.get('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrS
     }
 
     // 3. Auto-generate defaults from Diary and Daily Duties for this staff & month
-    const diaryRows = await all(
-      `SELECT duty_date, train_no, from_station, to_station, eft_cases, eft_amount, efts_collected, mr_number, remitted_station
+    const diaryRows = (await all(
+      `SELECT date_str, train_no, from_station, to_station, no_of_cases, collected_rs, remit_mr_no, remit_station, remit_date, remit_amount, row_order
        FROM diary_entries
        WHERE staff_id = ? AND month_year = ?
-       ORDER BY duty_date`,
+       ORDER BY row_order ASC`,
       [staffId, monthYearStr]
-    );
+    )) || [];
 
     const cashRemittanceRows = [];
     const maxCashRows = Math.max(14, diaryRows.length);
@@ -16190,10 +16190,10 @@ app.get('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrS
       const entry = diaryRows[i];
       cashRemittanceRows.push({
         slNo: i + 1,
-        mrNumber: entry?.mr_number || '',
-        date: entry?.duty_date ? entry.duty_date.split('-').reverse().join('-') : '',
-        rmtdStn: entry?.remitted_station || (entry?.to_station ? entry.to_station : (staffRow.hq_station || 'GNT')),
-        totalAmount: entry?.eft_amount ? String(entry.eft_amount) : ''
+        mrNumber: entry?.remit_mr_no || '',
+        date: entry?.remit_date || entry?.date_str || '',
+        rmtdStn: entry?.remit_station || (entry?.to_station ? entry.to_station : (staffRow.hq_station || 'GNT')),
+        totalAmount: entry?.remit_amount ? String(entry.remit_amount) : (entry?.collected_rs ? String(entry.collected_rs) : '')
       });
     }
 

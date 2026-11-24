@@ -5,7 +5,7 @@ import {
   generatePendingTaClaimsForMonth,
   calculateAbsenceAndTa
 } from '../ta_generator';
-import { generateStaffNdaJournal } from '../nda_generator';
+import { generateStaffNdaJournal, calculateNightDutyHours } from '../nda_generator';
 import { generateStaffDiary } from '../diary_generator';
 import { generateDailyBookingChart } from '../daily_booking_generator';
 import {
@@ -146,14 +146,17 @@ export async function saveTaDocument(staffId: any, data: any, currentUser: any =
             staffId, dutyDate || item.date_str, item.date_str || '', item.train_no
           ]
         );
+        const autoNight = calculateNightDutyHours(item.dep_time, item.arr_time, item.from_station, item.to_station, item.train_no);
         await run(
           `UPDATE nda_entries 
            SET act_dep = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_dep END,
-               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END
+               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END,
+               night_hours = CASE WHEN ? IS NOT NULL THEN ? ELSE night_hours END
            WHERE staff_id = ? AND month_year = ? AND (date_str = ? OR date_str = ?) AND train_no = ?`,
           [
             item.dep_time || '', item.dep_time || '', item.dep_time || '',
             item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            autoNight, autoNight,
             staffId, rowMonthYear, item.date_str || '', dutyDate || '', item.train_no
           ]
         );
@@ -709,14 +712,16 @@ export async function saveNdaDocument(staffId: any, data: any, currentUser: any 
       }
 
       // Update matching ta_entries, ta_approvals, and diary_entries rows if present
+      const effDep = (item.act_dep && item.act_dep !== '---') ? item.act_dep : (item.sched_dep || '');
+      const effArr = (item.act_arr && item.act_arr !== '---') ? item.act_arr : (item.sched_arr || '');
       await run(
         `UPDATE ta_entries 
          SET dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
              arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END
          WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
         [
-          item.act_dep || '', item.act_dep || '', item.act_dep || '',
-          item.act_arr || '', item.act_arr || '', item.act_arr || '',
+          effDep, effDep, effDep,
+          effArr, effArr, effArr,
           staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
         ]
       );
@@ -726,8 +731,8 @@ export async function saveNdaDocument(staffId: any, data: any, currentUser: any 
              arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END
          WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
         [
-          item.act_dep || '', item.act_dep || '', item.act_dep || '',
-          item.act_arr || '', item.act_arr || '', item.act_arr || '',
+          effDep, effDep, effDep,
+          effArr, effArr, effArr,
           staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
         ]
       ).catch(() => { });
@@ -863,14 +868,17 @@ export async function saveDiaryDocument(staffId: any, data: any, currentUser: an
             staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
           ]
         ).catch(() => { });
+        const autoNight = calculateNightDutyHours(item.dep_time, item.arr_time, item.from_station, item.to_station, item.train_no);
         await run(
           `UPDATE nda_entries 
            SET act_dep = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_dep END,
-               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END
+               act_arr = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE act_arr END,
+               night_hours = CASE WHEN ? IS NOT NULL THEN ? ELSE night_hours END
            WHERE staff_id = ? AND month_year = ? AND (row_order = ? OR (date_str = ? AND train_no = ?))`,
           [
             item.dep_time || '', item.dep_time || '', item.dep_time || '',
             item.arr_time || '', item.arr_time || '', item.arr_time || '',
+            autoNight, autoNight,
             staffId, month_year, i + 1, item.date_str || '', item.train_no || ''
           ]
         ).catch(() => { });

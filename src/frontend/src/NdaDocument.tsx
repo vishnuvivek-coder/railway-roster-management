@@ -72,6 +72,53 @@ function parseTimeToMinutes(timeStr) {
  * - Number of hours worked during night window = Number of NDA points (1 hour = 1 point)
  * - Total NDA is calculated up to reaching back to return destination (Headquarters GNT)
  */
+/**
+ * Normalize date string to format D/M/YY for consistent multi-document matching
+ */
+function normalizeDateStr(d) {
+  if (!d) return '';
+  const s = String(d).trim();
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return `${parseInt(isoMatch[3], 10)}/${parseInt(isoMatch[2], 10)}/${isoMatch[1].slice(-2)}`;
+  }
+  const slashMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (slashMatch) {
+    const yr = slashMatch[3].length === 4 ? slashMatch[3].slice(-2) : slashMatch[3];
+    return `${parseInt(slashMatch[1], 10)}/${parseInt(slashMatch[2], 10)}/${yr}`;
+  }
+  return s;
+}
+
+/**
+ * Check if two date representations point to the exact same day
+ */
+function datesMatch(d1Str, d1Iso, d2Str, d2Iso) {
+  if (d1Iso && d2Iso && String(d1Iso).trim() === String(d2Iso).trim()) return true;
+  const n1 = normalizeDateStr(d1Str || d1Iso);
+  const n2 = normalizeDateStr(d2Str || d2Iso);
+  if (n1 && n2 && n1 === n2) return true;
+  return false;
+}
+
+/**
+ * Match train numbers across documents (handles prefix/suffix variants like 12703/12704)
+ */
+function trainsMatch(t1, t2) {
+  if (!t1 || !t2 || t1 === '---' || t2 === '---') return true;
+  const s1 = String(t1).trim();
+  const s2 = String(t2).trim();
+  return s1 === s2 || s1.includes(s2) || s2.includes(s1);
+}
+
+/**
+ * Calculate Night Duty Allowance (NDA) Points:
+ * - Based on 24-hour IST clock (Night Window = 22:00 to 06:00)
+ * - Duty starts 30 minutes before scheduled departure (depMins - 30)
+ * - Duty ends 30 minutes after actual arrival (arrMins + 30)
+ * - Number of hours worked during night window = Number of NDA points (1 hour = 1 point)
+ * - Total NDA is calculated up to reaching back to return destination (Headquarters GNT)
+ */
 function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', trainNo = '') {
   const depMins = parseTimeToMinutes(depTime);
   const arrMins = parseTimeToMinutes(arrTime);
@@ -97,21 +144,47 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
     return 8;
   }
 
+  // Night window intervals across multi-day timeline:
+  // Day -1 Night: 22:00 to 24:00 (-120 to 0)
+  // Day 0 Early Morning: 00:00 to 06:00 (0 to 360)
+  // Day 0 Night: 22:00 to 24:00 (1320 to 1440)
+  // Day 1 Early Morning: 00:00 to 06:00 (1440 to 1800)
+  // Day 1 Night: 22:00 to 24:00 (2760 to 2880)
+  // Day 2 Early Morning: 00:00 to 06:00 (2880 to 3240)
+  const nightIntervals = [
+    [-120, 0],
+    [0, 360],
+    [1320, 1440],
+    [1440, 1800],
+    [2760, 2880],
+    [2880, 3240]
+  ];
+
+  const getNightOverlap = (start, end) => {
+    let overlap = 0;
+    for (const [wStart, wEnd] of nightIntervals) {
+      const oStart = Math.max(start, wStart);
+      const oEnd = Math.min(end, wEnd);
+      if (oEnd > oStart) {
+        overlap += (oEnd - oStart);
+      }
+    }
+    return overlap;
+  };
+
   // 1. Both Departure and Arrival are known
   if (depMins !== null && arrMins !== null) {
-    if (arrMins >= depMins) {
-      let nightMins = 0;
-      nightMins += Math.max(0, Math.min(arrMins, 360) - Math.max(depMins, 0));
-      nightMins += Math.max(0, Math.min(arrMins, 1440) - Math.max(depMins, 1320));
-      if (nightMins <= 0) return null;
-      return Math.round(nightMins / 60);
-    } else {
-      const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
-      const day2Night = Math.max(0, Math.min(arrMins, 360) - 0);
-      const totalMins = day1Night + day2Night;
-      if (totalMins <= 0) return null;
-      return Math.round(totalMins / 60);
+    // Add 30 mins preparatory duty before departure and 30 mins closing duty after arrival
+    const dutyStart = depMins - 30;
+    let dutyEnd = arrMins + 30;
+    if (arrMins < depMins) {
+      // Overnight crossing midnight: arrival is on next day
+      dutyEnd = 1440 + arrMins + 30;
     }
+
+    const nightMins = getNightOverlap(dutyStart, dutyEnd);
+    if (nightMins <= 0) return null;
+    return Math.round(nightMins / 60);
   }
 
   // 2. Arrival leg from overnight journey
@@ -127,7 +200,9 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
     else if (trainNo === '12604') priorNight = 80;
     else priorNight = 120;
 
-    const morningMins = Math.min(arrMins, 360);
+    // Add 30 mins after actual arrival
+    const dutyEnd = arrMins + 30;
+    const morningMins = Math.max(0, Math.min(dutyEnd, 360));
     const totalNight = priorNight + morningMins;
     if (totalNight <= 0) return null;
     return Math.round(totalNight / 60);
@@ -135,7 +210,9 @@ function calculateNightDutyHours(depTime, arrTime, fromStn = '', toStn = '', tra
 
   // 3. Departure only (e.g. departure continuing into next day)
   if (depMins !== null && arrMins === null) {
-    const day1Night = Math.max(0, 1440 - Math.max(depMins, 1320));
+    // Add 30 mins before scheduled departure
+    const dutyStart = depMins - 30;
+    const day1Night = getNightOverlap(dutyStart, 1440);
     let morningMins = 360;
     if (trainNo === '12604') morningMins = 345;
     else if (trainNo === '17251') morningMins = 300;
@@ -426,6 +503,72 @@ export default function NdaDocument({
     };
   }, [selectedStaffId, startDate, endDate]);
 
+  // Real-time instant synchronization across TA, NDA, and DIARY documents without page refresh
+  useEffect(() => {
+    const handleDutyTimeSync = (e) => {
+      const detail = e?.detail;
+      if (!detail || detail.source === 'NDA') return;
+      if (selectedStaffId && detail.staffId && String(detail.staffId) !== String(selectedStaffId)) return;
+      if (detail.year && year && String(detail.year) !== String(year)) return;
+      if (detail.month && month && String(detail.month) !== String(month)) return;
+
+      setJournalData(prev => {
+        if (!prev || !prev.rows) return prev;
+        let anyRowUpdated = false;
+        const updatedRows = prev.rows.map(row => {
+          const dMatch = datesMatch(row.date_str, row.date_iso, detail.dateStr, detail.dateIso);
+          if (!dMatch) return row;
+
+          const tMatch = trainsMatch(row.train_no, detail.trainNo);
+          if (!tMatch) return row;
+
+          anyRowUpdated = true;
+          const nextRow = { ...row };
+          if (detail.schedDep !== undefined && detail.schedDep !== '') nextRow.sched_dep = detail.schedDep;
+          if (detail.schedArr !== undefined && detail.schedArr !== '') nextRow.sched_arr = detail.schedArr;
+          if (detail.actDep !== undefined && detail.actDep !== '') nextRow.act_dep = detail.actDep;
+          else if (detail.depTime !== undefined && detail.depTime !== '') {
+            if (!nextRow.sched_dep || nextRow.sched_dep === '---') nextRow.sched_dep = detail.depTime;
+            nextRow.act_dep = detail.depTime;
+          }
+
+          if (detail.actArr !== undefined && detail.actArr !== '') nextRow.act_arr = detail.actArr;
+          else if (detail.arrTime !== undefined && detail.arrTime !== '') {
+            if (!nextRow.sched_arr || nextRow.sched_arr === '---') nextRow.sched_arr = detail.arrTime;
+            nextRow.act_arr = detail.arrTime;
+          }
+
+          // Recalculate night duty hours with 30-min window rule:
+          // Scheduled departure time - 30m, Actual arrival time + 30m
+          const depToCheck = (nextRow.sched_dep && nextRow.sched_dep !== '---') ? nextRow.sched_dep : nextRow.act_dep;
+          const arrToCheck = (nextRow.act_arr && nextRow.act_arr !== '---') ? nextRow.act_arr : nextRow.sched_arr;
+
+          const autoHours = calculateNightDutyHours(
+            depToCheck,
+            arrToCheck,
+            nextRow.from_station,
+            nextRow.to_station,
+            nextRow.train_no
+          );
+          nextRow.night_hours = autoHours;
+          return nextRow;
+        });
+
+        if (!anyRowUpdated) return prev;
+        setHasUnsavedChanges(true);
+        const total = updatedRows.reduce((sum, r) => sum + (parseFloat(r.night_hours) || 0), 0);
+        return {
+          ...prev,
+          rows: updatedRows,
+          total_night_hours: Math.round(total)
+        };
+      });
+    };
+
+    window.addEventListener('railway:duty-time-sync', handleDutyTimeSync);
+    return () => window.removeEventListener('railway:duty-time-sync', handleDutyTimeSync);
+  }, [selectedStaffId, year, month]);
+
   // Global Ctrl+S Shortcut to Save
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -475,10 +618,11 @@ export default function NdaDocument({
         processedValue = Math.round(num);
       }
       currentRow.night_hours = processedValue;
-    } else if (field === 'act_dep' || field === 'act_arr' || field === 'sched_dep' || field === 'sched_arr' || field === 'from_station' || field === 'to_station') {
+    } else if (['act_dep', 'act_arr', 'sched_dep', 'sched_arr', 'from_station', 'to_station', 'train_no'].includes(field)) {
       currentRow[field] = value;
-      const depToCheck = currentRow.act_dep && currentRow.act_dep !== '---' ? currentRow.act_dep : currentRow.sched_dep;
-      const arrToCheck = currentRow.act_arr && currentRow.act_arr !== '---' ? currentRow.act_arr : currentRow.sched_arr;
+      // Scheduled departure time for departure, actual arrival time for arrival (+30m window rule)
+      const depToCheck = (currentRow.sched_dep && currentRow.sched_dep !== '---') ? currentRow.sched_dep : currentRow.act_dep;
+      const arrToCheck = (currentRow.act_arr && currentRow.act_arr !== '---') ? currentRow.act_arr : currentRow.sched_arr;
       
       const autoHours = calculateNightDutyHours(
         depToCheck,
@@ -506,6 +650,32 @@ export default function NdaDocument({
       rows: updatedRows,
       total_night_hours: Math.round(total)
     });
+
+    // Real-time synchronization to TA and Diary documents
+    if (['act_dep', 'act_arr', 'sched_dep', 'sched_arr', 'dep_time', 'arr_time'].includes(field)) {
+      window.dispatchEvent(new CustomEvent('railway:duty-time-sync', {
+        detail: {
+          source: 'NDA',
+          staffId: selectedStaffId,
+          year,
+          month,
+          dateStr: currentRow.date_str,
+          dateIso: currentRow.date_iso,
+          trainNo: currentRow.train_no,
+          fromStation: currentRow.from_station,
+          toStation: currentRow.to_station,
+          schedDep: currentRow.sched_dep,
+          schedArr: currentRow.sched_arr,
+          actDep: currentRow.act_dep,
+          actArr: currentRow.act_arr,
+          depTime: (currentRow.act_dep && currentRow.act_dep !== '---') ? currentRow.act_dep : currentRow.sched_dep,
+          arrTime: (currentRow.act_arr && currentRow.act_arr !== '---') ? currentRow.act_arr : currentRow.sched_arr,
+          field,
+          value,
+          rowOrder: currentRow.row_order
+        }
+      }));
+    }
   };
 
   // Header meta change

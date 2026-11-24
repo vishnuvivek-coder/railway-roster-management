@@ -51,6 +51,45 @@ const computePresetDates = (preset, y, m) => {
   };
 };
 
+/**
+ * Normalize date string to format D/M/YY for consistent multi-document matching
+ */
+function normalizeDateStr(d) {
+  if (!d) return '';
+  const s = String(d).trim();
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    return `${parseInt(isoMatch[3], 10)}/${parseInt(isoMatch[2], 10)}/${isoMatch[1].slice(-2)}`;
+  }
+  const slashMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (slashMatch) {
+    const yr = slashMatch[3].length === 4 ? slashMatch[3].slice(-2) : slashMatch[3];
+    return `${parseInt(slashMatch[1], 10)}/${parseInt(slashMatch[2], 10)}/${yr}`;
+  }
+  return s;
+}
+
+/**
+ * Check if two date representations point to the exact same day
+ */
+function datesMatch(d1Str, d1Iso, d2Str, d2Iso) {
+  if (d1Iso && d2Iso && String(d1Iso).trim() === String(d2Iso).trim()) return true;
+  const n1 = normalizeDateStr(d1Str || d1Iso);
+  const n2 = normalizeDateStr(d2Str || d2Iso);
+  if (n1 && n2 && n1 === n2) return true;
+  return false;
+}
+
+/**
+ * Match train numbers across documents (handles prefix/suffix variants like 12703/12704)
+ */
+function trainsMatch(t1, t2) {
+  if (!t1 || !t2 || t1 === '---' || t2 === '---') return true;
+  const s1 = String(t1).trim();
+  const s2 = String(t2).trim();
+  return s1 === s2 || s1.includes(s2) || s2.includes(s1);
+}
+
 export interface DiaryDocumentProps {
   authToken?: string;
   categories?: any[];
@@ -318,6 +357,47 @@ export default function DiaryDocument({
     };
   }, [selectedStaffId, startDate, endDate]);
 
+  // Real-time instant synchronization across TA, NDA, and DIARY documents without page refresh
+  useEffect(() => {
+    const handleDutyTimeSync = (e) => {
+      const detail = e?.detail;
+      if (!detail || detail.source === 'DIARY') return;
+      if (selectedStaffId && detail.staffId && String(detail.staffId) !== String(selectedStaffId)) return;
+      if (detail.year && year && String(detail.year) !== String(year)) return;
+      if (detail.month && month && String(detail.month) !== String(month)) return;
+
+      setDiaryData(prev => {
+        if (!prev || !prev.rows) return prev;
+        let anyRowUpdated = false;
+        const updatedRows = (prev.rows || []).map(row => {
+          const dMatch = datesMatch(row.date_str, row.date_iso, detail.dateStr, detail.dateIso);
+          if (!dMatch) return row;
+
+          const tMatch = trainsMatch(row.train_no, detail.trainNo);
+          if (!tMatch) return row;
+
+          anyRowUpdated = true;
+          const nextRow = { ...row };
+          const newDep = (detail.actDep && detail.actDep !== '---') ? detail.actDep : (detail.depTime || detail.schedDep);
+          const newArr = (detail.actArr && detail.actArr !== '---') ? detail.actArr : (detail.arrTime || detail.schedArr);
+          if (newDep !== undefined && newDep !== '') nextRow.dep_time = newDep;
+          if (newArr !== undefined && newArr !== '') nextRow.arr_time = newArr;
+          return nextRow;
+        });
+
+        if (!anyRowUpdated) return prev;
+        setHasUnsavedChanges(true);
+        return {
+          ...prev,
+          rows: updatedRows
+        };
+      });
+    };
+
+    window.addEventListener('railway:duty-time-sync', handleDutyTimeSync);
+    return () => window.removeEventListener('railway:duty-time-sync', handleDutyTimeSync);
+  }, [selectedStaffId, year, month]);
+
   // Global Ctrl+S Shortcut to Save
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -453,6 +533,32 @@ export default function DiaryDocument({
       rows: updatedRows,
       grand_totals: grandTotals
     });
+
+    // Real-time synchronization to TA and NDA documents
+    if (['dep_time', 'arr_time'].includes(field)) {
+      window.dispatchEvent(new CustomEvent('railway:duty-time-sync', {
+        detail: {
+          source: 'DIARY',
+          staffId: selectedStaffId,
+          year,
+          month,
+          dateStr: currentRow.date_str,
+          dateIso: currentRow.date_iso,
+          trainNo: currentRow.train_no,
+          fromStation: currentRow.from_station,
+          toStation: currentRow.to_station,
+          depTime: currentRow.dep_time,
+          arrTime: currentRow.arr_time,
+          actDep: currentRow.dep_time,
+          actArr: currentRow.arr_time,
+          schedDep: currentRow.dep_time,
+          schedArr: currentRow.arr_time,
+          field,
+          value,
+          rowOrder: currentRow.row_order
+        }
+      }));
+    }
   };
 
   // Header meta change
