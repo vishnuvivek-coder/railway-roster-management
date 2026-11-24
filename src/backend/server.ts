@@ -7083,40 +7083,52 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff_id, date]);
         const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
 
-        await run(
-          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
-         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
-         ON CONFLICT(staff_id, date) DO UPDATE SET
-           overridden_link_number = excluded.overridden_link_number,
-           status = excluded.status,
-           substitute_staff_id = NULL,
-           substitute_name = NULL,
-           leave_type = NULL,
-           is_extra = 0,
-           extra_train_no = NULL,
-           is_advance_duty = 0,
-           advance_train_no = NULL,
-           reason = excluded.reason,
-           target_category_id = excluded.target_category_id,
-           train_out = NULL,
-           coach_out = NULL,
-           train_return = NULL,
-           coach_return = NULL,
-           duty_label = NULL`,
-          [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
-        );
+        const preserveOriginalLink = Boolean(req.body.preserve_original_link);
 
-        // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
-        await run(
-          'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
-          [staff_id, date]
-        );
+        if (!preserveOriginalLink) {
+          await run(
+            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
+           VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+           ON CONFLICT(staff_id, date) DO UPDATE SET
+             overridden_link_number = excluded.overridden_link_number,
+             status = excluded.status,
+             substitute_staff_id = NULL,
+             substitute_name = NULL,
+             leave_type = NULL,
+             is_extra = 0,
+             extra_train_no = NULL,
+             is_advance_duty = 0,
+             advance_train_no = NULL,
+             reason = excluded.reason,
+             target_category_id = excluded.target_category_id,
+             train_out = NULL,
+             coach_out = NULL,
+             train_return = NULL,
+             coach_return = NULL,
+             duty_label = NULL`,
+            [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
+          );
+
+          // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
+          await run(
+            'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
+            [staff_id, date]
+          );
+        }
 
         // If this staff is replacing an original occupant on this date, link substitute_staff_id on the original occupant's override row
         if (req.body.replaced_staff_id && parseInt(req.body.replaced_staff_id, 10) !== parseInt(staff_id, 10) && targetLink !== null) {
+          const replacedStaffId = parseInt(req.body.replaced_staff_id, 10);
           await run(
-            'UPDATE overrides SET substitute_staff_id = ?, substitute_name = ? WHERE staff_id = ? AND date = ?',
-            [staff.id, staff.name, parseInt(req.body.replaced_staff_id, 10), date]
+            `INSERT INTO overrides (staff_id, date, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id)
+             VALUES (?, ?, ?, 'SUBSTITUTE', ?, ?, ?, ?)
+             ON CONFLICT(staff_id, date) DO UPDATE SET
+               substitute_staff_id = excluded.substitute_staff_id,
+               substitute_name = excluded.substitute_name,
+               overridden_link_number = COALESCE(overrides.overridden_link_number, excluded.overridden_link_number),
+               target_category_id = COALESCE(overrides.target_category_id, excluded.target_category_id),
+               reason = COALESCE(overrides.reason, excluded.reason)`,
+            [replacedStaffId, date, targetLink, staff.id, staff.name, `Duty covered by ${staff.name}`, resolvedTargetCat]
           );
         }
 
@@ -7138,7 +7150,9 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         }
         const day1RestRemark = (isDay1Rest && targetLink !== null) ? ` - Rest day worked (CR credited for ${formatDateDisplay(date)})` : '';
         const baseRemark = reason || (targetLink === null ? 'Assigned Rest Day' : `Assigned Link #${targetLink}`);
-        const musterRemark = baseRemark + day1RestRemark;
+        const musterRemark = preserveOriginalLink
+          ? `Completed Morning Link Duty • Booked to Link #${targetLink}`
+          : (baseRemark + day1RestRemark);
 
         // Sync with muster records: P for duty, R for rest
         const musterCode = targetLink === null ? 'R' : 'P';
@@ -14805,12 +14819,10 @@ app.get('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfStaff
     const currentMonth = now.getMonth() + 1;
     const currentDay = now.getDate();
     const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
-    const isCurrentMonth = (year === currentYear && month === currentMonth);
-
-    if (isCurrentMonth) {
-      if (!endDate || endDate > todayIso) {
-        endDate = todayIso;
-      }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const defaultEndIso = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+    if (!endDate) {
+      endDate = defaultEndIso;
     }
 
     const journal = await generateStaffTaJournal({ get, all, run }, staffId, year, month, startDate, endDate);

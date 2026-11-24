@@ -24,23 +24,21 @@ const computePresetDates = (preset, y, m) => {
   const todayIso = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
   const isCurrentMonth = (yr === currentYear && mo === currentMonth);
 
-  // Upto date cutoff: for current month, do not show estimation for the whole month
-  const effectiveMonthEnd = isCurrentMonth
-    ? `${yr}-${String(mo).padStart(2, '0')}-${String(Math.min(lastDay, currentDay)).padStart(2, '0')}`
-    : `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  // Full month end to allow complete calculation and tallying with Daily Duty
+  const effectiveMonthEnd = `${yr}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
   if (preset === 'wage_period') {
     // 11th of prev month to 10th of selected month (IR wage period)
     const targetEnd = `${yr}-${String(mo).padStart(2, '0')}-10`;
     return {
       start: `${prevYr}-${String(prevMo).padStart(2, '0')}-11`,
-      end: isCurrentMonth && targetEnd > todayIso ? todayIso : targetEnd
+      end: targetEnd
     };
   } else if (preset === 'fortnight_1') {
     const targetEnd = `${yr}-${String(mo).padStart(2, '0')}-15`;
     return {
       start: prevMonth30thIso,
-      end: isCurrentMonth && targetEnd > todayIso ? todayIso : targetEnd
+      end: targetEnd
     };
   } else if (preset === 'fortnight_2') {
     return {
@@ -48,7 +46,7 @@ const computePresetDates = (preset, y, m) => {
       end: effectiveMonthEnd
     };
   }
-  // Default 'full_month' / up-to-date (starting from previous month 30th to up-to-date cutoff)
+  // Default 'full_month' / entire duty roster range
   return {
     start: prevMonth30thIso,
     end: effectiveMonthEnd

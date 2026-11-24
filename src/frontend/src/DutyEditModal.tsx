@@ -1506,7 +1506,7 @@ export default function DutyEditModal({
     }
   };
 
-  const doExecuteAssign = async (assignedStaffObj, linkNum, targetCatIdNum) => {
+  const doExecuteAssign = async (assignedStaffObj, linkNum, targetCatIdNum, preserveOriginalLink = false) => {
     setSubmitting(true);
     try {
       const cleanStaffId = (val) => {
@@ -1524,6 +1524,7 @@ export default function DutyEditModal({
         new_link_number: linkNum,
         target_category_id: targetCatIdNum,
         replaced_staff_id: (origId && origId !== assignedStaffObj.id) ? origId : null,
+        preserve_original_link: preserveOriginalLink,
         reason: assignReason || (linkNum ? `Assigned to Link #${linkNum}${dutyModal.originalStaffName ? ` (Relief for ${dutyModal.originalStaffName})` : ''}` : 'Assigned duty link')
       };
 
@@ -1881,7 +1882,8 @@ export default function DutyEditModal({
               staffName: chosenRepObj.name,
               currentTrainDesc: repStatus.trainDesc,
               targetDesc: targetLink ? `Link #${targetLink}` : 'Duty',
-              onConfirm: () => doExecuteDelete(payload)
+              onBookKeepIntact: () => doExecuteDelete({ ...payload, preserve_original_link: true }),
+              onShiftStaff: () => doExecuteDelete({ ...payload, preserve_original_link: false })
             });
             return;
           }
@@ -1922,7 +1924,8 @@ export default function DutyEditModal({
             staffName: assignedStaffObj.name,
             currentTrainDesc: assignStatus.trainDesc,
             targetDesc: linkNum ? `Link #${linkNum}` : 'Duty',
-            onConfirm: () => doExecuteAssign(assignedStaffObj, linkNum, targetCatIdNum)
+            onBookKeepIntact: () => doExecuteAssign(assignedStaffObj, linkNum, targetCatIdNum, true),
+            onShiftStaff: () => doExecuteAssign(assignedStaffObj, linkNum, targetCatIdNum, false)
           });
           return;
         }
@@ -5542,67 +5545,102 @@ export default function DutyEditModal({
             padding: '16px'
           }}>
             <div style={{
-              maxWidth: '460px',
+              maxWidth: '520px',
               width: '100%',
               background: '#18181b',
-              border: '2px solid #f59e0b',
+              border: '2px solid #10b981',
               borderRadius: '16px',
               padding: '24px',
-              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(245, 158, 11, 0.25)',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(16, 185, 129, 0.25)',
               textAlign: 'center'
             }}>
               
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f59e0b', margin: '0 0 10px 0' }}>
-                Confirm Employee Shift
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981', margin: '0 0 10px 0' }}>
+                Confirm Duty Booking / Employee Shift
               </h3>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
+              <p style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
                 <strong>{shiftConfirmDialog.staffName}</strong> is already working{' '}
                 <span style={{ color: '#60a5fa', fontWeight: 700 }}>{shiftConfirmDialog.currentTrainDesc}</span> on {selectedDate}.
               </p>
               <div style={{
-                padding: '12px 14px',
+                padding: '14px 16px',
                 borderRadius: '8px',
-                background: 'rgba(245, 158, 11, 0.1)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                fontSize: '0.84rem',
-                color: '#fbbf24',
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                fontSize: '0.85rem',
+                color: '#d1fae5',
                 marginBottom: '20px',
-                textAlign: 'left'
+                textAlign: 'left',
+                lineHeight: 1.5
               }}>
-                <strong>What will happen:</strong>
-                <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                  <li>Staff will be shifted to <strong>{shiftConfirmDialog.targetDesc}</strong>.</li>
-                  <li>Their slot on <strong>{shiftConfirmDialog.currentTrainDesc}</strong> will immediately show as <strong style={{ color: '#ef4444' }}>[VACANT]</strong>.</li>
+                <strong style={{ color: '#34d399', display: 'block', marginBottom: '6px' }}>
+                  Duty Booking Options:
+                </strong>
+                <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
+                  <li style={{ marginBottom: '8px' }}>
+                    <strong>Keep Morning Link Intact (Recommended):</strong> Employee completed their morning link duty ({shiftConfirmDialog.currentTrainDesc}). Book them to <strong>{shiftConfirmDialog.targetDesc}</strong> without cancelling or vacating their morning link duty. Both duties will be credited.
+                  </li>
+                  <li>
+                    <strong>Shift Staff:</strong> Move staff to <strong>{shiftConfirmDialog.targetDesc}</strong> and make their original slot on <strong>{shiftConfirmDialog.currentTrainDesc}</strong> show as <strong style={{ color: '#f87171' }}>[VACANT]</strong>.
+                  </li>
                 </ul>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShiftConfirmDialog(null)}
-                  style={{ padding: '8px 18px', fontSize: '0.86rem' }}
-                >
-                  Cancel
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
-                    const cb = shiftConfirmDialog.onConfirm;
+                    const cb = shiftConfirmDialog.onBookKeepIntact || shiftConfirmDialog.onConfirm;
                     setShiftConfirmDialog(null);
                     if (cb) cb();
                   }}
                   style={{
-                    padding: '8px 22px',
-                    fontSize: '0.86rem',
+                    padding: '10px 20px',
+                    fontSize: '0.92rem',
                     fontWeight: 800,
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
                     border: 'none',
-                    color: '#000'
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
                   }}
                 >
-                  Confirm & Shift Staff
+                  ✓ Book Duty (Keep Morning Link Intact)
                 </button>
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShiftConfirmDialog(null)}
+                    style={{ padding: '8px 18px', fontSize: '0.86rem', flex: 1 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      const cb = shiftConfirmDialog.onShiftStaff || shiftConfirmDialog.onConfirm;
+                      setShiftConfirmDialog(null);
+                      if (cb) cb();
+                    }}
+                    style={{
+                      padding: '8px 18px',
+                      fontSize: '0.86rem',
+                      fontWeight: 700,
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid #f59e0b',
+                      color: '#fbbf24',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      flex: 1
+                    }}
+                  >
+                    Shift Staff (Vacate Original Slot)
+                  </button>
+                </div>
               </div>
             </div>
           </div>

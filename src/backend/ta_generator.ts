@@ -1937,6 +1937,17 @@ function resolveLrDutyCode(dutyCode, remarks, dateStrIso, linkMap = {}, allLinks
   };
 }
 
+function getAdjacentDateIso(dIso, offsetDays) {
+  if (!dIso || typeof dIso !== 'string') return null;
+  const parts = dIso.split('-');
+  if (parts.length !== 3) return null;
+  const yr = parseInt(parts[0], 10);
+  const mo = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  const dt = new Date(Date.UTC(yr, mo, day + offsetDays));
+  return dt.toISOString().slice(0, 10);
+}
+
 /**
  * Generate pending TA claims into ta_approvals for a given month
  */
@@ -1993,19 +2004,9 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
   const isCurrentMonth = (numYear === currentYear && numMonth === currentMonth);
   const isFutureMonth = (numYear > currentYear || (numYear === currentYear && numMonth > currentMonth));
 
-  // Never estimate future months
-  if (isFutureMonth) {
-    if (staffId) {
-      await run('DELETE FROM ta_approvals WHERE staff_id = ? AND month_year = ?', [staffId, monthYearStr]);
-    } else {
-      await run('DELETE FROM ta_approvals WHERE month_year = ?', [monthYearStr]);
-    }
-    return;
-  }
-
   const daysInMonth = new Date(numYear, numMonth, 0).getDate();
-  // TA shown up to date only; do not show estimation for the whole month
-  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : daysInMonth;
+  // Full month duty calculation to tally with Daily Duty
+  const maxDay = daysInMonth;
 
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
@@ -2353,6 +2354,32 @@ async function generatePendingTaClaimsForMonth(db, year, month, staffId = null) 
               }
             }
           }
+
+          // If staff completed a morning link duty arrival at HQ (e.g. Tr 17262 arriving GNT)
+          // and also has a booked/substitute duty on this date, retain both duties!
+          if (origLinkNum && !origIsRest && category.id !== 4 && overrideDuty) {
+            const origLinkDef = linkMap[`${category.id}_${origLinkNum}`] || linkMap[origLinkNum];
+            if (origLinkDef && !origLinkDef.is_rest) {
+              const rawMorningRows = getDutyRowsForLinkNumber(category.id, origLinkNum, origLinkDef, dateStrIso);
+              const morningArrivals = rawMorningRows.filter(r => (r.to || r.to_station || '').toUpperCase() === 'GNT' && r.arr && r.arr !== '---');
+              if (morningArrivals.length > 0) {
+                const prevIso = getAdjacentDateIso(dateStrIso, -1);
+                const prevMuster = prevIso ? musterMap[prevIso] : null;
+                const prevWasLeave = prevMuster && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'SICK', 'CR', 'R', 'O'].includes(prevMuster.code.toUpperCase());
+                if (!prevWasLeave) {
+                  const existingTrs = new Set(duties.map(d => String(d.train_no || '').trim()));
+                  morningArrivals.forEach(mr => {
+                    if (!existingTrs.has(String(mr.train_no || '').trim())) {
+                      duties.unshift({
+                        ...mr,
+                        remarks: 'Completed Morning Link Duty'
+                      });
+                    }
+                  });
+                }
+              }
+            }
+          }
         }
 
         const dutiesWithTimings = duties.map(duty => {
@@ -2519,9 +2546,9 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const isCurrentMonth = (y === currentYear && m === currentMonth);
   const isFutureMonth = (y > currentYear || (y === currentYear && m > currentMonth));
 
-  // Determine up-to-date cutoff for current/past/future month
-  const maxDay = isCurrentMonth ? Math.min(daysInMonth, currentDay) : (isFutureMonth ? 0 : daysInMonth);
-  const upToDateIso = `${y}-${String(m).padStart(2, '0')}-${String(maxDay > 0 ? maxDay : 1).padStart(2, '0')}`;
+  // Determine date boundaries for TA calculation
+  const maxDay = daysInMonth;
+  const monthEndIso = `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
   const prevYr = m === 1 ? y - 1 : y;
   const prevMo = m === 1 ? 12 : m - 1;
@@ -2530,15 +2557,7 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   const prevMonth30thIso = `${prevYr}-${String(prevMo).padStart(2, '0')}-${String(prev30thDay).padStart(2, '0')}`;
 
   let actualStart = (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) ? startDate : prevMonth30thIso;
-  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : (isCurrentMonth ? upToDateIso : `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`);
-
-  // Enforce: TA should be shown up to date only; do not show estimation for the whole month
-  if (isCurrentMonth && actualEnd > todayIso) {
-    actualEnd = todayIso;
-  }
-  if (isFutureMonth && actualEnd > todayIso) {
-    actualEnd = todayIso;
-  }
+  let actualEnd = (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) ? endDate : monthEndIso;
 
   // 1. Always regenerate claims in ta_approvals for this staff member across all covered months
   // so that any changes in the Daily Summary Duty List are immediately reflected in the TA claim!
@@ -2877,72 +2896,13 @@ async function generateStaffTaJournal(db, staffId, year, month, startDate, endDa
   // If an overnight train leg had its departure on a leave date, its arrival leg must not appear.
   // If an overnight train leg had its arrival on a leave date, its departure leg must not appear.
   // -------------------------------------------------------------
+  // Retain all assigned working trains from Daily Duty so TA strictly tallies with Daily Duty
   let cleanedRows = [];
   for (let i = 0; i < finalRows.length; i++) {
     const r = finalRows[i];
     if (r.is_leave || !r.train_no || ['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(r.train_no)) {
       continue;
     }
-    if (category.id === 4) {
-      cleanedRows.push(r);
-      continue;
-    }
-
-    const dIso = r.duty_date || r.date_iso || resolveDutyDateIso(r);
-    if (!dIso) {
-      cleanedRows.push(r);
-      continue;
-    }
-
-    const isDepOnly = (r.dep_time && r.dep_time !== '---') && (!r.arr_time || r.arr_time === '---');
-    const isArrOnly = (!r.dep_time || r.dep_time === '---') && (r.arr_time && r.arr_time !== '---');
-
-    // 1. Arrival-only leg: check if departure on preceding day was on leave or missing
-    if (isArrOnly) {
-      const prevIso = getAdjacentDateIso(dIso, -1);
-      if (prevIso && leaveInfoMap[prevIso]) {
-        // Departure on preceding day was canceled due to leave; cannot arrive on a train never departed on!
-        continue;
-      }
-      if (prevIso && prevIso >= actualStart) {
-        const hasMatchingDep = finalRows.some(x => {
-          const xIso = x.duty_date || x.date_iso || resolveDutyDateIso(x);
-          if (xIso !== prevIso || x.is_leave || !x.dep_time || x.dep_time === '---') return false;
-          return x.train_no === r.train_no || (r.to_station && (x.to_station === r.to_station || x.to_station === '---'));
-        });
-        if (!hasMatchingDep) {
-          // Matching departure is missing on the previous day in this journal
-          continue;
-        }
-      }
-    }
-
-    // 2. Departure-only leg: check if arrival on succeeding day is on leave or missing
-    if (isDepOnly) {
-      const nextIso = getAdjacentDateIso(dIso, 1);
-      if (nextIso && leaveInfoMap[nextIso]) {
-        // Arrival on next day is canceled due to leave; cannot depart on a train that arrives on leave date!
-        continue;
-      }
-      if (nextIso && nextIso <= actualEnd) {
-        const hasNextDayInRows = finalRows.some(x => {
-          const xIso = x.duty_date || x.date_iso || resolveDutyDateIso(x);
-          return xIso === nextIso;
-        });
-        if (hasNextDayInRows) {
-          const hasMatchingArr = finalRows.some(x => {
-            const xIso = x.duty_date || x.date_iso || resolveDutyDateIso(x);
-            if (xIso !== nextIso || x.is_leave || !x.arr_time || x.arr_time === '---') return false;
-            return x.train_no === r.train_no || (r.from_station && (x.from_station === r.from_station || x.from_station === '---'));
-          });
-          if (!hasMatchingArr) {
-            // Matching arrival is missing on the next day in this journal
-            continue;
-          }
-        }
-      }
-    }
-
     cleanedRows.push(r);
   }
 
