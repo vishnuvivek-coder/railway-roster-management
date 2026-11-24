@@ -1,8 +1,10 @@
 // Utility to generate authentic Indian Railways digital signature SVG data URLs
 export function getDefaultDigitalSignature(name?: string, designation?: string, pfNo?: string): string {
   const cleanName = (name || 'Railway Employee').trim();
-  const cleanDesig = (designation || 'Staff').trim();
-  const cleanPf = (pfNo && String(pfNo).trim() !== '07323475') ? String(pfNo).trim() : 'IR-VERIFIED';
+  const cleanDesig = (designation || 'CTI/SL/GNT').trim();
+  const rawPf = pfNo ? String(pfNo).trim() : '';
+  const cleanPf = (rawPf && rawPf !== 'IR-VERIFIED') ? (rawPf === '07323475' ? '24807323475' : rawPf) : '24807323475';
+  const idLabel = (/^(IP|PF):/i.test(cleanPf)) ? cleanPf : `IP: ${cleanPf}`;
 
   // Capitalize properly (e.g. K V RAMANA RAO -> K. V. Ramana Rao)
   const titleCaseName = cleanName
@@ -21,7 +23,7 @@ export function getDefaultDigitalSignature(name?: string, designation?: string, 
       ✓ DIGITALLY SIGNED • INDIAN RAILWAYS
     </text>
     <text x="140" y="72" font-family="Arial, sans-serif" font-size="7" font-weight="600" fill="#374151" text-anchor="middle">
-      ${cleanDesig} • PF: ${cleanPf}
+      ${cleanDesig} • ${idLabel}
     </text>
   </svg>`;
 

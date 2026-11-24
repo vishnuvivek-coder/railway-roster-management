@@ -35,10 +35,10 @@ export default function DailyEarningsDocument({
   lockedStaffId
 }: DailyEarningsDocumentProps) {
   // Mode selection:
-  // 'continuous' -> Multi-Day Continuous Daily Summary (exact format of user's spreadsheet screenshot)
-  // 'single_day' -> Single Date View (Category Separated)
-  // 'monthly'    -> Individual Staff Monthly Breakdown (1 staff for 30/31 days)
-  const [viewMode, setViewMode] = useState(() => isEmployee ? 'monthly' : 'continuous');
+  // 'monthly'    -> Individual Staff Monthly Breakdown (1 staff for 30/31 days) - DEFAULT & PRIMARY
+  // 'two_page'   -> Official 2-Page E.F.T Statement (Individual Staff)
+  // 'continuous' -> Multi-Day Continuous Summary (Reference)
+  const [viewMode, setViewMode] = useState('monthly');
 
   useEffect(() => {
     if (isEmployee) {
@@ -55,7 +55,7 @@ export default function DailyEarningsDocument({
   // Internal state fallbacks
   const [internalStaffId, setInternalStaffId] = useState('');
   const [internalYear, setInternalYear] = useState('2026');
-  const [internalMonth, setInternalMonth] = useState('8');
+  const [internalMonth, setInternalMonth] = useState('10');
 
   const selectedStaffId = propSelectedStaffId !== undefined ? propSelectedStaffId : internalStaffId;
   const setSelectedStaffId = propSetSelectedStaffId || setInternalStaffId;
@@ -94,8 +94,10 @@ export default function DailyEarningsDocument({
 
   // Fetch staff for dropdowns
   useEffect(() => {
-    const catId = selectedCatId || (categories && categories.length > 0 ? categories[0].id.toString() : '1');
-    fetch(`${API_BASE}/staff?category_id=${catId}`, {
+    const catParam = (selectedCatId && selectedCatId !== 'ALL' && selectedCatId !== 'all')
+      ? `?category_id=${selectedCatId}`
+      : '';
+    fetch(`${API_BASE}/staff${catParam}`, {
       headers: { 'Authorization': `Bearer ${authToken}` }
     })
       .then(res => res.json())
@@ -108,13 +110,13 @@ export default function DailyEarningsDocument({
             const exists = data.some(s => s.id.toString() === selectedStaffId?.toString());
             if (!exists) {
               const firstValid = data.find(s => !s.name.includes('VACANT')) || data[0];
-              setSelectedStaffId(firstValid.id.toString());
+              if (firstValid) setSelectedStaffId(firstValid.id.toString());
             }
           }
         }
       })
       .catch(console.error);
-  }, [selectedCatId, categories, authToken, selectedStaffId, setSelectedStaffId]);
+  }, [selectedCatId, authToken, lockedStaffId, selectedStaffId, setSelectedStaffId]);
 
   // 1. Fetch Continuous Multi-Day Range Data (Matching user screenshot)
   const fetchContinuousRange = () => {
@@ -580,72 +582,6 @@ export default function DailyEarningsDocument({
         }}>
           <button
             type="button"
-            onClick={() => setViewMode('two_page')}
-            className="btn"
-            style={{
-              padding: '10px 24px',
-              borderRadius: '6px',
-              fontWeight: 800,
-              fontSize: '0.92rem',
-              background: viewMode === 'two_page'
-                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-                : 'var(--bg-secondary)',
-              color: viewMode === 'two_page' ? '#0D0D0F' : 'var(--color-text-secondary)',
-              border: viewMode === 'two_page' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-              boxShadow: viewMode === 'two_page' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            📄 Official 2-Page Daily Summary (Page 1 & 2)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('continuous')}
-            className="btn"
-            style={{
-              padding: '10px 24px',
-              borderRadius: '6px',
-              fontWeight: 800,
-              fontSize: '0.92rem',
-              background: viewMode === 'continuous'
-                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-                : 'var(--bg-secondary)',
-              color: viewMode === 'continuous' ? '#0D0D0F' : 'var(--color-text-secondary)',
-              border: viewMode === 'continuous' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-              boxShadow: viewMode === 'continuous' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Daily Summary Register (Continuous Multi-Day Sheet)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('single_day')}
-            className="btn"
-            style={{
-              padding: '10px 24px',
-              borderRadius: '6px',
-              fontWeight: 800,
-              fontSize: '0.92rem',
-              background: viewMode === 'single_day'
-                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-                : 'var(--bg-secondary)',
-              color: viewMode === 'single_day' ? '#0D0D0F' : 'var(--color-text-secondary)',
-              border: viewMode === 'single_day' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
-              boxShadow: viewMode === 'single_day' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Single Day View
-          </button>
-
-          <button
-            type="button"
             onClick={() => setViewMode('monthly')}
             className="btn"
             style={{
@@ -663,7 +599,52 @@ export default function DailyEarningsDocument({
               transition: 'all 0.2s ease'
             }}
           >
-            Employee Monthly Sheet (Whole Month)
+            👤 Individual Employee Monthly Sheet
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('two_page')}
+            className="btn"
+            style={{
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 800,
+              fontSize: '0.92rem',
+              background: viewMode === 'two_page'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'two_page' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'two_page' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'two_page' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            📄 Official 2-Page E.F.T Statement
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('continuous')}
+            className="btn"
+            style={{
+              padding: '10px 20px',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              background: viewMode === 'continuous'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'continuous' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'continuous' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'continuous' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              opacity: 0.85,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            📋 Consolidated (All Staff Reference)
           </button>
         </div>
       )}
@@ -840,49 +821,68 @@ export default function DailyEarningsDocument({
               </select>
             </div>
           ) : (
-            /* Controls for Monthly Mode */
+            /* Controls for Monthly Mode (Individual Employee) */
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ flexGrow: 1, minWidth: '240px' }}>
-                  {isEmployee ? (
-                    <div style={{
-                      padding: '8px 16px',
-                      background: 'rgba(212, 161, 92, 0.1)',
-                      border: '1px solid var(--border-gold)',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontWeight: 700,
-                      color: 'var(--primary)',
-                      fontSize: '0.9rem'
-                    }}>
-                      <span>👤 {currentEmpName} ({currentEmpDesig})</span>
-                      <span style={{ fontSize: '0.75rem', opacity: 0.8, marginLeft: 'auto' }}>My Diary / Earnings</span>
-                    </div>
-                  ) : (
-                    <SearchableStaffSelect
-                      staffList={[...staffList].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))}
-                      value={selectedStaffId}
-                      onChange={(val) => { if (setSelectedStaffId) setSelectedStaffId(val); }}
-                      customStyles={{
-                        control: (base, state) => ({
-                          ...base,
-                          background: 'transparent',
-                          borderColor: 'transparent',
-                          boxShadow: 'none',
-                          minHeight: '28px',
-                          fontSize: '0.88rem',
-                          fontWeight: 700,
-                          color: 'var(--primary)'
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: 'var(--primary)'
-                        })
-                      }}
-                    />
-                  )}
-                </div>
+              {/* Category Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Category:</span>
+                <select
+                  className="select-input"
+                  value={selectedCatId || 'ALL'}
+                  onChange={(e) => {
+                    if (setSelectedCatId) setSelectedCatId(e.target.value);
+                  }}
+                  style={{ padding: '6px 10px', fontSize: '0.85rem', minWidth: '130px', fontWeight: 600 }}
+                >
+                  <option value="ALL">All Categories</option>
+                  {categories && categories.map(cat => (
+                    <option key={cat.id} value={cat.id.toString()}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Individual Staff Selector */}
+              <div style={{ minWidth: '260px', flexGrow: 1 }}>
+                {isEmployee ? (
+                  <div style={{
+                    padding: '8px 16px',
+                    background: 'rgba(212, 161, 92, 0.1)',
+                    border: '1px solid var(--border-gold)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontWeight: 700,
+                    color: 'var(--primary)',
+                    fontSize: '0.9rem'
+                  }}>
+                    <span>👤 {currentEmpName} ({currentEmpDesig})</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.8, marginLeft: 'auto' }}>My Diary / Earnings</span>
+                  </div>
+                ) : (
+                  <SearchableStaffSelect
+                    staffList={[...staffList].sort((a, b) => (a.name || '').trim().localeCompare((b.name || '').trim()))}
+                    value={selectedStaffId}
+                    onChange={(val) => { if (setSelectedStaffId) setSelectedStaffId(val); }}
+                    customStyles={{
+                      control: (base, state) => ({
+                        ...base,
+                        background: 'transparent',
+                        borderColor: 'transparent',
+                        boxShadow: 'none',
+                        minHeight: '28px',
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        color: 'var(--primary)'
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: 'var(--primary)'
+                      })
+                    }}
+                  />
+                )}
+              </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Month:</span>
@@ -1656,29 +1656,35 @@ export default function DailyEarningsDocument({
           border: '1px solid #C0C0C0',
           fontFamily: 'Arial, sans-serif'
         }}>
-          {/* Employee Header Banner */}
+          {/* Employee Header Banner matching exact official format */}
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: '14px',
-            padding: '10px 16px',
-            background: '#F5F5F5',
-            border: '1px solid #DDD',
-            borderRadius: '6px'
+            padding: '12px 18px',
+            background: '#F8F9FA',
+            border: '1.5px solid #000000',
+            borderRadius: '4px'
           }}>
             <div>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: '#000', textTransform: 'uppercase' }}>
-                {currentEmpName}
+              <span style={{ fontSize: '14px', fontWeight: 900, color: '#000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                E.F.T / CASH EARNINGS STATEMENT OF {currentEmpName}
               </span>
-              <span style={{ fontSize: '11px', color: '#555', marginLeft: '12px', fontWeight: 600 }}>
-                DESIG: {currentEmpDesig} | HQ: {monthlyData?.employee?.hq_station || 'GNT'} | BILL UNIT: {(monthlyData?.employee?.bill_unit && monthlyData?.employee?.bill_unit !== '0910629') ? monthlyData?.employee?.bill_unit : ''}
-              </span>
+              <div style={{ fontSize: '11px', color: '#333', marginTop: '4px', fontWeight: 700 }}>
+                DESIGNATION: <span style={{ color: '#000' }}>{currentEmpDesig}</span> &nbsp;|&nbsp; 
+                HQ: <span style={{ color: '#000' }}>{monthlyData?.employee?.hq_station || 'GNT'}</span> &nbsp;|&nbsp; 
+                PF / T.CODE: <span style={{ color: '#000' }}>{monthlyData?.employee?.pf_no || monthlyData?.employee?.t_code || ''}</span> &nbsp;|&nbsp;
+                BILL UNIT: <span style={{ color: '#000' }}>{(monthlyData?.employee?.bill_unit && monthlyData?.employee?.bill_unit !== '0910629') ? monthlyData?.employee?.bill_unit : ''}</span>
+              </div>
             </div>
-            <div>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#000' }}>
-                MONTH: {monthlyData?.month_name?.toUpperCase() || month} {year}
-              </span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '13px', fontWeight: 900, color: '#000' }}>
+                MONTH OF {monthlyData?.month_name?.toUpperCase() || month} {year}
+              </div>
+              <div style={{ fontSize: '10px', color: '#666', fontWeight: 600, marginTop: '2px' }}>
+                INDIVIDUAL EMPLOYEE MONTHLY RECORD
+              </div>
             </div>
           </div>
 

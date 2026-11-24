@@ -7084,31 +7084,46 @@ app.post('/api/duty/change-status', requireAdmin, async (req, res) => {
         const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff_id, date]);
 
         const preserveOriginalLink = Boolean(req.body.preserve_original_link);
+        const bookingReason = preserveOriginalLink
+          ? (reason || `Booked to Link #${targetLink} (Morning Link #${originalLink} kept intact)`)
+          : (reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`);
+
+        await run(
+          `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label, shifted_from_link, shifted_from_train)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)
+         ON CONFLICT(staff_id, date) DO UPDATE SET
+           overridden_link_number = excluded.overridden_link_number,
+           status = excluded.status,
+           substitute_staff_id = NULL,
+           substitute_name = NULL,
+           leave_type = NULL,
+           is_extra = 0,
+           extra_train_no = NULL,
+           is_advance_duty = 0,
+           advance_train_no = NULL,
+           reason = excluded.reason,
+           target_category_id = excluded.target_category_id,
+           shifted_from_link = excluded.shifted_from_link,
+           shifted_from_train = excluded.shifted_from_train,
+           train_out = NULL,
+           coach_out = NULL,
+           train_return = NULL,
+           coach_return = NULL,
+           duty_label = NULL`,
+          [
+            staff_id,
+            date,
+            originalLink,
+            targetLink,
+            linkStatus,
+            bookingReason,
+            resolvedTargetCat,
+            preserveOriginalLink ? null : (originalLink || null),
+            preserveOriginalLink ? null : (staff.train_out || null)
+          ]
+        );
 
         if (!preserveOriginalLink) {
-          await run(
-            `INSERT INTO overrides (staff_id, date, original_link_number, overridden_link_number, status, substitute_staff_id, substitute_name, reason, target_category_id, train_out, coach_out, train_return, coach_return, duty_label)
-           VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
-           ON CONFLICT(staff_id, date) DO UPDATE SET
-             overridden_link_number = excluded.overridden_link_number,
-             status = excluded.status,
-             substitute_staff_id = NULL,
-             substitute_name = NULL,
-             leave_type = NULL,
-             is_extra = 0,
-             extra_train_no = NULL,
-             is_advance_duty = 0,
-             advance_train_no = NULL,
-             reason = excluded.reason,
-             target_category_id = excluded.target_category_id,
-             train_out = NULL,
-             coach_out = NULL,
-             train_return = NULL,
-             coach_return = NULL,
-             duty_label = NULL`,
-            [staff_id, date, originalLink, targetLink, linkStatus, reason || `Changed to Link ${targetLink === null ? 'REST' : targetLink}`, resolvedTargetCat]
-          );
-
           // Clear any previous substitute reference for this staff on this date so their previous slot shows vacant
           await run(
             'UPDATE overrides SET substitute_staff_id = NULL, substitute_name = NULL WHERE substitute_staff_id = ? AND date = ?',
@@ -13457,6 +13472,76 @@ async function buildDailyViewPayload(rawTargetDateStr: string) {
           ta_percentage: (isDutyRest || taCalc.ta_percentage === null || taCalc.ta_percentage === undefined) ? 0 : taCalc.ta_percentage,
           absence_hours: isDutyRest ? 0 : (taCalc.absence_hours || 0)
         });
+
+        const cyclicLinkNum = getBaseLinkNumber(staff.row_position, dayOffset, catCycleLength);
+        const hasPreservedMorningLink = override && 
+          override.shifted_from_link === null &&
+          activeLink !== null &&
+          cyclicLinkNum !== null &&
+          parseInt(cyclicLinkNum, 10) !== parseInt(activeLink, 10) &&
+          !['REST', 'SICK', 'LEAVE', 'CR', 'ABSENT'].includes(override.status);
+
+        if (hasPreservedMorningLink) {
+          const morningLinkDef = getLinkDef(cat.id, cyclicLinkNum, targetDateStr);
+          const morningTa = calculateAbsenceAndTa(
+            null,
+            null,
+            morningLinkDef?.from_station || 'GNT',
+            morningLinkDef?.to_station || '---',
+            morningLinkDef?.train_numbers || ''
+          );
+          staffDuties.push({
+            staffId: staff.id,
+            name: staff.name,
+            designation: staff.designation,
+            cug_number: staff.cug_number || null,
+            contact_number: staff.contact_number || null,
+            email: staff.email || null,
+            pf_no: staff.pf_no || null,
+            hrms_id: staff.hrms_id || null,
+            rowPosition: staff.row_position,
+            categoryId: cat.id,
+            categoryName: cat.name,
+            target_category_id: cat.id,
+            rest_day: staff.rest_day,
+            link_number: cyclicLinkNum,
+            original_link_number: cyclicLinkNum,
+            isRest: morningLinkDef ? Boolean(morningLinkDef.is_rest) : false,
+            isOverridden: false,
+            status: 'DUTY',
+            train_out: null,
+            coach_out: null,
+            train_return: null,
+            coach_return: null,
+            duty_label: null,
+            muster_code: 'P',
+            muster_remarks: 'Morning Link Duty Completed (Kept Intact)',
+            substituteStaffId: null,
+            substituteName: null,
+            overrideReason: 'Morning Link Duty Completed (Kept Intact)',
+            extra_train_no: null,
+            is_extra: 0,
+            shifted_place: null,
+            shifted_from_link: null,
+            shifted_from_train: null,
+            advance_train_no: null,
+            is_advance_duty: 0,
+            leave_type: null,
+            cr_available: crInfo.display,
+            cr_short_display: crInfo.shortDisplay,
+            cr_count: crInfo.count,
+            cr_dates: crInfo.dates,
+            lr_rest_info: lrRestInfo,
+            train_numbers: morningLinkDef?.train_numbers || `Link #${cyclicLinkNum}`,
+            from_station: morningLinkDef?.from_station || 'GNT',
+            to_station: morningLinkDef?.to_station || '---',
+            coaches: morningLinkDef?.coaches || (cat.id === 1 ? 'AC' : 'SL'),
+            set_type: morningLinkDef?.set_type || `Link #${cyclicLinkNum}`,
+            ta_percentage: morningTa.ta_percentage || 0,
+            absence_hours: morningTa.absence_hours || 0,
+            is_morning_link_duty: true
+          });
+        }
       }
 
       // Sort daily duties by link number ascending to keep a fixed order of trains/links

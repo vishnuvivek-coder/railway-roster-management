@@ -7464,6 +7464,12 @@ export default function App() {
 
                 // Helper to resolve duty assignments for a given slot list
                 const activeWorkedStaffIds = new Set();
+                const activeWorkedStaffSlots = new Set();
+                const isDutyAlreadyPlaced = (d, slotFirstTrain, lNum) => {
+                  if (!d || !d.staffId) return false;
+                  const linkKey = lNum !== undefined && lNum !== null ? String(lNum) : (d.link_number !== undefined && d.link_number !== null ? String(d.link_number) : String(slotFirstTrain || ''));
+                  return activeWorkedStaffSlots.has(`${d.staffId}_link_${linkKey}`);
+                };
 
                 // Helper to identify return-leg multi-day duties (not outward departures from HQ)
                 const isReturnDuty = (d) => {
@@ -7698,14 +7704,14 @@ export default function App() {
 
                       // 1. Check if ANY staff with explicit override link is assigned to this link
                       let overriddenStaffDuty = staffDuties.find(d => 
-                        !activeWorkedStaffIds.has(d.staffId) &&
+                        !isDutyAlreadyPlaced(d, slot.firstTrain, lDef.linkNum) &&
                         matchesOverrideLink(d) &&
                         d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
                       );
 
                       // 2. Direct active link assignment (only real human staff, never VACANT)
                       let regularStaffDuty = staffDuties.find(d => 
-                        !activeWorkedStaffIds.has(d.staffId) &&
+                        !isDutyAlreadyPlaced(d, slot.firstTrain, lDef.linkNum) &&
                         (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
                         !isReturnDuty(d) &&
                         (!d.train_out || d.train_out === slot.firstTrain || (slot.altFirstTrains && slot.altFirstTrains.includes(d.train_out)) || (slot.firstTrain && d.train_out.includes(slot.firstTrain))) &&
@@ -7724,9 +7730,9 @@ export default function App() {
 
                       // DEFENSIVE GUARD:
                       // If regularStaffDuty is actively manned and scheduled to work this exact link
-                      // (and is NOT on leave/sick/rest itself), then an originalSickOrLeaveDuty belonging
-                      // to a DIFFERENT staff member must NEVER displace or vacate this regular staff member!
-                      if (originalSickOrLeaveDuty && regularStaffDuty && String(originalSickOrLeaveDuty.staffId) !== String(regularStaffDuty.staffId)) {
+                      // (and is NOT on leave/sick/rest itself), then an originalSickOrLeaveDuty
+                      // must NEVER displace or vacate this actively working staff member!
+                      if (regularStaffDuty) {
                         const isRegularWorking = regularStaffDuty.status !== 'LEAVE' &&
                                                  regularStaffDuty.status !== 'SICK' &&
                                                  regularStaffDuty.status !== 'CR' &&
@@ -7770,9 +7776,9 @@ export default function App() {
                         );
                       const isStaffShiftedAway = originalSickOrLeaveDuty && !isUtilisedAdvance && !isSleeperUpgradedAway && (
                         originalSickOrLeaveDuty.status === 'SHIFTED' ||
-                        originalSickOrLeaveDuty.status === 'EXTRA_CREW' ||
-                        originalSickOrLeaveDuty.is_extra === 1 ||
-                        (originalSickOrLeaveDuty.status === 'CHANGED_LINK' && parseInt(originalSickOrLeaveDuty.link_number, 10) !== parseInt(lDef.linkNum, 10))
+                        (originalSickOrLeaveDuty.shifted_from_link && parseInt(originalSickOrLeaveDuty.shifted_from_link, 10) === parseInt(lDef.linkNum, 10)) ||
+                        ((originalSickOrLeaveDuty.status === 'EXTRA_CREW' || originalSickOrLeaveDuty.is_extra === 1) && originalSickOrLeaveDuty.shifted_from_link && parseInt(originalSickOrLeaveDuty.shifted_from_link, 10) === parseInt(lDef.linkNum, 10)) ||
+                        (originalSickOrLeaveDuty.status === 'CHANGED_LINK' && originalSickOrLeaveDuty.shifted_from_link && parseInt(originalSickOrLeaveDuty.shifted_from_link, 10) === parseInt(lDef.linkNum, 10))
                       );
 
                       let subId = originalSickOrLeaveDuty 
@@ -7782,7 +7788,7 @@ export default function App() {
                       let bookedTrainStaffDuty = null;
                       if (!overriddenStaffDuty && !regularStaffDuty && !originalSickOrLeaveDuty) {
                         bookedTrainStaffDuty = staffDuties.find(d => 
-                          !activeWorkedStaffIds.has(d.staffId) &&
+                          !isDutyAlreadyPlaced(d, slot.firstTrain, lDef.linkNum) &&
                           (d.isOverridden || d.train_out || d.categoryId === 4) &&
                           matchesTrainBooking(d) &&
                           d.name && d.name !== 'VACANT (V)' && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant
@@ -7790,13 +7796,15 @@ export default function App() {
                       }
 
                       let staffDuty = overriddenStaffDuty || (subId 
-                        ? staffDuties.find(s => !activeWorkedStaffIds.has(s.staffId) && s.staffId === subId && s.name && !s.name.includes('VACANT') && s.name.trim() !== 'V' && !s.isVacant) 
+                        ? staffDuties.find(s => !isDutyAlreadyPlaced(s, slot.firstTrain, lDef.linkNum) && s.staffId === subId && s.name && !s.name.includes('VACANT') && s.name.trim() !== 'V' && !s.isVacant) 
                         : (originalSickOrLeaveDuty ? null : (regularStaffDuty && (regularStaffDuty.status === 'AVAILABLE_FOR_BOOKING' || regularStaffDuty.status === 'SUBSTITUTE' || regularStaffDuty.status === 'UTILISED_ADVANCE') ? null : regularStaffDuty))) || bookedTrainStaffDuty;
 
                       const isRealHumanStaff = staffDuty && staffDuty.name && !staffDuty.name.includes('VACANT') && staffDuty.name.trim() !== 'V' && !staffDuty.isVacant;
 
                       if (isRealHumanStaff) {
                         activeWorkedStaffIds.add(staffDuty.staffId);
+                        const linkKey = lDef.linkNum !== undefined && lDef.linkNum !== null ? String(lDef.linkNum) : (staffDuty.link_number !== undefined && staffDuty.link_number !== null ? String(staffDuty.link_number) : String(slot.firstTrain || ''));
+                        activeWorkedStaffSlots.add(`${staffDuty.staffId}_link_${linkKey}`);
                         const isApprovedLeave = safeLeaveRequests.some(l => 
                           String(l.staff_id) === String(staffDuty.staffId) && 
                           l.status === 'APPROVED' &&
@@ -8092,7 +8100,7 @@ export default function App() {
 
                     // Check for Extra Staff assigned to this train slot (dragged or added down below)
                     const extraStaffDuties = staffDuties.filter(d => 
-                      !activeWorkedStaffIds.has(d.staffId) &&
+                      !isDutyAlreadyPlaced(d, slot.firstTrain, 'EXTRA') &&
                       d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                       (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
                       !isReturnDuty(d) &&
@@ -8109,6 +8117,8 @@ export default function App() {
 
                     extraStaffDuties.forEach(extraStaff => {
                       activeWorkedStaffIds.add(extraStaff.staffId);
+                      activeWorkedStaffSlots.add(`${extraStaff.staffId}_link_EXTRA`);
+                      activeWorkedStaffSlots.add(`${extraStaff.staffId}_slot_${slot.slotId}`);
                       const extraDutyKey = `slot_${slot.slotId}_extra_${extraStaff.staffId}`;
                       const customExtra = slotCustomizations[extraDutyKey] || {};
                       dutiesInSlot.push({
@@ -8159,7 +8169,7 @@ export default function App() {
 
                 // Dynamically resolve any staff who worked trains from the register not caught in predefined slots (e.g. 07001, 12755, 08519, 18063, etc.)
                 const unplacedTrainStaff = staffDuties.filter(d => 
-                  !activeWorkedStaffIds.has(d.staffId) && 
+                  !isDutyAlreadyPlaced(d, d.train_out || d.train_numbers, 'SPECIAL') && 
                   d.name && !d.name.includes('VACANT') && d.name.trim() !== 'V' && !d.isVacant &&
                   (d.status === 'DUTY' || d.status === 'SUBSTITUTE') &&
                   !isReturnDuty(d) &&
@@ -8171,6 +8181,7 @@ export default function App() {
                 const groupedSpecial = new Map();
                 unplacedTrainStaff.forEach(s => {
                   activeWorkedStaffIds.add(s.staffId);
+                  activeWorkedStaffSlots.add(`${s.staffId}_link_SPECIAL`);
                   let tOut = s.train_out || '';
                   let tRet = s.train_return || '';
                   if (!tOut && s.train_numbers) {
