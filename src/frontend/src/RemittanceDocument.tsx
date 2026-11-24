@@ -155,12 +155,12 @@ export default function RemittanceDocument({
   });
 
   const [employeeMeta, setEmployeeMeta] = useState<EmployeeMeta>({
-    name: 'K V RAMANA RAO',
-    designation: 'CTI',
+    name: '',
+    designation: '',
     hqStation: 'GNT',
     pfNo: '',
     billUnit: '',
-    designationSign: 'CTI/SL/GNT',
+    designationSign: '',
     signatureData: null
   });
 
@@ -244,6 +244,34 @@ export default function RemittanceDocument({
     loadStaff();
   }, [authToken, selectedCatId, selectedStaffId, setSelectedStaffId]);
 
+  const selectedStaffObj = useMemo(() => {
+    if (!staffList || !selectedStaffId) return null;
+    return staffList.find((s: any) => String(s.id) === String(selectedStaffId)) || null;
+  }, [staffList, selectedStaffId]);
+
+  // Immediately display the individual employee's name, designation, and signature when selected
+  useEffect(() => {
+    if (selectedStaffObj) {
+      const staffName = selectedStaffObj.name || '';
+      const staffDesig = selectedStaffObj.designation || 'CTI';
+      const staffHq = selectedStaffObj.hq_station || 'GNT';
+      const staffPf = selectedStaffObj.pf_no || '';
+      const staffDesigSign = `${staffDesig}/SL/${staffHq}`;
+      const staffSig = selectedStaffObj.signature_data || getDefaultDigitalSignature(staffName, staffDesigSign, staffPf);
+
+      setHeaderTitleOf(staffName);
+      setEmployeeMeta({
+        name: staffName,
+        designation: staffDesig,
+        hqStation: staffHq,
+        pfNo: staffPf,
+        billUnit: selectedStaffObj.bill_unit || '',
+        designationSign: staffDesigSign,
+        signatureData: staffSig
+      });
+    }
+  }, [selectedStaffObj]);
+
   // Fetch document data
   const fetchDocument = useCallback(async () => {
     if (!selectedStaffId) return;
@@ -260,20 +288,28 @@ export default function RemittanceDocument({
       if (res.ok) {
         const data = await res.json();
         
-        setHeaderTitleOf(data.headerTitleOf || data.employeeMeta?.name || 'K V RAMANA RAO');
+        const currentStaff = selectedStaffObj || staffList.find((s: any) => String(s.id) === String(selectedStaffId));
+        const empName = (data.employeeMeta?.name && data.isCustom && data.employeeMeta.name !== 'K V RAMANA RAO')
+          ? data.employeeMeta.name
+          : (currentStaff?.name || data.employeeMeta?.name || '');
+        const empDesig = data.employeeMeta?.designation || currentStaff?.designation || 'CTI';
+        const empHq = data.employeeMeta?.hqStation || currentStaff?.hq_station || 'GNT';
+        const empPf = data.employeeMeta?.pfNo || currentStaff?.pf_no || '';
+        const empDesigSign = data.employeeMeta?.designationSign || `${empDesig}/SL/${empHq}`;
+        const empSig = data.employeeMeta?.signatureData || currentStaff?.signature_data || getDefaultDigitalSignature(empName, empDesigSign, empPf);
+
+        setHeaderTitleOf((data.headerTitleOf && data.isCustom && data.headerTitleOf !== 'K V RAMANA RAO') ? data.headerTitleOf : empName);
         setHeaderMonthText(data.headerMonthText || data.monthName || '');
 
-        if (data.employeeMeta) {
-          setEmployeeMeta({
-            name: data.employeeMeta.name || 'K V RAMANA RAO',
-            designation: data.employeeMeta.designation || 'CTI',
-            hqStation: data.employeeMeta.hqStation || 'GNT',
-            pfNo: data.employeeMeta.pfNo || '',
-            billUnit: data.employeeMeta.billUnit || '',
-            designationSign: data.employeeMeta.designationSign || 'CTI/SL/GNT',
-            signatureData: data.employeeMeta.signatureData || null
-          });
-        }
+        setEmployeeMeta({
+          name: empName,
+          designation: empDesig,
+          hqStation: empHq,
+          pfNo: empPf,
+          billUnit: data.employeeMeta?.billUnit || currentStaff?.bill_unit || '',
+          designationSign: empDesigSign,
+          signatureData: empSig
+        });
 
         if (Array.isArray(data.cashRemittanceRows) && data.cashRemittanceRows.length > 0) {
           // Ensure at least 26 rows to match exact format
@@ -469,11 +505,12 @@ export default function RemittanceDocument({
     setHasUnsavedChanges(true);
   };
 
-  const selectedStaffObj = staffList.find(s => String(s.id) === String(selectedStaffId));
-  const effectiveSignature = employeeMeta.signatureData || getDefaultDigitalSignature(
-    employeeMeta.name || selectedStaffObj?.name,
-    employeeMeta.designationSign || employeeMeta.designation || selectedStaffObj?.designation,
-    employeeMeta.pfNo || selectedStaffObj?.pf_no
+  const effectiveSignature = employeeMeta.signatureData || (
+    selectedStaffObj?.signature_data || getDefaultDigitalSignature(
+      employeeMeta.name || selectedStaffObj?.name || 'Railway Employee',
+      employeeMeta.designationSign || (selectedStaffObj ? `${selectedStaffObj.designation || 'CTI'}/SL/${selectedStaffObj.hq_station || 'GNT'}` : 'CTI/SL/GNT'),
+      employeeMeta.pfNo || selectedStaffObj?.pf_no
+    )
   );
 
   // Common transparent full-cell input style matching Excel exact grid lines

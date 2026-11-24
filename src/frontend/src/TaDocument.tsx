@@ -223,7 +223,7 @@ export default function TaDocument({
     branch: 'COMMERCIAL',
     division: 'GNT',
     hq: 'GNT',
-    name: 'K V R RAO',
+    name: '',
     designation: 'CTI',
     month_name: '30/09/2026 TO 31/10/2026',
     year: '2026',
@@ -231,7 +231,7 @@ export default function TaDocument({
     pf_no: '',
     bill_unit_no: '',
     doa: '',
-    full_name_sign: 'K V RAMANA RAO',
+    full_name_sign: '',
     designation_sign: '(CTI/SL/GNT)',
     vertical_object_text: (String(selectedCatId) === '1' || !selectedCatId) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES',
     signature_data: null as string | null,
@@ -250,10 +250,37 @@ export default function TaDocument({
   };
 
   const selectedStaffObj = staffList.find(s => s.id?.toString() === selectedStaffId?.toString());
-  const effectiveSignature = editableMeta.signature_data || getDefaultDigitalSignature(
-    editableMeta.full_name_sign || editableMeta.name || selectedStaffObj?.name,
-    editableMeta.designation_sign || editableMeta.designation || selectedStaffObj?.designation,
-    editableMeta.pf_no || selectedStaffObj?.pf_no
+
+  // Immediately display the individual employee's name, designation, and signature when selected
+  useEffect(() => {
+    if (selectedStaffObj) {
+      const staffName = selectedStaffObj.name || '';
+      const staffDesig = selectedStaffObj.designation || 'CTI';
+      const staffHq = selectedStaffObj.hq_station || 'GNT';
+      const staffPf = (selectedStaffObj.pf_no && selectedStaffObj.pf_no !== '07323475') ? selectedStaffObj.pf_no : '';
+      const staffDesigSign = `(${staffDesig}/SL/${staffHq})`;
+      const staffSig = selectedStaffObj.signature_data || getDefaultDigitalSignature(staffName, staffDesigSign, staffPf);
+
+      setEditableMeta(prev => ({
+        ...prev,
+        name: staffName,
+        designation: staffDesig,
+        hq: staffHq,
+        pf_no: staffPf,
+        full_name_sign: staffName,
+        designation_sign: staffDesigSign,
+        signature_data: staffSig,
+        signature_updated_at: selectedStaffObj.signature_updated_at || null
+      }));
+    }
+  }, [selectedStaffObj]);
+
+  const effectiveSignature = editableMeta.signature_data || (
+    selectedStaffObj?.signature_data || getDefaultDigitalSignature(
+      editableMeta.full_name_sign || editableMeta.name || selectedStaffObj?.name || 'Railway Employee',
+      editableMeta.designation_sign || editableMeta.designation || (selectedStaffObj ? `(${selectedStaffObj.designation}/SL/${selectedStaffObj.hq_station || 'GNT'})` : '(CTI/SL/GNT)'),
+      editableMeta.pf_no || selectedStaffObj?.pf_no
+    )
   );
   const isCorStaff = Boolean(
     (journalData?.employee?.category_id === 1) ||
@@ -420,12 +447,12 @@ export default function TaDocument({
                 ? data.employee.bill_unit
                 : (data.employee.bill_no && data.employee.bill_no !== '0910629' ? data.employee.bill_no : ''),
               doa: (data.employee.doa && data.employee.doa !== '05/08/2000') ? data.employee.doa : '',
-              full_name_sign: empName === 'K V R RAO' ? 'K V RAMANA RAO' : empName,
-              designation_sign: `(${empDesig}/SL/GNT)`,
+              full_name_sign: empName,
+              designation_sign: `(${empDesig}/SL/${data.employee.hq || 'GNT'})`,
               vertical_object_text: (data.employee.category_id === 1 || data.employee.category_code === 'COR' || (data.employee.category_name && data.employee.category_name.toUpperCase().includes('COR')) || String(selectedCatId) === '1')
                 ? 'MANNING AC COACHES'
                 : 'MANNING SLEEPER COACHES',
-              signature_data: data.employee.signature_data || getDefaultDigitalSignature(data.employee.name, data.employee.designation, data.employee.pf_no),
+              signature_data: data.employee.signature_data || getDefaultDigitalSignature(empName, `(${empDesig}/SL/${data.employee.hq || 'GNT'})`, data.employee.pf_no),
               signature_updated_at: data.employee.signature_updated_at || null
             }));
           }

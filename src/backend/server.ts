@@ -16162,11 +16162,16 @@ app.get('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrS
       try {
         const parsed = JSON.parse(existing.data_json);
         if (!parsed.employeeMeta) parsed.employeeMeta = {};
-        parsed.employeeMeta.name = parsed.employeeMeta.name || staffRow.name;
-        parsed.employeeMeta.designation = parsed.employeeMeta.designation || staffRow.designation;
-        parsed.employeeMeta.hqStation = parsed.employeeMeta.hqStation || staffRow.hq_station || 'GNT';
-        parsed.employeeMeta.pfNo = parsed.employeeMeta.pfNo || staffRow.pf_no || '';
+        // Bind to actual employee record for this staffId
+        parsed.employeeMeta.name = staffRow.name;
+        parsed.employeeMeta.designation = staffRow.designation || parsed.employeeMeta.designation;
+        parsed.employeeMeta.hqStation = staffRow.hq_station || 'GNT';
+        parsed.employeeMeta.pfNo = staffRow.pf_no || '';
+        parsed.employeeMeta.designationSign = `${staffRow.designation || 'CTI'}/SL/${staffRow.hq_station || 'GNT'}`;
         parsed.employeeMeta.signatureData = staffRow.signature_data;
+        if (!parsed.headerTitleOf || parsed.headerTitleOf === 'K V RAMANA RAO') {
+          parsed.headerTitleOf = staffRow.name;
+        }
         parsed.isCustom = true;
         parsed.updatedAt = existing.updated_at;
         return res.json(parsed);
@@ -16255,6 +16260,7 @@ app.get('/api/documents/remittance/:staffId', authenticateToken, requireAdminOrS
       month,
       monthName,
       monthYear: monthYearStr,
+      headerTitleOf: staffRow.name,
       employeeMeta: {
         name: staffRow.name,
         designation: staffRow.designation,

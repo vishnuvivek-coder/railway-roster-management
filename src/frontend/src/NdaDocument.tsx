@@ -336,11 +336,11 @@ export default function NdaDocument({
 
   // Editable header & footer metadata
   const [editableMeta, setEditableMeta] = useState({
-    name: 'K V RAMANA RAO',
+    name: '',
     designation: 'CTI',
     bill_unit: '',
     pf_no: '',
-    full_name_sign: 'K V RAMANA RAO',
+    full_name_sign: '',
     designation_sign: '(CTI/SL/GNT)',
     signature_data: null as string | null,
     signature_updated_at: null as string | null
@@ -358,10 +358,36 @@ export default function NdaDocument({
   };
 
   const selectedStaffObj = staffList.find(s => String(s.id) === String(selectedStaffId));
-  const effectiveSignature = editableMeta.signature_data || getDefaultDigitalSignature(
-    editableMeta.full_name_sign || editableMeta.name || selectedStaffObj?.name,
-    editableMeta.designation_sign || editableMeta.designation || selectedStaffObj?.designation,
-    editableMeta.pf_no || selectedStaffObj?.pf_no
+
+  // Immediately display the individual employee's name, designation, and signature when selected
+  useEffect(() => {
+    if (selectedStaffObj) {
+      const staffName = selectedStaffObj.name || '';
+      const staffDesig = selectedStaffObj.designation || 'CTI';
+      const staffHq = selectedStaffObj.hq_station || 'GNT';
+      const staffPf = (selectedStaffObj.pf_no && selectedStaffObj.pf_no !== '07323475') ? selectedStaffObj.pf_no : '';
+      const staffDesigSign = `(${staffDesig}/SL/${staffHq})`;
+      const staffSig = selectedStaffObj.signature_data || getDefaultDigitalSignature(staffName, staffDesig, staffPf);
+
+      setEditableMeta(prev => ({
+        ...prev,
+        name: staffName,
+        designation: staffDesig,
+        pf_no: staffPf,
+        full_name_sign: staffName,
+        designation_sign: staffDesigSign,
+        signature_data: staffSig,
+        signature_updated_at: selectedStaffObj.signature_updated_at || null
+      }));
+    }
+  }, [selectedStaffObj]);
+
+  const effectiveSignature = editableMeta.signature_data || (
+    selectedStaffObj?.signature_data || getDefaultDigitalSignature(
+      editableMeta.full_name_sign || editableMeta.name || selectedStaffObj?.name || 'Railway Employee',
+      editableMeta.designation_sign || editableMeta.designation || (selectedStaffObj ? `(${selectedStaffObj.designation}/SL/${selectedStaffObj.hq_station || 'GNT'})` : '(CTI/SL/GNT)'),
+      editableMeta.pf_no || selectedStaffObj?.pf_no
+    )
   );
 
   // Auto-initialize selectedCatId if categories are loaded and selectedCatId is empty
@@ -424,16 +450,21 @@ export default function NdaDocument({
         if (data && !data.error) {
           setJournalData(data);
           if (data.employee) {
-            const empName = data.employee.name || '';
-            const empDesig = data.employee.designation || 'CTI';
+            const currentStaff = selectedStaffObj || staffList.find(s => String(s.id) === String(selectedStaffId));
+            const empName = data.employee.name || currentStaff?.name || '';
+            const empDesig = data.employee.designation || currentStaff?.designation || 'CTI';
+            const empHq = data.employee.hq || currentStaff?.hq_station || 'GNT';
+            const empPf = (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : (currentStaff?.pf_no || '');
+            const empSig = data.employee.signature_data || currentStaff?.signature_data || getDefaultDigitalSignature(empName, `(${empDesig}/SL/${empHq})`, empPf);
+
             setEditableMeta({
               name: empName,
               designation: empDesig,
               bill_unit: (data.employee.bill_unit && data.employee.bill_unit !== '0910629') ? data.employee.bill_unit : '',
-              pf_no: (data.employee.pf_no && data.employee.pf_no !== '07323475') ? data.employee.pf_no : '',
+              pf_no: empPf,
               full_name_sign: empName,
-              designation_sign: `(${empDesig}/SL/GNT)`,
-              signature_data: data.employee.signature_data || getDefaultDigitalSignature(data.employee.name, data.employee.designation, data.employee.pf_no),
+              designation_sign: `(${empDesig}/SL/${empHq})`,
+              signature_data: empSig,
               signature_updated_at: data.employee.signature_updated_at || null
             });
           }
