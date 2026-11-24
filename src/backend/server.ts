@@ -9255,7 +9255,8 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     target_link,
     target_category_id,
     is_extra,
-    replace_staff_id
+    replace_staff_id,
+    keep_link_intact
   } = req.body;
 
   if (!staff_id || !date || !target_train) {
@@ -9286,10 +9287,14 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
     const effectiveTargetCat = isExtraCrew
       ? staff.category_id
       : ((parsedTargetCat && parsedTargetCat !== 4) ? parsedTargetCat : (staff.category_id === 1 ? 1 : 2));
+    const shiftedFromLinkVal = keep_link_intact ? null : (source_link || origLink || null);
+    const shiftedFromTrainVal = keep_link_intact ? null : (source_train || null);
     const shiftedPlace = isExtraCrew ? 'EXTRA_DOWN_BELOW' : `Link #${effectiveLink}`;
-    const reason = isExtraCrew
-      ? `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} as Extra Staff (down below)`
-      : `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} (Link #${effectiveLink})`;
+    const reason = keep_link_intact
+      ? `Booked to Train ${target_train}${isExtraCrew ? ' as Additional Duty' : ` (Link #${effectiveLink})`} (Morning link ${source_train || origLink || ''} kept intact)`
+      : (isExtraCrew
+        ? `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} as Extra Staff (down below)`
+        : `Shifted from Train ${source_train || origLink || ''} to Train ${target_train} (Link #${effectiveLink})`);
 
     await run(
       `INSERT INTO overrides (
@@ -9329,8 +9334,8 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
         origLink,
         target_train,
         isExtraCrew ? 1 : 0,
-        source_link || origLink || null,
-        source_train || null,
+        shiftedFromLinkVal,
+        shiftedFromTrainVal,
         shiftedPlace
       ]
     );
@@ -9564,7 +9569,7 @@ app.post('/api/duty/drag-assign-train', requireAdmin, async (req, res) => {
 //   • Summary         : Assigns a non-daily train to a staff member on a date, writes to `non_daily_assignments` and `overrides`, and updates Muster, TA, NDA, Diary, and Earnings.
 // ============================================================================
 app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
-  const { staff_id, date, non_daily_train_id, train_number, source_link } = req.body;
+  const { staff_id, date, non_daily_train_id, train_number, source_link, keep_link_intact } = req.body;
   if (!staff_id || !date || (!non_daily_train_id && !train_number)) {
     return res.status(400).json({ error: 'staff_id, date, and train_number or non_daily_train_id are required' });
   }
@@ -9586,7 +9591,10 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
     const existingOverride = await get('SELECT * FROM overrides WHERE staff_id = ? AND date = ?', [staff.id, date]);
     const existingMuster = await get('SELECT * FROM muster_records WHERE staff_id = ? AND date = ?', [staff.id, date]);
 
-    const reason = `Assigned to Non-Daily Train ${finalTrainNo}${trainObj && trainObj.departure_station ? ` (${trainObj.departure_station} ➔ ${trainObj.arrival_station})` : ''}`;
+    const shiftedFromLinkVal = keep_link_intact ? null : (source_link || null);
+    const reason = keep_link_intact
+      ? `Booked to Non-Daily Train ${finalTrainNo}${trainObj && trainObj.departure_station ? ` (${trainObj.departure_station} ➔ ${trainObj.arrival_station})` : ''} (Morning link kept intact)`
+      : `Assigned to Non-Daily Train ${finalTrainNo}${trainObj && trainObj.departure_station ? ` (${trainObj.departure_station} ➔ ${trainObj.arrival_station})` : ''}`;
     await run(
       `INSERT INTO overrides (
         staff_id, date, overridden_link_number, status, target_category_id,
@@ -9617,7 +9625,7 @@ app.post('/api/duty/assign-non-daily-train', requireAdmin, async (req, res) => {
         reason,
         origLink,
         finalTrainNo,
-        source_link || origLink || null
+        shiftedFromLinkVal
       ]
     );
 
@@ -14794,7 +14802,7 @@ app.get('/api/duty-register/history', async (req, res) => {
 // DOCUMENTS: Travelling Allowance (TA) Journal API
 // -------------------------------------------------------------
 
-const { generateStaffTaJournal, generatePendingTaClaimsForMonth, calculateAbsenceAndTa } = require('./ta_generator');
+const { generateStaffTaJournal, generatePendingTaClaimsForMonth, calculateAbsenceAndTa, getMonthsBetween } = require('./ta_generator');
 
 // GET /api/documents/ta/:staffId?year=2026&month=8&start_date=2026-09-01&end_date=2026-09-30
 // ============================================================================
@@ -15062,6 +15070,249 @@ app.delete('/api/documents/ta/:staffId', authenticateToken, requireAdminOrSelfSt
     res.json({ success: true, message: 'TA Journal reset to master roster rotation.' });
   } catch (err) {
     console.error('Error resetting TA journal:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/documents/ta/claim/:staffId - Claim TA from Staff Movement with precise calculation and note it in TA Document
+// ============================================================================
+// [ENDPOINT DATA-FLOW] POST /api/documents/ta/claim/:staffId
+//   • Module          : Staff Movement / TA Journal Document
+//   • Frontend Caller : Staff Movement -> Claim TA Button (Header or Row)
+//   • Reads From DB   : staff, staff_roster_assignments, links, actual_train_runs, nda_entries, muster_records, overrides, lr_sheet_records, daily_earnings_entries
+//   • Saves To DB     : ta_approvals, ta_entries, actual_train_runs, audit_logs
+//   • Auto-Syncs To   : TA Document (`ta_entries` & `ta_approvals`), NDA, Diary
+//   • Summary         : Calculates precise TA metrics (departure/arrival, absence hours, 24-hr percentage, DA rate, claim amount) and notes the claim into the official TA document for the employee.
+// ============================================================================
+app.post('/api/documents/ta/claim/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const { year, month, start_date, end_date, duty_date } = req.body;
+    const y = parseInt(year, 10) || new Date().getFullYear();
+    const m = parseInt(month, 10) || (new Date().getMonth() + 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const startDate = start_date || `${y}-${String(m).padStart(2, '0')}-01`;
+    const endDate = end_date || `${y}-${String(m).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    // Generate exact TA Journal rows using precise railway rules
+    // (generateStaffTaJournal internally recalculates ta_approvals across all covered months)
+    const journal = await generateStaffTaJournal({ get, all, run }, staffId, y, m, startDate, endDate);
+    if (!journal || !journal.rows) {
+      return res.status(404).json({ error: 'Could not generate TA journal for staff member.' });
+    }
+
+    // 3. Filter rows to valid worked duties (not leave, valid train)
+    let targetRows = journal.rows.filter(r => !r.is_leave && r.train_no && !['---', '-', 'REST', 'OFF', 'SPARE', 'SPARE (HQ)', 'STANDBY'].includes(r.train_no));
+    if (duty_date) {
+      targetRows = targetRows.filter(r => (r.duty_date === duty_date || r.date_iso === duty_date));
+    }
+
+    if (targetRows.length === 0) {
+      return res.status(200).json({
+        success: false,
+        message: duty_date ? `No eligible working duty found on ${duty_date} for TA claim.` : 'No eligible working duty found in the selected period for TA claim.',
+        claimedCount: 0,
+        totalAmount: 0,
+        rows: []
+      });
+    }
+
+    // 4. Update ta_approvals to status='APPROVED' for these duties
+    for (const r of targetRows) {
+      const dIso = r.duty_date || r.date_iso;
+      const tNo = r.train_no;
+      await run(
+        `UPDATE ta_approvals 
+         SET status = 'APPROVED',
+             dep_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE dep_time END,
+             arr_time = CASE WHEN ? != '' AND ? != '---' THEN ? ELSE arr_time END,
+             ta_percentage = COALESCE(?, ta_percentage),
+             claim_amount = COALESCE(?, claim_amount)
+         WHERE staff_id = ? AND duty_date = ? AND train_no = ?`,
+        [r.dep_time || '', r.dep_time || '', r.dep_time || '', r.arr_time || '', r.arr_time || '', r.arr_time || '', r.days_claiming_ta, r.claim_amount, staffId, dIso, tNo]
+      );
+    }
+
+    // 5. Also note permanently into ta_entries (official TA Document table)
+    if (duty_date) {
+      await run('DELETE FROM ta_entries WHERE staff_id = ? AND duty_date = ?', [staffId, duty_date]);
+    } else {
+      await run('DELETE FROM ta_entries WHERE staff_id = ? AND duty_date >= ? AND duty_date <= ?', [staffId, startDate, endDate]);
+    }
+
+    const defaultObjText = (journal.employee?.category_id === 1) ? 'MANNING AC COACHES' : 'MANNING SLEEPER COACHES';
+    let savedRowOrder = 0;
+    const seenDedupe = new Set();
+    for (const item of targetRows) {
+      const dutyDate = item.duty_date || item.date_iso;
+      const dedupeKey = `${dutyDate}_${String(item.train_no || '').trim()}_${String(item.from_station || '').trim()}_${String(item.to_station || '').trim()}`;
+      if (seenDedupe.has(dedupeKey)) continue;
+      seenDedupe.add(dedupeKey);
+      savedRowOrder++;
+
+      const daysClaiming = item.days_claiming_ta !== null && item.days_claiming_ta !== undefined
+        ? parseFloat(item.days_claiming_ta)
+        : null;
+      const rowMonthYear = item.month_year || `${y}-${String(m).padStart(2, '0')}`;
+
+      await run(
+        `INSERT INTO ta_entries (
+          staff_id, month_year, duty_date, date_str, train_no,
+          from_station, to_station, dep_time, arr_time,
+          ta_a1, ta_a, ta_b1, days_claiming_ta, object_of_journey,
+          remarks, row_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          staffId,
+          rowMonthYear,
+          dutyDate,
+          item.date_str || '',
+          item.train_no || '',
+          item.from_station || '',
+          item.to_station || '',
+          item.dep_time || '',
+          item.arr_time || '',
+          item.ta_a1 || '',
+          item.ta_a || '',
+          item.ta_b1 || '',
+          daysClaiming,
+          item.object_of_journey || defaultObjText,
+          item.remarks || '',
+          savedRowOrder
+        ]
+      );
+
+      // Save to actual_train_runs cache for multi-doc sync
+      if (item.train_no && dutyDate) {
+        if (item.from_station && item.dep_time && item.dep_time !== '---') {
+          await run(
+            `INSERT OR REPLACE INTO actual_train_runs (train_no, run_date, station_code, sched_arr, sched_dep, act_arr, act_dep, delay_arr_mins, delay_dep_mins, source)
+             VALUES (?, ?, ?, '---', ?, '---', ?, 0, 0, 'TA_CLAIM')`,
+            [item.train_no, dutyDate, item.from_station, item.dep_time, item.dep_time]
+          );
+        }
+        if (item.to_station && item.arr_time && item.arr_time !== '---') {
+          await run(
+            `INSERT OR REPLACE INTO actual_train_runs (train_no, run_date, station_code, sched_arr, sched_dep, act_arr, act_dep, delay_arr_mins, delay_dep_mins, source)
+             VALUES (?, ?, ?, ?, '---', ?, '---', 0, 0, 'TA_CLAIM')`,
+            [item.train_no, dutyDate, item.to_station, item.arr_time, item.arr_time]
+          );
+        }
+      }
+    }
+
+    const totalAmount = targetRows.reduce((sum, r) => sum + (parseFloat(r.claim_amount) || 0), 0);
+    const totalDays = targetRows.reduce((sum, r) => sum + (parseFloat(r.days_claiming_ta) || 0), 0);
+    const staffLabel = journal.employee?.name || `Staff #${staffId}`;
+
+    await logAudit(
+      req.user?.role || 'Staff',
+      'CLAIM_TA',
+      `Noted TA claim in TA Document for ${staffLabel} (${targetRows.length} duties, ₹${totalAmount})`,
+      'TA Journal Document'
+    );
+
+    res.json({
+      success: true,
+      message: `TA claimed and noted in TA Document successfully! Total: ₹${totalAmount.toLocaleString('en-IN')} across ${targetRows.length} duty(s).`,
+      staffId,
+      staffName: staffLabel,
+      claimedCount: targetRows.length,
+      totalAmount,
+      totalDays: Math.round(totalDays * 10) / 10,
+      rows: targetRows
+    });
+  } catch (err: any) {
+    console.error('Error in claim TA endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/documents/ta/status/:staffId - Retrieve TA claim status for staff movement
+// ============================================================================
+// [ENDPOINT DATA-FLOW] GET /api/documents/ta/status/:staffId
+//   • Module          : Staff Movement / TA Journal Document
+//   • Frontend Caller : Staff Movement -> Schedule table & Header Card
+//   • Reads From DB   : ta_approvals, ta_entries
+//   • Saves To DB     : None (Read-Only)
+//   • Summary         : Returns claimed TA amounts, percentages, and dates for an employee in the specified date range.
+// ============================================================================
+app.get('/api/documents/ta/status/:staffId', authenticateToken, requireAdminOrSelfStaff('staffId'), async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.staffId, 10);
+    const year = parseInt(req.query.year as string, 10) || new Date().getFullYear();
+    const month = parseInt(req.query.month as string, 10) || (new Date().getMonth() + 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const startDate = (req.query.start_date || req.query.startDate || `${year}-${String(month).padStart(2, '0')}-01`) as string;
+    const endDate = (req.query.end_date || req.query.endDate || `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`) as string;
+
+    const approvedRows = await all(
+      `SELECT * FROM ta_approvals 
+       WHERE staff_id = ? AND duty_date >= ? AND duty_date <= ? AND status = 'APPROVED'
+         AND train_no IS NOT NULL AND train_no NOT IN ('---', '-', 'REST', 'OFF', 'SPARE (HQ)', 'SPARE', 'STANDBY')
+       ORDER BY duty_date ASC, row_order ASC`,
+      [staffId, startDate, endDate]
+    );
+
+    const savedEntries = await all(
+      `SELECT * FROM ta_entries
+       WHERE staff_id = ? AND duty_date >= ? AND duty_date <= ?
+       ORDER BY duty_date ASC, row_order ASC`,
+      [staffId, startDate, endDate]
+    );
+
+    const claimedDates: Record<string, any> = {};
+    let totalAmount = 0;
+    let totalDays = 0;
+
+    for (const r of approvedRows) {
+      const dIso = r.duty_date;
+      if (!dIso) continue;
+      const amt = parseFloat(r.claim_amount) || 0;
+      const pct = parseFloat(r.ta_percentage) || 0;
+      totalAmount += amt;
+      totalDays += pct;
+      claimedDates[dIso] = {
+        train_no: r.train_no,
+        dep_time: r.dep_time,
+        arr_time: r.arr_time,
+        absence_hours: r.absence_hours,
+        ta_percentage: pct,
+        claim_amount: amt,
+        status: r.status,
+        is_saved: true
+      };
+    }
+
+    // Also include any saved entries that might not be in ta_approvals
+    for (const s of savedEntries) {
+      const dIso = s.duty_date;
+      if (!dIso || claimedDates[dIso]) continue;
+      const pct = parseFloat(s.days_claiming_ta) || 0;
+      const amt = Math.round(pct * 800);
+      totalAmount += amt;
+      totalDays += pct;
+      claimedDates[dIso] = {
+        train_no: s.train_no,
+        dep_time: s.dep_time,
+        arr_time: s.arr_time,
+        absence_hours: 0,
+        ta_percentage: pct,
+        claim_amount: amt,
+        status: 'APPROVED',
+        is_saved: true
+      };
+    }
+
+    res.json({
+      staffId,
+      totalClaimedDuties: Object.keys(claimedDates).length,
+      totalAmount,
+      totalDays: Math.round(totalDays * 10) / 10,
+      claimedDates
+    });
+  } catch (err: any) {
+    console.error('Error in TA status endpoint:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1681,6 +1681,81 @@ export default function App() {
 
   const [selectedStaffId, setSelectedStaffId] = useState('');
 
+  // Staff Movement TA Claim states
+  const [claimingTa, setClaimingTa] = useState(false);
+  const [claimingTaDate, setClaimingTaDate] = useState<string | null>(null);
+  const [movementTaStatus, setMovementTaStatus] = useState<any>(null);
+  const [movementTaFeedback, setMovementTaFeedback] = useState<{ message: string; type: 'success' | 'error'; totalAmount?: number; count?: number } | null>(null);
+
+  const fetchMovementTaStatus = useCallback(async (staffIdToFetch?: string | number) => {
+    const sId = staffIdToFetch || selectedStaffId;
+    if (!sId) return;
+    try {
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const sDate = movementDateMode === 'range' ? movementStartDate : `${year}-${String(month).padStart(2, '0')}-01`;
+      const eDate = movementDateMode === 'range' ? movementEndDate : `${year}-${String(month).padStart(2, '0')}-${new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()}`;
+      const res = await fetch(`${API_BASE}/documents/ta/status/${sId}?year=${year}&month=${month}&start_date=${sDate}&end_date=${eDate}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMovementTaStatus(data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch staff movement TA status:', err);
+    }
+  }, [authToken, selectedStaffId, movementDateMode, movementStartDate, movementEndDate, year, month]);
+
+  const handleClaimTa = async (staffId: string | number, targetDate: string | null = null) => {
+    if (!staffId) return;
+    setClaimingTa(true);
+    if (targetDate) setClaimingTaDate(targetDate);
+    setMovementTaFeedback(null);
+
+    try {
+      const token = authToken || localStorage.getItem('railway_auth_token') || localStorage.getItem('token');
+      const sDate = movementDateMode === 'range' ? movementStartDate : `${year}-${String(month).padStart(2, '0')}-01`;
+      const eDate = movementDateMode === 'range' ? movementEndDate : `${year}-${String(month).padStart(2, '0')}-${new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()}`;
+
+      const res = await fetch(`${API_BASE}/documents/ta/claim/${staffId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          year: parseInt(year, 10),
+          month: parseInt(month, 10),
+          start_date: sDate,
+          end_date: eDate,
+          duty_date: targetDate || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to claim TA');
+      }
+
+      setMovementTaFeedback({
+        type: 'success',
+        message: data.message || `TA claimed and noted in TA Document! Total: ₹${data.totalAmount} across ${data.claimedCount} duty(s).`,
+        totalAmount: data.totalAmount,
+        count: data.claimedCount
+      });
+
+      await fetchMovementTaStatus(staffId);
+    } catch (err: any) {
+      setMovementTaFeedback({
+        type: 'error',
+        message: err.message || 'Error calculating and claiming TA.'
+      });
+    } finally {
+      setClaimingTa(false);
+      setClaimingTaDate(null);
+    }
+  };
+
   // State for Staff CRUD & Add/Remove Staff
   const [staffList, setStaffList] = useState([]);
   const [editingStaff, setEditingStaff] = useState(null);
@@ -2339,6 +2414,9 @@ export default function App() {
       fetchDailyDuties();
       fetchNonDailyTrains('ALL');
       if (activeTab === 'daily') fetchRoster();
+    }
+    if (activeTab === 'daily' && selectedStaffId) {
+      fetchMovementTaStatus(selectedStaffId);
     }
     if (activeTab === 'roster') {
       fetch(`${API_BASE}/links`).then(r => r.json()).then(setAllLinksList).catch(() => {});
@@ -3524,7 +3602,7 @@ export default function App() {
     return null;
   };
 
-  const doActualDropStaff = async (staffId, staffName, targetGroup, forceExtra, targetSpecificDuty, dragData, replaceStaffId = null) => {
+  const doActualDropStaff = async (staffId, staffName, targetGroup, forceExtra, targetSpecificDuty, dragData, replaceStaffId = null, keepLinkIntact = false) => {
     const targetTrain = targetGroup.firstTrain;
     let vacantDuty = null;
     if (!forceExtra) {
@@ -3572,18 +3650,21 @@ export default function App() {
           target_link: targetLink,
           target_category_id: targetCatId,
           is_extra: isExtra ? 1 : 0,
-          replace_staff_id: resolvedReplaceStaffId || undefined
+          replace_staff_id: resolvedReplaceStaffId || undefined,
+          keep_link_intact: keepLinkIntact ? true : undefined
         })
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to assign employee to train');
 
-      const noticeMsg = replaceStaffId
-        ? `Replaced duty! Assigned ${staffName} to Train ${targetTrain} (Link #${targetLink}) and relieved previous occupant to Available at HQ.`
-        : (isExtra
-          ? `Assigned ${staffName} to Train ${targetTrain} as Extra Crew (down below)!`
-          : `Assigned ${staffName} to Train ${targetTrain} (Link #${targetLink})!`);
+      const noticeMsg = keepLinkIntact
+        ? `Booked duty! Assigned ${staffName} to Train ${targetTrain} keeping morning link intact.`
+        : (replaceStaffId
+          ? `Replaced duty! Assigned ${staffName} to Train ${targetTrain} (Link #${targetLink}) and relieved previous occupant to Available at HQ.`
+          : (isExtra
+            ? `Assigned ${staffName} to Train ${targetTrain} as Extra Crew (down below)!`
+            : `Assigned ${staffName} to Train ${targetTrain} (Link #${targetLink})!`));
       setDragNotice(noticeMsg);
       setTimeout(() => setDragNotice(null), 8000);
 
@@ -3727,7 +3808,8 @@ export default function App() {
         staffName,
         currentTrainDesc: currentWorkingTrain,
         targetTrainDesc: `Train ${targetTrain}`,
-        onConfirm: () => doActualDropStaff(staffId, staffName, targetGroup, resolvedExtra, resolvedDuty, dragData)
+        onConfirm: () => doActualDropStaff(staffId, staffName, targetGroup, resolvedExtra, resolvedDuty, dragData, null, false),
+        onBookDutyKeepIntact: () => doActualDropStaff(staffId, staffName, targetGroup, true, resolvedDuty, dragData, null, true)
       });
       return;
     }
@@ -3735,7 +3817,7 @@ export default function App() {
     await doActualDropStaff(staffId, staffName, targetGroup, resolvedExtra, resolvedDuty, dragData);
   };
 
-  const doActualAssignNonDaily = async (staffId, staffName, trainItem, dragData) => {
+  const doActualAssignNonDaily = async (staffId, staffName, trainItem, dragData, keepLinkIntact = false) => {
     const trainNo = trainItem.train_number;
     try {
       const res = await fetch(`${API_BASE}/duty/assign-non-daily-train`, {
@@ -3749,13 +3831,17 @@ export default function App() {
           date: selectedDate,
           non_daily_train_id: trainItem.id,
           train_number: trainNo,
-          source_link: dragData?.sourceLink
+          source_link: dragData?.sourceLink,
+          keep_link_intact: keepLinkIntact ? true : undefined
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to assign employee to non-daily train');
 
-      setDragNotice(`Assigned ${staffName} to Non-Daily Train ${trainNo}!`);
+      const noticeMsg = keepLinkIntact
+        ? `Booked duty! Assigned ${staffName} to Non-Daily Train ${trainNo} keeping morning link intact.`
+        : `Assigned ${staffName} to Non-Daily Train ${trainNo}!`;
+      setDragNotice(noticeMsg);
       setTimeout(() => setDragNotice(null), 8000);
 
       clearAllDragHighlights();
@@ -3797,7 +3883,8 @@ export default function App() {
         staffName,
         currentTrainDesc: currentWorkingTrain,
         targetTrainDesc: `Non-Daily Train ${trainNo}`,
-        onConfirm: () => doActualAssignNonDaily(staffId, staffName, trainItem, dragData)
+        onConfirm: () => doActualAssignNonDaily(staffId, staffName, trainItem, dragData, false),
+        onBookDutyKeepIntact: () => doActualAssignNonDaily(staffId, staffName, trainItem, dragData, true)
       });
       return;
     }
@@ -6468,28 +6555,164 @@ export default function App() {
                         </div>
                       </div>
                       
-                      <div style={{ 
-                        background: 'rgba(255, 255, 255, 0.02)', 
-                        padding: '10px 16px', 
-                        borderRadius: '8px', 
-                        border: '1px solid var(--border-glass)',
-                        textAlign: 'right'
-                      }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>
-                          {movementDateMode === 'range' ? 'Selected Movement Period' : 'Selected Month'}
-                        </span>
-                        <strong style={{ fontSize: '1.05rem', color: 'var(--primary)' }}>
-                          {movementDateMode === 'range' ? (
-                            `${movementStartDate.split('-').reverse().join('/')} ➔ ${movementEndDate.split('-').reverse().join('/')}`
-                          ) : (
-                            new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                        {/* TA Claim Controls in Staff Movement Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => handleClaimTa(staffRow.staffId)}
+                            disabled={claimingTa}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                              color: '#ffffff',
+                              border: '1px solid #10b981',
+                              borderRadius: '8px',
+                              padding: '9px 18px',
+                              fontWeight: 700,
+                              fontSize: '0.92rem',
+                              cursor: claimingTa ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+                              transition: 'all 0.2s ease'
+                            }}
+                            title="Calculate precise TA and note all duties in the TA Document"
+                          >
+                            {claimingTa && !claimingTaDate ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm" style={{ width: '0.9rem', height: '0.9rem', border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                                <span>Calculating & Noting TA...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: '1.1rem' }}>💰</span>
+                                <span>Claim TA</span>
+                              </>
+                            )}
+                          </button>
+
+                          {movementTaStatus && movementTaStatus.totalAmount > 0 && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => {
+                                setSelectedStaffId(String(staffRow.staffId));
+                                setDocStaffId(String(staffRow.staffId));
+                                setDocSubTab('ta');
+                                setActiveTab('documents');
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                fontSize: '0.85rem',
+                                borderRadius: '8px',
+                                background: 'rgba(212, 161, 92, 0.12)',
+                                color: 'var(--primary)',
+                                border: '1px solid var(--border-gold)',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                              title="Open and view noted Travelling Allowance in official TA Document"
+                            >
+                              <span>📄 View in TA Document</span>
+                              <span style={{
+                                background: 'rgba(16, 185, 129, 0.2)',
+                                color: '#10b981',
+                                borderRadius: '4px',
+                                padding: '2px 8px',
+                                fontSize: '0.8rem',
+                                fontWeight: 800
+                              }}>
+                                ₹{movementTaStatus.totalAmount.toLocaleString('en-IN')}
+                              </span>
+                            </button>
                           )}
-                        </strong>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                          {rosterData?.dates?.length ? `${rosterData.dates.length} Days Duty Movement` : ''}
+                        </div>
+
+                        <div style={{ 
+                          background: 'rgba(255, 255, 255, 0.02)', 
+                          padding: '10px 16px', 
+                          borderRadius: '8px', 
+                          border: '1px solid var(--border-glass)',
+                          textAlign: 'right'
+                        }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>
+                            {movementDateMode === 'range' ? 'Selected Movement Period' : 'Selected Month'}
+                          </span>
+                          <strong style={{ fontSize: '1.05rem', color: 'var(--primary)' }}>
+                            {movementDateMode === 'range' ? (
+                              `${movementStartDate.split('-').reverse().join('/')} ➔ ${movementEndDate.split('-').reverse().join('/')}`
+                            ) : (
+                              new Date(year, month - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+                            )}
+                          </strong>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                            {rosterData?.dates?.length ? `${rosterData.dates.length} Days Duty Movement` : ''}
+                          </div>
                         </div>
                       </div>
                     </div>
+
+                    {/* Feedback Toast / Banner */}
+                    {movementTaFeedback && (
+                      <div style={{
+                        margin: '0 0 20px 0',
+                        padding: '12px 18px',
+                        borderRadius: '10px',
+                        background: movementTaFeedback.type === 'success' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        border: `1px solid ${movementTaFeedback.type === 'success' ? '#10b981' : '#ef4444'}`,
+                        color: movementTaFeedback.type === 'success' ? '#10b981' : '#f87171',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '0.92rem' }}>
+                          <span style={{ fontSize: '1.1rem' }}>{movementTaFeedback.type === 'success' ? '✅' : '⚠️'}</span>
+                          <span>{movementTaFeedback.message}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {movementTaFeedback.type === 'success' && (
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => {
+                                setSelectedStaffId(String(staffRow.staffId));
+                                setDocStaffId(String(staffRow.staffId));
+                                setDocSubTab('ta');
+                                setActiveTab('documents');
+                              }}
+                              style={{
+                                background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: '0.82rem',
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                              }}
+                            >
+                              📄 Open TA Document ➔
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setMovementTaFeedback(null)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}
+                            title="Dismiss notification"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Table View */}
                     <div className="mobile-table-scroll-hint no-print">
@@ -6508,7 +6731,7 @@ export default function App() {
                               ⚡ Actually Worked Link &amp; Duty Performed (TA Basis)
                             </th>
                             <th>Status / Remarks</th>
-                            {isAdmin && <th style={{ width: '80px', textAlign: 'center' }}>Action</th>}
+                            <th style={{ width: isAdmin ? '145px' : '95px', textAlign: 'center' }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -6536,7 +6759,7 @@ export default function App() {
                             if (filteredCells.length === 0) {
                               return (
                                 <tr>
-                                  <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
+                                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
                                     No duty movements match "<strong>{movementSearchQuery}</strong>" in the selected period.
                                   </td>
                                 </tr>
@@ -6544,6 +6767,7 @@ export default function App() {
                             }
 
                             return filteredCells.map((cell) => {
+                            const rowClaimedInfo = movementTaStatus?.claimedDates?.[cell.date] || null;
                             const isMusterLeave = cell.muster_code && ['CL', 'CCL', 'SCL', 'LAP', 'LHAP', 'NH'].includes(cell.muster_code);
                             const isMusterOd = cell.muster_code === 'OD' || cell.leave_type === 'OD';
                             const isMusterSick = cell.muster_code === 'SICK';
@@ -6859,8 +7083,18 @@ export default function App() {
                                           ? (cell.actualLinkNumber ? `⚡ Link #${cell.actualLinkNumber} (Rest Day Duty)` : `⚡ ${cell.set_type || 'Rest Day Train Duty'}`)
                                           : workedLinkBadgeText}
                                       </span>
-                                      <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>
-                                        💰 TA Claimed on Worked Duty
+                                      <span style={{ 
+                                        background: rowClaimedInfo ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.12)', 
+                                        color: '#10b981', 
+                                        border: `1px solid ${rowClaimedInfo ? '#10b981' : 'rgba(16, 185, 129, 0.3)'}`, 
+                                        borderRadius: '4px', 
+                                        padding: '1px 6px', 
+                                        fontSize: '0.68rem', 
+                                        fontWeight: 700 
+                                      }}>
+                                        {rowClaimedInfo 
+                                          ? `💰 TA Claimed: ₹${rowClaimedInfo.claim_amount} (${Math.round((rowClaimedInfo.ta_percentage || 1) * 100)}%)` 
+                                          : '💰 Ready to Claim'}
                                       </span>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '0.78rem', color: '#e2e8f0' }}>
@@ -6901,8 +7135,18 @@ export default function App() {
                                       <span style={{ background: 'rgba(16, 185, 129, 0.14)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '5px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 700 }}>
                                         ✅ Same as Scheduled ({cell.actualLinkNumber ? `Link #${getLinkDisplayLabel(selectedCatId, cell.actualLinkNumber)}` : 'Scheduled Duty'})
                                       </span>
-                                      <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>
-                                        💰 TA Claimed
+                                      <span style={{ 
+                                        background: rowClaimedInfo ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.12)', 
+                                        color: '#10b981', 
+                                        border: `1px solid ${rowClaimedInfo ? '#10b981' : 'rgba(16, 185, 129, 0.3)'}`, 
+                                        borderRadius: '4px', 
+                                        padding: '1px 6px', 
+                                        fontSize: '0.68rem', 
+                                        fontWeight: 700 
+                                      }}>
+                                        {rowClaimedInfo 
+                                          ? `💰 TA Claimed: ₹${rowClaimedInfo.claim_amount} (${Math.round((rowClaimedInfo.ta_percentage || 1) * 100)}%)` 
+                                          : '💰 Ready to Claim'}
                                       </span>
                                     </div>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
@@ -6988,44 +7232,82 @@ export default function App() {
                                 <td>
                                   {remarksElement}
                                 </td>
-                                {isAdmin && (
-                                  <td style={{ textAlign: 'center' }}>
-                                    <button
-                                      type="button"
-                                      className="btn btn-secondary"
-                                      onClick={() => openDutyEditModal({
-                                        staffId: staffRow.staffId,
-                                        name: staffRow.staffName,
-                                        designation: staffRow.designation,
-                                        categoryId: parseInt(selectedCatId, 10),
-                                        actualLinkNumber: cell.actualLinkNumber,
-                                        calculatedLinkNumber: cell.calculatedLinkNumber,
-                                        train_numbers: cell.train_numbers,
-                                        status: cell.status,
-                                        substituteStaffId: cell.substituteStaffId,
-                                        substituteName: cell.substituteName,
-                                        overrideReason: cell.overrideReason,
-                                        isOverridden: cell.isOverridden,
-                                        isRest: cell.isRest,
-                                        lr_rest_info: cell.lr_rest_info,
-                                        cr_available: staffRow.cr_available || cell.cr_available
-                                      }, cell.date)}
-                                      style={{
-                                        padding: '4px 8px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 600,
-                                        borderRadius: '6px',
-                                        background: 'rgba(212, 161, 92, 0.12)',
-                                        color: 'var(--primary)',
-                                        border: '1px solid var(--border-gold)',
-                                        cursor: 'pointer'
-                                      }}
-                                      title="Edit Duty Status / Sick / Leave / Changed Link"
-                                    >
-                                      ✏️ Edit
-                                    </button>
-                                  </td>
-                                )}
+                                <td style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                    {isWorkingTrain && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleClaimTa(staffRow.staffId, cell.date)}
+                                        disabled={claimingTa && claimingTaDate === cell.date}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '3px 8px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          borderRadius: '6px',
+                                          background: rowClaimedInfo ? 'rgba(16, 185, 129, 0.16)' : 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                                          color: rowClaimedInfo ? '#10b981' : '#ffffff',
+                                          border: rowClaimedInfo ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #10b981',
+                                          cursor: (claimingTa && claimingTaDate === cell.date) ? 'not-allowed' : 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
+                                        title={rowClaimedInfo ? `TA already noted: ₹${rowClaimedInfo.claim_amount}. Click to re-claim/update.` : `Claim TA for ${cell.date} (${workedTrainName})`}
+                                      >
+                                        {claimingTa && claimingTaDate === cell.date ? (
+                                          <span>⏳ Claiming...</span>
+                                        ) : rowClaimedInfo ? (
+                                          <>
+                                            <span>✓</span>
+                                            <span>Claimed (₹{rowClaimedInfo.claim_amount})</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span>💰</span>
+                                            <span>Claim TA</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => openDutyEditModal({
+                                          staffId: staffRow.staffId,
+                                          name: staffRow.staffName,
+                                          designation: staffRow.designation,
+                                          categoryId: parseInt(selectedCatId, 10),
+                                          actualLinkNumber: cell.actualLinkNumber,
+                                          calculatedLinkNumber: cell.calculatedLinkNumber,
+                                          train_numbers: cell.train_numbers,
+                                          status: cell.status,
+                                          substituteStaffId: cell.substituteStaffId,
+                                          substituteName: cell.substituteName,
+                                          overrideReason: cell.overrideReason,
+                                          isOverridden: cell.isOverridden,
+                                          isRest: cell.isRest,
+                                          lr_rest_info: cell.lr_rest_info,
+                                          cr_available: staffRow.cr_available || cell.cr_available
+                                        }, cell.date)}
+                                        style={{
+                                          padding: '3px 8px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 600,
+                                          borderRadius: '6px',
+                                          background: 'rgba(212, 161, 92, 0.12)',
+                                          color: 'var(--primary)',
+                                          border: '1px solid var(--border-gold)',
+                                          cursor: 'pointer'
+                                        }}
+                                        title="Edit Duty Status / Sick / Leave / Changed Link"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
                               </tr>
                             );
                           });
@@ -16809,73 +17091,107 @@ export default function App() {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
-              <span style={{ fontSize: '2.4rem' }}>⚠️</span>
+              <span style={{ fontSize: '2.4rem' }}>🚆</span>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#facc15' }}>
-                  Confirm Employee Duty Shift
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#facc15' }}>
+                  Confirm Duty Booking / Employee Shift
                 </h3>
                 <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--color-text-secondary, #94a3b8)' }}>
-                  Reassigning an already working employee
+                  Booking or shifting an already working employee
                 </p>
               </div>
             </div>
 
             <div style={{
-              background: 'rgba(234, 179, 8, 0.1)',
-              border: '1px solid rgba(234, 179, 8, 0.3)',
-              borderRadius: '10px',
+              background: 'rgba(234, 179, 8, 0.08)',
+              border: '1px solid rgba(234, 179, 8, 0.25)',
+              borderRadius: '12px',
               padding: '16px',
               marginBottom: '20px',
               fontSize: '0.92rem',
               lineHeight: 1.6
             }}>
-              <strong>{appShiftConfirm.staffName}</strong> is currently assigned to{' '}
-              <strong style={{ color: '#60a5fa' }}>{appShiftConfirm.currentTrainDesc}</strong> on {selectedDate}.
-              <br /><br />
-              Are you sure you want to shift them to{' '}
-              <strong style={{ color: '#34d399' }}>{appShiftConfirm.targetTrainDesc}</strong>?
-              <br /><br />
+              <p style={{ margin: '0 0 12px 0' }}>
+                <strong>{appShiftConfirm.staffName}</strong> is currently assigned to{' '}
+                <strong style={{ color: '#60a5fa' }}>{appShiftConfirm.currentTrainDesc}</strong> on {selectedDate}.
+              </p>
+              
               <div style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                color: '#f87171',
-                fontWeight: 700,
-                fontSize: '0.85rem'
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                marginBottom: '12px',
+                fontSize: '0.88rem'
               }}>
-                ℹ️ The slot on their previous train will immediately be marked as <strong>VACANT</strong>.
+                <strong style={{ color: '#34d399', display: 'block', marginBottom: '4px' }}>
+                  Option 1: Book Duty (Keep Morning Link Intact) — Recommended
+                </strong>
+                <span>
+                  Employee completed their link duty on the morning of the day and can be booked to <strong>{appShiftConfirm.targetTrainDesc}</strong> without cancelling their morning link duty ({appShiftConfirm.currentTrainDesc}). Both duties remain credited and active.
+                </span>
+              </div>
+
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                color: '#f87171'
+              }}>
+                <strong>Option 2: Shift Staff:</strong> Move staff to <strong>{appShiftConfirm.targetTrainDesc}</strong> and mark their slot on {appShiftConfirm.currentTrainDesc} as <strong>[VACANT]</strong>.
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setAppShiftConfirm(null)}
-                style={{ padding: '10px 18px', fontWeight: 600 }}
+                style={{ padding: '9px 16px', fontWeight: 600 }}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-outline"
                 onClick={() => {
                   const onConf = appShiftConfirm.onConfirm;
                   setAppShiftConfirm(null);
                   if (onConf) onConf();
                 }}
                 style={{
-                  padding: '10px 22px',
-                  fontWeight: 800,
-                  backgroundColor: '#eab308',
-                  color: '#000',
-                  border: 'none',
-                  boxShadow: '0 4px 14px rgba(234, 179, 8, 0.4)',
+                  padding: '9px 16px',
+                  fontWeight: 700,
+                  border: '1px solid #f87171',
+                  color: '#f87171',
+                  background: 'transparent',
                   cursor: 'pointer'
                 }}
               >
-                ✓ Confirm Shift & Vacate Old Train
+                🔄 Shift Staff (Mark Vacant)
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const onBook = appShiftConfirm.onBookDutyKeepIntact || appShiftConfirm.onConfirm;
+                  setAppShiftConfirm(null);
+                  if (onBook) onBook();
+                }}
+                style={{
+                  padding: '9px 20px',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+                  cursor: 'pointer'
+                }}
+              >
+                ✓ Book Duty (Keep Link Intact)
               </button>
             </div>
           </div>
@@ -17440,7 +17756,8 @@ export default function App() {
                   staffName: s.name,
                   currentTrainDesc: currentWorking,
                   targetTrainDesc: `Non-Daily Train ${targetTrain.train_number}`,
-                  onConfirm: () => doActualAssignNonDaily(s.id, s.name, trainItem, null)
+                  onConfirm: () => doActualAssignNonDaily(s.id, s.name, trainItem, null, false),
+                  onBookDutyKeepIntact: () => doActualAssignNonDaily(s.id, s.name, trainItem, null, true)
                 });
               } else {
                 doActualAssignNonDaily(s.id, s.name, trainItem, null);
@@ -17481,7 +17798,8 @@ export default function App() {
                   staffName: s.name,
                   currentTrainDesc: currentWorking,
                   targetTrainDesc: matchingVacantDuty ? `Train ${targetTrain.train_number} (Link #${matchingVacantDuty.link_number})` : `Train ${targetTrain.train_number} (Extra Crew)`,
-                  onConfirm: () => doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null)
+                  onConfirm: () => doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null, null, false),
+                  onBookDutyKeepIntact: () => doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null, null, true)
                 });
               } else {
                 doActualDropStaff(s.id, s.name, targetGroup, forceExtra, matchingVacantDuty, null);

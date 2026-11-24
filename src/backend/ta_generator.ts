@@ -2974,7 +2974,8 @@ module.exports = {
   getLinkSetDetails,
   resolveLrDutyCode,
   getDutyRowsForLrTrain,
-  generateDefaultStaffSignature
+  generateDefaultStaffSignature,
+  getMonthsBetween
 };
 
 export {
@@ -2989,7 +2990,8 @@ export {
   getLinkSetDetails,
   resolveLrDutyCode,
   getDutyRowsForLrTrain,
-  generateDefaultStaffSignature
+  generateDefaultStaffSignature,
+  getMonthsBetween
 };
 
 
