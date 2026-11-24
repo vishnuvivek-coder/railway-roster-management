@@ -650,7 +650,7 @@ export default function RemittanceDocument({
           <button
             type="button"
             onClick={() => printElement('.exact-excel-sheet', {
-              title: `General_Summary_Remittance_${year}_${month}`,
+              title: `MR_Statement_${year}_${month}`,
               orientation: 'landscape',
               pageFormat: 'legal'
             })}
@@ -662,7 +662,7 @@ export default function RemittanceDocument({
 
           <button
             type="button"
-            onClick={() => downloadPdfFromElement('.exact-excel-sheet', `General_Summary_Remittance_${year}_${month}.pdf`, {
+            onClick={() => downloadPdfFromElement('.exact-excel-sheet', `MR_Statement_${year}_${month}.pdf`, {
               orientation: 'landscape',
               unit: 'mm',
               format: 'legal'

@@ -16344,7 +16344,7 @@ export default function App() {
                   transition: 'all 0.2s ease'
                 }}
               >
-                💵 General Summary (Remittance)
+                💵 MR Statement
               </button>
 
               {!isEmployee && (
