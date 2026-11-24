@@ -205,20 +205,23 @@ export default function DiaryDocument({
     t_code_no: '7133'
   });
 
-  // Editable Page 2 bottom summary breakdown metadata
+  // Editable Page 2 bottom summary breakdown metadata (matches Image 2: NO OF W DA 24 | HP 13 19250 | 8190 | 27440 | IT 7 10852 | 4268 | 15120 | OC | 23875 | TOTAL 66435)
   const [summaryMeta, setSummaryMeta] = useState({
-    nw_days: 25,
-    hp_cases: 3,
-    hp_amount: 3737,
-    hp_gst: 1584,
-    hp_total: 5320,
-    it_cases: 5,
-    it_amount: 6824,
-    it_gst: 2356,
-    it_total: 9180,
-    oc_cases: 71,
-    oc_amount: 50270
+    nw_days: 24,
+    hp_cases: 13,
+    hp_amount: 19250,
+    hp_gst: 8190,
+    hp_total: 27440,
+    it_cases: 7,
+    it_amount: 10852,
+    it_gst: 4268,
+    it_total: 15120,
+    oc_cases: 0,
+    oc_amount: 23875
   });
+
+  // Page 1 Row Count (Default: 29 rows, exactly matching Page 1 split in Image 1 up to 24/10/26)
+  const [page1RowCount, setPage1RowCount] = useState(29);
 
   // Auto-initialize selectedCatId if categories are loaded
   useEffect(() => {
@@ -807,15 +810,14 @@ export default function DiaryDocument({
     }
   };
 
-  // 2-Page Partitioning: Page 1 holds up to 24 rows, Page 2 holds up to 20 rows
-  const PAGE1_ROW_COUNT = 24;
-  const PAGE2_ROW_COUNT = 20;
-
+  // 2-Page Partitioning: Page 1 holds up to page1RowCount rows (default 29), Page 2 holds remaining rows
+  const PAGE1_ROW_COUNT = page1RowCount;
   const rawRows = diaryData?.rows || [];
   const rawPage1 = rawRows.slice(0, PAGE1_ROW_COUNT);
   const rawPage2 = rawRows.slice(PAGE1_ROW_COUNT);
+  const PAGE2_ROW_COUNT = Math.max(rawPage2.length, 18);
 
-  // Pad Page 1 up to 24 rows for clean full-page ledger styling
+  // Pad Page 1 up to PAGE1_ROW_COUNT rows for clean full-page ledger styling
   const page1Rows = [...rawPage1];
   while (page1Rows.length < PAGE1_ROW_COUNT) {
     page1Rows.push({
@@ -842,7 +844,7 @@ export default function DiaryDocument({
     });
   }
 
-  // Pad Page 2 up to 20 rows for clean full-page ledger styling
+  // Pad Page 2 up to PAGE2_ROW_COUNT rows for clean full-page ledger styling
   const page2Rows = [...rawPage2];
   while (page2Rows.length < PAGE2_ROW_COUNT) {
     page2Rows.push({
@@ -869,19 +871,31 @@ export default function DiaryDocument({
     });
   }
 
-  // Page 1 Totals (computed over actual non-empty rows)
-  const page1Totals = {
-    total_issued: rawPage1.reduce((s, r) => s + (r.total_issued || 0), 0),
-    total_cases: rawPage1.reduce((s, r) => s + (r.cases_count || 0), 0),
-    total_collected: rawPage1.reduce((s, r) => s + (r.collected_amount || 0), 0),
-    total_gst_cases: rawPage1.reduce((s, r) => s + (r.gst_cases || 0), 0),
-    total_gst_amount: rawPage1.reduce((s, r) => s + (r.gst_amount || 0), 0),
-    grand_total_amount: rawPage1.reduce((s, r) => s + (r.total_amount || 0), 0),
-    total_remit_amount: rawPage1.reduce((s, r) => s + (r.remit_amount || 0), 0)
-  };
+  // Page 1 Totals (dynamically computed over actual non-empty rows)
+  const page1Totals = React.useMemo(() => {
+    return {
+      total_issued: rawPage1.reduce((s, r) => s + (parseFloat(r.total_issued) || 0), 0),
+      total_cases: rawPage1.reduce((s, r) => s + (parseFloat(r.cases_count) || parseFloat(r.no_of_cases) || 0), 0),
+      total_collected: rawPage1.reduce((s, r) => s + (parseFloat(r.collected_amount) || parseFloat(r.collected_rs) || 0), 0),
+      total_gst_cases: rawPage1.reduce((s, r) => s + (parseFloat(r.gst_cases) || 0), 0),
+      total_gst_amount: rawPage1.reduce((s, r) => s + (parseFloat(r.gst_amount) || 0), 0),
+      grand_total_amount: rawPage1.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0),
+      total_remit_amount: rawPage1.reduce((s, r) => s + (parseFloat(r.remit_amount) || 0), 0)
+    };
+  }, [rawPage1]);
 
-  // Grand Totals (Both Pages)
-  const grandTotals = diaryData?.grand_totals || page1Totals;
+  // Grand Totals (dynamically computed across all rows on both pages)
+  const grandTotals = React.useMemo(() => {
+    return {
+      total_issued: rawRows.reduce((s, r) => s + (parseFloat(r.total_issued) || 0), 0),
+      total_cases: rawRows.reduce((s, r) => s + (parseFloat(r.cases_count) || parseFloat(r.no_of_cases) || 0), 0),
+      total_collected: rawRows.reduce((s, r) => s + (parseFloat(r.collected_amount) || parseFloat(r.collected_rs) || 0), 0),
+      total_gst_cases: rawRows.reduce((s, r) => s + (parseFloat(r.gst_cases) || 0), 0),
+      total_gst_amount: rawRows.reduce((s, r) => s + (parseFloat(r.gst_amount) || 0), 0),
+      grand_total_amount: rawRows.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0),
+      total_remit_amount: rawRows.reduce((s, r) => s + (parseFloat(r.remit_amount) || 0), 0)
+    };
+  }, [rawRows]);
 
   const cellInputStyle = {
     width: '100%',
@@ -1070,6 +1084,24 @@ export default function DiaryDocument({
               <option value="2025">2025</option>
               <option value="2026">2026</option>
               <option value="2027">2027</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontSize: '0.76rem', marginBottom: '4px', color: 'var(--primary)' }}>Page 1 Rows</label>
+            <select
+              className="form-input"
+              value={page1RowCount}
+              onChange={(e) => setPage1RowCount(parseInt(e.target.value, 10))}
+              style={{ padding: '7px 10px', fontSize: '0.85rem', fontWeight: 700 }}
+              title="Select rows per page to match your official physical register"
+            >
+              <option value={24}>24 Rows</option>
+              <option value={26}>26 Rows</option>
+              <option value={28}>28 Rows</option>
+              <option value={29}>29 Rows (Official 2-Page Image Match)</option>
+              <option value={30}>30 Rows</option>
+              <option value={32}>32 Rows</option>
             </select>
           </div>
         </div>
@@ -1718,7 +1750,7 @@ export default function DiaryDocument({
             display: 'flex',
             flexDirection: 'column'
           }}>
-            {/* Header Title Row */}
+            {/* Header Title Row (Page 2 - exact format matching Page 1) */}
             <div style={{
               flex: '0 0 auto',
               display: 'flex',
@@ -1729,9 +1761,40 @@ export default function DiaryDocument({
               marginBottom: '6px',
               paddingBottom: '2px'
             }}>
-              <div>
-                <span>Month of {diaryData.month_name} {diaryData.year}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>E.F.T Earnings Statement of</span>
+                <input
+                  type="text"
+                  value={editableMeta.name}
+                  onChange={(e) => handleMetaChange('name', e.target.value)}
+                  style={{ fontWeight: 'bold', width: '170px', border: '1px solid transparent', background: 'transparent', outline: 'none', fontSize: '11.5px', padding: '1px 4px' }}
+                />
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>Designation</span>
+                <input
+                  type="text"
+                  value={editableMeta.designation}
+                  onChange={(e) => handleMetaChange('designation', e.target.value)}
+                  style={{ fontWeight: 'bold', width: '50px', border: '1px solid transparent', background: 'transparent', outline: 'none', fontSize: '11.5px', padding: '1px 4px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>T.Code.No.</span>
+                <input
+                  type="text"
+                  value={editableMeta.t_code_no}
+                  onChange={(e) => handleMetaChange('t_code_no', e.target.value)}
+                  style={{ fontWeight: 'bold', width: '60px', border: '1px solid transparent', background: 'transparent', outline: 'none', fontSize: '11.5px', padding: '1px 4px' }}
+                />
+              </div>
+
+              <div>
+                <span>Month of {diaryData?.month_name || ''} {diaryData?.year || year}</span>
+              </div>
+
               <div>
                 <span>page-2</span>
               </div>
@@ -2068,7 +2131,7 @@ export default function DiaryDocument({
               }}>
                 <tbody>
                   <tr style={{ height: '21px' }}>
-                    <td style={{ border: '1px solid #000', width: '85px', background: '#f8fafc' }}>N/W/DAYS</td>
+                    <td style={{ border: '1px solid #000', width: '85px', background: '#f8fafc' }}>NO OF W DA</td>
                     <td style={{ border: '1px solid #000', width: '50px' }}>
                       <input
                         type="number"
@@ -2090,7 +2153,11 @@ export default function DiaryDocument({
                       <input
                         type="number"
                         value={summaryMeta.hp_amount}
-                        onChange={(e) => { setHasUnsavedChanges(true); setSummaryMeta({ ...summaryMeta, hp_amount: parseFloat(e.target.value) || 0 }); }}
+                        onChange={(e) => {
+                          setHasUnsavedChanges(true);
+                          const amt = parseFloat(e.target.value) || 0;
+                          setSummaryMeta(prev => ({ ...prev, hp_amount: amt, hp_total: amt + (parseFloat(prev.hp_gst) || 0) }));
+                        }}
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
@@ -2098,7 +2165,11 @@ export default function DiaryDocument({
                       <input
                         type="number"
                         value={summaryMeta.hp_gst}
-                        onChange={(e) => { setHasUnsavedChanges(true); setSummaryMeta({ ...summaryMeta, hp_gst: parseFloat(e.target.value) || 0 }); }}
+                        onChange={(e) => {
+                          setHasUnsavedChanges(true);
+                          const gst = parseFloat(e.target.value) || 0;
+                          setSummaryMeta(prev => ({ ...prev, hp_gst: gst, hp_total: (parseFloat(prev.hp_amount) || 0) + gst }));
+                        }}
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
@@ -2110,7 +2181,7 @@ export default function DiaryDocument({
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
-                    <td style={{ border: '1px solid #000', width: '45px', background: '#f8fafc' }}>I/T</td>
+                    <td style={{ border: '1px solid #000', width: '45px', background: '#f8fafc' }}>IT</td>
                     <td style={{ border: '1px solid #000', width: '45px' }}>
                       <input
                         type="number"
@@ -2123,7 +2194,11 @@ export default function DiaryDocument({
                       <input
                         type="number"
                         value={summaryMeta.it_amount}
-                        onChange={(e) => { setHasUnsavedChanges(true); setSummaryMeta({ ...summaryMeta, it_amount: parseFloat(e.target.value) || 0 }); }}
+                        onChange={(e) => {
+                          setHasUnsavedChanges(true);
+                          const amt = parseFloat(e.target.value) || 0;
+                          setSummaryMeta(prev => ({ ...prev, it_amount: amt, it_total: amt + (parseFloat(prev.it_gst) || 0) }));
+                        }}
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
@@ -2131,7 +2206,11 @@ export default function DiaryDocument({
                       <input
                         type="number"
                         value={summaryMeta.it_gst}
-                        onChange={(e) => { setHasUnsavedChanges(true); setSummaryMeta({ ...summaryMeta, it_gst: parseFloat(e.target.value) || 0 }); }}
+                        onChange={(e) => {
+                          setHasUnsavedChanges(true);
+                          const gst = parseFloat(e.target.value) || 0;
+                          setSummaryMeta(prev => ({ ...prev, it_gst: gst, it_total: (parseFloat(prev.it_amount) || 0) + gst }));
+                        }}
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
@@ -2143,16 +2222,8 @@ export default function DiaryDocument({
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
-                    <td style={{ border: '1px solid #000', width: '45px', background: '#f8fafc' }}>O/C</td>
-                    <td style={{ border: '1px solid #000', width: '45px' }}>
-                      <input
-                        type="number"
-                        value={summaryMeta.oc_cases}
-                        onChange={(e) => { setHasUnsavedChanges(true); setSummaryMeta({ ...summaryMeta, oc_cases: parseInt(e.target.value, 10) || 0 }); }}
-                        style={{ ...cellInputStyle, fontWeight: 'bold' }}
-                      />
-                    </td>
-                    <td style={{ border: '1px solid #000', width: '80px' }}>
+                    <td style={{ border: '1px solid #000', width: '45px', background: '#f8fafc' }}>OC</td>
+                    <td style={{ border: '1px solid #000', width: '90px' }}>
                       <input
                         type="number"
                         value={summaryMeta.oc_amount}
@@ -2160,11 +2231,11 @@ export default function DiaryDocument({
                         style={{ ...cellInputStyle, fontWeight: 'bold', textAlign: 'right', paddingRight: '2px' }}
                       />
                     </td>
-                    <td style={{ border: '1px solid #000', width: '90px', background: 'rgba(212, 161, 92, 0.12)' }}>
-                      TOTAL {grandTotals.total_cases || 79}
+                    <td style={{ border: '1px solid #000', width: '80px', background: 'rgba(212, 161, 92, 0.12)' }}>
+                      TOTAL
                     </td>
-                    <td style={{ border: '1px solid #000', width: '95px', background: 'rgba(212, 161, 92, 0.12)', textAlign: 'right', paddingRight: '4px' }}>
-                      {grandTotals.grand_total_amount || 64770}
+                    <td style={{ border: '1px solid #000', width: '100px', background: 'rgba(212, 161, 92, 0.12)', textAlign: 'right', paddingRight: '4px', fontSize: '10.5px' }}>
+                      {(parseFloat(summaryMeta.hp_total) || 0) + (parseFloat(summaryMeta.it_total) || 0) + (parseFloat(summaryMeta.oc_amount) || 0) || grandTotals.grand_total_amount || 66435}
                     </td>
                   </tr>
                 </tbody>
@@ -2177,7 +2248,7 @@ export default function DiaryDocument({
                 alignItems: 'flex-end',
                 fontSize: '11px',
                 fontWeight: 'bold',
-                paddingTop: '4px',
+                paddingTop: '6px',
                 paddingBottom: '2px'
               }}>
                 <div>
@@ -2188,19 +2259,34 @@ export default function DiaryDocument({
                   <span>Head of the Office</span>
                 </div>
 
-                <div style={{ textAlign: 'center' }}>
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'rgba(34, 197, 94, 0.12)',
+                    border: '1px dashed #16a34a',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '9px',
+                    color: '#15803d',
+                    fontWeight: 800,
+                    marginBottom: '3px'
+                  }}>
+                    <span>✓ DIGITALLY SIGNED • INDIAN RAILWAYS</span>
+                  </div>
                   <input
                     type="text"
                     value={editableMeta.name}
                     onChange={(e) => { setHasUnsavedChanges(true); setEditableMeta({ ...editableMeta, name: e.target.value }); }}
-                    style={{ fontWeight: 'bold', textAlign: 'center', border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', width: '160px' }}
+                    style={{ fontWeight: 'bold', textAlign: 'right', border: 'none', background: 'transparent', outline: 'none', fontSize: '11px', width: '180px' }}
                   />
                   <div>
                     <input
                       type="text"
                       value={`(${editableMeta.designation || 'CTI'}/SL/GNT)`}
                       onChange={(e) => { setHasUnsavedChanges(true); setEditableMeta({ ...editableMeta, designation: e.target.value }); }}
-                      style={{ fontWeight: 'normal', textAlign: 'center', border: 'none', background: 'transparent', outline: 'none', fontSize: '10px', width: '160px' }}
+                      style={{ fontWeight: 'normal', textAlign: 'right', border: 'none', background: 'transparent', outline: 'none', fontSize: '10px', width: '160px', color: '#555' }}
                     />
                   </div>
                 </div>

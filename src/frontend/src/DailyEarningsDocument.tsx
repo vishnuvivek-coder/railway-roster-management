@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import SearchableStaffSelect from './SearchableStaffSelect';
 import { printElement, downloadPdfFromElement } from './printUtils';
+import DiaryDocument from './DiaryDocument';
 
 const API_BASE = '/api';
 
@@ -579,6 +580,28 @@ export default function DailyEarningsDocument({
         }}>
           <button
             type="button"
+            onClick={() => setViewMode('two_page')}
+            className="btn"
+            style={{
+              padding: '10px 24px',
+              borderRadius: '6px',
+              fontWeight: 800,
+              fontSize: '0.92rem',
+              background: viewMode === 'two_page'
+                ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                : 'var(--bg-secondary)',
+              color: viewMode === 'two_page' ? '#0D0D0F' : 'var(--color-text-secondary)',
+              border: viewMode === 'two_page' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+              boxShadow: viewMode === 'two_page' ? '0 4px 16px rgba(212, 161, 92, 0.4)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            📄 Official 2-Page Daily Summary (Page 1 & 2)
+          </button>
+
+          <button
+            type="button"
             onClick={() => setViewMode('continuous')}
             className="btn"
             style={{
@@ -958,7 +981,22 @@ export default function DailyEarningsDocument({
         )}
       </div>
 
-      {loading ? (
+      {viewMode === 'two_page' ? (
+        <DiaryDocument
+          authToken={authToken}
+          categories={categories}
+          selectedCatId={selectedCatId}
+          setSelectedCatId={setSelectedCatId}
+          selectedStaffId={selectedStaffId}
+          setSelectedStaffId={setSelectedStaffId}
+          year={year}
+          setYear={setYear}
+          month={month}
+          setMonth={setMonth}
+          isEmployee={isEmployee}
+          lockedStaffId={lockedStaffId}
+        />
+      ) : loading ? (
         <div className="spinner-container">
           <div className="spinner"></div>
           <span>Loading Daily Summary Register...</span>

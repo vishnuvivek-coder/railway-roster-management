@@ -1525,6 +1525,8 @@ export default function App() {
     }
   });
   const [individualMusterModalOpen, setIndividualMusterModalOpen] = useState(false);
+  // View mode for Daily Summary Table: 'two_page' (Official 2-Page E.F.T Earnings Statement format) vs 'slot_view'
+  const [dailySummaryViewMode, setDailySummaryViewMode] = useState<'two_page' | 'slot_view'>('two_page');
 
   // Date states - default to today's date dynamically
   const [selectedDate, setSelectedDate] = useState(getLocalDateString());
@@ -6172,16 +6174,35 @@ export default function App() {
 
           {activeTab === 'daily-summary' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
-              <div className="filter-group">
-                <label className="form-label" style={{ marginBottom: 0 }}>Select Date:</label>
-                <input 
-                  type="date" 
-                  className="select-input" 
-                  value={selectedDate} 
-                  onChange={(e) => setSelectedDate(e.target.value)} 
-                  style={{ width: '160px' }}
-                />
-              </div>
+              {dailySummaryViewMode === 'slot_view' ? (
+                <div className="filter-group">
+                  <label className="form-label" style={{ marginBottom: 0 }}>Select Date:</label>
+                  <input 
+                    type="date" 
+                    className="select-input" 
+                    value={selectedDate} 
+                    onChange={(e) => setSelectedDate(e.target.value)} 
+                    style={{ width: '160px' }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(212, 161, 92, 0.15)',
+                    border: '1px solid var(--border-gold)',
+                    color: 'var(--primary)',
+                    fontWeight: 800,
+                    fontSize: '0.88rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <span>📄</span> Daily Summary Table • Official Two-Page Format (Page 1 & 2)
+                  </span>
+                </div>
+              )}
               {isAdmin && (
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
                   <button
@@ -7326,11 +7347,97 @@ export default function App() {
           )}
 
           {/* ----------------------------------------------------
-             TAB 1.5: DAILY SUMMARY TABLE (VIEW ALL EMPLOYEES PER DAY)
+             TAB 1.5: DAILY SUMMARY TABLE (OFFICIAL TWO-PAGE FORMAT & SLOT VIEW)
              ---------------------------------------------------- */}
           {activeTab === 'daily-summary' && (
             <div>
-              {loadingDaily ? (
+              {/* Top View Mode Switcher */}
+              <div className="no-print" style={{
+                display: 'flex',
+                gap: '10px',
+                marginBottom: '16px',
+                background: 'var(--bg-secondary)',
+                padding: '8px 12px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-subtle)',
+                alignItems: 'center',
+                flexWrap: 'wrap'
+              }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setDailySummaryViewMode('two_page')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    background: dailySummaryViewMode === 'two_page'
+                      ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                      : 'transparent',
+                    color: dailySummaryViewMode === 'two_page' ? '#0D0D0F' : 'var(--color-text-secondary)',
+                    border: dailySummaryViewMode === 'two_page' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: dailySummaryViewMode === 'two_page' ? '0 4px 14px rgba(212, 161, 92, 0.4)' : 'none'
+                  }}
+                >
+                  <span>📄</span> Official Two-Page Format (Page 1 & 2)
+                </button>
+
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setDailySummaryViewMode('slot_view')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '0.92rem',
+                    background: dailySummaryViewMode === 'slot_view'
+                      ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
+                      : 'transparent',
+                    color: dailySummaryViewMode === 'slot_view' ? '#0D0D0F' : 'var(--color-text-secondary)',
+                    border: dailySummaryViewMode === 'slot_view' ? '1px solid var(--primary)' : '1px solid var(--border-glass)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: dailySummaryViewMode === 'slot_view' ? '0 4px 14px rgba(212, 161, 92, 0.4)' : 'none'
+                  }}
+                >
+                  <span>📋</span> Daily Duty Allocation Roster (Slot View)
+                </button>
+              </div>
+
+              {dailySummaryViewMode === 'two_page' ? (
+                <DiaryDocument
+                  authToken={authToken}
+                  categories={categories}
+                  selectedCatId={selectedCatId}
+                  setSelectedCatId={setSelectedCatId}
+                  selectedStaffId={selectedStaffId || docStaffId}
+                  setSelectedStaffId={(sId) => {
+                    setSelectedStaffId(sId);
+                    setDocStaffId(sId);
+                  }}
+                  year={docYear || year}
+                  setYear={(y) => {
+                    setDocYear(y);
+                    setYear(y);
+                  }}
+                  month={docMonth || month}
+                  setMonth={(m) => {
+                    setDocMonth(m);
+                    setMonth(m);
+                  }}
+                  isEmployee={isEmployee}
+                  lockedStaffId={currentUser?.staff_id}
+                />
+              ) : (
+                loadingDaily ? (
                 <div className="spinner-container">
                   <div className="spinner"></div> Loading Daily Duties...
                 </div>
@@ -11771,6 +11878,7 @@ export default function App() {
                 <div className="spinner-container">
                   <div className="spinner"></div> Loading Daily Duties...
                 </div>
+              )
               )}
             </div>
           )}
